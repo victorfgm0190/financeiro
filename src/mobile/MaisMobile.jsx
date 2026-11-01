@@ -2,17 +2,21 @@ import { ChevronRight } from 'lucide-react'
 import { secoesMais } from './navegacao'
 import ThemeToggle from '../components/ThemeToggle'
 import SessaoUsuario from '../components/Layout/SessaoUsuario'
+import AjudaTela from '../components/BoasVindas/AjudaTela'
 
 // Tela "Mais": gerada 100% de modules.js (secoesMais) — aqui só o layout de cada tipo de seção.
 export default function MaisMobile({ modules, irPara }) {
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-texto-1 pt-1">Mais</h1>
+      <div className="flex items-center gap-1 pt-1">
+        <h1 className="text-xl font-bold text-texto-1">Mais</h1>
+        <AjudaTela pagina="mais" />
+      </div>
       {secoesMais(modules).map(sec => (
         <section key={sec.titulo}>
           <h2 className="text-xs uppercase tracking-wide text-texto-3 mb-2">{sec.titulo}</h2>
           {sec.tipo === 'grupo' && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3" data-guia="mais.telas">
               {sec.itens.map(m => {
                 const Icon = m.icon
                 return (
@@ -30,7 +34,7 @@ export default function MaisMobile({ modules, irPara }) {
             </div>
           )}
           {sec.tipo === 'config' && (
-            <ul className="rounded-xl border border-borda divide-y divide-borda">
+            <ul className="rounded-xl border border-borda divide-y divide-borda" data-guia="mais.configuracoes">
               {sec.itens.map(m => {
                 const Icon = m.icon
                 return (
@@ -47,10 +51,10 @@ export default function MaisMobile({ modules, irPara }) {
           )}
         </section>
       ))}
-      <section>
+      <section data-guia="mais.tema">
         <ThemeToggle />
       </section>
-      <section className="rounded-xl border border-borda px-4 py-3">
+      <section className="rounded-xl border border-borda px-4 py-3" data-guia="mais.sessao">
         <SessaoUsuario comSair />
       </section>
     </div>

@@ -8,6 +8,7 @@ import DateInput from '../shared/DateInput'
 import { isoLocal } from '../../lib/hoje'
 import { specRelatorioFavorecido } from '../../lib/relatorioFavorecidoExcel'
 import { exportarExcel } from '../../lib/exportExcel'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 // ─── Shared helpers (same pattern as DemonstrativoFinanceiro) ────────────────
 
@@ -108,6 +109,7 @@ function doExport(filtered, totals, accounts, categories, applied, analytic) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function RelatorioPorFavorecido() {
+  useSubtelaGuia('reports:favorecido')
   const { profileTransactions: transactions, categories, profileAccounts: accounts, settings, rateiosByLancamento } = useApp()
   const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
@@ -196,7 +198,7 @@ export default function RelatorioPorFavorecido() {
 
         <div>
           <label className="label">Período</label>
-          <div className="flex gap-1.5 flex-wrap">
+          <div data-guia="reports:favorecido.periodo" className="flex gap-1.5 flex-wrap">
             {PERIOD_OPTIONS.map(o => (
               <button
                 key={o.value}
@@ -211,7 +213,7 @@ export default function RelatorioPorFavorecido() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
+          <div data-guia="reports:favorecido.datas">
             <label className="label">Data Inicial</label>
             <DateInput className="input" value={fromDraft} onChange={e => setFromDraft(e.target.value)} />
           </div>
@@ -219,7 +221,7 @@ export default function RelatorioPorFavorecido() {
             <label className="label">Data Final</label>
             <DateInput className="input" value={toDraft} onChange={e => setToDraft(e.target.value)} />
           </div>
-          <div>
+          <div data-guia="reports:favorecido.contas">
             <label className="label">Contas ({selectedAccsDraft.length}/{accItems.length})</label>
             <MultiSelectPanel items={accItems} selected={selectedAccsDraft} onChange={setSelectedAccsDraft} />
           </div>
@@ -227,6 +229,7 @@ export default function RelatorioPorFavorecido() {
 
         <div className="flex gap-2 flex-wrap items-center">
           <button
+            data-guia="reports:favorecido.atualizar"
             onClick={handleAtualizar}
             className={`btn-primary flex items-center gap-2 ${isDirty ? 'ring-2 ring-primary/50' : ''}`}
           >
@@ -234,13 +237,14 @@ export default function RelatorioPorFavorecido() {
           </button>
           {filtered.length > 0 && (
             <>
-              <button onClick={() => doExport(filtered, totals, accounts, categories, applied, false)} className="btn-secondary flex items-center gap-2 text-xs">
+              <button data-guia="reports:favorecido.csv-sintetico" onClick={() => doExport(filtered, totals, accounts, categories, applied, false)} className="btn-secondary flex items-center gap-2 text-xs">
                 <Download size={12} /> CSV Sintético
               </button>
-              <button onClick={() => doExport(filtered, totals, accounts, categories, applied, true)} className="btn-secondary flex items-center gap-2 text-xs">
+              <button data-guia="reports:favorecido.csv-analitico" onClick={() => doExport(filtered, totals, accounts, categories, applied, true)} className="btn-secondary flex items-center gap-2 text-xs">
                 <Download size={12} /> CSV Analítico
               </button>
               <button
+                data-guia="reports:favorecido.excel"
                 onClick={() => {
                   const nomes = applied.accs.map(id => accounts.find(a => a.id === id)).filter(Boolean).map(a => a.apelido || a.name)
                   const filtros = [
@@ -264,6 +268,7 @@ export default function RelatorioPorFavorecido() {
         <div className="relative">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3 pointer-events-none" />
           <input
+            data-guia="reports:favorecido.busca"
             className="input pl-9"
             placeholder="Buscar favorecido..."
             value={search}
@@ -274,7 +279,7 @@ export default function RelatorioPorFavorecido() {
 
       {/* Report table */}
       {filtered.length > 0 && (
-        <div className="card p-0 overflow-hidden">
+        <div data-guia="reports:favorecido.tabela" className="card p-0 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 520 }}>
               <thead>

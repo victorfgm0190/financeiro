@@ -213,7 +213,7 @@ export default function EnvelopesPanel() {
           <p className="text-xs text-texto-3 mt-0.5">Controle de gastos por categoria com limite mensal</p>
         </div>
         {podeIncluir && (
-          <button className="btn-primary flex items-center gap-1.5 text-sm whitespace-nowrap shrink-0" onClick={openNew} aria-label="Novo envelope">
+          <button className="btn-primary flex items-center gap-1.5 text-sm whitespace-nowrap shrink-0" onClick={openNew} aria-label="Novo envelope" data-guia="envelopes.novo">
             <Plus size={14} /> Novo<span className="hidden sm:inline"> Envelope</span>
           </button>
         )}
@@ -221,7 +221,7 @@ export default function EnvelopesPanel() {
 
       {/* Competência selector */}
       {envelopes.length > 0 && (
-        <div className="card flex items-center justify-between py-2.5">
+        <div className="card flex items-center justify-between py-2.5" data-guia="envelopes.competencia">
           <button onClick={() => shiftComp(-1)} className="p-1.5 rounded-md hover:bg-surface-hover text-texto-2 hover:text-texto-1 transition-colors" title="Competência anterior">
             <ChevronLeft size={18} />
           </button>
@@ -255,7 +255,7 @@ export default function EnvelopesPanel() {
       {envelopes.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
           {resumos.map(r => (
-            <div key={r.env.id} className="card hover:bg-surface-hover/40 transition-colors">
+            <div key={r.env.id} data-guia={r === resumos[0] ? 'envelopes.envelope' : undefined} className="card hover:bg-surface-hover/40 transition-colors">
               <EnvelopeLinha
                 r={r}
                 onAbrir={() => setDetailId(r.env.id)}

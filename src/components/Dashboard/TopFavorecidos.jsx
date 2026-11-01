@@ -78,7 +78,7 @@ export default function TopFavorecidos({ receitas, despesas, onAbrirLancamentos 
   const cfgTodos = todos ? COLUNAS[todos] : null
 
   return (
-    <div className="card">
+    <div data-guia="dashboard.top-favorecidos" className="card">
       <h3 className="text-sm font-semibold text-texto-2 mb-3 flex items-center gap-2">
         <Users size={14} className="text-texto-2" />
         Top 5 Favorecidos

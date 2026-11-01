@@ -21,6 +21,7 @@ import { isoLocal } from '../../lib/hoje'
 import { ratearProporcional, erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
 import { ehAjusteDeRendimento } from '../../lib/rendimentoReserva'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -353,7 +354,7 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
     <div className="space-y-4">
       {/* Resumo do topo — valor com fonte responsiva (clamp) p/ nunca cortar no mobile.
           grid-cols-3 garante 3 cards de largura igual; min-w-0 evita que o número estoure a célula. */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3" data-guia="reservas.totais">
         <div className="card min-w-0 py-3 px-2 sm:px-4 text-center">
           <p className="text-[10px] sm:text-xs text-texto-3 uppercase tracking-wide mb-1">Total Reservado</p>
           <p className={`font-bold tabular-nums whitespace-nowrap text-[clamp(0.72rem,3.6vw,1.25rem)] ${totalSaldo >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(totalSaldo)}</p>
@@ -371,7 +372,7 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
       {/* Lista de contas reserva */}
       <div className="space-y-3">
         {reservaData.map(({ acc, cat, entradas, saidas }) => (
-          <div key={acc.id} className="card">
+          <div key={acc.id} data-guia={acc === reservaAccounts[0] ? 'reservas.conta' : undefined} className="card">
             <div className="flex items-start justify-between gap-2 sm:gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-2">
@@ -401,6 +402,7 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
                   {fmtSinal(acc.balance || 0)}
                 </p>
                 <button
+                  data-guia={acc === reservaAccounts[0] ? 'reservas.extrato' : undefined}
                   onClick={() => setExtratoAcc(acc)}
                   className="text-xs text-texto-3 hover:text-primary-fg transition-colors mt-0.5 whitespace-nowrap"
                 >
@@ -539,6 +541,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
   const [distrib, setDistrib] = useState({})
   const [distErro, setDistErro] = useState({})
   const [distSalvando, setDistSalvando] = useState(null)
+  useSubtelaGuia('reservas:resumo')
   const ratear = (accountId, fns, aDistribuir) => {
     const r = ratearProporcional(fns.map(f => ({ id: f.id, saldo: computeSaldo(f) })), aDistribuir)
     setDistrib(prev => ({ ...prev, ...Object.fromEntries(fns.map(f => [f.id, r[f.id] ? valorParaInput(r[f.id]) : ''])) }))
@@ -616,7 +619,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
       {/* KPI + actions — no mobile os botões ocupam uma linha própria (w-full) em vez de
           depender de ml-auto, que empurrava "Total reservado:" para fora da borda esquerda. */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 min-w-0 shrink-0">
+        <div className="flex items-center gap-2 min-w-0 shrink-0" data-guia="reservas:resumo.total">
           <span className="text-xs text-texto-3 uppercase tracking-wide whitespace-nowrap">Total reservado:</span>
           <span className={`text-lg font-bold ${grandTotal >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(grandTotal)}</span>
         </div>
@@ -625,22 +628,22 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
         )}
         <div className="flex gap-2 w-full sm:w-auto sm:ml-auto flex-wrap justify-end">
           {functions.length > 0 && (
-            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
+            <button data-guia="reservas:resumo.exportar" onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
               <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
             </button>
           )}
           {canUndo && podeEditar && (
-            <button onClick={onUndo} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
+            <button data-guia="reservas:resumo.desfazer-virada" onClick={onUndo} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
               <RotateCcw size={12} /> <span className="hidden sm:inline">Desfazer Virada</span><span className="sm:hidden">Desfazer</span>
             </button>
           )}
           {podeEditar && (
-          <button onClick={onVirar} className="btn-primary flex items-center gap-1.5 text-xs py-1.5">
+          <button data-guia="reservas:resumo.virar-saldo" onClick={onVirar} className="btn-primary flex items-center gap-1.5 text-xs py-1.5">
             <CheckCircle size={12} /> <span className="hidden sm:inline">Virar Saldo</span><span className="sm:hidden">Virar</span>
           </button>
           )}
           {podeIncluir && (
-          <button onClick={onAdd} className="btn-primary flex items-center gap-1.5 text-xs py-1.5">
+          <button data-guia="reservas:resumo.nova-funcao" onClick={onAdd} className="btn-primary flex items-center gap-1.5 text-xs py-1.5">
             <Plus size={12} /> <span className="hidden sm:inline">Nova Função</span><span className="sm:hidden">Nova</span>
           </button>
           )}
@@ -691,6 +694,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                   {/* input + diferença ficam juntos: em telas estreitas quebram como bloco abaixo do label */}
                   <div className="flex items-center gap-2 flex-1 min-w-[8rem]">
                     <InputMoeda negativo
+                      data-guia={fns === groups.find(g => g.accountId)?.fns ? 'reservas:resumo.saldo-real' : undefined}
                       className="input flex-1 min-w-0 text-xs py-1 text-right"
                       value={saldoReal ?? ''}
                       onChange={e => onSetAccountBalance(accountId, e.target.value)}
@@ -734,7 +738,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       {fmtSinal(atualizado)}
                     </div>
                     <div className="flex items-center justify-between text-xs gap-3">
-                      <button onClick={() => setMovFn(f)} className="text-texto-3 hover:underline whitespace-nowrap">
+                      <button data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.mov-futuros' : undefined} onClick={() => setMovFn(f)} className="text-texto-3 hover:underline whitespace-nowrap">
                         Mov. Futuros:
                         <span className={`ml-1 font-semibold ${liquido > 0 ? 'text-receita' : liquido < 0 ? 'text-despesa' : 'text-texto-3'}`}>
                           {liquido !== 0 ? (liquido > 0 ? '+' : '') + fmt(liquido) : '0,00'}
@@ -754,7 +758,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                         <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={podeEditar ? onAddPeriod : null} />
                       </div>
                       <div className="flex items-center gap-4 text-xs">
-                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0" data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.entradas-saidas' : undefined}>
                           <span className="text-texto-3 shrink-0">Entradas:</span>
                           <MovValue value={f.entradas} tipo="entradas" onClick={() => openOrigem(f, 'entradas')} />
                         </div>
@@ -767,6 +771,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="text-texto-3 shrink-0">Ajuste:</span>
                           <button
+                            data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.ajuste' : undefined}
                             onClick={() => setAdjFn(f)}
                             className={`inline-flex items-center gap-1 font-semibold hover:underline ${ajusteColor(f.ajuste)}`}
                             title="Ver histórico de ajustes"
@@ -779,12 +784,12 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                         </div>
                         <div className="flex items-center gap-0.5 shrink-0">
                           {podeEditar && (
-                          <button onClick={() => onEdit(f)} className="p-1.5 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-2 transition-colors">
+                          <button data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.editar' : undefined} onClick={() => onEdit(f)} className="p-1.5 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-2 transition-colors">
                             <Edit2 size={12} />
                           </button>
                           )}
                           {podeExcluir && (
-                          <button onClick={() => onDelete(f)} className="p-1.5 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors">
+                          <button data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.excluir' : undefined} onClick={() => onDelete(f)} className="p-1.5 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors">
                             <Trash2 size={12} />
                           </button>
                           )}
@@ -810,6 +815,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     <div className="flex items-center gap-2 ml-auto">
                       <label className="text-xs text-texto-3 shrink-0">Saldo Real:</label>
                       <InputMoeda negativo
+                        data-guia={fns === groups.find(g => g.accountId)?.fns ? 'reservas:resumo.saldo-real' : undefined}
                         className="input w-32 text-xs py-1 text-right"
                         value={saldoReal ?? ''}
                         onChange={e => onSetAccountBalance(accountId, e.target.value)}
@@ -869,7 +875,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                           <td className="px-4 py-2 text-right text-xs text-texto-2">
                             <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={podeEditar ? onAddPeriod : null} align="right" />
                           </td>
-                          <td className="px-4 py-2 text-right">
+                          <td className="px-4 py-2 text-right" data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.entradas-saidas' : undefined}>
                             <MovValue value={f.entradas} tipo="entradas" onClick={() => openOrigem(f, 'entradas')} />
                           </td>
                           <td className="px-4 py-2 text-right">
@@ -878,6 +884,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                           <td className="px-4 py-2 text-right">
                             <span className="inline-flex items-center justify-end gap-1">
                               <button
+                                data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.ajuste' : undefined}
                                 onClick={() => setAdjFn(f)}
                                 title="Ver histórico de ajustes"
                                 className={`inline-flex items-center gap-1 text-xs font-semibold hover:underline cursor-pointer ${ajusteColor(f.ajuste)}`}
@@ -906,6 +913,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                           </td>
                           <td className="px-4 py-2 text-right text-xs font-semibold">
                             <button
+                              data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.mov-futuros' : undefined}
                               onClick={() => setMovFn(f)}
                               title="Ver movimentos futuros previstos"
                               className={`hover:underline cursor-pointer ${liquido > 0 ? 'text-receita' : liquido < 0 ? 'text-despesa' : 'text-texto-3'}`}
@@ -919,12 +927,12 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                           <td className="px-4 py-2">
                             <div className="flex items-center justify-end gap-0.5">
                               {podeEditar && (
-                              <button onClick={() => onEdit(f)} className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-2 transition-colors">
+                              <button data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.editar' : undefined} onClick={() => onEdit(f)} className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-2 transition-colors">
                                 <Edit2 size={11} />
                               </button>
                               )}
                               {podeExcluir && (
-                              <button onClick={() => onDelete(f)} className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors">
+                              <button data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.excluir' : undefined} onClick={() => onDelete(f)} className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors">
                                 <Trash2 size={11} />
                               </button>
                               )}
@@ -982,7 +990,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     {accountId && podeEditar && diff ? (
                       <tr>
                         <td colSpan={11} className="px-4 py-2">
-                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <div className="flex flex-wrap items-center gap-2 text-xs" data-guia={fns === groups.find(g => g.accountId)?.fns ? 'reservas:resumo.distribuir' : undefined}>
                             <button type="button" className="btn-secondary text-xs py-1" onClick={() => ratear(accountId, fns, diff)}>Ratear proporcional</button>
                             <button type="button" className="btn-secondary text-xs py-1" onClick={() => limparDistrib(accountId, fns)}>Limpar</button>
                             <span className="text-texto-3">
@@ -1688,6 +1696,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
   const totalInvested = linked.reduce((s, f) => s + (saldosAtualizados[f.id] || 0), 0)
   const hasProvisao = projections.some(p => p.monthly.some(m => m.prov > 0))
   const [mobilePage, setMobilePage] = useState(0)
+  useSubtelaGuia('reservas:fluxo')
 
   const yy = (y) => String(y).slice(2)
   const rangeLabel = `${windowMonths[0].label}/${yy(windowMonths[0].year)} – ${lastWm.label}/${yy(lastWm.year)}`
@@ -1771,7 +1780,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
   return (
     <div className="space-y-4">
       {/* KPI bar */}
-      <div className="card py-2.5 px-4 flex items-center gap-4 flex-wrap">
+      <div className="card py-2.5 px-4 flex items-center gap-4 flex-wrap" data-guia="reservas:fluxo.total">
         <Layers size={13} className="text-texto-2" />
         <span className="text-xs text-texto-3">Total investido:</span>
         <span className={`text-sm font-bold ${totalInvested >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(totalInvested)}</span>
@@ -1787,7 +1796,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
         )}
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-texto-3">{rangeLabel}</span>
-          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1">
+          <button data-guia="reservas:fluxo.exportar" onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1">
             <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
           </button>
         </div>
@@ -1796,7 +1805,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
       {/* ── Mobile layout (hidden md+) ── */}
       <div className="md:hidden space-y-3">
         {/* Month navigator */}
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2" data-guia="reservas:fluxo.meses">
           <button
             onClick={() => setMobilePage(p => Math.max(0, p - 1))}
             disabled={mobilePage === 0}
@@ -1818,7 +1827,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
 
         {/* Cards per function */}
         {projections.map(({ f, account, monthly, hasAlert }) => (
-          <div key={f.id} className={`card p-0 overflow-hidden ${hasAlert ? 'border border-aviso/30' : ''}`}>
+          <div key={f.id} data-guia={f === projections[0]?.f ? 'reservas:fluxo.tabela' : undefined} className={`card p-0 overflow-hidden ${hasAlert ? 'border border-aviso/30' : ''}`}>
             {/* Card header */}
             <div className="px-3 py-2.5 border-b border-borda flex items-center gap-2">
               {hasAlert && <AlertTriangle size={11} className="text-aviso shrink-0" />}
@@ -1887,7 +1896,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
       </div>
 
       {/* ── Desktop layout (hidden below md) ── */}
-      <div className="hidden md:block card p-0 overflow-hidden">
+      <div className="hidden md:block card p-0 overflow-hidden" data-guia="reservas:fluxo.tabela">
         <div className="overflow-x-auto">
           <table className="text-xs border-collapse" style={{ minWidth: 'max-content' }}>
             <thead>
@@ -2003,6 +2012,7 @@ function HistoricoTab({ snapshots, selFim, onSelFim }) {
   }, [snapshots])
 
   const sel = groups.find(g => g.dataFim === selFim) || groups[0] || null
+  useSubtelaGuia('reservas:historico')
 
   if (!snapshots || snapshots.length === 0) {
     return (
@@ -2028,6 +2038,7 @@ function HistoricoTab({ snapshots, selFim, onSelFim }) {
       <div className="flex items-center gap-2 flex-wrap">
         <label className="text-xs text-texto-3 uppercase tracking-wide shrink-0">Período fechado:</label>
         <select
+          data-guia="reservas:historico.periodo"
           className="input py-1.5 text-xs max-w-[280px]"
           value={sel?.dataFim || ''}
           onChange={e => onSelFim(e.target.value)}
@@ -2040,7 +2051,7 @@ function HistoricoTab({ snapshots, selFim, onSelFim }) {
 
       <div className="card p-0 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" style={{ minWidth: 640 }}>
+          <table className="w-full text-sm" style={{ minWidth: 640 }} data-guia="reservas:historico.tabela">
             <thead>
               <tr className="border-b border-borda">
                 <th className="text-left px-4 py-2 text-xs text-texto-2 font-medium">Função</th>
@@ -2374,7 +2385,7 @@ export default function ReservasPanel() {
   return (
     <div className="space-y-4">
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-borda overflow-x-auto scrollbar-none">
+      <div className="flex items-center gap-1 border-b border-borda overflow-x-auto scrollbar-none" data-guia="reservas.abas">
         {[
           { id: 'contas', label: 'Contas Reserva' },
           { id: 'resumo', label: 'Resumo' },

@@ -39,7 +39,7 @@ export default function ApelidosIaPanel() {
     <div className="card space-y-3">
       <div className="flex items-center gap-2">
         <h2 className="text-sm font-semibold text-texto-2">Apelidos da IA ({itens.length})</h2>
-        <button type="button" onClick={carregar} className="p-1.5 rounded text-texto-3 hover:text-texto-1" aria-label="Recarregar"><RefreshCw size={12} /></button>
+        <button type="button" data-guia="settings:apelidos-ia.recarregar" onClick={carregar} className="p-1.5 rounded text-texto-3 hover:text-texto-1" aria-label="Recarregar"><RefreshCw size={12} /></button>
       </div>
       <p className="text-xs text-texto-3">
         Quando você corrige uma sugestão do Assistente (ex.: “combustível” → Gasolina), o termo vira um apelido e passa a valer nas próximas vezes.
@@ -56,14 +56,14 @@ export default function ApelidosIaPanel() {
                 <tr key={a.id} className="border-b border-borda/60 last:border-0">
                   <td className="px-3 py-1.5 text-texto-2 whitespace-nowrap">{TIPOS[a.tipo] || a.tipo}</td>
                   <td className="px-3 py-1.5">
-                    <input className="input !py-1 max-w-[180px]" value={editando[a.id] ?? a.termo} disabled={!podeEditar}
+                    <input data-guia={a === itens[0] ? 'settings:apelidos-ia.termo' : undefined} className="input !py-1 max-w-[180px]" value={editando[a.id] ?? a.termo} disabled={!podeEditar}
                       onChange={e => setEditando(s => ({ ...s, [a.id]: e.target.value }))}
                       onBlur={() => salvarTermo(a)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
                       placeholder="Digite o termo" />
                   </td>
                   <td className="px-3 py-1.5">
                     {lista.length ? (
-                      <select className="input !py-1 max-w-xs" value={a.ref_id} disabled={!podeEditar} onChange={e => agir(() => editarApelido(a.id, { ref_id: e.target.value }))}>
+                      <select data-guia={a === itens[0] ? 'settings:apelidos-ia.destino' : undefined} className="input !py-1 max-w-xs" value={a.ref_id} disabled={!podeEditar} onChange={e => agir(() => editarApelido(a.id, { ref_id: e.target.value }))}>
                         {!valido && <option value={a.ref_id}>(cadastro apagado ou renomeado — ignorado)</option>}
                         {lista.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
                       </select>
@@ -72,7 +72,7 @@ export default function ApelidosIaPanel() {
                   <td className="px-3 py-1.5 text-right text-texto-2">{a.usos}</td>
                   <td className="px-2 py-1.5 text-right">
                     {podeExcluir && (
-                      <button type="button" aria-label="Excluir" title="Excluir" className="p-1.5 rounded text-texto-3 hover:text-perigo"
+                      <button type="button" data-guia={a === itens[0] ? 'settings:apelidos-ia.excluir' : undefined} aria-label="Excluir" title="Excluir" className="p-1.5 rounded text-texto-3 hover:text-perigo"
                         onClick={() => window.confirm(`Excluir o apelido "${a.termo}"?`) && agir(() => excluirApelido(a.id))}><Trash2 size={13} /></button>
                     )}
                   </td>

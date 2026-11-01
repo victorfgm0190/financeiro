@@ -57,13 +57,15 @@ export async function ensureIaSchema() {
 }
 
 // Uso do DIA (fuso de São Paulo) de um usuário → { total, imagem }; null se o banco ainda não tem
-// as colunas (sem contagem, sem bloqueio).
+// as colunas (sem contagem, sem bloqueio). A transcrição de áudio (plano B do microfone) não conta:
+// o pedido ao Assistente que vem dela já conta.
 export async function usoDoDia(usuario, q = query) {
   if (!usuario) return null
   try {
     const [r] = await q(`SELECT count(*)::int AS total, count(*) FILTER (WHERE com_imagem)::int AS imagem
                            FROM ia_uso
                           WHERE usuario = $1
+                            AND ferramenta IS DISTINCT FROM 'transcricao_audio'
                             AND created_at >= (date_trunc('day', now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo')`, [usuario])
     return { total: r?.total || 0, imagem: r?.imagem || 0 }
   } catch (err) {
@@ -252,11 +254,12 @@ Regras:
 11. Você NUNCA exclui nem apaga nada, e não há ferramenta para isso. Se pedirem exclusão, use perguntar dizendo que você não exclui e que o item pode ser aberto na tela para o usuário decidir; opcoes vazio.
 12. Operações críticas (estornar, pagar/fechar/abrir/revisar fatura, importar, virada de saldo, ajustes de reserva, gerenciais, baixa em lote, edição em massa, integridade, contratos, patrimônio, configurações) e EDITAR itens existentes: você não executa — use abrir_tela com o destino certo e o filtro citado.
 13. CONTAS (coluna "uso"): conta citada pelo nome/apelido → essa conta. Compra no cartão ("no cartão", "crédito", "final 1234", nome do cartão) → o cartão certo; se não der para saber qual, conta_id null. Sem conta nem cartão citados → conta_id null (o app usa a favorita). "só se citada": use apenas se o pedido citou essa conta (nome ou apelido); senão conta_id null. "GERENCIAL": NUNCA use em registrar_lancamento, criar_agendamento, baixar_agendamento nem como origem/destino de transferência — são movimentadas só pela classificação gerencial; nunca troque uma conta gerencial citada pelo cartão de nome parecido. Consultar saldo de qualquer conta é permitido.
-14. IMAGEM (foto ou print), com ou sem texto (o texto, se houver, manda: "foi no Itaupers", "divide em 3"):
+14. IMAGEM OU PDF (foto, print ou PDF de boleto, fatura, nota, cupom, comprovante ou extrato), com ou sem texto (o texto, se houver, manda: "foi no Itaupers", "divide em 3"):
    • cupom fiscal / nota: registrar_lancamento (despesa) com o VALOR TOTAL pago, a data da compra e o estabelecimento (nome fantasia) como favorecido e descrição; categoria pelo tipo de loja/itens; cartão pelo final impresso (final_cartao) ou pela forma de pagamento.
    • comprovante Pix/TED: registrar_lancamento; despesa se o usuário PAGOU (favorecido = quem recebeu), receita se RECEBEU (favorecido = quem pagou); transferência só se origem e destino forem contas do usuário. Valor e data do comprovante.
    • print de notificação/SMS do banco: mesma regra 15 (final do cartão em final_cartao, parcelas, valor total).
    • boleto: criar_agendamento (once) com valor, vencimento e beneficiário (favorecido/descrição); linha_digitavel com os dígitos, se legíveis.
+   • PDF: as mesmas regras acima, pelo tipo de documento. Fatura de cartão ou extrato com vários lançamentos → regra 17 (uma chamada por lançamento, cada um com a sua data, valor e estabelecimento; ignore pagamentos da fatura anterior, saldos e totais). PDF escaneado é lido como imagem.
    Campo que você não conseguiu ler com certeza (borrado, cortado, ambíguo): confiança < 0.5. Nunca invente valor, data ou final do cartão.
 15. COMPRA PARCELADA (SMS/notificação de cartão do Itaú, Nubank, BB… ou frase livre): é registrar_lancamento (despesa); SMS → o cartão do "final NNNN" e a data da mensagem. Parcelas = N quando o texto diz "em 3x", "3 parcelas", "parcelado em 3", "parcelei em 4", "em 4 vezes", "4 vezes", "4x", "dividi em 4", "em quatro vezes" (à vista → null). Valor = o TOTAL da compra: "R$ 350 em 4 vezes", "parcelei 350 em 4x" e o valor do SMS são o TOTAL (350); "4 vezes de 350", "4 parcelas de R$ 350", "4x de 350" dão o valor DA PARCELA → valor = 4 × 350 = 1400. Na dúvida, use o TOTAL com confiança de valor baixa. Ex.: "parcelei R$350 no posto de gasolina em 4 vezes" → valor 350, parcelas 4, categoria de Combustível; "comprei um tênis 4x de 150 na Centauro" → valor 600, parcelas 4, favorecido Centauro. Descrição e favorecido = o estabelecimento (ex.: "RAIA1476"), nunca "Compra em 3x" ou "Compra aprovada".
 16. COMPRA EM MOEDA ESTRANGEIRA (SMS/foto de cartão "valor US 20,00", "US$ 20", "USD 20", "U$ 20", "20 dólares"): registrar_lancamento com moeda "USD" e valor = o número NA MOEDA ORIGINAL, como escrito (US 20,00 → valor 20). NUNCA converta para real nem some IOF: o app busca a cotação e calcula. Sem moeda estrangeira citada → moeda "BRL". Ex.: "Compra aprovada no seu PERSON BLACK PONTOS final 2122 - VERCEL INC. valor US 20,00 em 23/10" → despesa, moeda USD, valor 20, final_cartao 2122, data 23/10, favorecido/descrição "VERCEL INC.".

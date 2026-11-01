@@ -25,7 +25,7 @@ export function ResumoRevisaoFatura({ contagem, projecao, faturaLabel, children 
   const c = contagem
   const decisao = c.decisao.qtd
   return (
-    <section aria-label="Resumo da revisão" className="space-y-2">
+    <section aria-label="Resumo da revisão" className="space-y-2" data-guia="import.resumo">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
         <CartaoResumo testid="resumo-arquivo" titulo="Total do arquivo" valor={fmt(projecao ? projecao.arquivo : c.arquivo.valor)} sub={plural(c.total, 'linha', 'linhas')} />
         <CartaoResumo testid="resumo-finup" titulo="Já no Finup" valor={fmt(c.conciliados.valor)} sub={plural(c.conciliados.qtd, 'lançamento', 'lançamentos')} />
@@ -64,7 +64,7 @@ export function ConferenciaFatura({ conferencia, sessao, onIrParaLinha }) {
   const { diferenca, semExplicacao, qtdItens, grupos } = conferencia
   return (
     <section data-testid="conferencia-fatura" className={`rounded-xl border ${alerta ? 'border-aviso/50 bg-aviso/10' : 'border-borda bg-surface'}`}>
-      <button type="button" onClick={alternar} aria-expanded={aberta}
+      <button type="button" onClick={alternar} aria-expanded={aberta} data-guia="import.conferencia"
         className="w-full flex items-center gap-2 px-3 py-2.5 text-left min-h-[44px]">
         {alerta
           ? <AlertCircle size={16} className="text-aviso shrink-0" />
@@ -118,7 +118,7 @@ export function ConferenciaFatura({ conferencia, sessao, onIrParaLinha }) {
 // ── 3. Abas da tabela ────────────────────────────────────────────────────────────────────────────
 export function AbasRevisao({ contagem, aba, onAba }) {
   return (
-    <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-borda" role="tablist" aria-label="Linhas da fatura">
+    <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-borda" role="tablist" aria-label="Linhas da fatura" data-guia="import.abas">
       {ABAS_REVISAO.map(a => {
         const n = a.conta(contagem)
         const ativa = aba === a.id

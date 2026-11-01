@@ -91,6 +91,7 @@ export default function AtalhosPanel() {
         </div>
         <button
           type="button"
+          data-guia="settings:atalhos.restaurar-todos"
           className="btn-secondary text-xs py-1.5 flex items-center gap-1.5"
           disabled={!personalizados}
           onClick={() => setConfirmarTodos(true)}
@@ -142,6 +143,7 @@ export default function AtalhosPanel() {
                       <div className="flex justify-end gap-1.5 whitespace-nowrap">
                         <button
                           type="button"
+                          data-guia={a === grupos[0].acoes[0] ? 'settings:atalhos.gravar' : undefined}
                           className={`${emCaptura ? 'btn-primary' : 'btn-secondary'} text-xs py-1 px-2 flex items-center gap-1`}
                           onClick={() => (emCaptura ? setCapturando(null) : iniciarCaptura(a.id))}
                         >
@@ -150,6 +152,7 @@ export default function AtalhosPanel() {
                         <button
                           type="button"
                           className="btn-secondary text-xs py-1 px-2 flex items-center gap-1"
+                          data-guia={a === grupos[0].acoes[0] ? 'settings:atalhos.desativar' : undefined}
                           disabled={!mapa[a.id] || emCaptura}
                           onClick={() => desativar(a)}
                         >
@@ -158,6 +161,7 @@ export default function AtalhosPanel() {
                         <button
                           type="button"
                           className="btn-secondary text-xs py-1 px-2 flex items-center gap-1"
+                          data-guia={a === grupos[0].acoes[0] ? 'settings:atalhos.restaurar' : undefined}
                           disabled={!alterado || emCaptura}
                           onClick={() => restaurar(a)}
                           title={`Padrão: ${textoCombinacao(a.padrao)}`}
@@ -174,7 +178,7 @@ export default function AtalhosPanel() {
         </table>
       </div>
 
-      <div className="card">
+      <div data-guia="settings:atalhos.fixos" className="card">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-texto-3 mb-2">Fixos (não configuráveis)</h3>
         <ul className="space-y-1.5">
           {ATALHOS_FIXOS.map(f => (

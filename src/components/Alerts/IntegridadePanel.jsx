@@ -9,6 +9,7 @@ import AceitarSaldoModal from './AceitarSaldoModal'
 import Modal from '../shared/Modal'
 import TransactionForm from '../Transactions/TransactionForm'
 import { fmt } from '../shared/utils'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 // Chave de handoff lida pelo CreditCardPanel ao montar: abre direto no cartão/fatura da pendência.
 export const ABRIR_FATURA_KEY = 'finup:abrirFatura'
@@ -53,6 +54,7 @@ function lancamentoDa(p, txById) {
 }
 
 export default function IntegridadePanel({ setActivePage }) {
+  useSubtelaGuia('alerts:integridade')
   const { accounts, transactions, pode } = useApp()
   // Varrer, corrigir, aceitar saldo, ignorar/reabrir pendências = editar em Alertas/Integridade.
   const podeEditarAl = pode('alertas', 'editar')
@@ -143,7 +145,7 @@ export default function IntegridadePanel({ setActivePage }) {
           </p>
         </div>
         {podeEditarAl && (
-          <button className="btn-primary flex items-center gap-2" onClick={varrer} disabled={varrendo}>
+          <button data-guia="alerts:integridade.varrer" className="btn-primary flex items-center gap-2" onClick={varrer} disabled={varrendo}>
             {varrendo ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             {varrendo ? 'Varrendo…' : 'Varrer agora'}
           </button>
@@ -161,7 +163,7 @@ export default function IntegridadePanel({ setActivePage }) {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-guia="alerts:integridade.status" className="flex flex-wrap items-center gap-2">
         {STATUS.map(s => (
           <button key={s.id} onClick={() => trocarStatus(s.id)}
             className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${status === s.id ? 'bg-primary text-white' : 'bg-surface-2 text-texto-2 hover:text-texto-1'}`}>
@@ -169,7 +171,7 @@ export default function IntegridadePanel({ setActivePage }) {
           </button>
         ))}
         {status === 'pendente' && corrigiveis.length > 0 && podeEditarAl && (
-          <button className="ml-auto text-xs flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-white hover:bg-primary-hover"
+          <button data-guia="alerts:integridade.corrigir-todas" className="ml-auto text-xs flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-white hover:bg-primary-hover"
             title="Aplica todas as correções automáticas (religar parcelas, depois etapas A) e varre de novo"
             onClick={() => setAjustar({ pendencias: corrigiveis, todas: true })}>
             <Wrench size={12} /> Corrigir todas ({corrigiveis.length})

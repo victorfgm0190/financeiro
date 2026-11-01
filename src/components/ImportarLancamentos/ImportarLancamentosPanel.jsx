@@ -58,10 +58,10 @@ function Progresso({ progresso }) {
 // (a rota ?acao=desfazer também recusa).
 export function ListaLotes({ lotes, erroLotes, nomeConta, podeExcluir, ocupado, onRecarregar, onDesfazer }) {
   return (
-    <section className="card space-y-2">
+    <section className="card space-y-2" data-guia="importar-lancamentos.ultimas">
       <div className="flex items-center gap-2">
         <h2 className="text-sm font-semibold text-texto-1">Últimas importações</h2>
-        <button className="p-1.5 rounded text-texto-3 hover:text-texto-1" onClick={onRecarregar} aria-label="Recarregar"><RefreshCw size={12} /></button>
+        <button className="p-1.5 rounded text-texto-3 hover:text-texto-1" onClick={onRecarregar} aria-label="Recarregar" data-guia="importar-lancamentos.recarregar"><RefreshCw size={12} /></button>
       </div>
       {erroLotes && <p className="text-xs text-perigo">{erroLotes}</p>}
       {!lotes.length && !erroLotes && <p className="text-xs text-texto-3">Nenhuma importação ainda.</p>}
@@ -291,7 +291,7 @@ export default function ImportarLancamentosPanel() {
       )}
 
       <Passo n={1} titulo="Conta de destino" desativado={ocupado}>
-        <select className="input max-w-md" value={contaId} onChange={e => { setContaId(e.target.value); limpar() }}>
+        <select className="input max-w-md" data-guia="importar-lancamentos.conta" value={contaId} onChange={e => { setContaId(e.target.value); limpar() }}>
           <option value="">Escolha a conta…</option>
           {contas.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
@@ -300,12 +300,12 @@ export default function ImportarLancamentosPanel() {
 
       <Passo n={2} titulo="Planilha" desativado={!conta || ocupado}>
         <div className="flex flex-wrap items-center gap-2">
-          <button className="btn-secondary inline-flex items-center gap-1.5" onClick={gerarExcel} disabled={!conta || gerando}>
+          <button className="btn-secondary inline-flex items-center gap-1.5" onClick={gerarExcel} data-guia="importar-lancamentos.gerar-excel" disabled={!conta || gerando}>
             <FileDown size={14} /> {gerando ? 'Gerando…' : 'Gerar Excel para preencher'}
           </button>
           <span className="text-xs text-texto-3">Excel desta conta, com listas de categorias e favorecidos.</span>
         </div>
-        <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-borda rounded-xl p-6 cursor-pointer hover:border-primary/60 text-center">
+        <label data-guia="importar-lancamentos.arquivo" className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-borda rounded-xl p-6 cursor-pointer hover:border-primary/60 text-center">
           <Upload size={20} className="text-texto-3" />
           <span className="text-sm text-texto-1">Enviar o arquivo preenchido</span>
           <span className="text-xs text-texto-3">.xlsx (gerado pelo Finup), .csv (mesmas colunas) ou .ofx (extrato do banco)</span>
@@ -329,7 +329,7 @@ export default function ImportarLancamentosPanel() {
           )}
 
           <Passo n={3} titulo={`Prévia — ${leitura.arquivo}`} desativado={bloqueadoPorAviso || ocupado}>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm" data-guia="importar-lancamentos.previa">
               <div className="rounded-lg bg-surface-2 p-2"><p className="text-[11px] text-texto-3">Válidas</p><p className="font-semibold text-texto-1">{previa.validas.length}</p></div>
               <div className="rounded-lg bg-surface-2 p-2"><p className="text-[11px] text-texto-3">Com erro</p><p className={`font-semibold ${previa.comErro.length ? 'text-perigo' : 'text-texto-1'}`}>{previa.comErro.length}</p></div>
               <div className="rounded-lg bg-surface-2 p-2"><p className="text-[11px] text-texto-3">Possíveis duplicados</p><p className={`font-semibold ${previa.duplicados.length ? 'text-aviso' : 'text-texto-1'}`}>{previa.duplicados.length}</p></div>
@@ -372,7 +372,7 @@ export default function ImportarLancamentosPanel() {
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-surface">
                   <tr className="text-left text-texto-3 border-b border-borda">
-                    <th className="px-2 py-2"><input type="checkbox" aria-label="Marcar todas" checked={previa.validas.every(i => i.selecionado)}
+                    <th className="px-2 py-2"><input type="checkbox" aria-label="Marcar todas" data-guia="importar-lancamentos.marcar-todas" checked={previa.validas.every(i => i.selecionado)}
                       onChange={e => setSelecao(Object.fromEntries(previa.validas.map(i => [i.linha, e.target.checked])))} /></th>
                     <th className="px-2 py-2">Linha</th><th className="px-2 py-2">Data</th><th className="px-2 py-2">Descrição</th>
                     <th className="px-2 py-2">Categoria</th><th className="px-2 py-2">Favorecido</th><th className="px-2 py-2 text-right">Valor</th>
@@ -403,10 +403,10 @@ export default function ImportarLancamentosPanel() {
 
           <Passo n={4} titulo="Confirmar" desativado={bloqueadoPorAviso || ocupado}>
             <div className="flex flex-wrap items-center gap-2">
-              <button className="btn-primary inline-flex items-center gap-1.5" onClick={gravar} disabled={!previa.totais.qtd || ocupado}>
+              <button className="btn-primary inline-flex items-center gap-1.5" onClick={gravar} data-guia="importar-lancamentos.importar" disabled={!previa.totais.qtd || ocupado}>
                 <Check size={14} /> Importar {previa.totais.qtd} lançamento{previa.totais.qtd === 1 ? '' : 's'} em “{conta.name}”
               </button>
-              <button className="btn-secondary" onClick={limpar} disabled={ocupado}>Cancelar</button>
+              <button className="btn-secondary" onClick={limpar} disabled={ocupado} data-guia="importar-lancamentos.cancelar">Cancelar</button>
             </div>
           </Passo>
         </>

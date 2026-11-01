@@ -4,6 +4,7 @@ import { consumoIa, salvarPrecoIa, excluirPrecoIa } from '../../lib/clientesApi'
 import { consolidarConsumo, periodoDoFiltro, precoDigitado, rotuloFerramenta } from '../../lib/consumoIa'
 import { fmt, fmtDate } from '../shared/utils'
 import { hojeSP } from '../../lib/hoje'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 // CONSUMO DE IA (Clientes Finup → aba "Consumo de IA", só o administrador da plataforma): o ia_uso de
 // CADA ambiente, somado no servidor (api/admin/consumo-ia.js), com o custo estimado pelo preço
@@ -95,7 +96,7 @@ function Precos({ precos, modelos, semTabela, onMudou }) {
     try { await excluirPrecoIa(id); onMudou() } catch (err) { setErro(err.message) }
   }
   return (
-    <section className="space-y-2">
+    <section className="space-y-2" data-guia="clientes:consumo.precos">
       <h3 className="text-sm font-semibold text-texto-1">Preços (US$ por milhão de tokens)</h3>
       {semTabela && <p className="text-xs text-aviso">O central ainda não tem a tabela de preços: rode scripts/migrar-central.js.</p>}
       <div className="card !p-0 overflow-x-auto">
@@ -151,6 +152,7 @@ function Precos({ precos, modelos, semTabela, onMudou }) {
 }
 
 export default function ConsumoIa() {
+  useSubtelaGuia('clientes:consumo')
   const hoje = hojeSP()
   const [tipo, setTipo] = useState('atual')
   const [livre, setLivre] = useState(() => periodoDoFiltro('atual', hoje))
@@ -185,7 +187,7 @@ export default function ConsumoIa() {
   return (
     <div className="space-y-4 min-w-0">
       <div className="flex flex-wrap items-end gap-2">
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Período">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Período" data-guia="clientes:consumo.periodo">
           {[['atual', 'Este mês'], ['anterior', 'Mês anterior'], ['livre', 'Intervalo']].map(([v, r]) => (
             <button key={v} type="button" onClick={() => setTipo(v)} aria-pressed={tipo === v}
               className={`px-3 py-1.5 min-h-[36px] rounded-lg text-xs font-medium border ${tipo === v ? 'border-primary text-primary-fg bg-primary/10' : 'border-borda text-texto-2 hover:bg-surface-hover'}`}>{r}</button>
@@ -198,11 +200,11 @@ export default function ConsumoIa() {
             <input type="date" aria-label="Fim" className="input !py-1.5 w-[9.5rem]" value={livre.fim} onChange={e => setLivre(p => ({ ...p, fim: e.target.value }))} />
           </div>
         )}
-        <select className="input !py-1.5 w-auto max-w-full" aria-label="Cliente" value={ambiente} onChange={e => setAmbiente(e.target.value)}>
+        <select className="input !py-1.5 w-auto max-w-full" aria-label="Cliente" data-guia="clientes:consumo.cliente" value={ambiente} onChange={e => setAmbiente(e.target.value)}>
           <option value="">Todos os clientes</option>
           {(dados?.ambientes || []).map(a => <option key={a.sigla} value={a.sigla}>{a.nome} ({a.sigla})</option>)}
         </select>
-        <button type="button" className="btn-secondary ml-auto inline-flex items-center gap-1.5 min-h-[36px]" onClick={carregar} title="Recarregar" aria-label="Recarregar">
+        <button type="button" className="btn-secondary ml-auto inline-flex items-center gap-1.5 min-h-[36px]" onClick={carregar} title="Recarregar" aria-label="Recarregar" data-guia="clientes:consumo.recarregar">
           {carregando ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
         </button>
       </div>
@@ -226,7 +228,7 @@ export default function ConsumoIa() {
             <p className="text-xs text-perigo">Sem leitura: {dados.falhas.map(f => `${nomes.get(f.sigla) || f.sigla} (${f.erro})`).join('; ')}</p>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-guia="clientes:consumo.totais">
             <Card titulo="Chamadas" valor={n(t.chamadas)} />
             <Card titulo="Tokens de entrada" valor={n(t.entrada)} detalhe={t.leitura || t.criacao ? `cache: ${n(t.leitura)} lidos, ${n(t.criacao)} gravados` : null} />
             <Card titulo="Tokens de saída" valor={n(t.saida)} />

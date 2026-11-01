@@ -32,7 +32,7 @@ export default function DespesasMobile({ card = false, oculto = false }) {
   return (
     <div className="space-y-3">
       <Segmentado opcoes={PERIOD_OPTS} valor={filtro} onChange={setFiltro} grande rotulo="Período" />
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2" data-guia="despesas.visao-modo">
         <Segmentado opcoes={VISOES} valor={visao} onChange={setVisao} grande rotulo="Visualização" />
         <Segmentado opcoes={MODO_OPTS} valor={modo} onChange={setModo} grande rotulo="Regra do valor" />
       </div>

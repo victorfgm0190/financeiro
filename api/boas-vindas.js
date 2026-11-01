@@ -2,12 +2,16 @@ import { query, parseBody } from './_db.js'
 import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { TELAS_COM_GUIA } from '../src/lib/ajudaTelas.js'
 
-// BOAS-VINDAS do usuário logado: se já viu o tour e se ocultou o checklist "Primeiros passos".
-// Gravado no banco do ambiente (não no navegador) para não reaparecer em outro aparelho.
-//   GET                                   → { tourVistoEm, checklistOcultoEm }
+// BOAS-VINDAS e GUIA DA TELA do usuário logado (preferências pessoais, no banco do ambiente — não no
+// navegador, para valerem em todos os aparelhos). O user_id vem SEMPRE da sessão, nunca do corpo.
+//   GET                                   → { tourVistoEm, checklistOcultoEm, guiasOcultos: [telaId] }
 //   POST { tourVisto: true }              → marca o tour como visto (pular ou concluir)
 //   POST { checklistOculto: true|false }  → oculta (ou volta a mostrar) o checklist
+//   POST { guiaOculto: '<tela>' }         → "Não mostrar mais" o guia desta tela
+//   POST { guiasTodos: true }             → desativa o guia de todas as telas
+//   DELETE                                → reativa todos os guias
 // user_id sem FK: o login de emergência tem id 'env:<usuário>' e não tem linha em usuarios.
 export const DDL_BOAS_VINDAS = `CREATE TABLE IF NOT EXISTS boas_vindas_usuario (
     user_id TEXT PRIMARY KEY,
@@ -15,12 +19,20 @@ export const DDL_BOAS_VINDAS = `CREATE TABLE IF NOT EXISTS boas_vindas_usuario (
     checklist_oculto_em TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`
+export const DDL_GUIAS = `CREATE TABLE IF NOT EXISTS guia_telas_ocultas (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    tela_id TEXT NOT NULL,
+    criado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, tela_id)
+  )`
 
 // "Já rodei" POR BANCO (um database por ambiente).
 const pronto = registroPorBanco()
 export async function ensureBoasVindasSchema() {
   if (pronto.jaRodou()) return
   await query(DDL_BOAS_VINDAS)
+  await query(DDL_GUIAS)
   pronto.marcar()
 }
 
@@ -43,6 +55,21 @@ export async function gravarBoasVindas(q, userId, { tourVisto, checklistOculto }
   return linhaParaJson(r)
 }
 
+// Telas com guia marcadas como "Não mostrar mais". Só ids conhecidos (src/lib/ajudaTelas.js).
+export async function ocultarGuias(q, userId, telas) {
+  const validas = [...new Set(telas)].filter(t => TELAS_COM_GUIA.includes(t))
+  if (!validas.length) return 0
+  await q(
+    `INSERT INTO guia_telas_ocultas (user_id, tela_id) SELECT $1, unnest($2::text[])
+     ON CONFLICT (user_id, tela_id) DO NOTHING`,
+    [userId, validas],
+  )
+  return validas.length
+}
+export const reativarGuias = (q, userId) => q('DELETE FROM guia_telas_ocultas WHERE user_id = $1', [userId])
+export const listarGuiasOcultos = async (q, userId) =>
+  (await q('SELECT tela_id FROM guia_telas_ocultas WHERE user_id = $1 ORDER BY tela_id', [userId])).map(r => r.tela_id)
+
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
@@ -50,15 +77,28 @@ async function handler(req, res) {
   if (!userId) return res.status(400).json({ error: 'Sessão sem usuário' })
   try {
     await ensureBoasVindasSchema()
-    if (req.method === 'GET') {
+    const resposta = async () => {
       const [r] = await query('SELECT tour_visto_em, checklist_oculto_em FROM boas_vindas_usuario WHERE user_id = $1', [userId])
-      return res.json(linhaParaJson(r))
+      return { ...linhaParaJson(r), guiasOcultos: await listarGuiasOcultos(query, userId) }
     }
+    if (req.method === 'GET') return res.json(await resposta())
     if (req.method === 'POST') {
       const body = await parseBody(req)
-      const out = await gravarBoasVindas(query, userId, { tourVisto: body?.tourVisto, checklistOculto: body?.checklistOculto })
-      if (!out) return res.status(400).json({ error: 'Nada para gravar' })
-      return res.json(out)
+      let fez = false
+      if (body?.tourVisto === true || typeof body?.checklistOculto === 'boolean') {
+        fez = !!(await gravarBoasVindas(query, userId, { tourVisto: body.tourVisto, checklistOculto: body.checklistOculto }))
+      }
+      if (typeof body?.guiaOculto === 'string') {
+        if (!(await ocultarGuias(query, userId, [body.guiaOculto]))) return res.status(400).json({ error: 'Tela desconhecida' })
+        fez = true
+      }
+      if (body?.guiasTodos === true) { await ocultarGuias(query, userId, TELAS_COM_GUIA); fez = true }
+      if (!fez) return res.status(400).json({ error: 'Nada para gravar' })
+      return res.json(await resposta())
+    }
+    if (req.method === 'DELETE') {
+      await reativarGuias(query, userId)
+      return res.json(await resposta())
     }
     return res.status(405).end()
   } catch (err) {

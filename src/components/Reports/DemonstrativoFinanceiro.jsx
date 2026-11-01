@@ -10,6 +10,7 @@ import { filtrarCategoriasPorPerfil, categoriasComMovimento } from '../../lib/ca
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { isoLocal } from '../../lib/hoje'
 import { exportarExcel } from '../../lib/exportExcel'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -448,6 +449,7 @@ function TxRow({ tx, indent }) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function DemonstrativoFinanceiro() {
+  useSubtelaGuia('reports:demonstrativo')
   const { profileReportTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, reserveFunctions, activeProfile, profiles, categoryGroupOrder } = useApp()
   const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
@@ -613,7 +615,7 @@ export default function DemonstrativoFinanceiro() {
             Demonstrativo Financeiro
           </h3>
           <div className="flex items-center gap-4 flex-wrap">
-            <label className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
+            <label data-guia="reports:demonstrativo.entre-perfis" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setIncludeInterProfile(v => !v)}
                 className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${includeInterProfile ? 'bg-primary' : 'bg-borda-campo'}`}
@@ -623,7 +625,7 @@ export default function DemonstrativoFinanceiro() {
               <ArrowLeftRight size={13} className="text-texto-2" />
               Incluir transferências entre perfis (CPF/CNPJ)
             </label>
-            <label className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
+            <label data-guia="reports:demonstrativo.ocultar-reserva" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setHideReserva(v => !v)}
                 className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${hideReserva ? 'bg-primary' : 'bg-borda-campo'}`}
@@ -632,7 +634,7 @@ export default function DemonstrativoFinanceiro() {
               </div>
               Ocultar movimentos de reserva
             </label>
-            <label className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
+            <label data-guia="reports:demonstrativo.ocultar-patrimonio" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setHidePatrimonio(v => !v)}
                 className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${hidePatrimonio ? 'bg-primary' : 'bg-borda-campo'}`}
@@ -641,7 +643,7 @@ export default function DemonstrativoFinanceiro() {
               </div>
               Ocultar movimentos de patrimônio
             </label>
-            <label className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
+            <label data-guia="reports:demonstrativo.exibir-lancamentos" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setShowTxDraft(v => !v)}
                 className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${showTxDraft ? 'bg-primary' : 'bg-borda-campo'}`}
@@ -656,7 +658,7 @@ export default function DemonstrativoFinanceiro() {
         {/* Period quick-select */}
         <div>
           <label className="label">Período</label>
-          <div className="flex gap-1.5 flex-wrap">
+          <div data-guia="reports:demonstrativo.periodo" className="flex gap-1.5 flex-wrap">
             {PERIOD_OPTIONS.map(o => (
               <button
                 key={o.value}
@@ -671,7 +673,7 @@ export default function DemonstrativoFinanceiro() {
         </div>
 
         {/* Date range */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div data-guia="reports:demonstrativo.datas" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="label">Data Inicial</label>
             <DateInput className="input" value={fromDraft} onChange={e => setFromDraft(e.target.value)} />
@@ -684,7 +686,7 @@ export default function DemonstrativoFinanceiro() {
 
         {/* Category and account multi-selects */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
+          <div data-guia="reports:demonstrativo.categorias">
             <label className="label">Categorias ({selectedCatsDraft.length}/{catItems.length})</label>
             <MultiSelectPanel
               label="Categorias"
@@ -693,7 +695,7 @@ export default function DemonstrativoFinanceiro() {
               onChange={setSelectedCatsDraft}
             />
           </div>
-          <div>
+          <div data-guia="reports:demonstrativo.contas">
             <label className="label">Contas ({selectedAccsDraft.length}/{accItems.length})</label>
             <MultiSelectPanel
               label="Contas"
@@ -707,6 +709,7 @@ export default function DemonstrativoFinanceiro() {
         {/* Actions */}
         <div className="flex gap-3 pt-1">
           <button
+            data-guia="reports:demonstrativo.atualizar"
             onClick={handleAtualizar}
             className={`btn-primary flex items-center gap-2 ${isDirty ? 'ring-2 ring-primary/50' : ''}`}
           >
@@ -714,6 +717,7 @@ export default function DemonstrativoFinanceiro() {
           </button>
           {report && (
             <button
+              data-guia="reports:demonstrativo.exportar-csv"
               onClick={() => exportCSV(report, applied.showTx, applied.from, applied.to)}
               className="btn-secondary flex items-center gap-2"
             >
@@ -722,6 +726,7 @@ export default function DemonstrativoFinanceiro() {
           )}
           {report && (
             <button
+              data-guia="reports:demonstrativo.exportar-excel"
               onClick={() => {
                 const nomesDe = (ids, lista) => ids.map(id => lista.find(x => x.id === id)).filter(Boolean).map(x => x.apelido || x.name)
                 const filtros = [
@@ -742,7 +747,7 @@ export default function DemonstrativoFinanceiro() {
 
       {/* Report table */}
       {report && (
-        <div className="card p-0 overflow-hidden">
+        <div data-guia="reports:demonstrativo.tabela" className="card p-0 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 420 }}>
               <thead>

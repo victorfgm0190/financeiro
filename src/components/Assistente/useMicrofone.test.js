@@ -12,6 +12,8 @@ describe('mensagens do microfone', () => {
     expect(mensagemErroVoz('not-allowed', { ios: true })).toContain('Ajustes')
     expect(mensagemErroVoz('service-not-allowed', { ios: true, instalado: false })).toContain('Ditado')
     expect(mensagemErroVoz('service-not-allowed', { ios: true, instalado: true })).toContain('microfone do teclado')
-    expect(mensagemSemSuporte({ instalado: true })).toContain('microfone do teclado')
+    expect(mensagemSemSuporte({ instalado: true, ios: true })).toContain('microfone do teclado')
+    // Fora do iPhone, sem nenhuma das camadas: Chrome ou digitar.
+    expect(mensagemSemSuporte({ instalado: false, ios: false })).toMatch(/Use o Chrome ou digite/)
   })
 })

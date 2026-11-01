@@ -201,7 +201,7 @@ function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = f
             ? 'border-primary bg-primary/5 animate-pulse cursor-copy'
             : 'border-borda-forte cursor-pointer hover:border-primary'
       }`}
-      onClick={() => !disabled && ref.current?.click()}
+      onClick={() => !disabled && ref.current?.click()} data-guia="import.arquivo"
       tabIndex={disabled ? undefined : 0}
       onDragEnter={(e) => { e.preventDefault(); if (!disabled) setDragging(true) }}
       onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragging(true) }}
@@ -3810,6 +3810,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
             className="btn-primary flex items-center gap-1.5 text-xs py-1.5"
             disabled={importarCount === 0 && excluirCount === 0 && parcelasEmpurraveis.length === 0}
             onClick={handleConfirmConciliacao}
+            data-guia="import.conciliacao-confirmar"
           >
             <Check size={12} /> Confirmar Conciliação
           </button>
@@ -4243,13 +4244,13 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           <div className="card grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="label">Cartão</label>
-              <select className="input" value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}>
+              <select className="input" data-guia="import.cartao" value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}>
                 <AccountOptions accounts={creditAccounts} accountGroups={accountGroups} placeholder="Selecione o cartão..." />
               </select>
             </div>
             <div>
               <label className="label">Mês de Referência</label>
-              <select className="input" value={faturaMonthYear} onChange={e => setFaturaMonthYear(e.target.value)}>
+              <select className="input" data-guia="import.mes" value={faturaMonthYear} onChange={e => setFaturaMonthYear(e.target.value)}>
                 <option value="">Selecione...</option>
                 {monthOptionsCom(faturaMonthYear).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
@@ -4276,6 +4277,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
               className="btn-secondary flex items-center gap-1.5 text-xs py-1.5"
               disabled={!selectedAccount || !faturaMonthYear}
               onClick={() => concFileRef.current?.click()}
+              data-guia="import.conciliar"
               title={!selectedAccount || !faturaMonthYear ? 'Selecione o cartão e o mês de referência' : 'Conciliar fatura com CSV ou XLS/XLSX do Itaú'}
             >
               <ArrowLeftRight size={12} /> Conciliar Fatura
@@ -4306,13 +4308,13 @@ Conciliar mesmo assim com o mês selecionado?`)) return
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="label">Cartão de Destino</label>
-                <select className="input" value={selectedAccount} disabled={!!editingImport} onChange={e => handleAccountChange(e.target.value)}>
+                <select className="input" data-guia="import.cartao" value={selectedAccount} disabled={!!editingImport} onChange={e => handleAccountChange(e.target.value)}>
                   <AccountOptions accounts={creditAccounts} accountGroups={accountGroups} placeholder="Selecione o cartão..." />
                 </select>
               </div>
               <div>
                 <label className="label">Mês de Referência</label>
-                <select className="input" value={faturaMonthYear} onChange={e => handleFaturaMonthYearChange(e.target.value)}>
+                <select className="input" data-guia="import.mes" value={faturaMonthYear} onChange={e => handleFaturaMonthYearChange(e.target.value)}>
                   <option value="">Selecione...</option>
                   {monthOptionsCom(faturaMonthYear).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
@@ -4527,26 +4529,26 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           )}
 
           {/* Regras de classificação: administradas em Configurações › Regras. */}
-          <div className="px-1"><LinkRegrasClassificacao /></div>
+          <div className="px-1" data-guia="import.regras"><LinkRegrasClassificacao /></div>
 
           {/* 5. Barra de ações fixa */}
           <BarraAcoesRevisao
             contagem={contagem}
             acoes={<>
               {!editingImport && (
-                <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={autoClassify}>
+                <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={autoClassify} data-guia="import.classificar-auto">
                   <Wand2 size={12} /> Classificar Auto
                 </button>
               )}
               {!editingImport && (
-                <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={() => setShowBatchFill(true)}>
+                <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={() => setShowBatchFill(true)} data-guia="import.preencher-lote">
                   <Layers size={12} /> Preencher em Lote
                 </button>
               )}
-              <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={() => setShowCatGer(true)}>
+              <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={() => setShowCatGer(true)} data-guia="import.cat-ger">
                 <ArrowRight size={12} /> Cat → Ger
               </button>
-              <button className="btn-secondary text-xs py-1.5" onClick={() => { setRows([]); setEditingImport(null) }}>
+              <button className="btn-secondary text-xs py-1.5" onClick={() => { setRows([]); setEditingImport(null) }} data-guia="import.cancelar">
                 <X size={12} className="mr-1 inline" /> Cancelar
               </button>
             </>}
@@ -4556,6 +4558,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                 disabled={(editingImport && toImportCount === 0) || !selectedAccount || !faturaMonthYear}
                 title={!faturaMonthYear ? 'Escolha o Mês de Referência' : undefined}
                 onClick={handleConfirmImport}
+                data-guia="import.confirmar"
               >
                 <Save size={12} /> {editingImport
                   ? `Salvar (${toImportCount})`
@@ -4569,7 +4572,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
       {/* Histórico de importações */}
       {cardImports.length > 0 && (
         <div className="card">
-          <h3 className="text-xs font-semibold text-texto-2 uppercase tracking-wide mb-3">
+          <h3 className="text-xs font-semibold text-texto-2 uppercase tracking-wide mb-3" data-guia="import.historico">
             Histórico de Importações
           </h3>
           <div className="space-y-1.5">

@@ -96,7 +96,7 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
             </button>
           ) : <span className="w-2" />}
           <h1 className="min-w-0 text-base font-semibold text-texto-1 truncate">{modulo.label}</h1>
-          {modulo.page && <AjudaTela pagina={modulo.page} />}
+          <AjudaTela pagina={modulo.page || modulo.id} />
           <span className="flex-1" />
           <button type="button" onClick={onOpenSearch} aria-label="Buscar" className="w-11 h-11 flex items-center justify-center text-texto-2">
             <Search size={20} />

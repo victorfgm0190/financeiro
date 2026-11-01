@@ -558,7 +558,7 @@ export default function ClientesPanel({ onMudou = () => {} }) {
   const [aba, setAba] = useState('clientes')
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 border-b border-borda" role="tablist" aria-label="Clientes Finup">
+      <div className="flex gap-1 border-b border-borda" role="tablist" aria-label="Clientes Finup" data-guia="clientes.abas">
         {[['clientes', 'Clientes'], ['consumo', 'Consumo de IA']].map(([v, r]) => (
           <button key={v} type="button" role="tab" aria-selected={aba === v} onClick={() => setAba(v)}
             className={`px-3 py-2 min-h-[40px] text-sm font-medium border-b-2 -mb-px ${aba === v ? 'border-primary text-primary-fg' : 'border-transparent text-texto-2 hover:text-texto-1'}`}>{r}</button>
@@ -600,7 +600,7 @@ function ControleDeClientes({ onMudou }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5" data-guia="clientes.filtro-status">
           {['pedido', ...STATUS_CLIENTE.filter(s => s !== 'pedido'), 'todos'].map(s => (
             <button key={s} onClick={() => setFiltro(s)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${filtro === s ? 'border-primary text-primary-fg bg-primary/10' : 'border-borda text-texto-2 hover:bg-surface-hover'}`}>
@@ -610,8 +610,8 @@ function ControleDeClientes({ onMudou }) {
           ))}
         </div>
         <div className="ml-auto flex gap-2">
-          <button className="btn-secondary inline-flex items-center gap-1.5" onClick={mudou} title="Recarregar"><RefreshCw size={14} /></button>
-          <button className="btn-primary inline-flex items-center gap-1.5" onClick={() => setNovo(true)}><Plus size={14} /> Novo cliente</button>
+          <button className="btn-secondary inline-flex items-center gap-1.5" onClick={mudou} title="Recarregar" data-guia="clientes.recarregar"><RefreshCw size={14} /></button>
+          <button className="btn-primary inline-flex items-center gap-1.5" onClick={() => setNovo(true)} data-guia="clientes.novo"><Plus size={14} /> Novo cliente</button>
         </div>
       </div>
       {contagem.pedido > 0 && (
@@ -619,7 +619,7 @@ function ControleDeClientes({ onMudou }) {
       )}
       {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}
 
-      <div className="card !p-0 overflow-x-auto">
+      <div className="card !p-0 overflow-x-auto" data-guia="clientes.lista">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-texto-3 border-b border-borda text-left">

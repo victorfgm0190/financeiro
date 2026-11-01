@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { Sparkles, Mic, Square, Camera, ImagePlus, X, Loader2 } from 'lucide-react'
+import { Sparkles, Mic, Square, Camera, ImagePlus, X, Loader2, FileText } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { comprimirImagem, imagemDoClipboard, MAX_IMAGEM_ORIGINAL } from '../../lib/assistente'
+import { comprimirImagem, imagemDoClipboard, MAX_IMAGEM_ORIGINAL, ehPdf, lerPdf } from '../../lib/assistente'
 import { interpretar } from '../../lib/assistenteApi'
 import { EXECUTORES } from './executores'
 import LoteAssistente from './LoteAssistente'
 import { Pergunta } from './respostas'
 import { useMicrofone, BARRAS, mensagemSemSuporte } from './useMicrofone'
+import AjudaTela from '../BoasVindas/AjudaTela'
 
-// ASSISTENTE IA: texto, voz (Web Speech API, pt-BR) ou imagem (câmera, galeria ou Ctrl+V de um
-// print) → /api/assistente. A imagem é reduzida no aparelho (lado maior ~1600 px, JPEG ~0,8) e NÃO é
-// gravada em lugar nenhum: vai só ao modelo, para ler o lançamento. Texto junto é opcional.
+// ASSISTENTE IA: texto, voz (pt-BR), imagem (câmera, galeria ou Ctrl+V de um print) ou PDF (boleto,
+// fatura, nota, comprovante, extrato) → /api/assistente. A imagem é reduzida no aparelho (lado maior
+// ~1600 px, JPEG ~0,8); o PDF vai inteiro (até 3 MB). Nenhum dos dois é gravado em lugar nenhum: vai
+// só ao modelo, para ler o lançamento. Texto junto é opcional.
 // O backend só devolve a ferramenta e os parâmetros (registro central: src/lib/assistente/acoes.js). A resposta é
 // renderizada pelo executor da ferramenta (executores.jsx): prévia nos formulários existentes,
 // consulta calculada AQUI com as funções das telas (nunca valor da IA), ou abrir a tela certa
@@ -34,7 +36,8 @@ export default function Assistente({ onClose, onToast }) {
   // Trecho do ditado ainda provisório: já está DENTRO de `texto` (contador e Enviar usam `texto`);
   // aqui só para pintar o fim do campo de cinza enquanto grava.
   const [provisorio, setProvisorio] = useState('')
-  const [imagem, setImagem] = useState(null) // { base64, mimeType, preview }
+  // Anexo: imagem { base64, mimeType, preview } ou PDF { base64, mimeType: 'application/pdf', nome, paginas }.
+  const [imagem, setImagem] = useState(null)
   const [erro, setErro] = useState('')
   const arquivoRef = useRef(null)
   const galeriaRef = useRef(null)
@@ -64,7 +67,7 @@ export default function Assistente({ onClose, onToast }) {
   const enviar = async (extra = {}) => {
     if (mic.ouvindo) mic.parar()
     const pedido = texto.trim()
-    if (!pedido && !imagem) { setErro('Escreva, fale ou envie uma foto.'); return }
+    if (!pedido && !imagem) { setErro('Escreva, fale ou envie uma foto ou PDF.'); return }
     setErro('')
     setFase({ tipo: 'carregando' })
     try {
@@ -88,10 +91,18 @@ export default function Assistente({ onClose, onToast }) {
     enviar({ pergunta, respostaPergunta: resposta.trim() })
   }
 
-  // Uma imagem por vez (câmera, galeria ou colada): reduz no aparelho e mostra a miniatura.
+  // Um anexo por vez (câmera, galeria, arquivo ou colado). Imagem: reduz no aparelho e mostra a
+  // miniatura. PDF: vai inteiro (até o limite), com ícone, nome e nº de páginas.
   const carregarImagem = async (arq) => {
     if (!arq) return
-    if (!arq.type.startsWith('image/')) { setErro('Envie uma imagem (foto do comprovante, cupom, boleto ou print).'); return }
+    if (ehPdf(arq)) {
+      try {
+        setImagem(await lerPdf(arq))
+        setErro('')
+      } catch (err) { setErro(err.message) }
+      return
+    }
+    if (!arq.type.startsWith('image/')) { setErro('Envie uma imagem (foto, print) ou um PDF (boleto, fatura, nota, comprovante).'); return }
     if (arq.size > MAX_IMAGEM_ORIGINAL) { setErro('Imagem muito grande (máximo 20 MB). Tire outra foto ou recorte o print.'); return }
     try {
       const c = await comprimirImagem(arq)
@@ -140,13 +151,16 @@ export default function Assistente({ onClose, onToast }) {
         <Pergunta parametros={fase.parametros} textoOriginal={texto.trim()} onResponder={responder} onNovo={novoPedido} />
       ) : (
         <>
-          <p className="text-xs text-texto-3">
-            Descreva um lançamento, uma conta a pagar, uma baixa ou peça um saldo. Ex.: “gastei 600 de combustível”, “o Carlos me pagou 220 no Pix, dá baixa”, “qual o saldo da conta Itaú”.
+          <div className="flex items-start gap-1">
+          <p className="text-xs text-texto-3 flex-1 min-w-0">
+            Descreva um lançamento, uma conta a pagar, uma baixa ou peça um saldo — ou envie foto, print ou PDF de um boleto, fatura, nota ou comprovante. Ex.: “gastei 600 de combustível”, “recebi 220 no Pix do aluguel, dá baixa”, “qual o saldo da conta corrente”.
           </p>
+          <AjudaTela pagina="assistente" className="-mt-1.5" />
+          </div>
           <div className="relative">
             {mic.ouvindo ? (
               // Gravando: o campo mostra a transcrição ao vivo — final normal, provisória em cinza.
-              <div className="input min-h-[96px] pr-10 whitespace-pre-wrap break-words" aria-live="polite">
+              <div className="input min-h-[96px] pr-10 whitespace-pre-wrap break-words" aria-live="polite" data-guia="assistente.texto">
                 {(() => {
                   // `texto` já inclui o provisório no fim: a parte final sai em cinza.
                   const corte = provisorioVisivel && texto.endsWith(provisorioVisivel) ? texto.length - provisorioVisivel.length : texto.length
@@ -157,6 +171,7 @@ export default function Assistente({ onClose, onToast }) {
               </div>
             ) : (
               <textarea
+                data-guia="assistente.texto"
                 className="input min-h-[96px] pr-10 resize-none"
                 value={texto}
                 onChange={e => setTexto(e.target.value.slice(0, MAX_TEXTO))}
@@ -170,10 +185,20 @@ export default function Assistente({ onClose, onToast }) {
             <span className="absolute bottom-1.5 right-2 text-[10px] text-texto-3">{texto.length}/{MAX_TEXTO}</span>
           </div>
           {imagem && (
-            <div className="flex items-center gap-2">
-              <img src={imagem.preview} alt="Foto enviada" className="h-16 w-16 rounded-lg border border-borda object-cover" />
-              <button type="button" onClick={() => setImagem(null)} className="inline-flex items-center gap-1 text-xs text-texto-2 hover:text-perigo min-h-[40px]">
-                <X size={13} /> Remover foto
+            <div className="flex items-center gap-2 min-w-0">
+              {imagem.mimeType === 'application/pdf' ? (
+                <span data-testid="anexo-pdf" className="flex items-center gap-2 min-w-0 rounded-lg border border-borda bg-surface-2 px-2.5 py-2">
+                  <FileText size={22} className="text-perigo shrink-0" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block text-xs text-texto-1 font-medium truncate max-w-[14rem]" title={imagem.nome}>{imagem.nome}</span>
+                    <span className="block text-[11px] text-texto-2">PDF{imagem.paginas ? ` · ${imagem.paginas} página${imagem.paginas !== 1 ? 's' : ''}` : ''}</span>
+                  </span>
+                </span>
+              ) : (
+                <img src={imagem.preview} alt="Foto enviada" className="h-16 w-16 rounded-lg border border-borda object-cover" />
+              )}
+              <button type="button" onClick={() => setImagem(null)} className="inline-flex items-center gap-1 text-xs text-texto-2 hover:text-perigo min-h-[40px] shrink-0">
+                <X size={13} /> {imagem.mimeType === 'application/pdf' ? 'Remover PDF' : 'Remover foto'}
               </button>
             </div>
           )}
@@ -186,7 +211,7 @@ export default function Assistente({ onClose, onToast }) {
         <div className="flex items-center gap-2">
           <span className="relative inline-flex shrink-0">
             {mic.ouvindo && mic.pulso && <span className="absolute inset-0 rounded-full bg-perigo/40 animate-ping" aria-hidden />}
-            <button type="button" onClick={alternarMicrofone} disabled={carregando}
+            <button type="button" data-guia="assistente.microfone" onClick={alternarMicrofone} disabled={carregando || mic.transcrevendo}
               className={`relative w-11 h-11 rounded-full flex items-center justify-center border transition-colors ${mic.ouvindo ? 'border-perigo bg-perigo text-white' : 'border-borda text-texto-2 bg-surface-2'}`}
               aria-label={mic.ouvindo ? 'Parar de ouvir' : 'Falar'} aria-pressed={mic.ouvindo} title={mic.ouvindo ? 'Parar de ouvir' : 'Falar (pt-BR)'}>
               {mic.ouvindo ? <Square size={16} /> : <Mic size={18} />}
@@ -202,27 +227,35 @@ export default function Assistente({ onClose, onToast }) {
           )}
           {!mic.ouvindo && (
             <>
-              <button type="button" onClick={() => arquivoRef.current?.click()} disabled={carregando}
+              <button type="button" data-guia="assistente.camera" onClick={() => arquivoRef.current?.click()} disabled={carregando}
                 className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center border border-borda text-texto-2 bg-surface-2"
                 aria-label="Tirar foto" title="Tirar foto (cupom, nota, comprovante, boleto)">
                 <Camera size={18} />
               </button>
               <input ref={arquivoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={escolherFoto} />
-              <button type="button" onClick={() => galeriaRef.current?.click()} disabled={carregando}
+              <button type="button" data-guia="assistente.anexar" onClick={() => galeriaRef.current?.click()} disabled={carregando}
                 className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center border border-borda text-texto-2 bg-surface-2"
-                aria-label="Anexar imagem" title="Anexar da galeria (print de notificação, comprovante Pix…)">
+                aria-label="Anexar imagem ou PDF" title="Anexar imagem ou PDF (print, comprovante Pix, boleto, fatura, nota…)">
                 <ImagePlus size={18} />
               </button>
-              <input ref={galeriaRef} type="file" accept="image/*" className="hidden" onChange={escolherFoto} />
+              <input ref={galeriaRef} type="file" accept="image/*,application/pdf,.pdf" className="hidden" onChange={escolherFoto} />
             </>
           )}
-          <button type="button" onClick={() => enviar()} disabled={carregando || (!texto.trim() && !imagem)} className="btn-primary flex-1 min-w-0 min-h-[44px] inline-flex items-center justify-center gap-2">
+          <button type="button" data-guia="assistente.enviar" onClick={() => enviar()} disabled={carregando || mic.transcrevendo || (!texto.trim() && !imagem)} className="btn-primary flex-1 min-w-0 min-h-[44px] inline-flex items-center justify-center gap-2">
             {carregando ? <><Loader2 size={16} className="animate-spin" /> {demorando ? 'Lendo…' : 'Entendendo…'}</> : <><Sparkles size={16} /> Enviar</>}
           </button>
         </div>
       )}
       {!mic.suportado && !ehPergunta && <p className="text-[11px] text-aviso whitespace-pre-wrap break-words">{mensagemSemSuporte()}</p>}
-      {mic.ouvindo && <p className="text-[11px] text-texto-3">Ouvindo… toque no botão vermelho para parar (para sozinho após uns segundos de silêncio).</p>}
+      {mic.ouvindo && (
+        <p className="text-[11px] text-texto-3" aria-live="polite">
+          {mic.modo === 'gravacao' ? 'Gravando… toque no botão vermelho para parar (até 2 minutos; para sozinho após uns segundos de silêncio).' : 'Ouvindo… toque no botão vermelho para parar (para sozinho após uns segundos de silêncio).'}
+          {mic.restante != null && <span className="text-aviso font-medium"> ⚠ Faltam {mic.restante} s.</span>}
+        </p>
+      )}
+      {mic.transcrevendo && (
+        <p className="flex items-center gap-1.5 text-[11px] text-texto-2" aria-live="polite"><Loader2 size={12} className="animate-spin" /> Transcrevendo o áudio…</p>
+      )}
       <p className="text-[10px] text-texto-3">O assistente só sugere: nada é salvo sem a sua confirmação na prévia. Ele não exclui nada.</p>
     </div>
   )

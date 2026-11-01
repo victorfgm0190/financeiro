@@ -215,6 +215,20 @@
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+/* Guia da Tela: contorno pulsante no botão do item destacado (src/components/BoasVindas/AjudaTela.jsx). */
+.guia-destaque {
+  outline: 2px solid var(--color-primary-fg);
+  outline-offset: 3px;
+  border-radius: 8px;
+  animation: guia-pulso 1.1s ease-in-out infinite;
+}
+@keyframes guia-pulso {
+  0%, 100% { outline-color: var(--color-primary-fg); outline-offset: 3px; }
+  50% { outline-color: transparent; outline-offset: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guia-destaque { animation: none; }
+}
 .skeleton {
   border-radius: 4px;
   background: linear-gradient(90deg, var(--color-surface-2) 25%, var(--color-surface-hover) 50%, var(--color-surface-2) 75%);

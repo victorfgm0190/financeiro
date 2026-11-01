@@ -12,6 +12,7 @@ import { gerencialCitada, MENSAGEM_CONTA_GERENCIAL } from '../src/lib/assistente
 import { blocosDoPedido, trechosDosItens, faltantesDoLote } from '../src/lib/assistente/lote.js'
 import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, ehPedidoDeEstorno, buscarCandidatosBaixa, valorDitoAproximado } from './_iaBaixa.js'
 import { centralQuery } from './_central.js'
+import { validarAnexo, blocoDoAnexo, MIME_PDF } from './_anexoIa.js'
 import { limitesDoAmbiente, bloqueioDoLimite } from '../src/lib/assistente/limiteIa.js'
 
 // Limites do cliente (central). Sem as colunas (central não migrado) → o padrão.
@@ -44,8 +45,7 @@ const GRAVAM = new Set(['registrar_lancamento', 'criar_agendamento', 'baixar_age
 
 const MODELO = 'claude-haiku-5-5'
 const MAX_TEXTO = 1000
-const MAX_IMAGEM_BYTES = 2.2 * 1024 * 1024 // ~2 MB (o app comprime para ~1600 px antes)
-const MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+// Anexo (imagem ou PDF): validação e bloco do Claude em api/_anexoIa.js.
 
 // Resolvedores do backend (campo `resolver` do registro): dados que só o banco tem.
 const RESOLVEDORES = {
@@ -75,11 +75,10 @@ async function handler(req, res) {
     const perfilAtivo = typeof body?.perfilAtivo === 'string' ? body.perfilAtivo.slice(0, 80) : null
 
     if (texto.length > MAX_TEXTO) return res.status(400).json({ error: `Texto muito longo (máximo ${MAX_TEXTO} caracteres).` })
-    if (!texto && !imagem) return res.status(400).json({ error: 'Escreva, fale ou envie uma foto.' })
-    if (imagem) {
-      if (!MIMES.has(mime)) return res.status(400).json({ error: 'Formato de imagem não aceito (use JPG, PNG ou WebP).' })
-      if (Math.floor(imagem.length * 3 / 4) > MAX_IMAGEM_BYTES) return res.status(413).json({ error: 'Imagem muito grande (máximo ~2 MB).' })
-    }
+    if (!texto && !imagem) return res.status(400).json({ error: 'Escreva, fale ou envie uma foto ou PDF.' })
+    const ehPdf = mime === MIME_PDF
+    const recusa = validarAnexo(imagem, mime)
+    if (recusa) return res.status(recusa.status).json({ error: recusa.erro })
 
     const textoPedido = `${texto} ${pergunta} ${resposta}`
     if (ehPedidoDeExclusao(`${texto} ${resposta}`)) return res.json({ ferramenta: 'perguntar', parametros: RESPOSTA_EXCLUSAO })
@@ -100,10 +99,11 @@ async function handler(req, res) {
     const acoes = acoesDoPedido(textoPedido, podeFn)
     const disponiveis = new Set(acoes.map(a => a.id))
 
-    const partes = [`Hoje é ${hoje}.`, texto ? `Pedido: ${texto}` : 'Pedido: (veja a imagem)']
+    const partes = [`Hoje é ${hoje}.`, texto ? `Pedido: ${texto}` : `Pedido: (veja ${ehPdf ? 'o PDF' : 'a imagem'})`]
     if (resposta) partes.push(`Você perguntou: ${pergunta || '(pergunta anterior)'}`, `Resposta do usuário: ${resposta}`)
     const content = [
-      ...(imagem ? [{ type: 'image', source: { type: 'base64', media_type: mime, data: imagem } }] : []),
+      // Imagem → bloco image; PDF → bloco document (texto e páginas escaneadas são lidos igual).
+      ...blocoDoAnexo(imagem, mime),
       { type: 'text', text: partes.join('\n') },
     ]
 

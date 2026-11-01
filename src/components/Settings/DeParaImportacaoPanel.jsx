@@ -24,12 +24,12 @@ export default function DeParaImportacaoPanel() {
     <div className="card space-y-3">
       <div className="flex items-center gap-2">
         <h2 className="text-sm font-semibold text-texto-2">De-para de importação ({itens.length})</h2>
-        <button type="button" onClick={carregar} className="p-1.5 rounded text-texto-3 hover:text-texto-1" aria-label="Recarregar"><RefreshCw size={12} /></button>
+        <button type="button" data-guia="settings:depara-importacao.recarregar" onClick={carregar} className="p-1.5 rounded text-texto-3 hover:text-texto-1" aria-label="Recarregar"><RefreshCw size={12} /></button>
       </div>
       <p className="text-xs text-texto-3">Quando um arquivo importado (Importar lançamentos) traz uma categoria que não existe no Finup, ela vira a categoria escolhida aqui.</p>
       {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}
       {podeEditar && (
-        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); agir(async () => { await salvarDepara(novo.origem, novo.categoria); setNovo({ origem: '', categoria: '' }) }) }}>
+        <form data-guia="settings:depara-importacao.novo" className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); agir(async () => { await salvarDepara(novo.origem, novo.categoria); setNovo({ origem: '', categoria: '' }) }) }}>
           <input className="input !py-1.5 max-w-xs" placeholder="Digite o texto como vem no arquivo" value={novo.origem} onChange={e => setNovo(n => ({ ...n, origem: e.target.value }))} />
           <select className="input !py-1.5 max-w-xs" value={novo.categoria} onChange={e => setNovo(n => ({ ...n, categoria: e.target.value }))}>
             <option value="">Categoria…</option>
@@ -46,14 +46,14 @@ export default function DeParaImportacaoPanel() {
               <tr key={d.id} className="border-b border-borda/60 last:border-0">
                 <td className="px-3 py-1.5 text-texto-1">{d.nome_exibicao || d.nome_origem}</td>
                 <td className="px-3 py-1.5">
-                  <select className="input !py-1 max-w-xs" value={d.categoria_id} disabled={!podeEditar} onChange={e => agir(() => editarDepara(d.id, e.target.value))}>
+                  <select data-guia={d === itens[0] ? 'settings:depara-importacao.categoria' : undefined} className="input !py-1 max-w-xs" value={d.categoria_id} disabled={!podeEditar} onChange={e => agir(() => editarDepara(d.id, e.target.value))}>
                     {!nome.has(d.categoria_id) && <option value={d.categoria_id}>(categoria apagada)</option>}
                     {rotulos.map(r => <option key={r.id} value={r.id}>{r.rotulo}</option>)}
                   </select>
                 </td>
                 <td className="px-2 py-1.5 text-right">
                   {podeEditar && (
-                    <button type="button" aria-label="Excluir" title="Excluir" className="p-1.5 rounded text-texto-3 hover:text-perigo"
+                    <button type="button" data-guia={d === itens[0] ? 'settings:depara-importacao.excluir' : undefined} aria-label="Excluir" title="Excluir" className="p-1.5 rounded text-texto-3 hover:text-perigo"
                       onClick={() => window.confirm(`Excluir o de-para de "${d.nome_exibicao || d.nome_origem}"?`) && agir(() => excluirDepara(d.id))}><Trash2 size={13} /></button>
                   )}
                 </td>

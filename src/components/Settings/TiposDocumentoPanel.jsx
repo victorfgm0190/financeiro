@@ -108,7 +108,7 @@ export default function TiposDocumentoPanel() {
     <div className="card space-y-3">
       <div className="flex items-center gap-2">
         <h2 className="text-sm font-semibold text-texto-2">Tipos de documento ({tiposDocumento.length})</h2>
-        <button type="button" onClick={() => setEditando('novo')} className="ml-auto btn-secondary text-xs py-1.5 flex items-center gap-1.5">
+        <button type="button" data-guia="settings:tipos-documento.novo" onClick={() => setEditando('novo')} className="ml-auto btn-secondary text-xs py-1.5 flex items-center gap-1.5">
           <Plus size={12} /> Novo tipo
         </button>
       </div>
@@ -137,7 +137,7 @@ export default function TiposDocumentoPanel() {
             } ${t.ativo ? '' : 'opacity-60'}`}
           >
             <span className="select-none text-base leading-none text-texto-3 hover:text-texto-2 cursor-grab active:cursor-grabbing shrink-0" title="Arrastar para reordenar">⠿</span>
-            <div className="flex gap-0.5 shrink-0">
+            <div data-guia={i === 0 ? 'settings:tipos-documento.ordem' : undefined} className="flex gap-0.5 shrink-0">
               <button type="button" onClick={() => reordenar(moverTipo(ids, t.id, 'up'))} disabled={i === 0} title="Mover para cima"
                 className="p-1 rounded hover:bg-surface-hover disabled:opacity-25 text-texto-2"><ArrowUp size={11} /></button>
               <button type="button" onClick={() => reordenar(moverTipo(ids, t.id, 'down'))} disabled={i === tiposDocumento.length - 1} title="Mover para baixo"
@@ -149,14 +149,14 @@ export default function TiposDocumentoPanel() {
             <span className="badge bg-surface-hover text-texto-2 text-xs shrink-0 hidden sm:inline">{rotuloNatureza(t.natureza)}</span>
             {usos.get(t.id) > 0 && <span className="text-[11px] text-texto-3 shrink-0 hidden md:inline">{usos.get(t.id)} uso{usos.get(t.id) !== 1 ? 's' : ''}</span>}
             <div className="ml-auto flex items-center gap-1 shrink-0">
-              <button type="button" onClick={() => alternarAtivo(t)}
+              <button type="button" data-guia={i === 0 ? 'settings:tipos-documento.ativo' : undefined} onClick={() => alternarAtivo(t)}
                 className={`text-[11px] px-2 py-0.5 rounded border ${t.ativo ? 'border-primary/50 text-primary-fg' : 'border-borda-forte text-texto-2'}`}
                 title={t.ativo ? 'Inativar (some dos formulários)' : 'Ativar'}>
                 {t.ativo ? 'Ativo' : 'Inativo'}
               </button>
-              <button type="button" onClick={() => setEditando(t.id)} className="p-1.5 rounded text-texto-2 hover:text-texto-1 hover:bg-surface-hover" title="Editar"><Pencil size={12} /></button>
+              <button type="button" data-guia={i === 0 ? 'settings:tipos-documento.editar' : undefined} onClick={() => setEditando(t.id)} className="p-1.5 rounded text-texto-2 hover:text-texto-1 hover:bg-surface-hover" title="Editar"><Pencil size={12} /></button>
               {!t.sistema && (
-                <button type="button" onClick={() => setExcluir(t)} className="p-1.5 rounded text-texto-3 hover:text-perigo hover:bg-surface-hover" title="Excluir"><Trash2 size={12} /></button>
+                <button type="button" data-guia={t === tiposDocumento.find(x => !x.sistema) ? 'settings:tipos-documento.excluir' : undefined} onClick={() => setExcluir(t)} className="p-1.5 rounded text-texto-3 hover:text-perigo hover:bg-surface-hover" title="Excluir"><Trash2 size={12} /></button>
               )}
             </div>
           </div>

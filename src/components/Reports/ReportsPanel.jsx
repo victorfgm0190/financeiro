@@ -103,7 +103,7 @@ export default function ReportsPanel() {
   if (showDemonstrativo) {
     return (
       <div className="space-y-4">
-        <button className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors" onClick={() => setShowDemonstrativo(false)}>
+        <button data-guia="reports:demonstrativo.voltar" className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors" onClick={() => setShowDemonstrativo(false)}>
           <ArrowLeft size={14} /> Voltar aos Relatórios
         </button>
         <DemonstrativoFinanceiro />
@@ -114,7 +114,7 @@ export default function ReportsPanel() {
   if (showFavorecido) {
     return (
       <div className="space-y-4">
-        <button className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors" onClick={() => setShowFavorecido(false)}>
+        <button data-guia="reports:favorecido.voltar" className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors" onClick={() => setShowFavorecido(false)}>
           <ArrowLeft size={14} /> Voltar aos Relatórios
         </button>
         <RelatorioPorFavorecido />
@@ -125,7 +125,7 @@ export default function ReportsPanel() {
   if (showFluxoConta) {
     return (
       <div className="space-y-4">
-        <button className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors" onClick={() => setShowFluxoConta(false)}>
+        <button data-guia="reports:fluxo-conta.voltar" className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors" onClick={() => setShowFluxoConta(false)}>
           <ArrowLeft size={14} /> Voltar aos Relatórios
         </button>
         <FluxoCaixaPorConta />
@@ -136,6 +136,7 @@ export default function ReportsPanel() {
   return (
     <div className="space-y-4">
       <button
+        data-guia="reports.demonstrativo"
         className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
         onClick={() => setShowDemonstrativo(true)}
       >
@@ -150,6 +151,7 @@ export default function ReportsPanel() {
       </button>
 
       <button
+        data-guia="reports.favorecido"
         className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
         onClick={() => setShowFavorecido(true)}
       >
@@ -164,6 +166,7 @@ export default function ReportsPanel() {
       </button>
 
       <button
+        data-guia="reports.fluxo-conta"
         className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
         onClick={() => setShowFluxoConta(true)}
       >
@@ -179,6 +182,7 @@ export default function ReportsPanel() {
 
       {hasCredit && (
         <button
+          data-guia="reports.fatura"
           className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
           onClick={() => setShowRelatorioFatura(true)}
         >
@@ -193,7 +197,7 @@ export default function ReportsPanel() {
         </button>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div data-guia="reports.medias" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="card">
           <div className="flex items-center gap-2 mb-1 text-receita">
             <ArrowDownCircle size={14} />
@@ -216,7 +220,7 @@ export default function ReportsPanel() {
         </div>
       </div>
 
-      <div className="card">
+      <div data-guia="reports.evolucao" className="card">
         <h2 className="text-sm font-semibold text-texto-2 mb-4">Evolução dos Últimos 6 Meses</h2>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={last6Months} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
@@ -232,11 +236,12 @@ export default function ReportsPanel() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="card">
+        <div data-guia="reports.despesas-categoria" className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-texto-2">Despesas por Categoria</h2>
             <SeletorModoValor value={modoValor} onChange={setModoValor} />
             <select
+              data-guia="reports.mes"
               className="input w-auto text-xs py-1.5"
               value={selectedMonth}
               onChange={e => setSelectedMonth(Number(e.target.value))}
@@ -262,7 +267,7 @@ export default function ReportsPanel() {
           )}
         </div>
 
-        <div className="card">
+        <div data-guia="reports.ranking" className="card">
           <h2 className="text-sm font-semibold text-texto-2 mb-4">Ranking de Despesas</h2>
           {categoryData.length === 0 ? (
             <p className="text-texto-3 text-sm text-center py-8">Sem dados neste período</p>

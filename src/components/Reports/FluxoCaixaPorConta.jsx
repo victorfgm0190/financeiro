@@ -20,6 +20,7 @@ import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import ProvisorioForm from './ProvisorioForm'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 const round2 = n => Math.round(n * 100) / 100
 const todayStr = () => format(new Date(), 'yyyy-MM-dd')
@@ -49,6 +50,7 @@ function loadSelecaoSalva() {
 }
 
 export default function FluxoCaixaPorConta() {
+  useSubtelaGuia('reports:fluxo-conta')
   const { rateiosByLancamento, profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, projetarEtapaA, mergeScheduleFromDb, updateSchedule, datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, registrarEdicao, pode } = useApp()
   // Nível de acesso (src/lib/permissoes.js): provisórios e datas provisórias gravadas = fluxo;
   // "Aplicar data" altera o agendamento; "Efetivar" cria um agendamento.
@@ -469,7 +471,7 @@ export default function FluxoCaixaPorConta() {
       <div className="card space-y-3 md:sticky md:top-0 md:z-20">
         {/* Visão (toggle) + criação de provisório */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex gap-1 bg-surface-2/60 rounded-lg p-1 w-full sm:w-auto">
+          <div data-guia="reports:fluxo-conta.visao" className="flex gap-1 bg-surface-2/60 rounded-lg p-1 w-full sm:w-auto">
             {VISOES.map(v => (
               <button
                 key={v.id}
@@ -484,6 +486,7 @@ export default function FluxoCaixaPorConta() {
           </div>
           {podeIncluirF && (
           <button
+            data-guia="reports:fluxo-conta.provisorio"
             type="button"
             onClick={() => setProvModal({ initial: null })}
             className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 sm:ml-auto border-dashed border-borda-forte text-texto-2 hover:bg-surface-hover"
@@ -496,7 +499,7 @@ export default function FluxoCaixaPorConta() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {visao === 'conta' && (
-            <div className="lg:col-span-2 relative" ref={contaDropRef}>
+            <div data-guia="reports:fluxo-conta.selecao" className="lg:col-span-2 relative" ref={contaDropRef}>
               <label className="label">Contas</label>
               <button
                 type="button"
@@ -539,7 +542,7 @@ export default function FluxoCaixaPorConta() {
             </div>
           )}
           {visao === 'grupo' && (
-            <div className="lg:col-span-2">
+            <div data-guia="reports:fluxo-conta.selecao" className="lg:col-span-2">
               <label className="label">Grupo de Contas</label>
               <select className="input" value={groupId} onChange={e => setGroupId(e.target.value)}>
                 <option value="">Selecione...</option>
@@ -555,7 +558,7 @@ export default function FluxoCaixaPorConta() {
               </p>
             </div>
           )}
-          <div>
+          <div data-guia="reports:fluxo-conta.datas">
             <label className="label">Data inicial</label>
             <DateInput className="input" value={start} onChange={e => setStart(e.target.value)} />
           </div>
@@ -567,7 +570,7 @@ export default function FluxoCaixaPorConta() {
 
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-5 flex-wrap">
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label data-guia="reports:fluxo-conta.incluir-agendamentos" className="flex items-center gap-2 cursor-pointer">
               <div className="relative shrink-0">
                 <input type="checkbox" checked={includeSchedules} onChange={e => setIncludeSchedules(e.target.checked)} className="sr-only peer" />
                 <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
@@ -575,7 +578,7 @@ export default function FluxoCaixaPorConta() {
               </div>
               <span className="text-sm text-texto-2 select-none">Incluir agendamentos (transações futuras)</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label data-guia="reports:fluxo-conta.ocultar-reserva" className="flex items-center gap-2 cursor-pointer">
               <div className="relative shrink-0">
                 <input type="checkbox" checked={hideReserva} onChange={e => setHideReserva(e.target.checked)} className="sr-only peer" />
                 <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
@@ -583,7 +586,7 @@ export default function FluxoCaixaPorConta() {
               </div>
               <span className="text-sm text-texto-2 select-none">Ocultar movimentos de reserva</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label data-guia="reports:fluxo-conta.ocultar-patrimonio" className="flex items-center gap-2 cursor-pointer">
               <div className="relative shrink-0">
                 <input type="checkbox" checked={hidePatrimonio} onChange={e => setHidePatrimonio(e.target.checked)} className="sr-only peer" />
                 <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
@@ -643,7 +646,7 @@ export default function FluxoCaixaPorConta() {
 
       {/* KPIs */}
       {!noSelection && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div data-guia="reports:fluxo-conta.resumo" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="card">
             <div className="flex items-center gap-2 mb-1 text-receita"><ArrowDownCircle size={14} /><p className="text-xs text-texto-2 uppercase tracking-wide">Entradas</p></div>
             <p className="text-xl font-bold text-receita">{fmt(totalEntrada)}</p>
@@ -673,7 +676,7 @@ export default function FluxoCaixaPorConta() {
           <h2 className="text-sm font-semibold text-texto-2">Movimentações</h2>
           <span className="text-xs text-texto-3 ml-auto">{rowsView.length} linha{rowsView.length !== 1 ? 's' : ''}</span>
           {!noSelection && rows.length > 0 && (
-            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1">
+            <button data-guia="reports:fluxo-conta.exportar" onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1">
               <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
             </button>
           )}
@@ -688,8 +691,8 @@ export default function FluxoCaixaPorConta() {
             <table className="w-full text-sm" style={{ minWidth: 920 }}>
               <thead>
                 <tr className="border-b border-borda">
-                  <th className="w-9 px-2 py-2.5" title="Desmarque uma linha para tirá-la do cálculo" />
-                  <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-24">Data</th>
+                  <th data-guia="reports:fluxo-conta.caixinha" className="w-9 px-2 py-2.5" title="Desmarque uma linha para tirá-la do cálculo" />
+                  <th data-guia="reports:fluxo-conta.data" className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-24">Data</th>
                   <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
                   <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Movimentação</th>
                   <th className="text-right px-3 py-2.5 text-xs text-despesa font-medium w-28">Pagamento</th>

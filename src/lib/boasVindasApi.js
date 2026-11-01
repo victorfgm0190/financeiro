@@ -1,5 +1,7 @@
-// Cliente de /api/boas-vindas (tour visto / checklist oculto, por usuário, no banco do ambiente) e
-// um estado compartilhado entre o modal do tour, o checklist do Painel e o link "Rever tour".
+// Cliente de /api/boas-vindas (tour visto, checklist oculto e guias das telas ocultos, por usuário, no
+// banco do ambiente) e um estado compartilhado entre o tour, o checklist, o Guia da Tela e os links
+// "Rever tour" / "Reativar guias". As telas ocultas vêm JUNTO na primeira carga, para o Guia não
+// "piscar" na abertura.
 import { authHeaders } from './api.js'
 
 async function chamar(metodo, corpo) {
@@ -13,39 +15,60 @@ async function chamar(metodo, corpo) {
   return json
 }
 
-// Estado: null = ainda não carregou (ou falhou — aí NADA aparece sozinho: melhor não mostrar o tour
-// do que mostrá-lo de novo a quem já viu).
+// Estado: null = ainda não carregou (ou falhou — aí NADA abre sozinho: melhor não mostrar o tour ou
+// o guia do que mostrá-los a quem já pediu para não ver). `tourAberto` = o tour está na tela agora.
 let estado = null
+let tourAberto = false
 let carregando = null
 const ouvintes = new Set()
-const avisar = () => { for (const f of ouvintes) f(estado) }
+const avisar = () => { for (const f of ouvintes) f(estado ? { ...estado, tourAberto } : null) }
 export const EVENTO_ABRIR_TOUR = 'finup:abrir-tour'
 
+const doServidor = (r) => ({
+  tourVistoEm: r.tourVistoEm || null,
+  checklistOcultoEm: r.checklistOcultoEm || null,
+  guiasOcultos: Array.isArray(r.guiasOcultos) ? r.guiasOcultos : [],
+})
+
 export function assinarBoasVindas(fn) { ouvintes.add(fn); return () => ouvintes.delete(fn) }
-export const estadoBoasVindas = () => estado
+export const estadoBoasVindas = () => (estado ? { ...estado, tourAberto } : null)
 
 export function carregarBoasVindas() {
-  if (estado) return Promise.resolve(estado)
+  if (estado) return Promise.resolve(estadoBoasVindas())
   if (!carregando) {
     carregando = chamar('GET')
-      .then(r => { estado = { tourVistoEm: r.tourVistoEm || null, checklistOcultoEm: r.checklistOcultoEm || null }; avisar(); return estado })
+      .then(r => { estado = doServidor(r); avisar(); return estadoBoasVindas() })
       .catch(err => { console.warn('[boas-vindas]', err.message); return null })
       .finally(() => { carregando = null })
   }
   return carregando
 }
 
-async function gravar(corpo, otimista) {
-  estado = { ...(estado || {}), ...otimista }
-  avisar()
+// Grava com otimismo (a tela muda na hora) e confirma com a resposta do servidor.
+async function gravar(metodo, corpo, otimista) {
+  if (estado) { estado = { ...estado, ...otimista(estado) }; avisar() }
   try {
-    const r = await chamar('POST', corpo)
-    estado = { tourVistoEm: r.tourVistoEm || null, checklistOcultoEm: r.checklistOcultoEm || null }
+    estado = doServidor(await chamar(metodo, corpo))
     avisar()
-  } catch (err) { console.warn('[boas-vindas] não gravou:', err.message) }
+    return true
+  } catch (err) {
+    console.warn('[boas-vindas] não gravou:', err.message)
+    return false
+  }
 }
-export const marcarTourVisto = () => gravar({ tourVisto: true }, { tourVistoEm: estado?.tourVistoEm || new Date().toISOString() })
-export const ocultarChecklist = () => gravar({ checklistOculto: true }, { checklistOcultoEm: new Date().toISOString() })
+export const marcarTourVisto = () => gravar('POST', { tourVisto: true }, (e) => ({ tourVistoEm: e.tourVistoEm || new Date().toISOString() }))
+export const ocultarChecklist = () => gravar('POST', { checklistOculto: true }, () => ({ checklistOcultoEm: new Date().toISOString() }))
+// Guia da Tela: "Não mostrar mais" (uma tela), "Desativar todos" e "Reativar todos".
+export const ocultarGuia = (tela) => gravar('POST', { guiaOculto: tela }, (e) => ({ guiasOcultos: [...new Set([...(e.guiasOcultos || []), tela])] }))
+export const ocultarTodosGuias = (telas = []) => gravar('POST', { guiasTodos: true }, () => ({ guiasOcultos: telas }))
+export const reativarTodosGuias = () => gravar('DELETE', null, () => ({ guiasOcultos: [] }))
+
+// O tour avisa quando abre e fecha: o Guia da Tela espera ele fechar.
+export function definirTourAberto(v) {
+  if (tourAberto === !!v) return
+  tourAberto = !!v
+  avisar()
+}
 
 // "Rever tour de boas-vindas" (barra lateral / Mais): o host do tour no App escuta.
 export function abrirTour() {
@@ -53,4 +76,4 @@ export function abrirTour() {
 }
 
 // Só para testes.
-export function _reiniciarBoasVindas() { estado = null; carregando = null; ouvintes.clear() }
+export function _reiniciarBoasVindas() { estado = null; tourAberto = false; carregando = null; ouvintes.clear() }

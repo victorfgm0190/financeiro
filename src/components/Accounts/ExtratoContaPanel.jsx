@@ -29,6 +29,7 @@ import SeloParcela from '../shared/SeloParcela'
 import { criarSeloParcela } from '../../lib/numeroParcela'
 import { hojeSP } from '../../lib/hoje'
 import SeloCambio from '../shared/SeloCambio'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -314,7 +315,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
         {fmt(balance)}
       </td>
       <td className="px-2 py-1.5">
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div data-guia="accounts:extrato.acoes-linha" className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           {onEdit && mostrarEditar && (
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(tx) }}
@@ -504,6 +505,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
 
 // atalhoNovoTx: id da ação de atalho que a tela registrou para o mesmo onNewTx (só para o tooltip).
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton, atalhoNovoTx }) {
+  useSubtelaGuia('accounts:extrato')
   const tituloNovoTx = useTituloAtalho('Novo Lançamento', atalhoNovoTx)
   const { transactions, schedules, accounts, settings, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, getAccountSaldos, pode } = useApp()
   // Selo "x/N" dos lançamentos gerados por agendamento parcelado (data_ocorrencia gravada).
@@ -1031,6 +1033,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           <div className="flex items-center gap-3">
             {backButton && onClose && (
               <button
+                data-guia="accounts:extrato.voltar"
                 onClick={onClose}
                 className="flex items-center gap-1.5 text-sm text-texto-2 hover:text-texto-1 transition-colors shrink-0"
               >
@@ -1044,7 +1047,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               )}
             </h2>
             {/* Seletor de mês — entre o nome da conta e os botões (destaque sutil) */}
-            <div className="flex items-center gap-0.5 shrink-0 rounded-md border border-borda-forte bg-surface-2/60 px-0.5 py-0.5">
+            <div data-guia="accounts:extrato.mes" className="flex items-center gap-0.5 shrink-0 rounded-md border border-borda-forte bg-surface-2/60 px-0.5 py-0.5">
               <button onClick={prevMonth} aria-label="Mês anterior" className="p-1 rounded hover:bg-surface-hover text-texto-2 hover:text-texto-1 transition-colors">
                 <ChevronLeft size={14} />
               </button>
@@ -1056,7 +1059,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             {/* Resumo de faturas (contas gerenciais) — no centro da barra, entre o seletor de mês
                 e os botões de ação. Usa faturaTotals já calculado; nenhum recálculo aqui. */}
             {faturaTotals && (
-              <div className="hidden lg:flex items-stretch min-w-0 text-xs">
+              <div data-guia="accounts:extrato.resumo-fatura" className="hidden lg:flex items-stretch min-w-0 text-xs">
                 {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => (
                   <div key={f.ref} className={`min-w-0 ${i > 0 ? 'border-l border-borda-forte pl-3 ml-3' : ''}`}>
                     <div className="flex items-center justify-between gap-3">
@@ -1089,6 +1092,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             <div className="flex items-center gap-2 shrink-0 ml-auto">
               {(podeEditarTx || podeExcluirTx) && (
               <button
+                data-guia="accounts:extrato.selecionar"
                 onClick={toggleSelectMode}
                 className={`flex items-center gap-1.5 text-xs px-3 py-1.5 ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
                 title={selectMode ? 'Sair do modo de seleção' : 'Selecionar lançamentos para alterar ou conciliar'}
@@ -1100,6 +1104,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               {!isMobile && podeEditarTx && (
                 <>
                   <button
+                    data-guia="accounts:extrato.reconciliar"
                     onClick={() => setShowReconciliar(true)}
                     className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
                     title="Reconciliar transações do período"
@@ -1107,6 +1112,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     <CheckSquare size={12} /> Reconciliar
                   </button>
                   <button
+                    data-guia="accounts:extrato.conciliar-gerenciais"
                     onClick={handleConciliarGerenciais}
                     className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
                     title="Conciliar todos os lançamentos pendentes do período que envolvem uma conta gerencial (origem ou destino)"
@@ -1117,6 +1123,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               )}
               {isGerencial && (
                 <button
+                  data-guia="accounts:extrato.excel"
                   onClick={handleExportExcel}
                   className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
                   title="Exportar o extrato do mês (com filtros aplicados) para Excel (.xlsx)"
@@ -1125,7 +1132,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 </button>
               )}
               {onNewTx && podeIncluirTx && (
-                <button onClick={onNewTx} title={tituloNovoTx} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
+                <button data-guia="accounts:extrato.novo" onClick={onNewTx} title={tituloNovoTx} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
                   <Plus size={12} /> Novo Lançamento
                   <ShortcutHint actionId={atalhoNovoTx} />
                 </button>
@@ -1139,7 +1146,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           </div>
 
           {/* KPIs (compactos) */}
-          <div className={`grid grid-cols-1 gap-1.5 ${hasFuturoKpi ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+          <div data-guia="accounts:extrato.saldos" className={`grid grid-cols-1 gap-1.5 ${hasFuturoKpi ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
             <div className="rounded-lg border border-borda bg-surface px-3 py-2">
               <p className="text-[10px] text-texto-2 uppercase tracking-wide">Saldo Atual</p>
               <p className={`text-xl font-bold ${saldoAtualKpi >= 0 ? 'text-texto-1' : 'text-despesa'}`}>{fmtSinal(saldoAtualKpi)}</p>
@@ -1194,7 +1201,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 </th>
                 <th className="text-right px-3 py-1 text-xs text-texto-2 font-medium whitespace-nowrap">Saldo</th>
                 <th className="w-8" />
-                <th className="text-center px-1 py-1 text-xs text-texto-2 font-medium" title="Reconciliado">R</th>
+                <th data-guia="accounts:extrato.conciliado" className="text-center px-1 py-1 text-xs text-texto-2 font-medium" title="Reconciliado">R</th>
               </tr>
             </thead>
           </table>
@@ -1202,7 +1209,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
         {/* Filtros — DESKTOP: em tabela com o MESMO colGroup do header → cada input exatamente
             sob sua coluna. Espaçamento vertical mínimo (py-1) coladinho ao cabeçalho. */}
-        <div className="hidden md:block border-x border-borda bg-surface/60">
+        <div data-guia="accounts:extrato.filtros" className="hidden md:block border-x border-borda bg-surface/60">
           <table className="w-full text-sm table-fixed">
             {colGroup}
             <tbody>
@@ -1233,7 +1240,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 </td>
                 <td colSpan={3} className="px-2 py-1">
                   <div className="flex items-center justify-end gap-2">
-                    <div className="flex items-center rounded-md border border-borda-forte overflow-hidden shrink-0">
+                    <div data-guia="accounts:extrato.filtro-conciliacao" className="flex items-center rounded-md border border-borda-forte overflow-hidden shrink-0">
                       {[
                         { v: 'todos', label: 'Todos' },
                         { v: 'conciliados', label: '✓ Conc.' },
@@ -1255,6 +1262,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     </div>
                     <button
                       type="button"
+                      data-guia="accounts:extrato.limpar"
                       onClick={() => setFiltros(EMPTY_LANC_FILTROS)}
                       disabled={!hasLancFiltros(filtros)}
                       title="Limpar todos os filtros"
@@ -1274,7 +1282,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         </div>
 
         {/* Filtros — MOBILE: barra flex compacta (componente compartilhado). */}
-        <div className="md:hidden border-x border-borda bg-surface">
+        <div data-guia="accounts:extrato.filtros" className="md:hidden border-x border-borda bg-surface">
           <LancamentoFiltros
             filtros={filtros}
             setFiltros={setFiltros}
@@ -1282,7 +1290,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               <>
                 <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-receita" />
                 <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-despesa" />
-                <div className="flex items-center rounded-md border border-borda-forte overflow-hidden shrink-0">
+                <div data-guia="accounts:extrato.filtro-conciliacao" className="flex items-center rounded-md border border-borda-forte overflow-hidden shrink-0">
                   {[
                     { v: 'todos', label: 'Todos' },
                     { v: 'conciliados', label: '✓ Conciliados' },
@@ -1543,7 +1551,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           Acima da barra inferior do mobile (MobileShell); rente à base no desktop. */}
       {selectMode && (
         <div className="fixed bottom-[calc(68px+env(safe-area-inset-bottom))] md:bottom-0 inset-x-0 z-[45] px-3 pb-3 pointer-events-none">
-          <div className="pointer-events-auto mx-auto max-w-3xl bg-surface border border-borda-forte rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
+          <div data-guia="accounts:extrato.barra-selecao" className="pointer-events-auto mx-auto max-w-3xl bg-surface border border-borda-forte rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
             <span className="text-sm text-texto-2 font-medium">
               {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
             </span>

@@ -64,9 +64,10 @@ describe('passos do tour conforme o ambiente', () => {
     expect(r.itens.map(i => [i.id, i.feito])).toEqual([['perfil', true], ['conta', false], ['cartao', true], ['agendamento', false]])
     expect(r.completo).toBe(false)
   })
-  it('toda tela do menu tem ajuda com para que serve', () => {
-    for (const p of ['dashboard', 'accounts', 'credit', 'schedule', 'import', 'cashflow', 'transactions', 'reservas', 'envelopes', 'budget', 'patrimonio', 'reports', 'alerts', 'settings']) {
-      expect(AJUDA_TELAS[p]?.paraQueServe, p).toBeTruthy()
+  it('toda tela do menu tem guia com descrição e itens', () => {
+    for (const p of ['dashboard', 'accounts', 'credit', 'schedule', 'import', 'importar-lancamentos', 'cashflow', 'transactions', 'reservas', 'envelopes', 'budget', 'patrimonio', 'contratos', 'reports', 'alerts', 'settings', 'assistente', 'inicio', 'mais', 'despesas']) {
+      expect(AJUDA_TELAS[p]?.descricao, p).toBeTruthy()
+      expect(AJUDA_TELAS[p].itens.length, p).toBeGreaterThan(0)
     }
   })
 })
@@ -142,14 +143,15 @@ describe('checklist Primeiros passos', () => {
 })
 
 describe('ajuda da tela', () => {
-  it('"?" abre o painel com para que serve, itens e dicas', () => {
+  it('"?" abre o guia com a descrição, os itens numerados e as dicas', () => {
+    app()
     render(<AjudaTela pagina="accounts" />)
     fireEvent.click(screen.getByRole('button', { name: 'Ajuda: Contas' }))
-    expect(screen.getByRole('dialog', { name: 'Ajuda: Contas' })).toBeTruthy()
-    expect(screen.getByText(AJUDA_TELAS.accounts.paraQueServe)).toBeTruthy()
-    expect(screen.getByText('Nova Conta')).toBeTruthy()
+    const guia = screen.getByTestId('guia-tela')
+    expect(guia.textContent).toContain(AJUDA_TELAS.accounts.descricao)
+    expect(guia.textContent).toContain('Nova Conta')
     fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByTestId('guia-tela')).toBeNull()
   })
   it('tela sem texto de ajuda: sem botão', () => {
     const { container } = render(<AjudaTela pagina="inexistente" />)

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { RotateCcw, FileSpreadsheet, ChevronUp, ChevronDown, AlertTriangle, ExternalLink } from 'lucide-react'
 import { exportarExcel } from '../../lib/exportExcel'
@@ -119,6 +120,7 @@ export default function RazaoDiarioTab({ functions = [], snapshots = [], onVerPe
   const [sortDesc, setSortDesc] = useState(true)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
+  useSubtelaGuia('reservas:razao')
 
   // Todo setState acontece no .then/.catch/.finally — nada síncrono, para o efeito de mount
   // não disparar renders em cascata. O state já nasce em `loading`.
@@ -281,10 +283,11 @@ export default function RazaoDiarioTab({ functions = [], snapshots = [], onVerPe
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleRefresh} disabled={loading} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
+          <button data-guia="reservas:razao.atualizar" onClick={handleRefresh} disabled={loading} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
             <RotateCcw size={12} className={loading ? 'animate-spin' : ''} /> Atualizar
           </button>
           <button
+            data-guia="reservas:razao.exportar"
             onClick={handleExportExcel}
             disabled={sorted.length === 0}
             className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 disabled:opacity-40"
@@ -299,6 +302,7 @@ export default function RazaoDiarioTab({ functions = [], snapshots = [], onVerPe
         <div className="flex items-center gap-3 flex-wrap">
           <label className="text-xs text-texto-3 shrink-0">Mês</label>
           <select
+            data-guia="reservas:razao.mes"
             className="input w-auto text-xs py-1.5"
             value={selectedMonth}
             onChange={e => setSelectedMonth(e.target.value)}
@@ -322,7 +326,7 @@ export default function RazaoDiarioTab({ functions = [], snapshots = [], onVerPe
         {funcoesNoRazao.length > 0 && (
           <div className="flex items-start gap-3 flex-wrap">
             <label className="text-xs text-texto-3 shrink-0 pt-1">Funções</label>
-            <div className="flex flex-wrap gap-1.5 flex-1">
+            <div className="flex flex-wrap gap-1.5 flex-1" data-guia="reservas:razao.funcoes">
               {funcoesNoRazao.map(f => {
                 const on = selectedFunctions.includes(f.id)
                 return (
@@ -364,7 +368,7 @@ export default function RazaoDiarioTab({ functions = [], snapshots = [], onVerPe
       {/* Tabela */}
       <div className="card p-0 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" style={{ minWidth: 900 }}>
+          <table className="w-full text-sm" style={{ minWidth: 900 }} data-guia="reservas:razao.tabela">
             <thead>
               <tr className="border-b border-borda">
                 <Th col="snapshot_date" label="Data" align="left" sortCol={sortColumn} sortDesc={sortDesc} onSort={handleSort} />
@@ -420,6 +424,7 @@ export default function RazaoDiarioTab({ functions = [], snapshots = [], onVerPe
                     <td className="px-2 py-2 text-right">
                       {r._periodo && onVerPeriodo && (
                         <button
+                          data-guia={r === sorted.find(x => x._periodo) ? 'reservas:razao.ver-periodo' : undefined}
                           onClick={() => onVerPeriodo(r._periodo.fim)}
                           title={`Ver o período fechado ${fmtDate(r._periodo.inicio)} → ${fmtDate(r._periodo.fim)} no Histórico`}
                           className="text-texto-3 hover:text-texto-2 transition-colors p-1"

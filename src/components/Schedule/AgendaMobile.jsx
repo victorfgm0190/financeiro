@@ -157,7 +157,7 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
           <p className="text-xl font-bold text-despesa tabular-nums">{fmt(totalMes)}</p>
         </div>
         {onSelecionar && !pagosLinhas && (
-          <button type="button" onClick={onSelecionar} className="btn-amber min-h-[44px]">
+          <button type="button" data-guia="schedule.selecionar" onClick={onSelecionar} className="btn-amber min-h-[44px]">
             <MousePointer2 size={13} /> Selecionar
           </button>
         )}

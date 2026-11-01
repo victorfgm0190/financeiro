@@ -42,7 +42,7 @@ export default function VarreduraRateio({ somenteLeitura = false }) {
         </p>
       </div>
       {!aberta ? (
-        <button type="button" className="btn-secondary text-xs" onClick={() => { setAberta(true); setFeito(null) }}>Procurar</button>
+        <button type="button" data-guia="settings:manutencao.rateio-procurar" className="btn-secondary text-xs" onClick={() => { setAberta(true); setFeito(null) }}>Procurar</button>
       ) : lista.length === 0 ? (
         <p className="text-xs text-texto-2">{feito ? `Rateio aplicado em ${feito} lançamento(s). Histórico registrado.` : 'Nenhum lançamento de baixa sem rateio.'}</p>
       ) : (

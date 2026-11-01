@@ -823,6 +823,7 @@ export default function CreditCardPanel() {
         <div className="flex items-center gap-2 flex-1 min-w-[180px]">
           <CreditCard size={15} className="text-texto-2 shrink-0" />
           <select
+            data-guia="credit.cartao"
             className="bg-surface-2 border border-borda-campo text-texto-1 rounded-lg px-3 py-2 text-sm focus:outline-none w-full"
             value={selectedCardId}
             onChange={e => handleCardChange(e.target.value)}
@@ -832,7 +833,7 @@ export default function CreditCardPanel() {
             ))}
           </select>
           {podeEditarCartao && selectedCard && (
-            <button type="button" onClick={() => setEditarCartao(true)} title="Editar cartão" aria-label="Editar cartão"
+            <button type="button" data-guia="credit.editar-cartao" onClick={() => setEditarCartao(true)} title="Editar cartão" aria-label="Editar cartão"
               className="p-2 rounded-lg border border-borda-campo bg-surface-2 text-texto-2 hover:text-texto-1 hover:bg-surface-hover transition-colors shrink-0 min-h-[38px]">
               <Edit2 size={14} />
             </button>
@@ -840,7 +841,7 @@ export default function CreditCardPanel() {
         </div>
 
         {/* Navegador de fatura */}
-        <div className="flex items-center gap-1 bg-surface-2 border border-borda-forte rounded-lg px-1 py-1 shrink-0">
+        <div data-guia="credit.fatura" className="flex items-center gap-1 bg-surface-2 border border-borda-forte rounded-lg px-1 py-1 shrink-0">
           <button
             onClick={() => { exitSelect(); setBillKey(k => offsetBillKey(k, -1)) }}
             className="p-1.5 text-texto-2 hover:text-texto-1 hover:bg-surface-hover rounded transition-colors"
@@ -863,6 +864,7 @@ export default function CreditCardPanel() {
           {/* Extrato Gerencial: só no computador (grupos gerenciais fora do mobile). */}
           {!isMobile && gerencialLigado && (
             <button
+              data-guia="credit.extrato"
               onClick={() => { saveScroll(); setShowExtrato(true) }}
               className="btn-amber"
             >
@@ -870,6 +872,7 @@ export default function CreditCardPanel() {
             </button>
           )}
           <button
+            data-guia="credit.relatorio"
             onClick={() => { saveScroll(); setShowRelatorio(true) }}
             className="btn-amber"
           >
@@ -888,7 +891,7 @@ export default function CreditCardPanel() {
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
         {/* Fatura Selecionada ocupa a linha inteira no mobile (col-span-2) p/ os "previstos"/
             "total" caberem — no grid estreito de 2 colunas ficavam apertados/cortados. */}
-        <div className="card col-span-2 sm:col-span-1">
+        <div data-guia="credit.fatura-selecionada" className="card col-span-2 sm:col-span-1">
           <div className="flex items-center gap-2 mb-2 text-texto-2">
             <Calendar size={13} />
             <span className="text-xs uppercase tracking-wide">Fatura Selecionada</span>
@@ -924,7 +927,7 @@ export default function CreditCardPanel() {
           <p className="text-2xl font-bold text-texto-1">{fmt(usoLimite)}</p>
           <p className="text-xs text-texto-3 mt-1">Fecha dia {selectedCard?.closingDay || '—'} · Vence dia {selectedCard?.dueDay || '—'}</p>
         </div>
-        <div className="card">
+        <div data-guia="credit.pagamento" className="card">
           <div className="flex items-center gap-2 mb-2 text-texto-2">
             <CheckCircle2 size={13} />
             <span className="text-xs uppercase tracking-wide">{totalPago === 0 ? 'Saldo a Pagar' : 'Valor Pago'}</span>
@@ -937,6 +940,7 @@ export default function CreditCardPanel() {
           </p>
           <DiferencaPagamento diferenca={diferencaPagamento - totalPrevisto} className="mt-1.5" />
           {podeEditar && <button
+            data-guia="credit.fechar"
             onClick={faturaFechada ? handleAbrirFatura : handleFecharFatura}
             className={`mt-2 inline-block text-xs rounded px-3 py-1 border transition-colors ${
               faturaFechada
@@ -949,6 +953,7 @@ export default function CreditCardPanel() {
         </div>
         <div className="flex flex-col gap-2">
           {podeIncluir && <button
+            data-guia="credit.novo"
             disabled={faturaFechada}
             title={faturaFechada ? 'Fatura fechada — abra a fatura para adicionar lançamentos' : undefined}
             className={`btn-primary flex-1 hidden md:flex items-center justify-center gap-2 text-sm ${faturaFechada ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -958,12 +963,14 @@ export default function CreditCardPanel() {
           </button>}
           {podeIncluir && <button
             className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm"
+            data-guia="credit.pagar"
             onClick={() => { setShowPayModal(true); setPayAmount(String(billTotal)); setPayDate(dataPadraoPagamento(vencimentoFatura)) }}
           >
             <DollarSign size={14} /> Pagar Fatura
           </button>}
           {podeEditar && <button
             className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm"
+            data-guia="credit.atualizar"
             onClick={() => {
               if (!selectedCard || !billKey) return
               const [by, bm] = billKey.split('-')
@@ -980,6 +987,7 @@ export default function CreditCardPanel() {
           </button>}
           {podeEditar && <button
             className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm"
+            data-guia="credit.revisar"
             onClick={handleAbrirRevisar}
             title="Revisa os movimentos automáticos (transferências gerenciais e resgates) da fatura e mostra os ajustes pendentes antes de aplicar"
           >
@@ -1029,6 +1037,7 @@ export default function CreditCardPanel() {
             )}
             {billLancamentos.length > 0 && podeEditar && (
               <button
+                data-guia="credit.selecionar"
                 onClick={toggleSelectMode}
                 className={`flex items-center gap-1.5 text-xs px-2.5 py-1 ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
                 title={selectMode ? 'Sair do modo de seleção' : 'Selecionar lançamentos para alterar ou conciliar'}
@@ -1038,6 +1047,7 @@ export default function CreditCardPanel() {
             )}
             {billLancamentos.length > 0 && !isMobile && podeEditar && (
               <button
+                data-guia="credit.reconciliar"
                 onClick={() => setShowReconciliar(true)}
                 className="btn-secondary flex items-center gap-1.5 text-xs px-2.5 py-1"
                 title="Reconciliar transações da fatura"
@@ -1138,7 +1148,7 @@ export default function CreditCardPanel() {
                     {hasGer && <th className="text-left px-4 py-3 text-xs text-texto-2 font-medium">Ger.</th>}
                     <th className="text-right px-4 py-3 text-xs text-texto-2 font-medium">Valor</th>
                     <th className="px-4 py-3 w-16" />
-                    <th className="px-2 py-3 text-center text-xs text-texto-2 font-medium w-10" title="Reconciliado">R</th>
+                    <th data-guia="credit.conciliado" className="px-2 py-3 text-center text-xs text-texto-2 font-medium w-10" title="Reconciliado">R</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1231,7 +1241,7 @@ export default function CreditCardPanel() {
                           {isEstorno ? `-${fmt(tx.amount)}` : fmt(tx.amount)}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex gap-1 justify-end">
+                          <div data-guia="credit.acoes-linha" className="flex gap-1 justify-end">
                             <button
                               onClick={(e) => { e.stopPropagation(); setEditTx(tx) }}
                               title="Editar"
@@ -1284,6 +1294,7 @@ export default function CreditCardPanel() {
       {agendamentosPrevistos.length > 0 && (
         <div className="mt-4 border border-dashed border-borda-forte rounded-lg">
           <button
+            data-guia="credit.previstos"
             onClick={() => setShowPrevistos(p => !p)}
             className="w-full flex items-center justify-between px-4 py-3 text-sm text-texto-2"
           >

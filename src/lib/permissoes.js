@@ -166,6 +166,8 @@ const ROTAS = [
   // Assistente IA: interpretar e guardar pré-lançamento = quem inclui lançamentos. Apelidos: aprender
   // (POST, ao confirmar a prévia) também; editar/excluir na tela de Cadastros = cadastros.
   [/^(assistente|ia-pre-lancamentos)$/, () => M('lancamentos', 'incluir')],
+  // Transcrição do áudio do Assistente (plano B do microfone): quem usa o Assistente.
+  [/^transcrever-audio$/, () => M('lancamentos', 'incluir')],
   [/^ia-apelidos$/, (m) => (m === 'POST' ? M('lancamentos', 'incluir') : PORMETODO('cadastros')[m])],
   [/^integridade$/, () => M('alertas', 'editar')],
   [/^historico$/, () => M('*', 'editar')],

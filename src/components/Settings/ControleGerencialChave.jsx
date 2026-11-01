@@ -35,7 +35,7 @@ export default function ControleGerencialChave({ podeEditar }) {
 
   return (
     <div className="mb-4 rounded-xl border border-borda-forte bg-surface-2/40 p-3.5 space-y-2">
-      <label className={`flex items-center gap-3 ${podeEditar ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}>
+      <label data-guia="settings:controle-gerencial.chave" className={`flex items-center gap-3 ${podeEditar ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-texto-1">Usar controle gerencial</p>
           <p className="text-xs text-texto-3">

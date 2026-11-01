@@ -67,7 +67,7 @@ export default function FavorecidosPanel() {
           <h2 className="text-sm font-semibold text-texto-2">Favorecidos ({data.payees.length})</h2>
           <p className="text-xs text-texto-3 mt-0.5">Renomeie e junte favorecidos em lançamentos, agendamentos e regras.</p>
         </div>
-        <button type="button" className="btn-secondary min-h-[44px] flex items-center gap-2 text-sm" onClick={abrirSync} disabled={faltando.length === 0}
+        <button type="button" data-guia="settings:favorecidos.sincronizar" className="btn-secondary min-h-[44px] flex items-center gap-2 text-sm" onClick={abrirSync} disabled={faltando.length === 0}
           title="Inclui no cadastro os nomes usados em lançamentos, agendamentos e regras que ainda não estão nele">
           <RefreshCw size={14} /> Sincronizar com lançamentos{faltando.length > 0 ? ` (${faltando.length})` : ''}
         </button>
@@ -103,13 +103,13 @@ export default function FavorecidosPanel() {
         </div>
       )}
 
-      <div className="relative">
+      <div data-guia="settings:favorecidos.busca" className="relative">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
         <input className="input pl-9 min-h-[44px]" placeholder="Buscar favorecido" value={busca} onChange={e => setBusca(e.target.value)} />
       </div>
 
       {selecionados.length >= 2 && (
-        <div className="rounded-xl border border-primary/30 bg-primary/10 p-3 space-y-3">
+        <div data-guia="settings:favorecidos.mesclar" className="rounded-xl border border-primary/30 bg-primary/10 p-3 space-y-3">
           <p className="text-sm text-texto-1 flex items-center gap-2"><Merge size={14} /> Mesclar {selecionados.length} nomes em um só</p>
           <div>
             <label className="label" htmlFor="fav-mescla-nome">Novo nome</label>
@@ -136,14 +136,14 @@ export default function FavorecidosPanel() {
       <div className="rounded-lg border border-borda divide-y divide-borda">
         {filtrada.slice(0, LIMITE_LISTA).map(f => (
           <div key={f.nome} className="flex items-center gap-2 px-2.5 py-1">
-            <input type="checkbox" className="accent-primary w-4 h-4 shrink-0" checked={marcados.has(f.nome)}
+            <input type="checkbox" data-guia={f === filtrada[0] ? 'settings:favorecidos.selecionar' : undefined} className="accent-primary w-4 h-4 shrink-0" checked={marcados.has(f.nome)}
               onChange={() => alternar(f.nome)} aria-label={`Selecionar ${f.nome}`} />
             <span className="text-sm text-texto-1 truncate flex-1">{f.nome}</span>
             {!f.noCadastro && <span className="text-[10px] px-1.5 py-0.5 rounded bg-aviso/15 text-aviso whitespace-nowrap">⚠ fora do cadastro</span>}
             {f.usos.total === 0
               ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover/60 text-texto-2 whitespace-nowrap">sem uso</span>
               : <span className="text-xs text-texto-3 whitespace-nowrap hidden sm:inline">{resumoUso(f.usos)}</span>}
-            <button type="button" className="min-h-[44px] px-2 text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1"
+            <button type="button" data-guia={f === filtrada[0] ? 'settings:favorecidos.renomear' : undefined} className="min-h-[44px] px-2 text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1"
               onClick={() => setModal({ nomes: [f.nome], nomeInicial: f.nome, alias: true, titulo: 'Renomear favorecido' })}>
               <Pencil size={12} /> Renomear
             </button>

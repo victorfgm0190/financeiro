@@ -458,12 +458,12 @@ export default function CashFlowPanel({ setActivePage }) {
           <p className="text-xs text-texto-3 uppercase tracking-wide">Consultas</p>
           <div className="ml-auto flex gap-2">
             {!consulta.virtual && podeEditarF && (
-              <button type="button" onClick={() => setConsultaModal({ initial: consulta })} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
+              <button data-guia="cashflow.editar-consulta" type="button" onClick={() => setConsultaModal({ initial: consulta })} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
                 <SlidersHorizontal size={12} /> Editar consulta atual
               </button>
             )}
             {podeIncluirF && (
-              <button type="button" onClick={() => setConsultaModal({ initial: null })} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
+              <button data-guia="cashflow.nova-consulta" type="button" onClick={() => setConsultaModal({ initial: null })} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
                 <Plus size={12} /> Nova consulta
               </button>
             )}
@@ -472,14 +472,14 @@ export default function CashFlowPanel({ setActivePage }) {
         {isMobile && cartoes.length > 6 ? (
           <div>
             <label className="label">Trocar consulta</label>
-            <select className="input" value={consulta.id} onChange={e => setAtivaId(e.target.value)}>
+            <select data-guia="cashflow.consultas" className="input" value={consulta.id} onChange={e => setAtivaId(e.target.value)}>
               {cartoes.map(c => (
                 <option key={c.id} value={c.id}>{c.nome}{c.id === padraoId ? ' (padrão)' : ''}</option>
               ))}
             </select>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div data-guia="cashflow.consultas" className="flex flex-wrap gap-2">
             {cartoes.map(c => (
               <ConsultaCard
                 key={c.id}
@@ -528,7 +528,7 @@ export default function CashFlowPanel({ setActivePage }) {
       {isMobile ? (
         <div className="card py-3 space-y-2">
           <div className="flex items-center gap-2">
-            <div className="flex-1 grid grid-cols-3 gap-1 bg-surface-2/60 rounded-lg p-1" role="tablist" aria-label="Horizonte">
+            <div data-guia="cashflow.prazo" className="flex-1 grid grid-cols-3 gap-1 bg-surface-2/60 rounded-lg p-1" role="tablist" aria-label="Horizonte">
               {HORIZONTES_MOBILE.map(({ dias, rotulo }) => (
                 <button
                   key={dias}
@@ -543,6 +543,7 @@ export default function CashFlowPanel({ setActivePage }) {
               ))}
             </div>
             <button
+              data-guia="cashflow.filtros"
               type="button"
               onClick={() => setFiltrosAbertos(true)}
               aria-label="Filtros e consultas"
@@ -562,7 +563,7 @@ export default function CashFlowPanel({ setActivePage }) {
           <span className="text-texto-3"> → </span>
           <span className="font-semibold text-texto-1">{fmtDate(fim)}</span>
         </p>
-        <div className="flex flex-wrap gap-1 bg-surface-2/60 rounded-lg p-1" role="group" aria-label="Prazo">
+        <div data-guia="cashflow.prazo" className="flex flex-wrap gap-1 bg-surface-2/60 rounded-lg p-1" role="group" aria-label="Prazo">
           {HORIZONTES.map(h => (
             <button
               key={h}
@@ -602,7 +603,7 @@ export default function CashFlowPanel({ setActivePage }) {
       ) : (
         <>
           {/* Saldo inicial */}
-          <div className="card p-0 overflow-hidden">
+          <div data-guia="cashflow.saldo-inicial" className="card p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-borda flex items-start gap-3">
               <Wallet size={14} className="text-texto-2 mt-0.5 shrink-0" />
               <div className="min-w-0">
@@ -649,7 +650,7 @@ export default function CashFlowPanel({ setActivePage }) {
           </div>
 
           {/* Cards */}
-          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${temSimulacao ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+          <div data-guia="cashflow.resumo" className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${temSimulacao ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
             <div className="card">
               <div className="flex items-center gap-2 mb-1 text-texto-2"><Wallet size={14} /><p className="text-xs uppercase tracking-wide">Saldo inicial</p></div>
               <p className={`text-xl font-bold ${corSaldo(saldoInicial)}`}>{vf(saldoInicial)}</p>
@@ -681,7 +682,7 @@ export default function CashFlowPanel({ setActivePage }) {
           </div>
 
           {/* Gráfico */}
-          <div className="card">
+          <div data-guia="cashflow.grafico" className="card">
             <h2 className="text-sm font-semibold text-texto-2 mb-4">Projeção de saldo — dia a dia</h2>
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={serie} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
@@ -737,7 +738,7 @@ export default function CashFlowPanel({ setActivePage }) {
               <h2 className="text-sm font-semibold text-texto-2">Eventos projetados</h2>
               <span className="text-xs text-texto-3">{rowsView.length} evento{rowsView.length !== 1 ? 's' : ''}</span>
               {rowsView.length > 0 && (
-                <label className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Só os eventos visíveis no prazo e filtros atuais">
+                <label data-guia="cashflow.marcar-todos" className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Só os eventos visíveis no prazo e filtros atuais">
                   <input
                     type="checkbox"
                     className="accent-primary w-3.5 h-3.5"
@@ -749,16 +750,17 @@ export default function CashFlowPanel({ setActivePage }) {
                 </label>
               )}
               <div className="flex items-center gap-4 flex-wrap ml-auto">
-                <label className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Override temporário da consulta">
+                <label data-guia="cashflow.incluir-envelopes" className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Override temporário da consulta">
                   <input type="checkbox" className="accent-primary w-3.5 h-3.5" checked={incluirEnvelopes} onChange={e => setOvr('incluir_envelopes', e.target.checked)} />
                   Incluir envelopes
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Override temporário da consulta">
+                <label data-guia="cashflow.ocultar-reservas" className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Override temporário da consulta">
                   <input type="checkbox" className="accent-primary w-3.5 h-3.5" checked={ocultarReserva} onChange={e => setOvr('ocultar_reserva', e.target.checked)} />
                   Ocultar reservas
                 </label>
                 {podeIncluirF && (
                 <button
+                  data-guia="cashflow.provisorio"
                   type="button"
                   onClick={() => setProvModal({ initial: null })}
                   className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 border-dashed border-borda-forte text-texto-2 hover:bg-surface-hover"
@@ -775,9 +777,9 @@ export default function CashFlowPanel({ setActivePage }) {
               <table className="w-full text-sm" style={{ minWidth: isMobile ? 960 : 1030 }}>
                 <thead>
                   <tr className="border-b border-borda">
-                    <th className="w-9 px-2 py-2.5" title="Desmarque um evento para tirá-lo do cálculo" />
+                    <th data-guia="cashflow.caixinha" className="w-9 px-2 py-2.5" title="Desmarque um evento para tirá-lo do cálculo" />
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-28">Data</th>
-                    <th className="text-left px-2 py-2.5 text-xs text-texto-2 font-medium w-[100px]" title="Confirmado / A confirmar (agendamentos) — clique no badge para alternar">Status</th>
+                    <th data-guia="cashflow.status" className="text-left px-2 py-2.5 text-xs text-texto-2 font-medium w-[100px]" title="Confirmado / A confirmar (agendamentos) — clique no badge para alternar">Status</th>
                     <th className="text-left px-2 py-2.5 text-xs text-texto-2 font-medium w-[70px]" title="Tipo de documento">Doc.</th>
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-32">Conta</th>
@@ -788,7 +790,7 @@ export default function CashFlowPanel({ setActivePage }) {
                       <span className="flex items-center justify-end gap-1"><ArrowUpCircle size={11} /> Saída</span>
                     </th>
                     <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium w-32">Saldo</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-32">Ações</th>
+                    <th data-guia="cashflow.acoes" className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-32">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -964,16 +966,17 @@ export default function CashFlowPanel({ setActivePage }) {
           {secaoConsultas}
           <div className="space-y-1">
             <p className="text-xs text-texto-3 uppercase tracking-wide">Eventos</p>
-            <label className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-texto-2" title="Override temporário da consulta">
+            <label data-guia="cashflow.incluir-envelopes" className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-texto-2" title="Override temporário da consulta">
               <input type="checkbox" className="accent-primary w-4 h-4" checked={incluirEnvelopes} onChange={e => setOvr('incluir_envelopes', e.target.checked)} />
               Incluir envelopes
             </label>
-            <label className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-texto-2" title="Override temporário da consulta">
+            <label data-guia="cashflow.ocultar-reservas" className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-texto-2" title="Override temporário da consulta">
               <input type="checkbox" className="accent-primary w-4 h-4" checked={ocultarReserva} onChange={e => setOvr('ocultar_reserva', e.target.checked)} />
               Ocultar reservas
             </label>
             {podeIncluirF && (
             <button
+              data-guia="cashflow.provisorio"
               type="button"
               onClick={() => { setFiltrosAbertos(false); setProvModal({ initial: null }) }}
               className="btn-secondary min-h-[44px] w-full flex items-center justify-center gap-1.5 text-sm border-dashed border-borda-forte text-texto-2"

@@ -35,6 +35,8 @@ import { CORES_PERFIL } from '../../lib/chartPalette'
 import InputMoeda from '../shared/InputMoeda'
 import { hojeSP } from '../../lib/hoje'
 import { aliquotaIof } from '../../lib/cambio'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
+import GuiasTelasPanel from '../BoasVindas/GuiasTelasPanel'
 
 const PROFILE_COLORS = CORES_PERFIL
 
@@ -423,7 +425,7 @@ export default function SettingsPanel() {
         'border-transparent bg-surface-2'
       }`}
     >
-      <div className="flex items-center gap-2 min-w-0">
+      <div data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.ordem' : undefined} className="flex items-center gap-2 min-w-0">
         {ordHandle('Arrastar para reordenar dentro do grupo')}
         {ordSetas(() => moveCategory(cat.id, 'up'), () => moveCategory(cat.id, 'down'), i === 0, i === lista.length - 1)}
         <span className="w-3 h-3 rounded-full shrink-0" style={{ background: cat.color }} />
@@ -440,6 +442,7 @@ export default function SettingsPanel() {
           className="max-w-[150px]"
         />
         <select
+          data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-grupo' : undefined}
           className="input w-auto text-xs py-1 max-w-[140px]"
           title="Grupo da categoria — reclassifica para outro grupo (não altera lançamentos)"
           value={cat.group || ''}
@@ -449,6 +452,7 @@ export default function SettingsPanel() {
           {categoryGroups.map(g => <option key={g} value={g}>{g}</option>)}
         </select>
         <select
+          data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-gerencial' : undefined}
           className="input w-auto text-xs py-1 max-w-[150px]"
           title="Grupo Gerencial Padrão — pré-seleciona este grupo ao lançar/importar nesta categoria (regra por descrição tem prioridade)"
           value={cat.defaultGerencialGroup || ''}
@@ -463,6 +467,7 @@ export default function SettingsPanel() {
         </select>
         {aplicAccounts.length > 0 && cat.type !== 'income' && (
           <select
+            data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-investimento' : undefined}
             className="input w-auto text-xs py-1 max-w-[150px]"
             title="Conta de Investimento — despesas de cartão nesta categoria geram um aporte automático nesta conta"
             value={cat.investmentAccountId || ''}
@@ -476,6 +481,7 @@ export default function SettingsPanel() {
         )}
         <button
           type="button"
+          data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-espelho' : undefined}
           onClick={() => updateCategory(cat.id, { geraEspelho: !cat.geraEspelho })}
           title={cat.geraEspelho ? 'Espelho ativo — clique para desativar' : 'Espelho inativo — clique para ativar'}
           className={`shrink-0 inline-flex items-center gap-0.5 text-[9px] uppercase tracking-wide font-bold px-1.5 py-1 rounded transition-colors ${
@@ -496,7 +502,7 @@ export default function SettingsPanel() {
             {accounts.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
           </select>
         )}
-        <button onClick={() => deleteCategory(cat.id)} className="p-1 text-texto-3 hover:text-perigo transition-colors rounded">
+        <button data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-excluir' : undefined} onClick={() => deleteCategory(cat.id)} className="p-1 text-texto-3 hover:text-perigo transition-colors rounded">
           <Trash2 size={12} />
         </button>
       </div>
@@ -627,13 +633,15 @@ export default function SettingsPanel() {
   const moduloDaSecao = MODULO_DA_ABA_CONFIG[abaAtual.id] || 'configuracoes'
   const somenteLeitura = secao !== 'atalhos' && secao !== 'usuarios' && secao !== 'agenda-celular' && !secaoAtual.todos &&
     !(pode(moduloDaSecao, 'incluir') || pode(moduloDaSecao, 'editar') || pode(moduloDaSecao, 'excluir'))
+  // Guia da Tela: cada seção de Configurações tem guia próprio (settings:<id da seção>).
+  useSubtelaGuia(`settings:${secao}`)
 
   return (
     <div className="space-y-4">
       {/* Cabeçalho: título, breadcrumb e abas. Aba/seção ativas vivem no hash (#config/aba/seção). */}
       <div>
         <h1 className="text-lg font-semibold text-texto-1">Configurações</h1>
-        <nav aria-label="Você está em" className="text-xs text-texto-3 mt-0.5 flex items-center gap-1 flex-wrap">
+        <nav data-guia="settings.caminho" aria-label="Você está em" className="text-xs text-texto-3 mt-0.5 flex items-center gap-1 flex-wrap">
           <span>Configurações</span>
           <ChevronRight size={12} />
           <span className={abaAtual.perigo ? 'text-perigo' : 'text-texto-2'}>{abaAtual.label}</span>
@@ -657,6 +665,7 @@ export default function SettingsPanel() {
               key={a.id}
               type="button"
               role="tab"
+              data-guia={`settings.aba-${a.id}`}
               aria-selected={ativa}
               onClick={() => irPara(a.id)}
               className={`shrink-0 min-h-[44px] px-4 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${cor}`}
@@ -669,7 +678,7 @@ export default function SettingsPanel() {
 
       <div className={temSubmenu ? 'flex flex-col md:flex-row gap-4 md:items-start' : ''}>
         {temSubmenu && (
-          <nav className="bg-surface border border-borda rounded-xl p-2 w-full md:w-56 md:shrink-0 flex flex-row flex-wrap md:flex-col gap-1">
+          <nav data-guia="settings.secoes" className="bg-surface border border-borda rounded-xl p-2 w-full md:w-56 md:shrink-0 flex flex-row flex-wrap md:flex-col gap-1">
             {abaAtual.secoes.map(s => (
               <button
                 key={s.id}
@@ -698,7 +707,7 @@ export default function SettingsPanel() {
         <h2 className="text-sm font-semibold text-texto-2 mb-1">Período Financeiro</h2>
         <p className="text-xs text-texto-3 mb-4">Como receitas e despesas são agrupadas no Dashboard e relatórios.</p>
 
-        <div className="space-y-2.5 mb-4">
+        <div data-guia="settings:periodo.modo" className="space-y-2.5 mb-4">
           <label className="flex items-start gap-2.5 cursor-pointer">
             <input
               type="radio"
@@ -731,6 +740,7 @@ export default function SettingsPanel() {
           <div className="flex-1">
             <label className="label">Dia de Início do Mês Financeiro</label>
             <input
+              data-guia="settings:periodo.dia-inicio"
               className={`input ${monthMode === 'calendar' ? 'opacity-50 cursor-not-allowed' : ''}`}
               type="number"
               min="1"
@@ -745,7 +755,7 @@ export default function SettingsPanel() {
                 : 'Ex: dia 5 = período vai do dia 5 ao dia 4 do mês seguinte'}
             </p>
           </div>
-          <button className="btn-primary flex items-center gap-2" onClick={handleSaveSettings}>
+          <button data-guia="settings:periodo.salvar" className="btn-primary flex items-center gap-2" onClick={handleSaveSettings}>
             <Save size={14} /> {saved ? 'Salvo!' : 'Salvar'}
           </button>
         </div>
@@ -762,7 +772,7 @@ export default function SettingsPanel() {
           Estornos detectados na importação/conciliação de fatura (receitas que não são pagamento
           nem anuidade) podem receber uma categoria padrão automaticamente, no grupo D · Despesa.
         </p>
-        <label className="flex items-center gap-2.5 cursor-pointer mb-3">
+        <label data-guia="settings:estornos.estorno" className="flex items-center gap-2.5 cursor-pointer mb-3">
           <div className="relative shrink-0">
             <input
               type="checkbox"
@@ -776,7 +786,7 @@ export default function SettingsPanel() {
           <span className="text-sm text-texto-2 select-none">Aplicar categoria padrão para estornos de cartão</span>
         </label>
         {settings.estornoCartaoEnabled && (
-          <div>
+          <div data-guia="settings:estornos.estorno-categoria">
             <label className="label">Categoria</label>
             <CategorySelect
               categories={categories}
@@ -799,7 +809,7 @@ export default function SettingsPanel() {
           Spread e "IOF em linha separada" ficam em cada cartão (Editar Conta).
         </p>
         <label className="label" htmlFor="iof-aliquota">Alíquota do IOF (%)</label>
-        <input id="iof-aliquota" className="input w-32" type="number" min="0" max="20" step="0.01"
+        <input id="iof-aliquota" data-guia="settings:estornos.iof" className="input w-32" type="number" min="0" max="20" step="0.01"
           defaultValue={((aliquotaIof(settings)) * 100).toFixed(2)}
           onBlur={e => {
             const v = Number(String(e.target.value).replace(',', '.'))
@@ -814,7 +824,7 @@ export default function SettingsPanel() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-texto-2">Perfis CPF / CNPJ</h2>
-          <button className="btn-primary text-xs py-1.5 flex items-center gap-1.5" onClick={() => { setEditingProfile(null); setShowProfileForm(true) }}>
+          <button data-guia="settings:perfis.novo" className="btn-primary text-xs py-1.5 flex items-center gap-1.5" onClick={() => { setEditingProfile(null); setShowProfileForm(true) }}>
             <Plus size={12} /> Novo Perfil
           </button>
         </div>
@@ -843,7 +853,7 @@ export default function SettingsPanel() {
                   <p className="text-xs text-texto-3">{p.type === 'pf' ? 'CPF' : 'CNPJ'}: {fmtDoc}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <div className="flex gap-0.5">
+                  <div data-guia={i === 0 ? 'settings:perfis.ordem' : undefined} className="flex gap-0.5">
                     <button type="button" title="Subir" aria-label={`Subir ${p.name}`} onClick={() => moveProfile(p.id, 'up')} disabled={i === 0}
                       className="p-1 rounded hover:bg-surface-hover disabled:opacity-25 text-texto-2 transition-colors">
                       <ArrowUp size={11} />
@@ -853,8 +863,8 @@ export default function SettingsPanel() {
                       <ArrowDown size={11} />
                     </button>
                   </div>
-                  <button className="p-1 text-texto-3 hover:text-texto-2 transition-colors" onClick={() => openProfileEdit(p)}><Edit2 size={13} /></button>
-                  <button className="p-1 text-texto-3 hover:text-perigo transition-colors" onClick={() => setProfileConfirmDelete(p.id)}><Trash2 size={13} /></button>
+                  <button data-guia={i === 0 ? 'settings:perfis.editar' : undefined} className="p-1 text-texto-3 hover:text-texto-2 transition-colors" onClick={() => openProfileEdit(p)}><Edit2 size={13} /></button>
+                  <button data-guia={i === 0 ? 'settings:perfis.excluir' : undefined} className="p-1 text-texto-3 hover:text-perigo transition-colors" onClick={() => setProfileConfirmDelete(p.id)}><Trash2 size={13} /></button>
                 </div>
               </div>
             )
@@ -906,7 +916,7 @@ export default function SettingsPanel() {
               </div>
             </div>
 
-            <label className="flex items-center gap-2.5 cursor-pointer">
+            <label data-guia="settings:perfis.principal" className="flex items-center gap-2.5 cursor-pointer">
               <div className="relative shrink-0">
                 <input type="checkbox" checked={profileForm.isDefault} onChange={e => setProfileField('isDefault', e.target.checked)} className="sr-only peer" />
                 <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
@@ -940,6 +950,7 @@ export default function SettingsPanel() {
           <div className="flex items-center gap-3">
             <span className="text-xs text-texto-3">{categoryGroups.length} grupo{categoryGroups.length !== 1 ? 's' : ''}</span>
             <button
+              data-guia="settings:categorias.padrao"
               className="btn-secondary flex items-center gap-1.5 text-xs"
               onClick={() => setConfirmOrdemPadrao(true)}
               title="Restaurar ordem padrão de grupos e categorias"
@@ -963,7 +974,7 @@ export default function SettingsPanel() {
         )}
 
         {/* Criar grupo (só nome) */}
-        <form onSubmit={handleAddGroup} className="flex gap-2 mb-4">
+        <form onSubmit={handleAddGroup} data-guia="settings:categorias.novo-grupo" className="flex gap-2 mb-4">
           <input
             className="input flex-1"
             placeholder="Grupo de categorias"
@@ -974,7 +985,7 @@ export default function SettingsPanel() {
         </form>
 
         {profiles.length > 0 && (
-          <div className="flex items-center gap-2 mb-3">
+          <div data-guia="settings:categorias.filtro-perfil" className="flex items-center gap-2 mb-3">
             <span className="text-xs text-texto-3">Mostrar categorias de:</span>
             <select className="input w-auto text-xs py-1" value={filtroPerfilCat} onChange={e => setFiltroPerfilCat(e.target.value)}>
               <option value="">Todos os perfis</option>
@@ -1025,7 +1036,7 @@ export default function SettingsPanel() {
                       </span>
                     </span>
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => startRenameGroup(group)} title="Renomear grupo" className="p-1 text-texto-3 hover:text-texto-2"><Edit2 size={12} /></button>
+                      <button data-guia={group === catsByGroup[0]?.group ? 'settings:categorias.grupo-editar' : undefined} onClick={() => startRenameGroup(group)} title="Renomear grupo" className="p-1 text-texto-3 hover:text-texto-2"><Edit2 size={12} /></button>
                       <button
                         onClick={() => handleDeleteGroup(group)}
                         title={cats.length > 0 ? 'Esvazie o grupo para excluí-lo' : 'Excluir grupo'}
@@ -1064,7 +1075,7 @@ export default function SettingsPanel() {
         </div>
 
         {/* Criar categoria — Grupo obrigatório (escolher existente ou digitar novo) */}
-        <form onSubmit={handleAddCategory} className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+        <form onSubmit={handleAddCategory} data-guia="settings:categorias.nova-categoria" className="grid grid-cols-2 gap-2 sm:grid-cols-6">
           <input className="input col-span-2 sm:col-span-1" placeholder="Digite o nome da categoria" value={newCategory.name} onChange={e => setNewCategory(f => ({ ...f, name: e.target.value }))} />
           <input
             className="input"
@@ -1114,14 +1125,14 @@ export default function SettingsPanel() {
                   <span className="text-texto-1">{cat ? `${cat.icon} ${cat.name}` : rule.categoryId}</span>
                   {rule.payee && <span className="text-texto-3 text-xs ml-1">({rule.payee})</span>}
                 </span>
-                <button onClick={() => deleteRule(rule.id)} className="p-1 text-texto-3 hover:text-perigo transition-colors rounded">
+                <button data-guia={rule === classificationRules[0] ? 'settings:classificacao.excluir' : undefined} onClick={() => deleteRule(rule.id)} className="p-1 text-texto-3 hover:text-perigo transition-colors rounded">
                   <Trash2 size={12} />
                 </button>
               </div>
             )
           })}
         </div>
-        <form onSubmit={handleAddRule} className="grid grid-cols-3 gap-2">
+        <form onSubmit={handleAddRule} data-guia="settings:classificacao.nova" className="grid grid-cols-3 gap-2">
           <input className="input" placeholder="Contém" value={newRule.contains} onChange={e => setNewRule(f => ({ ...f, contains: e.target.value }))} />
           <CategorySelect
             categories={categories}
@@ -1162,13 +1173,13 @@ export default function SettingsPanel() {
                   </span>
                 </div>
                 <div className="flex gap-0.5 shrink-0">
-                  <button onClick={() => moveGerencialRule(rule.id, 'up')} disabled={idx === 0} className="p-1 rounded hover:bg-surface-hover disabled:opacity-30 text-texto-3 transition-colors">
+                  <button data-guia={idx === 0 ? 'settings:grupo-gerencial.ordem' : undefined} onClick={() => moveGerencialRule(rule.id, 'up')} disabled={idx === 0} className="p-1 rounded hover:bg-surface-hover disabled:opacity-30 text-texto-3 transition-colors">
                     <ArrowUp size={12} />
                   </button>
                   <button onClick={() => moveGerencialRule(rule.id, 'down')} disabled={idx === arr.length - 1} className="p-1 rounded hover:bg-surface-hover disabled:opacity-30 text-texto-3 transition-colors">
                     <ArrowDown size={12} />
                   </button>
-                  <button onClick={() => deleteGerencialRule(rule.id)} className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors">
+                  <button data-guia={idx === 0 ? 'settings:grupo-gerencial.excluir' : undefined} onClick={() => deleteGerencialRule(rule.id)} className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors">
                     <Trash2 size={12} />
                   </button>
                 </div>
@@ -1192,6 +1203,7 @@ export default function SettingsPanel() {
             setNewGRule({ contains: '', isParcelado: 'any', minAmount: '', maxAmount: '', grupoGerencialId: '' })
           }}
           className="space-y-2"
+          data-guia="settings:grupo-gerencial.nova"
         >
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <input
@@ -1254,12 +1266,12 @@ export default function SettingsPanel() {
       <div className="card">
         <h2 className="text-sm font-semibold text-texto-2 mb-1">Centros de Custo</h2>
         <p className="text-xs text-texto-3 mb-4">Rótulos livres para separar lançamentos por finalidade.</p>
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div data-guia="settings:centros-custo.lista" className="flex flex-wrap gap-2 mb-4">
           {costCenters.map(cc => (
             <span key={cc} className="badge bg-surface-2 text-texto-2 px-3 py-1 text-xs">{cc}</span>
           ))}
         </div>
-        <div className="flex gap-2">
+        <div data-guia="settings:centros-custo.novo" className="flex gap-2">
           <input className="input" placeholder="Centro de custo" value={newCC} onChange={e => setNewCC(e.target.value)} />
           <button
             className="btn-secondary flex items-center gap-1"
@@ -1280,6 +1292,7 @@ export default function SettingsPanel() {
             <p className="text-xs text-texto-3 mt-0.5">Arraste ⠿ ou use ↑↓ para definir a ordem exibida em todos os seletores</p>
           </div>
           <button
+            data-guia="settings:grupos-contas.padrao"
             className="btn-secondary flex items-center gap-1.5 text-xs"
             onClick={handleAgRestoreOrder}
             title="Restaurar ordem padrão"
@@ -1365,7 +1378,7 @@ export default function SettingsPanel() {
                     </span>
                   )}
                   {!g.inibido && (
-                    <div className="flex gap-0.5 shrink-0">
+                    <div data-guia={i === 0 ? 'settings:grupos-contas.ordem' : undefined} className="flex gap-0.5 shrink-0">
                       <button
                         onClick={() => moveAccountGroup(g.id, 'up')}
                         disabled={i === 0}
@@ -1385,6 +1398,7 @@ export default function SettingsPanel() {
                   {/* Inibir / Reativar */}
                   {g.inibido ? (
                     <button
+                      data-guia={i === 0 ? 'settings:grupos-contas.inibir' : undefined}
                       onClick={() => updateAccountGroup(g.id, { inibido: false })}
                       title="Reativar grupo"
                       className="p-1 rounded hover:bg-surface-hover text-primary-fg hover:text-texto-1 transition-colors shrink-0"
@@ -1393,6 +1407,7 @@ export default function SettingsPanel() {
                     </button>
                   ) : (
                     <button
+                      data-guia={i === 0 ? 'settings:grupos-contas.inibir' : undefined}
                       onClick={() => updateAccountGroup(g.id, { inibido: true })}
                       title="Inibir grupo (ocultar do app)"
                       className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-ambar transition-colors shrink-0"
@@ -1404,6 +1419,7 @@ export default function SettingsPanel() {
                     <>
                       {/* Edit */}
                       <button
+                        data-guia={i === 0 ? 'settings:grupos-contas.editar' : undefined}
                         onClick={() => { setAgEditId(g.id); setAgEditName(g.name); setAgEditAnchorId(g.anchorAccountId || '') }}
                         className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-2 transition-colors shrink-0"
                       >
@@ -1411,6 +1427,7 @@ export default function SettingsPanel() {
                       </button>
                       {/* Delete */}
                       <button
+                        data-guia={i === 0 ? 'settings:grupos-contas.excluir' : undefined}
                         onClick={() => setAgConfirmDeleteId(g.id)}
                         className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors shrink-0"
                       >
@@ -1425,7 +1442,7 @@ export default function SettingsPanel() {
         </div>
 
         {/* Add new group */}
-        <div className="flex gap-2 pt-2 border-t border-borda-forte">
+        <div data-guia="settings:grupos-contas.novo" className="flex gap-2 pt-2 border-t border-borda-forte">
           <select
             className="input w-36 text-sm"
             value={agNewType}
@@ -1482,6 +1499,7 @@ export default function SettingsPanel() {
           </div>
           {!showGroupForm && (
             <button
+              data-guia="settings:controle-gerencial.novo-grupo"
               className="btn-primary flex items-center gap-2"
               onClick={() => { setEditingGroup(null); setGroupForm({ name: '', alias: '', defaultAccountId: '' }); setShowGroupForm(true) }}
             >
@@ -1575,12 +1593,14 @@ export default function SettingsPanel() {
               {!group.fixed && (
                 <div className="flex gap-1">
                   <button
+                    data-guia={group === gerencialGroups.find(x => !x.fixed) ? 'settings:controle-gerencial.editar' : undefined}
                     onClick={() => openGroupEdit(group)}
                     className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors"
                   >
                     <Edit2 size={12} />
                   </button>
                   <button
+                    data-guia={group === gerencialGroups.find(x => !x.fixed) ? 'settings:controle-gerencial.excluir' : undefined}
                     onClick={() => setConfirmDeleteGroup(group)}
                     className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors"
                   >
@@ -1625,7 +1645,7 @@ export default function SettingsPanel() {
         })()}
 
         {/* Counts */}
-        <div className="grid grid-cols-3 gap-2 text-xs text-center">
+        <div data-guia="settings:backup.contagem" className="grid grid-cols-3 gap-2 text-xs text-center">
           {[
             ['Contas', data.accounts?.length ?? 0],
             ['Lançamentos', data.transactions?.length ?? 0],
@@ -1641,13 +1661,14 @@ export default function SettingsPanel() {
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3">
           <button
+            data-guia="settings:backup.exportar"
             className="btn-primary flex items-center justify-center gap-2 flex-1 disabled:opacity-60"
             onClick={handleExport}
             disabled={exporting || importing}
           >
             <Download size={14} /> {exporting ? 'Exportando…' : 'Exportar backup completo'}
           </button>
-          <label className={`btn-secondary flex items-center justify-center gap-2 flex-1 cursor-pointer ${importing ? 'opacity-60 pointer-events-none' : ''}`}>
+          <label data-guia="settings:backup.importar" className={`btn-secondary flex items-center justify-center gap-2 flex-1 cursor-pointer ${importing ? 'opacity-60 pointer-events-none' : ''}`}>
             <Upload size={14} /> Importar backup
             <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFileChange} disabled={importing} />
           </label>
@@ -1681,7 +1702,7 @@ export default function SettingsPanel() {
         </h2>
         <p className="text-xs text-texto-3 mb-4">Ferramentas para corrigir inconsistências nos dados.</p>
 
-        <div className="mb-3"><VarreduraRateio somenteLeitura={somenteLeitura} /></div>
+        <div data-guia="settings:manutencao.rateio" className="mb-3"><VarreduraRateio somenteLeitura={somenteLeitura} /></div>
 
         <div className="bg-surface-2 rounded-xl p-4 space-y-3">
           <div>
@@ -1720,6 +1741,7 @@ export default function SettingsPanel() {
           )}
 
           <button
+            data-guia="settings:manutencao.recalcular-saldos"
             className="btn-secondary flex items-center gap-2"
             onClick={handleRecalcAll}
             disabled={recalcStatus.running}
@@ -1736,6 +1758,7 @@ export default function SettingsPanel() {
               <p className="text-xs text-primary-fg mb-2">Dados gerenciais corrigidos com sucesso.</p>
             )}
             <button
+              data-guia="settings:manutencao.corrigir-gerencial"
               className="btn-secondary flex items-center gap-2"
               onClick={() => { corrigirDadosGerencial(); setCorrigirStatus('done') }}
             >
@@ -1774,6 +1797,7 @@ export default function SettingsPanel() {
             )}
 
             <button
+              data-guia="settings:manutencao.recalcular-faturas"
               className="btn-secondary flex items-center gap-2"
               onClick={handleRecalcFaturas}
               disabled={faturaStatus.running}
@@ -1797,6 +1821,7 @@ export default function SettingsPanel() {
               <div>
                 <label className="label">Grupo de contas</label>
                 <select
+                  data-guia="settings:manutencao.ajuste-grupo"
                   className="input text-sm"
                   value={ajusteGrupoId}
                   onChange={e => { setAjusteGrupoId(e.target.value); setAjusteResult(null); setAjusteDone(false) }}
@@ -1910,6 +1935,7 @@ export default function SettingsPanel() {
                 </p>
               </div>
               <button
+                data-guia="settings:manutencao.desfazer"
                 className="btn-secondary flex items-center gap-2 text-ambar border-ambar/40 hover:bg-ambar/10"
                 onClick={restoreBalanceSnapshot}
               >
@@ -1931,7 +1957,7 @@ export default function SettingsPanel() {
           Apaga os dados salvos neste navegador/celular e encerra a sessão. Seus dados na nuvem NÃO são
           afetados. Use em computador compartilhado.
         </p>
-        <button type="button" className="btn-danger" onClick={() => setApagarAparelho(true)}>Sair e apagar dados deste aparelho</button>
+        <button type="button" data-guia="settings:dados-aparelho.apagar" className="btn-danger" onClick={() => setApagarAparelho(true)}>Sair e apagar dados deste aparelho</button>
         <SairModal open={apagarAparelho} onClose={() => setApagarAparelho(false)} />
       </div>
       )}
@@ -1943,7 +1969,7 @@ export default function SettingsPanel() {
           <AlertTriangle size={14} /> Zona de Perigo
         </h2>
         <p className="text-xs text-texto-3 mb-3">Apagar todos os dados do aplicativo. Esta ação é irreversível.</p>
-        <button className="btn-danger" onClick={() => setConfirmReset(true)}>Apagar Todos os Dados</button>
+        <button data-guia="settings:zona-perigo.apagar" className="btn-danger" onClick={() => setConfirmReset(true)}>Apagar Todos os Dados</button>
       </div>
       )}
 
@@ -1953,6 +1979,7 @@ export default function SettingsPanel() {
       {secao === 'apelidos-ia' && <ApelidosIaPanel />}
       {secao === 'atalhos' && <AtalhosPanel />}
       {secao === 'agenda-celular' && <AgendaCelularPanel />}
+      {secao === 'guias' && <GuiasTelasPanel />}
       {secao === 'usuarios' && ehAdmin && <UsuariosPanel />}
         </fieldset>
       </div>

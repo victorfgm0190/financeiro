@@ -340,6 +340,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
   return (
     <>
     <div
+      data-guia="accounts.card"
       className={`relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg cursor-pointer ${isInactive ? 'opacity-50' : ''}`}
       style={highlightCard ? { border: '2px solid #185FA5' } : undefined}
       draggable={podeEditar}
@@ -367,7 +368,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             <span className={`text-xs ${txtSec}`}>{ACCOUNT_LABELS[account.type] || account.type}</span>
           </div>
           <h3 className="font-semibold text-sm truncate">{account.name}</h3>
-          <div className="flex flex-wrap gap-1 mt-1">
+          <div data-guia="accounts.selos" className="flex flex-wrap gap-1 mt-1">
             <ProfileBadge account={account} />
             {account.apelido && (
               <span className={`px-1.5 py-0.5 rounded text-xs bg-white/10 ${txtSec}`}>{account.apelido}</span>
@@ -390,6 +391,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
           <div className="flex gap-1">
             {temRendimento && podeEditar && (
               <button
+                data-guia="accounts.rendimento"
                 onClick={(e) => { e.stopPropagation(); setShowRendimento(true) }}
                 className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
                 title="Lançar rendimento"
@@ -398,12 +400,13 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
               </button>
             )}
             {podeEditar && (
-            <button onClick={(e) => { e.stopPropagation(); onEdit(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Editar conta">
+            <button data-guia="accounts.editar" onClick={(e) => { e.stopPropagation(); onEdit(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Editar conta">
               <Edit2 size={11} />
             </button>
             )}
             {podeEditar && (
             <button
+              data-guia="accounts.inativar"
               onClick={(e) => {
                 e.stopPropagation()
                 if (isInactive) updateAccount(account.id, { active: true })
@@ -417,13 +420,13 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             </button>
             )}
             {podeExcluir && (
-            <button onClick={(e) => { e.stopPropagation(); onDelete(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Excluir conta">
+            <button data-guia="accounts.excluir" onClick={(e) => { e.stopPropagation(); onDelete(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Excluir conta">
               <Trash2 size={11} />
             </button>
             )}
           </div>
           {podeEditar && (
-          <div className="flex gap-1">
+          <div data-guia="accounts.ordem" className="flex gap-1">
             <button onClick={(e) => { e.stopPropagation(); moveAccount(account.id, 'up') }} disabled={idx === 0} className="p-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors">
               <ArrowUp size={10} />
             </button>
@@ -527,6 +530,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
           )}
           {!isAsset && account.type !== 'liability' && podeEditar && (
             <button
+              data-guia="accounts.recalcular"
               onClick={(e) => { e.stopPropagation(); recalcularSaldo(account.id) }}
               className={`mt-1.5 text-xs flex items-center gap-1 ${txtSec} hover:text-white transition-colors`}
             >
@@ -538,6 +542,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
 
       {podeEditar ? (
         <button
+          data-guia="accounts.favorita"
           onClick={(e) => { e.stopPropagation(); setMainAccount(account.id) }}
           className={`mt-2.5 text-xs flex items-center gap-1 transition-opacity ${account.isMain ? 'text-white' : `${txtSec} hover:text-white`}`}
         >
@@ -619,6 +624,7 @@ function GroupSection({ group, accounts, saldosByAccount, onEdit, onDelete, onEx
       onDrop={e => { e.preventDefault(); onDropAccount?.(e.dataTransfer.getData('text/plain')) }}
     >
       <button
+        data-guia="accounts.grupo"
         onClick={() => setCollapsed(c => !c)}
         className="flex items-center gap-2.5 w-full text-left rounded-xl bg-surface-2/50 border border-borda py-3 px-4 hover:bg-surface-hover/50 transition-colors"
       >
@@ -809,6 +815,7 @@ export default function AccountsPanel({ setActivePage }) {
           <p className="text-2xl font-bold text-texto-1 mt-1">{fmtSinal(totalAssets)}</p>
         </div>
         <div
+          data-guia="accounts.saldo"
           className="card"
           title="Soma das contas visíveis. Saldo Atual: até hoje. Saldo Futuro: como fica depois que entrarem os lançamentos já efetivados com data posterior a hoje. Confere com a soma dos cabeçalhos de grupo."
         >
@@ -825,7 +832,7 @@ export default function AccountsPanel({ setActivePage }) {
           <p className="text-xs text-texto-2 uppercase tracking-wide">Dívida Cartão</p>
           <p className="text-2xl font-bold text-texto-1 mt-1">{fmt(totalCredit)}</p>
         </div>
-        <button type="button" onClick={() => setShowComposicaoPL(true)} className="card text-left hover:bg-surface-hover/40 transition-colors">
+        <button type="button" data-guia="accounts.pl" onClick={() => setShowComposicaoPL(true)} className="card text-left hover:bg-surface-hover/40 transition-colors">
           <p className="text-xs text-texto-2 uppercase tracking-wide">Patrimônio Líquido</p>
           <p className={`text-2xl font-bold mt-1 ${patrimonio.pl >= 0 ? 'text-receita' : 'text-despesa'}`}>
             {fmtSinal(patrimonio.pl)}
@@ -848,7 +855,7 @@ export default function AccountsPanel({ setActivePage }) {
           <h2 className="text-sm font-semibold text-texto-2">Contas ({accounts.length})</h2>
           {/* O total conta TODAS as contas do filtro; estas não estão nos grupos de cima. */}
           {ungrouped.length > 0 && (
-            <button type="button" className="text-xs text-aviso hover:underline"
+            <button type="button" data-guia="accounts.sem-grupo" className="text-xs text-aviso hover:underline"
               onClick={() => document.getElementById('contas-sem-grupo')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
               {ungrouped.length} sem grupo (no fim da página) ↓
             </button>
@@ -858,11 +865,11 @@ export default function AccountsPanel({ setActivePage }) {
           )}
         </div>
         <div className="flex gap-2">
-          <button className="btn-secondary flex items-center gap-1.5 text-sm" onClick={() => setShowGroupManager(true)}>
+          <button data-guia="accounts.grupos" className="btn-secondary flex items-center gap-1.5 text-sm" onClick={() => setShowGroupManager(true)}>
             <Settings size={13} /> Grupos
           </button>
           {podeIncluirConta && (
-            <button className="btn-primary flex items-center gap-1.5" onClick={() => { setEditAccount(null); setShowForm(true) }}>
+            <button data-guia="accounts.nova" className="btn-primary flex items-center gap-1.5" onClick={() => { setEditAccount(null); setShowForm(true) }}>
               <Plus size={14} /> Nova Conta
             </button>
           )}

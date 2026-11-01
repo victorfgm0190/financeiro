@@ -11,6 +11,8 @@ export const CONFIG_ABAS = [
       { id: 'estornos', label: 'Estorno e IOF de cartão' },
       { id: 'perfis', label: 'Perfis' },
       { id: 'agenda-celular', label: 'Agenda no celular', novo: true },
+      // Preferência pessoal (todos os níveis): o guia que abre sozinho em cada tela.
+      { id: 'guias', label: 'Guias das telas', novo: true, todos: true },
     ],
   },
   {

@@ -267,10 +267,10 @@ export default function UsuariosPanel() {
     <div className="card space-y-3">
       <div className="flex items-center gap-2">
         <h2 className="text-sm font-semibold text-texto-2">Usuários ({usuarios.length})</h2>
-        <button type="button" onClick={carregar} title="Recarregar" aria-label="Recarregar" className="p-1.5 rounded text-texto-3 hover:text-texto-1 hover:bg-surface-hover">
+        <button type="button" data-guia="settings:usuarios.recarregar" onClick={carregar} title="Recarregar" aria-label="Recarregar" className="p-1.5 rounded text-texto-3 hover:text-texto-1 hover:bg-surface-hover">
           <RefreshCw size={12} className={carregando ? 'animate-spin' : ''} />
         </button>
-        <button type="button" onClick={() => setEditando('novo')} className="ml-auto btn-primary text-xs py-1.5 flex items-center gap-1.5">
+        <button type="button" data-guia="settings:usuarios.novo" onClick={() => setEditando('novo')} className="ml-auto btn-primary text-xs py-1.5 flex items-center gap-1.5">
           <Plus size={12} /> Novo usuário
         </button>
       </div>
@@ -311,16 +311,16 @@ export default function UsuariosPanel() {
                       <button type="button" title="Desbloquear" aria-label="Desbloquear" onClick={() => acao({ id: u.id, desbloquear: true }, 'Usuário desbloqueado.')}
                         className="p-1.5 rounded hover:bg-surface-hover text-texto-2"><Unlock size={13} /></button>
                     )}
-                    <button type="button" title={motivoSemLink(u) ? `Enviar link de senha — ${motivoSemLink(u)}` : 'Enviar link de senha por e-mail'}
+                    <button type="button" data-guia={u === usuarios[0] ? 'settings:usuarios.link' : undefined} title={motivoSemLink(u) ? `Enviar link de senha — ${motivoSemLink(u)}` : 'Enviar link de senha por e-mail'}
                       aria-label="Enviar link de senha" disabled={!!motivoSemLink(u) || enviandoLink === u.id} onClick={() => enviarLink(u)}
                       className="p-1.5 rounded hover:bg-surface-hover text-texto-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent">
                       <Mail size={13} className={enviandoLink === u.id ? 'animate-pulse' : ''} /></button>
-                    <button type="button" title="Redefinir senha" aria-label="Redefinir senha" onClick={() => setSenhaDe(u)}
+                    <button type="button" data-guia={u === usuarios[0] ? 'settings:usuarios.senha' : undefined} title="Redefinir senha" aria-label="Redefinir senha" onClick={() => setSenhaDe(u)}
                       className="p-1.5 rounded hover:bg-surface-hover text-texto-2"><KeyRound size={13} /></button>
-                    <button type="button" title="Editar" aria-label="Editar" onClick={() => setEditando(u)}
+                    <button type="button" data-guia={u === usuarios[0] ? 'settings:usuarios.editar' : undefined} title="Editar" aria-label="Editar" onClick={() => setEditando(u)}
                       className="p-1.5 rounded hover:bg-surface-hover text-texto-2"><Pencil size={13} /></button>
                     {u.id !== sessao?.id && (
-                      <button type="button" title={u.ativo ? 'Desativar' : 'Ativar'} aria-label={u.ativo ? 'Desativar' : 'Ativar'}
+                      <button type="button" data-guia={u === usuarios.find(x => x.id !== sessao?.id) ? 'settings:usuarios.ativar' : undefined} title={u.ativo ? 'Desativar' : 'Ativar'} aria-label={u.ativo ? 'Desativar' : 'Ativar'}
                         onClick={() => acao({ id: u.id, ativo: !u.ativo }, u.ativo ? 'Usuário desativado.' : 'Usuário ativado.')}
                         className={`p-1.5 rounded hover:bg-surface-hover ${u.ativo ? 'text-texto-2 hover:text-perigo' : 'text-primary-fg'}`}><Power size={13} /></button>
                     )}

@@ -27,6 +27,7 @@ import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
 import SeloParcela from '../shared/SeloParcela'
 import { criarSeloParcela } from '../../lib/numeroParcela'
 import SeloCambio from '../shared/SeloCambio'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 // ─── Credit fatura helpers ──────────────────────────────────────────────────
 
@@ -149,12 +150,14 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
     [txs]
   )
   const reconciledTotals = useMemo(() => computeReconciledTotals(displayTxs), [displayTxs])
+  useSubtelaGuia('transactions:fatura')
 
   return (
     <div className="space-y-4">
       {/* Breadcrumb — fixo no topo ao rolar apenas no desktop (md+); no mobile rola normal */}
       <div className="flex items-center gap-2 flex-wrap md:sticky md:top-0 md:z-20 md:bg-page md:py-2 md:-my-2">
         <button
+          data-guia="transactions:fatura.voltar"
           onClick={onBack}
           className="flex items-center gap-1.5 text-sm text-texto-2 hover:text-texto-1 transition-colors"
         >
@@ -168,6 +171,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
           <span className="text-base font-bold text-despesa">{fmt(total)}</span>
           {txs.length > 0 && !isMobile && podeEditar && (
             <button
+              data-guia="transactions:fatura.reconciliar"
               onClick={() => setShowReconciliar(true)}
               className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
               title="Reconciliar transações da fatura"
@@ -177,6 +181,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
           )}
           {podeIncluir && (
             <button
+              data-guia="transactions:fatura.novo"
               onClick={onNewTx}
               className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5"
             >
@@ -187,7 +192,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
       </div>
 
       {/* KPI */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3" data-guia="transactions:fatura.resumo">
         <div className="card">
           <p className="text-xs text-texto-2 uppercase">Fatura</p>
           <p className="text-xl font-bold text-despesa mt-1">{fmt(total)}</p>
@@ -218,7 +223,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
           <>
             {/* Totalizador Conciliados/Pendentes (lançamentos visíveis) */}
             {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0) && (
-              <div className="border-b border-borda bg-surface/40 px-4 py-2.5 flex items-center text-xs">
+              <div className="border-b border-borda bg-surface/40 px-4 py-2.5 flex items-center text-xs" data-guia="transactions:fatura.conciliados">
                 <ReconciledTotals
                   conciliado={reconciledTotals.conciliado}
                   pendente={reconciledTotals.pendente}
@@ -291,6 +296,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                         <div className="flex gap-1 justify-end">
                           {podeIncluir && (
                             <button
+                              data-guia={tx === displayTxs[0] ? 'transactions:fatura.estornar' : undefined}
                               onClick={() => setConfirmEstorno(tx)}
                               title="Estornar lançamento"
                               className="p-1.5 text-texto-3 hover:text-despesa hover:bg-despesa/10 rounded transition-colors"
@@ -299,6 +305,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                             </button>
                           )}
                           <button
+                            data-guia={tx === displayTxs[0] ? 'transactions:fatura.editar' : undefined}
                             onClick={() => { setEditTx(tx); setShowEdit(true) }}
                             title={podeEditar ? 'Editar' : 'Ver'}
                             className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors"
@@ -315,6 +322,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                           )}
                           {podeExcluir && (
                             <button
+                              data-guia={tx === displayTxs[0] ? 'transactions:fatura.excluir' : undefined}
                               onClick={() => setConfirmDelete(tx)}
                               aria-label="Excluir"
                               className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors"
@@ -325,7 +333,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                         </div>
                       </td>
                       <td className="px-2 py-3 text-center">
-                        <div className="inline-flex justify-center">
+                        <div className="inline-flex justify-center" data-guia={tx === displayTxs[0] ? 'transactions:fatura.reconciliado' : undefined}>
                           {podeEditar ? (
                             <ReconcileBadge
                               reconciled={tx.reconciled}
@@ -442,7 +450,7 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-texto-2">Contas</h2>
           {podeIncluir && (
-            <button onClick={() => onNewTx()} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
+            <button data-guia="transactions.novo" onClick={() => onNewTx()} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
               <Plus size={12} /> Novo
             </button>
           )}
@@ -457,6 +465,7 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
             {bankAccounts.map(a => (
               <button
                 key={a.id}
+                data-guia={a === bankAccounts[0] ? 'transactions.conta' : undefined}
                 onClick={() => onSelectAccount(a)}
                 className="card text-left hover:bg-surface-hover/60 transition-colors group border border-transparent hover:border-borda-forte"
               >
@@ -504,6 +513,7 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
                       </span>
                       {podeIncluir && (
                         <button
+                          data-guia={card === creditCards[0] ? 'transactions.novo-cartao' : undefined}
                           onClick={() => onNewTx(card)}
                           className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors"
                           title="Novo lançamento no cartão"
@@ -520,6 +530,7 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
                       {faturas.map(fat => (
                         <button
                           key={fat.key}
+                          data-guia={card === creditCards[0] && fat === faturas[0] ? 'transactions.fatura' : undefined}
                           onClick={() => onSelectFatura(card, fat.key)}
                           className="w-full flex items-center justify-between px-4 py-3 border-b border-borda/40 last:border-0 hover:bg-surface-hover/30 transition-colors text-left group"
                         >

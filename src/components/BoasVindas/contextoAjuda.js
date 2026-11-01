@@ -9,6 +9,7 @@ export function montarContextoAjuda({ podeVer, pode, settings }) {
   return {
     podeVer: (pagina) => !!podeVer?.(pagina),
     podeIncluir: (modulo) => !!pode?.(modulo, 'incluir'),
+    pode: (modulo, acao = 'ver') => !!pode?.(modulo, acao),
     // Mesma condição do botão ✨ Assistente do cabeçalho (App.jsx podeAssistente).
     iaAtiva: !!pode?.('lancamentos', 'incluir'),
     gerencialAtivo: controleGerencialAtivo(settings),

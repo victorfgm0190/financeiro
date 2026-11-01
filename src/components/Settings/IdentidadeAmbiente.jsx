@@ -31,7 +31,7 @@ export default function IdentidadeAmbiente({ somenteLeitura = false }) {
       </div>
       <div>
         <label className="label" htmlFor="ident-nome">Nome do ambiente</label>
-        <input id="ident-nome" className="input" maxLength={120} value={nome} onChange={e => setNome(e.target.value)}
+        <input id="ident-nome" data-guia="settings:identidade.nome" className="input" maxLength={120} value={nome} onChange={e => setNome(e.target.value)}
           placeholder="De quem é o sistema" disabled={somenteLeitura} />
         <p className="text-xs text-texto-3 mt-1">
           Vazio: os relatórios usam o nome do usuário logado{usuario?.nome ? ` (${usuario.nome})` : ''}.
@@ -39,13 +39,13 @@ export default function IdentidadeAmbiente({ somenteLeitura = false }) {
       </div>
       <div>
         <label className="label" htmlFor="ident-frase">Frase do ambiente (opcional)</label>
-        <input id="ident-frase" className="input" maxLength={160} value={frase} onChange={e => setFrase(e.target.value)}
+        <input id="ident-frase" data-guia="settings:identidade.frase" className="input" maxLength={160} value={frase} onChange={e => setFrase(e.target.value)}
           placeholder="Frase exibida nos relatórios" disabled={somenteLeitura} />
         <p className="text-xs text-texto-3 mt-1">Vazia: a linha da frase não aparece.</p>
       </div>
       {!somenteLeitura && (
         <div className="flex justify-end">
-          <button type="submit" className="btn-primary flex items-center gap-2" disabled={!mudou && !salvo}>
+          <button type="submit" data-guia="settings:identidade.salvar" className="btn-primary flex items-center gap-2" disabled={!mudou && !salvo}>
             <Save size={14} /> {salvo ? 'Salvo!' : 'Salvar'}
           </button>
         </div>

@@ -71,12 +71,13 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpen
           <p className="text-xs text-texto-3">{mes}</p>
           <div className="flex items-center gap-1">
             <h1 className="text-xl font-bold text-texto-1">{nome ? `Olá, ${nome}` : 'Olá'}</h1>
-            <AjudaTela pagina="dashboard" />
+            <AjudaTela pagina="inicio" />
           </div>
         </div>
         <button
           type="button"
           onClick={alternarOcultar}
+          data-guia="inicio.ocultar"
           aria-label={ocultar ? 'Mostrar valores' : 'Ocultar valores'}
           aria-pressed={ocultar}
           className="w-11 h-11 rounded-full flex items-center justify-center text-texto-2 bg-surface border border-borda"
@@ -86,9 +87,9 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpen
       </header>
 
       {/* Início não tem cabeçalho: a lupa da Busca Global fica ao lado dos chips de perfil. */}
-      <div className="flex items-center gap-1 -mr-2">
+      <div className="flex items-center gap-1 -mr-2" data-guia="inicio.perfis">
         <PerfilChips className="flex-1 min-w-0 -ml-4 pl-4" />
-        <button type="button" onClick={onOpenSearch} aria-label="Buscar" className="w-11 h-11 shrink-0 flex items-center justify-center text-texto-2">
+        <button type="button" onClick={onOpenSearch} aria-label="Buscar" data-guia="inicio.buscar" className="w-11 h-11 shrink-0 flex items-center justify-center text-texto-2">
           <Search size={20} />
         </button>
       </div>
@@ -120,6 +121,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpen
       <button
         type="button"
         onClick={() => setPersonalizar(true)}
+        data-guia="inicio.personalizar"
         className="w-full flex items-center justify-center gap-2 min-h-[48px] rounded-xl border border-dashed border-borda-forte text-sm text-texto-2"
       >
         <SlidersHorizontal size={16} /> Personalizar cards do Início
@@ -168,6 +170,7 @@ function ResumoCard({ saldosPrincipais, v: valor, ocultar, carregando, onAbrir }
     <button
       type="button"
       onClick={onAbrir}
+      data-guia="inicio.resumo"
       aria-label="Saldo principal — ver como chegamos aqui"
       className="relative w-full text-left rounded-2xl p-5 text-white shadow-lg"
       style={{ background: 'linear-gradient(135deg, #0E6B4E 0%, #0B5740 100%)' }}

@@ -18,7 +18,7 @@ export default function FilterBar({
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         {/* STATUS — segmentado */}
-        <div role="radiogroup" aria-label="Status" className="flex w-full sm:w-auto max-w-full overflow-x-auto rounded-lg border border-borda-forte bg-surface-2 p-0.5">
+        <div role="radiogroup" aria-label="Status" data-guia="schedule.status" className="flex w-full sm:w-auto max-w-full overflow-x-auto rounded-lg border border-borda-forte bg-surface-2 p-0.5">
           {status.map(s => {
             const ativo = s.id === statusAtual
             const Icone = s.icon
@@ -49,6 +49,7 @@ export default function FilterBar({
           {!semPeriodo && <label className="flex items-center gap-1.5 flex-1 sm:flex-none min-w-0">
             <span className="text-xs text-texto-3 shrink-0">Período:</span>
             <select
+              data-guia="schedule.periodo"
               className="input py-1.5 text-xs w-full sm:w-auto"
               value={periodoAtual}
               onChange={e => onPeriodo(e.target.value)}
@@ -59,6 +60,7 @@ export default function FilterBar({
           {/* FILTROS */}
           <button
             type="button"
+            data-guia="schedule.filtros"
             onClick={onToggle}
             aria-expanded={aberto}
             className={`btn-secondary flex items-center gap-1.5 py-1.5 text-xs shrink-0 ${aberto ? 'ring-1 ring-inset ring-primary/50' : ''}`}

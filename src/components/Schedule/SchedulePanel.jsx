@@ -2365,6 +2365,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
         {!selectionMode && selectableRows.length > 0 && podeSelecionar && (
           <div className="flex justify-end px-3 pt-2.5 pb-0">
             <button
+              data-guia="schedule.selecionar"
               onClick={() => setSelectionMode(true)}
               className="btn-amber"
             >
@@ -3144,7 +3145,7 @@ export default function SchedulePanel() {
           <p className="text-xs text-texto-3 mt-0.5 leading-5 whitespace-nowrap">{nT(allPending)} pendentes · {nT(displayInvoice.filter(p => p.status === 'pending')) + nT(displayFaturaPayments.filter(s => getNextOccurrences(s, 1).length > 0))} faturas · {nT(displayGerencial.filter(s => getNextOccurrences(s, 1).length > 0))} resgates</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div role="radiogroup" aria-label="Visão" className="flex rounded-lg border border-borda-forte bg-surface-2 p-0.5">
+          <div role="radiogroup" aria-label="Visão" data-guia="schedule.visao" className="flex rounded-lg border border-borda-forte bg-surface-2 p-0.5">
             {[['lista', 'Lista', List], ['calendario', 'Calendário', CalendarDays]].map(([id, label, Icone]) => (
               <button key={id} type="button" role="radio" aria-checked={visao === id} onClick={() => trocarVisao(id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
@@ -3154,23 +3155,23 @@ export default function SchedulePanel() {
             ))}
           </div>
           {!emCalendario && (
-            <button type="button" className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={exportarParaExcel} disabled={exportando} title="Exportar a lista filtrada para Excel">
+            <button type="button" data-guia="schedule.exportar" className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={exportarParaExcel} disabled={exportando} title="Exportar a lista filtrada para Excel">
               <FileSpreadsheet size={14} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
             </button>
           )}
           {provisoesPendentes.length > 0 && podeExecutarGer && (
-            <button className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={abrirExecutarGer} title={tituloExecutarGer}>
+            <button data-guia="schedule.executar-gerenciais" className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={abrirExecutarGer} title={tituloExecutarGer}>
               <BarChart3 size={14} /> Executar Gerenciais ({provisoesPendentes.length})
               <ShortcutHint actionId="agend.executarGerenciais" />
             </button>
           )}
           {activeTab === 'conta' && podeIncluirAgend && (
             <>
-              <button className="btn-secondary hidden md:flex items-center gap-2 whitespace-nowrap" onClick={abrirLancarProvisao} title={tituloLancarProvisao}>
+              <button data-guia="schedule.lancar-provisao" className="btn-secondary hidden md:flex items-center gap-2 whitespace-nowrap" onClick={abrirLancarProvisao} title={tituloLancarProvisao}>
                 <Hourglass size={14} /> Lançar Provisão
                 <ShortcutHint actionId="agend.lancarProvisao" />
               </button>
-              <button className="btn-primary hidden md:flex items-center gap-2 whitespace-nowrap" onClick={abrirNovoAgendamento} title={tituloNovoAgendamento}>
+              <button data-guia="schedule.novo" className="btn-primary hidden md:flex items-center gap-2 whitespace-nowrap" onClick={abrirNovoAgendamento} title={tituloNovoAgendamento}>
                 <Plus size={14} /> Novo Agendamento
                 <ShortcutHint actionId="agend.novoAgendamento" />
               </button>
@@ -3179,7 +3180,7 @@ export default function SchedulePanel() {
         </div>
       </div>
 
-      <div className="border-b border-borda flex items-center gap-0 overflow-x-auto overflow-y-hidden">
+      <div className="border-b border-borda flex items-center gap-0 overflow-x-auto overflow-y-hidden" data-guia="schedule.abas">
         <TabButton active={activeTab === 'conta'} onClick={() => trocarAba('conta')} badge={allPending.length}>
           <Calendar size={14} /> Agendamentos
         </TabButton>
@@ -3310,7 +3311,7 @@ export default function SchedulePanel() {
       {seletorReserva && (
         <div className="flex items-center gap-2 -mt-1">
           <span className="text-xs text-texto-3 shrink-0">Conta de reserva:</span>
-          <div role="radiogroup" aria-label="Conta de reserva" className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-1">
+          <div role="radiogroup" aria-label="Conta de reserva" data-guia="schedule.conta-reserva" className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-1">
             {[{ accountId: '', nome: 'Todas', count: itensDoStatusAnuais.length }, ...chipsReserva].map(c => {
               const ativo = contaReserva === c.accountId
               return (
@@ -3371,7 +3372,7 @@ export default function SchedulePanel() {
         </div>
       )}
 
-      <div role="radiogroup" aria-label="Tipo" className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 pb-0.5">
+      <div role="radiogroup" aria-label="Tipo" data-guia="schedule.tipo" className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 pb-0.5">
         {TIPOS_AGENDAMENTO.map(t => {
           const ativo = tipoMov === t.id
           const cor = t.id === 'entradas' ? 'bg-receita text-page' : t.id === 'saidas' ? 'bg-despesa text-page' : t.id === 'transferencias' ? 'bg-transferencia text-page' : 'bg-primary text-white'

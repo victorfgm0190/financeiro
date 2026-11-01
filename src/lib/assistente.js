@@ -145,6 +145,46 @@ export const payloadDaBaixa = (criterio, candidato) => ({
 // Original aceito (antes de reduzir): fotos de celular costumam ter 3–12 MB.
 export const MAX_IMAGEM_ORIGINAL = 20 * 1024 * 1024
 
+// PDF (boleto, fatura, nota, cupom, comprovante, extrato) vai inteiro, sem compressão. O corpo de uma
+// requisição na Vercel tem ~4,5 MB e o base64 aumenta o arquivo em ~33%: 3 MB de PDF viram ~4 MB.
+export const MAX_PDF_BYTES = 3 * 1024 * 1024
+export const MENSAGEM_PDF_GRANDE = 'PDF muito grande (máximo 3 MB). Envie só as páginas necessárias ou tire um print.'
+
+// O iPhone às vezes entrega o arquivo do app Arquivos sem `type`: vale também a extensão.
+export const ehPdf = (arquivo) => arquivo?.type === 'application/pdf' || /\.pdf$/i.test(arquivo?.name || '')
+
+// Nº de páginas lido do próprio arquivo, quando dá (objetos "/Type /Page" visíveis). PDF com as
+// páginas dentro de streams comprimidos → null (a prévia mostra só o nome).
+export function contarPaginasPdf(bytes) {
+  try {
+    const texto = new TextDecoder('latin1').decode(bytes)
+    const n = (texto.match(/\/Type\s*\/Page(?![a-zA-Z])/g) || []).length
+    return n > 0 ? n : null
+  } catch { return null }
+}
+
+const paraBase64 = (bytes) => {
+  let s = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000))
+  return btoa(s)
+}
+
+// PDF → { base64, mimeType, nome, paginas }. Acima do limite: erro com a mensagem para o usuário.
+export async function lerPdf(arquivo) {
+  if (arquivo.size > MAX_PDF_BYTES) throw new Error(MENSAGEM_PDF_GRANDE)
+  // Blob.arrayBuffer não existe em Safari antigo: FileReader como reserva.
+  const buffer = typeof arquivo.arrayBuffer === 'function'
+    ? await arquivo.arrayBuffer()
+    : await new Promise((ok, falha) => {
+      const r = new FileReader()
+      r.onload = () => ok(r.result)
+      r.onerror = () => falha(new Error('Não consegui abrir o PDF.'))
+      r.readAsArrayBuffer(arquivo)
+    })
+  const bytes = new Uint8Array(buffer)
+  return { base64: paraBase64(bytes), mimeType: 'application/pdf', nome: arquivo.name || 'documento.pdf', paginas: contarPaginasPdf(bytes) }
+}
+
 // Imagem colada (Ctrl+V) → File, ou null quando o que foi colado não é imagem.
 export function imagemDoClipboard(clipboardData) {
   for (const item of clipboardData?.items || []) {

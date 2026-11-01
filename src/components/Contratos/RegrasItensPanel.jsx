@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import { parsearTextoBoleto, classificarItens, resumoItens } from '../../lib/contratos/composicao'
 import { rotuloContrato } from '../../lib/contratos/parcelas'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 const TIPOS = { comeca_com: 'começa com', contem: 'contém' }
 const RESP = { inquilino: 'Inquilino', proprietario: 'Proprietário' }
@@ -39,6 +40,7 @@ function FormRegra({ inicial, onSalvar, onCancelar }) {
 // + teste "colar o texto e ver a classificação".
 export default function RegrasItensPanel() {
   const { regrasContratos, criarRegraContrato, atualizarRegraContrato, excluirRegraContrato, contratos, pode } = useApp()
+  useSubtelaGuia('contratos:regras')
   const [escopo, setEscopo] = useState('')
   const [novo, setNovo] = useState(false)
   const [editando, setEditando] = useState(null)
@@ -61,17 +63,17 @@ export default function RegrasItensPanel() {
       <div className="flex flex-wrap items-end gap-2">
         <div>
           <label className="label text-xs">Regras de</label>
-          <select className="input py-1.5 text-sm" value={escopo} onChange={e => { setEscopo(e.target.value); setNovo(false) }}>
+          <select className="input py-1.5 text-sm" data-guia="contratos:regras.escopo" value={escopo} onChange={e => { setEscopo(e.target.value); setNovo(false) }}>
             <option value="">Todos os contratos (globais)</option>
             {contratos.map(c => <option key={c.id} value={c.id}>{rotuloContrato(c)}</option>)}
           </select>
         </div>
         <p className="text-xs text-texto-3 pb-2 flex-1 min-w-[200px]">A regra do contrato vence a global; "começa com" vence "contém". Sem texto diferenciando maiúsculas nem acentos.</p>
-        {podeEditar && <button className="btn-primary text-xs inline-flex items-center gap-1" onClick={() => setNovo(true)}><Plus size={12} /> Regra</button>}
+        {podeEditar && <button className="btn-primary text-xs inline-flex items-center gap-1" onClick={() => setNovo(true)} data-guia="contratos:regras.nova"><Plus size={12} /> Regra</button>}
       </div>
       {erro && <p className="text-xs text-perigo">{erro}</p>}
       {novo && <FormRegra onCancelar={() => setNovo(false)} onSalvar={async (r) => { await criarRegraContrato({ ...r, contrato_id: escopo || null }); setNovo(false) }} />}
-      <div className="card p-0 overflow-x-auto">
+      <div className="card p-0 overflow-x-auto" data-guia="contratos:regras.lista">
         <table className="w-full text-sm">
           <thead><tr className="text-xs text-texto-3 border-b border-borda">
             <th className="px-3 py-2 text-left">Item</th><th className="px-3 py-2 text-left">Casa se</th>
@@ -103,7 +105,7 @@ export default function RegrasItensPanel() {
 
       <div className="card space-y-2">
         <p className="label">Testar: cole o texto do boleto</p>
-        <textarea className="input min-h-[110px] font-mono text-xs" value={texto} onChange={e => setTexto(e.target.value)} placeholder={'Taxa de Condomínio 795,11\nFundo de Reserva 79,10'} />
+        <textarea className="input min-h-[110px] font-mono text-xs" data-guia="contratos:regras.testar" value={texto} onChange={e => setTexto(e.target.value)} placeholder={'Taxa de Condomínio 795,11\nFundo de Reserva 79,10'} />
         {teste && (
           <>
             <table className="w-full text-xs">

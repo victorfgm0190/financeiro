@@ -10,7 +10,7 @@ import { getSessao } from '../../lib/api'
 import {
   passosVisiveis, checklistComStatus, PRIMEIROS_PASSOS_TOUR, BOTOES_PRIMEIROS_PASSOS, TOUR_BOTOES,
 } from '../../lib/ajudaTelas'
-import { carregarBoasVindas, marcarTourVisto, EVENTO_ABRIR_TOUR } from '../../lib/boasVindasApi'
+import { carregarBoasVindas, marcarTourVisto, definirTourAberto, EVENTO_ABRIR_TOUR } from '../../lib/boasVindasApi'
 import { useContextoAjuda } from './contextoAjuda'
 import { useAcoesPrimeirosPassos } from './AcoesPrimeirosPassos'
 
@@ -32,6 +32,9 @@ export default function BoasVindasTour() {
     carregarBoasVindas().then(e => { if (vivo && e && !e.tourVistoEm) { setI(0); setAberto(true) } })
     return () => { vivo = false }
   }, [dbStatus])
+  // O Guia da Tela espera o tour fechar.
+  useEffect(() => { definirTourAberto(aberto) }, [aberto])
+  useEffect(() => () => definirTourAberto(false), [])
   useEffect(() => {
     const abrir = () => { setI(0); setAberto(true) }
     window.addEventListener(EVENTO_ABRIR_TOUR, abrir)

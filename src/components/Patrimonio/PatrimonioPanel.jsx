@@ -166,7 +166,7 @@ export default function PatrimonioPanel({ setActivePage }) {
     <div className="space-y-6">
       {/* KPI Row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <button type="button" onClick={() => setComposicao('bens')} className="card text-left hover:bg-surface-hover/40 transition-colors">
+        <button type="button" data-guia="patrimonio.kpis" onClick={() => setComposicao('bens')} className="card text-left hover:bg-surface-hover/40 transition-colors">
           <p className="text-xs text-texto-3 uppercase tracking-wide">Bens</p>
           <p className="text-lg font-bold text-receita mt-1">{fmt(totals.bens)}</p>
         </button>
@@ -186,14 +186,14 @@ export default function PatrimonioPanel({ setActivePage }) {
           <p className="text-xs text-texto-3 uppercase tracking-wide">Cartão</p>
           <p className="text-lg font-bold text-despesa mt-1">{fmt(totals.cartao)}</p>
         </button>
-        <button type="button" onClick={() => setComposicao('pl')} className="card text-left border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors">
+        <button type="button" data-guia="patrimonio.pl" onClick={() => setComposicao('pl')} className="card text-left border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors">
           <p className="text-xs text-primary-fg uppercase tracking-wide font-semibold">Patrimônio Líquido</p>
           <p className={`text-lg font-bold mt-1 ${totals.pl >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(totals.pl)}</p>
         </button>
       </div>
 
       {/* Evolution Chart */}
-      <div className="card">
+      <div data-guia="patrimonio.evolucao" className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-texto-2">Evolução do Patrimônio Líquido</h2>
           {!hasHistory && (
@@ -254,6 +254,7 @@ export default function PatrimonioPanel({ setActivePage }) {
                     <div
                       role="button"
                       tabIndex={0}
+                      data-guia="patrimonio.bem"
                       onClick={() => setDetalheBem(a)}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetalheBem(a) } }}
                       className="min-w-0 flex-1 cursor-pointer group -m-1 p-1 rounded-lg hover:bg-surface-hover/40 transition-colors"
@@ -289,6 +290,7 @@ export default function PatrimonioPanel({ setActivePage }) {
                         )}
                         {(a.valueHistory || []).length > 0 && (
                           <button
+                            data-guia="patrimonio.historico"
                             onClick={() => setExpandedHistory(isExpanded ? null : a.id)}
                             className="text-xs text-texto-3 hover:text-texto-2 transition-colors"
                           >
@@ -302,6 +304,7 @@ export default function PatrimonioPanel({ setActivePage }) {
                         {/* Mesmo destino do clique no nome do card — aqui como botão explícito,
                             já que a área clicável do nome só se anuncia pelo chevron. */}
                         <button
+                          data-guia="patrimonio.detalhar"
                           onClick={() => setDetalheBem(a)}
                           className="p-2 rounded-lg bg-surface-2 hover:bg-surface-hover text-texto-2 hover:text-texto-1 transition-colors"
                           title="Detalhar bem: nota fiscal, financiamento e parcelas"
@@ -310,6 +313,7 @@ export default function PatrimonioPanel({ setActivePage }) {
                         </button>
                         {podeEditarPatrimonio && (
                         <button
+                          data-guia="patrimonio.atualizar-valor"
                           onClick={() => setUpdateValueAccount(a)}
                           className="p-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary-fg transition-colors"
                           title="Atualizar valor"
@@ -372,7 +376,7 @@ export default function PatrimonioPanel({ setActivePage }) {
               const fin = ehContaDeFinanciamento(a)
               const Tag = fin ? 'button' : 'div'
               return (
-                <Tag key={a.id} {...(fin ? { type: 'button', onClick: () => setConsultaFin(a) } : {})}
+                <Tag key={a.id} data-guia="patrimonio.divida" {...(fin ? { type: 'button', onClick: () => setConsultaFin(a) } : {})}
                   className={`card border border-despesa/20 w-full text-left ${fin ? 'hover:bg-surface-hover/40 transition-colors' : ''}`}>
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
@@ -425,7 +429,7 @@ export default function PatrimonioPanel({ setActivePage }) {
       )}
 
       {/* Resumo financeiro */}
-      <div className="card">
+      <div data-guia="patrimonio.resumo" className="card">
         <h2 className="text-sm font-semibold text-texto-2 mb-3 flex items-center gap-2">
           <TrendingUp size={14} className="text-texto-2" /> Resumo Patrimonial
         </h2>

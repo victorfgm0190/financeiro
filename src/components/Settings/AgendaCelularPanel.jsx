@@ -111,7 +111,7 @@ export default function AgendaCelularPanel({ emJanela = false }) {
           <div className="space-y-3">
             <div>
               <p className="label">Mostrar na agenda</p>
-              <div role="radiogroup" aria-label="Mostrar na agenda" className="flex flex-wrap gap-2">
+              <div role="radiogroup" data-guia="settings:agenda-celular.mostrar" aria-label="Mostrar na agenda" className="flex flex-wrap gap-2">
                 <Escolha ativo={tipos.length === 1 && tipos[0] === 'despesa'} disabled={salvando} onClick={() => mudarOpcoes(['despesa'], mostrarValores)}>Despesas</Escolha>
                 <Escolha ativo={tipos.length === 1 && tipos[0] === 'receita'} disabled={salvando} onClick={() => mudarOpcoes(['receita'], mostrarValores)}>Receitas</Escolha>
                 <Escolha ativo={tipos.length === 2} disabled={salvando} onClick={() => mudarOpcoes(TIPOS_FEED, mostrarValores)}>Ambos</Escolha>
@@ -119,7 +119,7 @@ export default function AgendaCelularPanel({ emJanela = false }) {
             </div>
             <div>
               <p className="label">Mostrar valores</p>
-              <div role="radiogroup" aria-label="Mostrar valores" className="flex flex-wrap gap-2">
+              <div role="radiogroup" data-guia="settings:agenda-celular.valores" aria-label="Mostrar valores" className="flex flex-wrap gap-2">
                 <Escolha ativo={mostrarValores} disabled={salvando} onClick={() => mudarOpcoes(tipos, true)}>Sim</Escolha>
                 <Escolha ativo={!mostrarValores} disabled={salvando} onClick={() => mudarOpcoes(tipos, false)}>Não</Escolha>
               </div>
@@ -132,7 +132,7 @@ export default function AgendaCelularPanel({ emJanela = false }) {
           )}
 
           {!feed ? (
-            <button type="button" className="btn-primary" disabled={salvando} onClick={() => aplicar(criarAgendaFeed, { tipos, mostrarValores })}>
+            <button type="button" data-guia="settings:agenda-celular.criar" className="btn-primary" disabled={salvando} onClick={() => aplicar(criarAgendaFeed, { tipos, mostrarValores })}>
               {salvando ? 'Criando…' : 'Criar minha agenda'}
             </button>
           ) : !feed.token ? (
@@ -151,13 +151,13 @@ export default function AgendaCelularPanel({ emJanela = false }) {
                       <span className="text-[11px] text-texto-3">{cache ? `Atualizada em ${fmtHora(cache.geradoEm)}` : 'Gerando…'}</span>
                     </div>
                     <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
-                      <a href={l.webcal} className="btn-secondary min-h-[40px] flex items-center justify-center gap-2 text-sm">
+                      <a href={l.webcal} data-guia={tipo === feed.tipos[0] ? 'settings:agenda-celular.iphone' : undefined} className="btn-secondary min-h-[40px] flex items-center justify-center gap-2 text-sm">
                         <Smartphone size={14} /> Adicionar ao iPhone
                       </a>
-                      <a href={l.google} target="_blank" rel="noopener noreferrer" className="btn-secondary min-h-[40px] flex items-center justify-center gap-2 text-sm">
+                      <a href={l.google} data-guia={tipo === feed.tipos[0] ? 'settings:agenda-celular.google' : undefined} target="_blank" rel="noopener noreferrer" className="btn-secondary min-h-[40px] flex items-center justify-center gap-2 text-sm">
                         <CalendarDays size={14} /> Adicionar ao Google Agenda
                       </a>
-                      <button type="button" onClick={() => copiar(tipo, l.https)} className="btn-secondary min-h-[40px] flex items-center justify-center gap-2 text-sm">
+                      <button type="button" data-guia={tipo === feed.tipos[0] ? 'settings:agenda-celular.copiar' : undefined} onClick={() => copiar(tipo, l.https)} className="btn-secondary min-h-[40px] flex items-center justify-center gap-2 text-sm">
                         {copiado === tipo ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar link</>}
                       </button>
                     </div>
@@ -165,7 +165,7 @@ export default function AgendaCelularPanel({ emJanela = false }) {
                   </div>
                 )
               })}
-              <button type="button" onClick={() => setConfirmarNovo(true)} disabled={salvando}
+              <button type="button" data-guia="settings:agenda-celular.novo-link" onClick={() => setConfirmarNovo(true)} disabled={salvando}
                 className="flex items-center gap-1.5 text-xs text-texto-3 hover:text-perigo min-h-[32px]">
                 <RefreshCw size={12} /> Gerar novo link
               </button>

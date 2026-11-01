@@ -324,12 +324,13 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
               {creditAlerts.map(a => `${a.name} (vence dia ${a.dueDay})`).join(' · ')}
             </p>
           </div>
-          <button onClick={() => setActivePage('alerts')} className="ml-auto text-xs text-primary-fg hover:text-texto-1 shrink-0">Ver alertas</button>
+          <button data-guia="dashboard.ver-alertas" onClick={() => setActivePage('alerts')} className="ml-auto text-xs text-primary-fg hover:text-texto-1 shrink-0">Ver alertas</button>
         </div>
       )}
 
       {/* Saldo Principal hero */}
       <button
+        data-guia="dashboard.saldo-principal"
         onClick={onShowPosicao}
         className="w-full card text-left hover:bg-surface-hover/60 transition-colors group border border-transparent hover:border-primary/40"
       >
@@ -379,7 +380,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       </button>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div data-guia="dashboard.cards-mes" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard
           icon={TrendingUp}
           iconColor="text-receita"
@@ -460,7 +461,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
 
         {/* Projetado + Final — largura total, abaixo dos 4 KPI cards */}
         {saldoProjetado && (
-          <div className="col-span-2 lg:col-span-4 card flex items-center justify-between gap-6">
+          <div data-guia="dashboard.projecao" className="col-span-2 lg:col-span-4 card flex items-center justify-between gap-6">
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-2">
                 <Calendar size={15} className="text-primary-fg shrink-0" />
@@ -526,7 +527,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
 
       {/* Budget progress bar */}
       {income > 0 && (
-        <div className="card">
+        <div data-guia="dashboard.uso-receita" className="card">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold text-texto-2">Uso da Receita — Mês Atual</h3>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${budgetCls.badge}`}>
@@ -561,7 +562,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
 
       {/* 6-month chart + upcoming schedules */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="card lg:col-span-2">
+        <div data-guia="dashboard.grafico-6-meses" className="card lg:col-span-2">
           <h3 className="text-sm font-semibold text-texto-2 mb-3">Receitas vs Despesas — últimos 6 meses</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={last6Months} barGap={3} barCategoryGap="30%">
@@ -581,7 +582,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
         </div>
 
         {/* Upcoming 7 days */}
-        <div className="card">
+        <div data-guia="dashboard.proximos-vencimentos" className="card">
           <h3 className="text-sm font-semibold text-texto-2 mb-3 flex items-center gap-2">
             <Calendar size={14} className="text-texto-2" />
             Próximos Vencimentos
@@ -629,10 +630,10 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
         {/* Left: pizza interativa */}
-        <div className="card">
+        <div data-guia="dashboard.maiores-despesas" className="card">
           <div className="flex items-center justify-between mb-3 gap-2">
             <h3 className="text-sm font-semibold text-texto-2 shrink-0">Maiores Despesas</h3>
-            <div className="flex flex-wrap justify-end gap-x-3 gap-y-1">
+            <div data-guia="dashboard.filtros-despesas" className="flex flex-wrap justify-end gap-x-3 gap-y-1">
               <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
               <Segmentado opcoes={PERIOD_OPTS} valor={pieFilter} onChange={setPieFilter} rotulo="Período" />
             </div>
@@ -642,7 +643,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
         </div>
 
         {/* Right: ranking de categorias com barra (mesmo período e modo da pizza) */}
-        <div className="card">
+        <div data-guia="dashboard.ranking-categorias" className="card">
           <div className="flex items-center justify-between mb-3 gap-2">
             <h3 className="text-sm font-semibold text-texto-2 shrink-0">Ranking por Categoria</h3>
             <div className="flex flex-wrap justify-end gap-x-3 gap-y-1">
@@ -710,7 +711,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       )}
 
       {/* Accounts grid */}
-      <div className="card">
+      <div data-guia="dashboard.contas" className="card">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-texto-2">Contas</h3>
           {totalDebt > 0 && (

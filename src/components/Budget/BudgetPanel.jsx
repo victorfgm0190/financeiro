@@ -71,7 +71,7 @@ export default function BudgetPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-guia="budget.resumo">
         <div className="card">
           <p className="text-xs text-texto-2 uppercase tracking-wide">Total Orçado</p>
           <p className="text-xl font-bold text-texto-1 mt-1">{fmt(totalBudgeted)}</p>
@@ -93,7 +93,7 @@ export default function BudgetPanel() {
           Orçamentos por Categoria <SeletorModoValor value={modoValor} onChange={setModoValor} />
         </h2>
         {podeIncluir && (
-          <button className="btn-primary flex items-center gap-2" onClick={() => { setEditBudget(null); setForm({ categoryId: '', amount: '' }); setShowForm(true) }}>
+          <button className="btn-primary flex items-center gap-2" data-guia="budget.novo" onClick={() => { setEditBudget(null); setForm({ categoryId: '', amount: '' }); setShowForm(true) }}>
             <Plus size={14} /> Novo Orçamento
           </button>
         )}
@@ -115,7 +115,7 @@ export default function BudgetPanel() {
             const nearLimit = pct >= 80 && !overBudget
 
             return (
-              <div key={budget.id} className={`card border ${overBudget ? 'border-perigo/40' : nearLimit ? 'border-aviso/30' : 'border-borda'}`}>
+              <div key={budget.id} data-guia={budget === budgets[0] ? 'budget.categoria' : undefined} className={`card border ${overBudget ? 'border-perigo/40' : nearLimit ? 'border-aviso/30' : 'border-borda'}`}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">{cat?.icon || '📌'}</span>
@@ -136,12 +136,12 @@ export default function BudgetPanel() {
                       {pct.toFixed(0)}%
                     </span>
                     {podeEditar && (
-                      <button onClick={() => openEdit(budget)} className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors">
+                      <button data-guia={budget === budgets[0] ? 'budget.editar' : undefined} onClick={() => openEdit(budget)} className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors">
                         <Edit2 size={12} />
                       </button>
                     )}
                     {podeExcluir && (
-                      <button onClick={() => setConfirmDelete(budget)} className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors">
+                      <button data-guia={budget === budgets[0] ? 'budget.excluir' : undefined} onClick={() => setConfirmDelete(budget)} className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors">
                         <Trash2 size={12} />
                       </button>
                     )}

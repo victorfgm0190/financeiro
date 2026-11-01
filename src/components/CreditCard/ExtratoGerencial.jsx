@@ -6,6 +6,7 @@ import { faturaDoCartao } from '../../lib/fatura'
 import DateInput from '../shared/DateInput'
 import ReconcileBadge from '../shared/ReconcileBadge'
 import { isoLocal } from '../../lib/hoje'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
@@ -27,6 +28,7 @@ export default function ExtratoGerencial({ initialCardId }) {
   const { accounts, transactions, gerencialGroups, updateTransaction, pode } = useApp()
   const podeEditar = pode('cartao', 'editar')
   useScrollScope('credit:extrato')
+  useSubtelaGuia('credit:extrato')
 
   const creditCards = accounts.filter(a => a.type === 'credit')
   const [selectedCardId, setSelectedCardId] = useState(initialCardId || creditCards[0]?.id || '')
@@ -80,16 +82,16 @@ export default function ExtratoGerencial({ initialCardId }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="label">Cartão</label>
-            <select className="input" value={selectedCardId} onChange={e => setSelectedCardId(e.target.value)}>
+            <select data-guia="credit:extrato.cartao" className="input" value={selectedCardId} onChange={e => setSelectedCardId(e.target.value)}>
               <option value="">Selecione...</option>
               {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <div>
+          <div data-guia="credit:extrato.de">
             <label className="label">De</label>
             <DateInput className="input" value={from} onChange={e => setFrom(e.target.value)} />
           </div>
-          <div>
+          <div data-guia="credit:extrato.ate">
             <label className="label">Até</label>
             <DateInput className="input" value={to} onChange={e => setTo(e.target.value)} />
           </div>
@@ -110,12 +112,12 @@ export default function ExtratoGerencial({ initialCardId }) {
                 <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium">Descrição</th>
                 <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium hidden lg:table-cell">Movimentação</th>
                 <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium hidden md:table-cell">Favorecido</th>
-                <th className="text-center px-3 py-3 text-xs text-texto-2 font-medium">Ger</th>
+                <th data-guia="credit:extrato.ger" className="text-center px-3 py-3 text-xs text-texto-2 font-medium">Ger</th>
                 <th className="text-center px-3 py-3 text-xs text-texto-2 font-medium hidden md:table-cell">Fatura</th>
-                <th className="text-center px-3 py-3 text-xs text-texto-2 font-medium">R</th>
+                <th data-guia="credit:extrato.conciliado" className="text-center px-3 py-3 text-xs text-texto-2 font-medium">R</th>
                 <th className="text-right px-3 py-3 text-xs text-texto-2 font-medium">Pagamento</th>
                 <th className="text-right px-3 py-3 text-xs text-texto-2 font-medium">Depósito</th>
-                <th className="text-right px-3 py-3 text-xs text-texto-2 font-medium">Saldo</th>
+                <th data-guia="credit:extrato.saldo" className="text-right px-3 py-3 text-xs text-texto-2 font-medium">Saldo</th>
               </tr>
             </thead>
             <tbody>

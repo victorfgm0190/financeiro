@@ -88,7 +88,7 @@ function PossiveisDuplicados({ setActivePage }) {
               </div>
             </div>
             {setActivePage && (
-              <button onClick={() => setActivePage('schedule')} className="text-xs text-primary-fg hover:underline shrink-0">
+              <button data-guia={chave === itens[0].chave ? 'alerts.duplicados' : undefined} onClick={() => setActivePage('schedule')} className="text-xs text-primary-fg hover:underline shrink-0">
                 Conferir em Agendamentos
               </button>
             )}
@@ -166,7 +166,7 @@ function VencimentosPanel({ setActivePage }) {
             <CheckCircle size={16} /> Ativo
           </div>
         ) : (
-          <button className="btn-primary flex items-center gap-2" onClick={requestNotifications}>
+          <button data-guia="alerts.notificacoes" className="btn-primary flex items-center gap-2" onClick={requestNotifications}>
             <Bell size={14} /> Ativar Notificações
           </button>
         )}
@@ -174,7 +174,7 @@ function VencimentosPanel({ setActivePage }) {
 
       <PossiveisDuplicados setActivePage={setActivePage} />
 
-      <div>
+      <div data-guia="alerts.alertas-vencimento">
         <h2 className="text-sm font-semibold text-texto-2 mb-3">
           Alertas ({alerts.length})
         </h2>
@@ -223,6 +223,7 @@ function VencimentosPanel({ setActivePage }) {
                   </div>
                 </div>
                 <button
+                  data-guia={alert === alerts[0] ? 'alerts.dispensar' : undefined}
                   onClick={() => setDismissed(prev => [...prev, alert.id])}
                   className="text-xs text-texto-3 hover:text-texto-2 transition-colors shrink-0"
                 >
@@ -234,7 +235,7 @@ function VencimentosPanel({ setActivePage }) {
         )}
       </div>
 
-      <div className="card">
+      <div data-guia="alerts.calendario-cartoes" className="card">
         <h3 className="text-sm font-semibold text-texto-2 mb-3">Calendário de Vencimentos — Cartões</h3>
         <div className="space-y-2">
           {accounts.filter(a => a.type === 'credit' && a.active !== false).map(acc => {
@@ -288,7 +289,7 @@ export default function AlertsPanel({ setActivePage, integridadePendentes = 0 })
   ]
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div data-guia="alerts.abas" className="flex gap-2">
         {abas.map(({ id, label, icon: Icon, qtd }) => (
           <button key={id} onClick={() => setAba(id)}
             className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors ${aba === id ? 'bg-primary text-white' : 'bg-surface-2 text-texto-2 hover:text-texto-1'}`}>

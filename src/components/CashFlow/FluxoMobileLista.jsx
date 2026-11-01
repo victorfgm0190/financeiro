@@ -204,7 +204,7 @@ export default function FluxoMobileLista({
 
       {/* Marcar todos (só os eventos visíveis no prazo e filtros atuais) */}
       {rowsView.length > 0 && (
-        <label className="flex items-center gap-3 min-h-[44px] px-4 border-b border-borda text-sm text-texto-2 cursor-pointer">
+        <label data-guia="cashflow.marcar-todos" className="flex items-center gap-3 min-h-[44px] px-4 border-b border-borda text-sm text-texto-2 cursor-pointer">
           {caixaVarias(rowsView, 'Marcar todos os eventos')}
           <span className="flex-1">Marcar todos</span>
           <span className="text-xs text-texto-3">{marcacao.ativas}/{marcacao.total} no cálculo</span>

@@ -256,6 +256,7 @@ export default function DindinImportPanel() {
         <Upload size={15} className="text-primary-fg" />
         <h2 className="text-sm font-semibold text-texto-2">Importação Dindin</h2>
         <button
+          data-guia="settings:importacao.recarregar"
           onClick={reload}
           className="ml-auto text-texto-3 hover:text-texto-2 disabled:opacity-50"
           title="Recarregar"
@@ -267,7 +268,7 @@ export default function DindinImportPanel() {
       <p className="text-xs text-texto-3 -mt-3">Importação histórica dos lançamentos exportados do Dindin.</p>
 
       {/* Sub-tabs Conta Corrente | Cartões */}
-      <div className="flex items-center gap-1 border-b border-borda">
+      <div data-guia="settings:importacao.abas" className="flex items-center gap-1 border-b border-borda">
         {tabs.map(t => {
           const Icon = t.icon
           return (
@@ -285,7 +286,7 @@ export default function DindinImportPanel() {
       </div>
 
       {/* Upload */}
-      <label className={`block border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${busy === 'upload' ? 'border-borda opacity-50 pointer-events-none' : 'border-borda-forte hover:border-primary/60'}`}>
+      <label data-guia="settings:importacao.arquivo" className={`block border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${busy === 'upload' ? 'border-borda opacity-50 pointer-events-none' : 'border-borda-forte hover:border-primary/60'}`}>
         <Upload size={20} className="text-texto-3 mx-auto mb-1" />
         <p className="text-xs text-texto-2">
           {busy === 'upload' ? 'Processando…' : `Selecionar arquivo Dindin — ${tab === 'cc' ? 'Conta Corrente' : 'Cartões'} (XLS/XLSX)`}
@@ -303,7 +304,7 @@ export default function DindinImportPanel() {
       {info && <p className="text-xs text-primary-fg bg-primary/5 border border-primary/20 rounded px-3 py-2">{info}</p>}
 
       {/* Counts */}
-      <div className="flex items-center gap-3 text-xs text-texto-3 flex-wrap">
+      <div data-guia="settings:importacao.contagem" className="flex items-center gap-3 text-xs text-texto-3 flex-wrap">
         <span><b className="text-texto-2">{counts.pendente}</b> pendentes</span>
         {counts.ambiguos > 0 && <span className="text-aviso">⚠ {counts.ambiguos} sem conta</span>}
         <span>{counts.confirmado} confirmados</span>
@@ -360,6 +361,7 @@ export default function DindinImportPanel() {
           {/* Actions */}
           <div className="flex flex-wrap gap-2">
             <button
+              data-guia="settings:importacao.confirmar"
               onClick={doConfirm}
               disabled={selected.size === 0 || busy === 'confirm'}
               className="btn-primary flex items-center gap-1.5 text-xs py-1.5 disabled:opacity-50"
@@ -367,6 +369,7 @@ export default function DindinImportPanel() {
               <Check size={13} /> {busy === 'confirm' ? 'Gravando…' : `Confirmar importação (${selected.size})`}
             </button>
             <button
+              data-guia="settings:importacao.ignorar"
               onClick={doIgnore}
               disabled={selected.size === 0 || busy === 'ignore'}
               className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 disabled:opacity-50"
@@ -374,6 +377,7 @@ export default function DindinImportPanel() {
               <X size={13} /> Ignorar ({selected.size})
             </button>
             <button
+              data-guia="settings:importacao.limpar"
               onClick={() => setConfirmClear(true)}
               disabled={busy === 'clear'}
               className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 ml-auto text-texto-3"

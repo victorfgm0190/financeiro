@@ -31,7 +31,7 @@ export default function ContratosPanel() {
   const vigencia = (c) => `${fmtDate(c.data_inicio)} – ${c.data_fim ? fmtDate(c.data_fim) : 'sem fim'}`
 
   const abas = (
-    <div className="flex gap-1">
+    <div className="flex gap-1" data-guia="contratos.abas">
       {[['contratos', 'Contratos'], ['regras', 'Regras de itens do boleto']].map(([k, r]) => (
         <button key={k} onClick={() => setAba(k)} className={`text-sm px-3 py-1.5 rounded-lg ${aba === k ? 'bg-primary/15 text-primary-fg font-semibold' : 'text-texto-2 hover:bg-surface-hover'}`}>{r}</button>
       ))}
@@ -45,26 +45,26 @@ export default function ContratosPanel() {
       <div className="flex flex-wrap items-end gap-2">
         <div>
           <label className="label text-xs">Perfil</label>
-          <select className="input py-1.5 text-sm" value={perfil} onChange={e => setPerfil(e.target.value)}>
+          <select className="input py-1.5 text-sm" data-guia="contratos.perfil" value={perfil} onChange={e => setPerfil(e.target.value)}>
             <option value="">Todos</option>
             {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
         <div>
           <label className="label text-xs">Tipo</label>
-          <select className="input py-1.5 text-sm" value={tipo} onChange={e => setTipo(e.target.value)}>
+          <select className="input py-1.5 text-sm" data-guia="contratos.tipo" value={tipo} onChange={e => setTipo(e.target.value)}>
             <option value="">Todos</option><option value="pagar">A pagar</option><option value="receber">A receber</option>
           </select>
         </div>
         <div>
           <label className="label text-xs">Status</label>
-          <select className="input py-1.5 text-sm" value={status} onChange={e => setStatus(e.target.value)}>
+          <select className="input py-1.5 text-sm" data-guia="contratos.status" value={status} onChange={e => setStatus(e.target.value)}>
             <option value="">Todos</option>
             {Object.entries(STATUS_CONTRATO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </div>
         {pode('contratos', 'incluir') && (
-          <button className="btn-primary ml-auto flex items-center gap-1.5" onClick={() => setNovo(true)}>
+          <button className="btn-primary ml-auto flex items-center gap-1.5" onClick={() => setNovo(true)} data-guia="contratos.novo">
             <Plus size={14} /> Novo contrato
           </button>
         )}
@@ -83,7 +83,7 @@ export default function ContratosPanel() {
         </div>
       ) : (
         <>
-          <div className="card p-0 overflow-x-auto hidden md:block">
+          <div className="card p-0 overflow-x-auto hidden md:block" data-guia="contratos.lista">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-texto-3 border-b border-borda">
@@ -116,7 +116,7 @@ export default function ContratosPanel() {
               </tbody>
             </table>
           </div>
-          <div className="md:hidden space-y-2">
+          <div className="md:hidden space-y-2" data-guia="contratos.lista">
             {linhas.map(({ c, valor, prox }) => (
               <button key={c.id} className="card w-full text-left space-y-1" onClick={() => abrirFichaContrato(c.id)}>
                 <div className="flex justify-between gap-2">
