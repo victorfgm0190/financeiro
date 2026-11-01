@@ -14,8 +14,9 @@ export function ehIphoneSemInstalar(nav = globalThis.navigator, win = globalThis
   return !standalone
 }
 
-// Texto curto do indicador.
-export function textoIndicador({ online, pendentes }) {
+// Texto curto do indicador. Alteração recusada pelo servidor tem prioridade: precisa do usuário.
+export function textoIndicador({ online, pendentes, erros = 0 }) {
+  if (erros) return `${erros} ${erros === 1 ? 'alteração com erro' : 'alterações com erro'} — ver detalhes`
   if (!online) return pendentes ? `Sem internet · ${pendentes} aguardando envio` : 'Sem internet · gravando no aparelho'
   if (pendentes) return `${pendentes} ${pendentes === 1 ? 'alteração aguardando' : 'alterações aguardando'} envio`
   return 'Tudo sincronizado'

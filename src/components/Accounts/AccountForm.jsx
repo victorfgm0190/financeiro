@@ -9,6 +9,8 @@ import { ehContaDeFinanciamento } from '../../lib/financiamento'
 import { lerFinais, finaisDoCartao, chaveSubconta, subcontaDoCartao, ehSubcontaGerencialApp } from '../../lib/cartaoFinais'
 import { erroDiasCartao, cartaoSemDias } from '../../lib/cartaoDias'
 import { FECHAMENTO_PADRAO } from '../../lib/fatura'
+import { AVISO_SEM_VINCULO, SEM_PERFIL_CADASTRADO, BOTAO_CRIAR_PERFIL, avisoContaForaDoFiltro, perfilPadraoDaContaNova } from '../../lib/textosVinculo'
+import PerfilRapido from '../shared/PerfilRapido'
 
 const TYPES = [
   { value: 'checking', label: 'Conta Corrente' },
@@ -88,7 +90,8 @@ function LinhaToggle({ nome, ajuda, selo, checked, onChange, disabled = false })
 }
 
 export default function AccountForm({ initial, onClose }) {
-  const { accounts, accountGroups = [], activeAccountGroups = [], profiles = [], categories = [], addAccount, updateAccount, recalcularSaldo, pode } = useApp()
+  const { accounts, accountGroups = [], activeAccountGroups = [], profiles = [], categories = [], addAccount, updateAccount, recalcularSaldo, pode, activeProfileId = null, setAvisoToast } = useApp()
+  const [perfilRapido, setPerfilRapido] = useState(false)
   // Salvar: conta nova exige incluir; existente exige editar (src/lib/permissoes.js).
   const podeSalvar = pode('contas', initial ? 'editar' : 'incluir')
   const [form, setForm] = useState({
@@ -110,7 +113,9 @@ export default function AccountForm({ initial, onClose }) {
     accountGroupId: initial?.accountGroupId || null,
     appPriority: initial?.appPriority || false,
     hideOnMobile: initial?.hideOnMobile || false,
-    profileId: initial?.profileId || null,
+    // Conta nova já vem no perfil do filtro do topo (ou no único perfil do ambiente): sem isso ela
+    // nascia "Sem vínculo" e sumia da lista filtrada logo depois de criada.
+    profileId: initial ? (initial.profileId || null) : perfilPadraoDaContaNova({ activeProfileId, profiles }),
     initialBalance: (!initial || (initial.type !== 'credit' && initial.type !== 'asset' && initial.type !== 'liability'))
       ? Math.round(((initial?.initialBalance ?? initial?.balance) ?? 0) * 100) / 100
       : '',
@@ -283,6 +288,11 @@ export default function AccountForm({ initial, onClose }) {
     } else {
       addAccount({ ...payload, creditDebt: 0, creditMonthBill: 0 })
     }
+    // Salva sem vínculo com um perfil no filtro do topo: ela não aparece aqui — avisa.
+    if (!payload.profileId && activeProfileId && setAvisoToast) {
+      const perfilAtivo = profiles.find(p => p.id === activeProfileId)
+      if (perfilAtivo) setAvisoToast(avisoContaForaDoFiltro(payload.name, String(perfilAtivo.name || '').trim()))
+    }
     onClose()
   }
 
@@ -364,19 +374,34 @@ export default function AccountForm({ initial, onClose }) {
         </div>
       </div>
 
-      {profiles.length > 0 && (
-        <div>
-          <label className="label">Vínculo (CPF / CNPJ)</label>
-          <select className="input" value={form.profileId || ''} onChange={e => set('profileId', e.target.value || null)}>
-            <option value="">Sem vínculo</option>
-            {profiles.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name} — {p.type === 'pf' ? 'CPF' : 'CNPJ'} {p.document || '—'}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      <div>
+        <label className="label" htmlFor="conta-vinculo">Vínculo (CPF / CNPJ)</label>
+        {profiles.length > 0 ? (
+          <>
+            <select id="conta-vinculo" className="input" value={form.profileId || ''} onChange={e => set('profileId', e.target.value || null)}>
+              <option value="">Sem vínculo</option>
+              {profiles.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — {p.type === 'pf' ? 'CPF' : 'CNPJ'} {p.document || '—'}
+                </option>
+              ))}
+            </select>
+            {!form.profileId && (
+              <p role="note" data-testid="aviso-sem-vinculo" className="mt-1.5 flex gap-2 rounded-lg border border-aviso/50 bg-aviso/10 px-3 py-2 text-xs text-texto-1">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5 text-aviso" />
+                <span>{AVISO_SEM_VINCULO}</span>
+              </p>
+            )}
+          </>
+        ) : (
+          <div data-testid="sem-perfil" className="flex flex-wrap items-center gap-2 rounded-lg border border-aviso/50 bg-aviso/10 px-3 py-2 text-xs text-texto-1">
+            <AlertTriangle size={14} className="shrink-0 text-aviso" />
+            <span>{SEM_PERFIL_CADASTRADO}</span>
+            <button type="button" className="btn-secondary text-xs py-1" onClick={() => setPerfilRapido(true)}>{BOTAO_CRIAR_PERFIL}</button>
+          </div>
+        )}
+        <PerfilRapido open={perfilRapido} onClose={() => setPerfilRapido(false)} onCriado={(id) => set('profileId', id)} />
+      </div>
 
       {!isCredit && !isPatrimonial && !initial && (
         <div>

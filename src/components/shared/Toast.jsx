@@ -8,11 +8,12 @@ export default function Toast({ message, onClose, duration = 5000, variant = 'su
   }, [onClose, duration])
 
   const isError = variant === 'error'
-  const Icon = isError ? AlertTriangle : CheckCircle2
+  const isAviso = variant === 'aviso'
+  const Icon = isError || isAviso ? AlertTriangle : CheckCircle2
 
   return (
-    <div className={`fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 border px-4 py-3 rounded-xl shadow-2xl text-sm max-w-[92vw] md:max-w-md ${isError ? 'bg-perigo-bg border-perigo/40 text-texto-1' : 'bg-surface-2 border-borda-forte text-texto-1 whitespace-nowrap'}`}>
-      <Icon size={15} className={`shrink-0 ${isError ? 'text-perigo' : 'text-primary-fg'}`} />
+    <div className={`fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 border px-4 py-3 rounded-xl shadow-2xl text-sm max-w-[92vw] md:max-w-md ${isError ? 'bg-perigo-bg border-perigo/40 text-texto-1' : isAviso ? 'bg-surface-2 border-aviso/60 text-texto-1' : 'bg-surface-2 border-borda-forte text-texto-1 whitespace-nowrap'}`} role={isError || isAviso ? 'alert' : 'status'}>
+      <Icon size={15} className={`shrink-0 ${isError ? 'text-perigo' : isAviso ? 'text-aviso' : 'text-primary-fg'}`} />
       <span>{message}</span>
       <button onClick={onClose} className={`ml-1 shrink-0 transition-colors ${isError ? 'text-perigo hover:text-texto-1' : 'text-texto-3 hover:text-texto-2'}`}>
         <X size={13} />

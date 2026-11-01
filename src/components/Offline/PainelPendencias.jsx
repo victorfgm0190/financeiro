@@ -8,18 +8,23 @@ import { LIMITE_AVISO_FILA, ehIphoneSemInstalar } from '../../lib/offlineUi'
 // Painel do indicador de sincronização: o que está esperando envio, "Enviar agora" e uma cópia de
 // segurança das pendências em arquivo. Avisa quando o armazenamento não é persistente.
 export default function PainelPendencias({ open, onClose }) {
-  const { filaPendentes, enviarPendentes, dbStatus, syncing, erroArmazenamento, armazenamentoPersistente } = useApp()
+  const { filaPendentes, filaErros = [], tentarDeNovoErroFila, descartarErroFila, enviarPendentes, dbStatus, syncing, erroArmazenamento, armazenamentoPersistente } = useApp()
   const [enviando, setEnviando] = useState(false)
+  const [confirmarDescarte, setConfirmarDescarte] = useState(null)
   const online = dbStatus === 'connected'
+  // Alterações recusadas pelo servidor (AppContext marcarErroFila): à parte, com o motivo.
+  const errosPorChave = useMemo(() => new Map(filaErros.map(e => [e.chave, e])), [filaErros])
+  const comErro = filaPendentes.filter(e => errosPorChave.has(e.chave))
+    .map(e => ({ ...rotuloDaEntrada(e), chave: e.chave, motivo: errosPorChave.get(e.chave).motivo }))
   const grupos = useMemo(() => {
     const m = new Map()
-    for (const e of [...filaPendentes].sort((a, b) => (b.em || 0) - (a.em || 0))) {
+    for (const e of [...filaPendentes].filter(x => !errosPorChave.has(x.chave)).sort((a, b) => (b.em || 0) - (a.em || 0))) {
       const r = rotuloDaEntrada(e)
       if (!m.has(r.tela)) m.set(r.tela, [])
       m.get(r.tela).push({ ...r, chave: e.chave, em: e.em })
     }
     return [...m]
-  }, [filaPendentes])
+  }, [filaPendentes, errosPorChave])
 
   const enviar = async () => {
     setEnviando(true)
@@ -42,11 +47,43 @@ export default function PainelPendencias({ open, onClose }) {
     <Modal open={open} onClose={onClose} title="Sincronização">
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-sm">
-          {!online ? <CloudOff size={16} className="text-aviso" /> : filaPendentes.length ? <Send size={16} className="text-aviso" /> : <CheckCircle2 size={16} className="text-receita" />}
+          {!online ? <CloudOff size={16} className="text-aviso" /> : filaPendentes.length - comErro.length ? <Send size={16} className="text-aviso" /> : comErro.length ? <AlertTriangle size={16} className="text-perigo" /> : <CheckCircle2 size={16} className="text-receita" />}
           <span className="text-texto-1">
-            {!online ? 'Sem internet — as alterações ficam guardadas no aparelho.' : filaPendentes.length ? `${filaPendentes.length} alteração(ões) aguardando envio.` : 'Tudo sincronizado.'}
+            {!online ? 'Sem internet — as alterações ficam guardadas no aparelho.'
+              : filaPendentes.length - comErro.length ? `${filaPendentes.length - comErro.length} alteração(ões) aguardando envio.`
+                : comErro.length ? 'Nenhuma outra alteração aguardando envio.' : 'Tudo sincronizado.'}
           </span>
         </div>
+
+        {comErro.length > 0 && (
+          <div className="space-y-2" aria-label="Alterações com erro">
+            <p className="flex items-start gap-2 text-sm font-medium text-perigo">
+              <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+              <span>{comErro.length === 1 ? '1 alteração com erro' : `${comErro.length} alterações com erro`}: o servidor recusou e o app não tenta mais sozinho.</span>
+            </p>
+            <ul className="space-y-2">
+              {comErro.map(i => (
+                <li key={i.chave} className="rounded-lg border border-perigo/40 bg-perigo-bg px-3 py-2 text-xs space-y-1.5">
+                  <p className="text-texto-1"><span className="font-medium">{i.tela}</span> · {i.nome} <span className="text-texto-2">({i.acao})</span></p>
+                  <p className="text-perigo">Motivo: {i.motivo}.</p>
+                  <p className="text-texto-2">Para corrigir, abra o item na tela dele, ajuste e salve: o envio é refeito na hora.</p>
+                  {confirmarDescarte === i.chave ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-texto-1">Descartar esta alteração? O item volta a ficar como está gravado no banco.</span>
+                      <button type="button" className="btn-danger text-xs py-1" onClick={() => { setConfirmarDescarte(null); descartarErroFila(i.chave) }}>Descartar</button>
+                      <button type="button" className="btn-secondary text-xs py-1" onClick={() => setConfirmarDescarte(null)}>Cancelar</button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className="btn-secondary text-xs py-1" disabled={!online} onClick={() => tentarDeNovoErroFila(i.chave)}>Tentar de novo</button>
+                      <button type="button" className="btn-secondary text-xs py-1" onClick={() => setConfirmarDescarte(i.chave)}>Descartar alteração</button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {filaPendentes.length >= LIMITE_AVISO_FILA && (
           <Aviso>Muitas alterações sem enviar. Conecte-se assim que puder e, por segurança, baixe uma cópia das pendências.</Aviso>

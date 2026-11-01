@@ -169,11 +169,13 @@ const LOTE = 500
 // com `err.enviadas` = o que já foi (para o chamador tirar da fila) — o resto fica para a próxima.
 export async function enviarFila(entradas) {
   const enviadas = []
+  let lote = []
   try {
     const contas = entradas.filter(e => e.tipo === 'conta')
     if (contas.length) {
       const grav = contas.filter(e => e.op === 'gravar').map(e => e.item)
       const apag = contas.filter(e => e.op === 'apagar')
+      lote = contas
       await postSync({
         type: 'accounts',
         upsert: grav.map(accountToRow),
@@ -191,36 +193,115 @@ export async function enviarFila(entradas) {
       const grav = daTabela.filter(e => e.op === 'gravar')
       const apag = daTabela.filter(e => e.op === 'apagar')
       for (let i = 0; i === 0 || i < grav.length; i += LOTE) {
-        const lote = grav.slice(i, i + LOTE)
-        await postSync({ type: 'section', table: tabela, upsert: lote.map(e => toRowDaTabela[tabela](e.item)), delete: i === 0 ? apag.map(e => e.id) : [] })
-        enviadas.push(...lote, ...(i === 0 ? apag : []))
+        const pagina = grav.slice(i, i + LOTE)
+        lote = [...pagina, ...(i === 0 ? apag : [])]
+        await postSync({ type: 'section', table: tabela, upsert: pagina.map(e => toRowDaTabela[tabela](e.item)), delete: i === 0 ? apag.map(e => e.id) : [] })
+        enviadas.push(...lote)
       }
     }
 
     const fav = entradas.filter(e => e.tipo === 'favorecido')
     if (fav.length) {
+      lote = fav
       await postSync({ type: 'payees', add: fav.filter(e => e.op === 'gravar').map(e => e.id), remove: fav.filter(e => e.op === 'apagar').map(e => e.id) })
       enviadas.push(...fav)
     }
 
     for (const e of entradas.filter(x => x.tipo === 'config')) {
+      lote = [e]
       await enviarConfiguracoes(e.item.valores, e.item.campos)
       enviadas.push(e)
     }
     for (const e of entradas.filter(x => x.tipo === 'srf')) {
+      lote = [e]
       await syncSrf(e.id, e.item || [])
       enviadas.push(e)
     }
     for (const e of entradas.filter(x => x.tipo === 'rateios')) {
+      lote = [e]
       if (e.op === 'apagar') await deleteRateios(e.id)
       else await saveRateios(e.id, e.item || [])
       enviadas.push(e)
     }
   } catch (err) {
     err.enviadas = enviadas
+    err.lote = lote
     throw err
   }
   return enviadas
+}
+
+// Tipo da falha de envio:
+//   'rede'     — sem conexão / servidor fora / sessão: tenta de novo depois, sem marcar nada;
+//   'recusa'   — o servidor ou o banco recusou a alteração (validação, permissão, regra do banco):
+//                repetir não adianta, a entrada fica marcada com erro até o usuário corrigir ou descartar;
+//   'servidor' — erro 5xx sem motivo do banco: pode ser passageiro, tenta mais algumas vezes.
+export function tipoDeFalha(err) {
+  if (ehErroDeRede(err) || err.status === 401 || err.status === 408 || err.status === 429) return 'rede'
+  if (err.status >= 500 && !err.dados?.codigoBanco) return 'servidor'
+  return 'recusa'
+}
+
+// Envia a fila separando o que o servidor RECUSA: um lote recusado é reenviado item a item, para
+// que um item com problema não prenda os outros. Devolve { enviadas, falhas: [{ entrada, err }] }.
+// Falha de rede (ou exclusão em massa recusada pelo usuário) interrompe e é lançada como antes, com
+// `err.enviadas` e `err.falhas` do que já se resolveu.
+export async function enviarFilaIsolando(entradas, enviar = enviarFila) {
+  const enviadas = []
+  const falhas = []
+  const interromper = (err) => { err.enviadas = [...enviadas]; err.falhas = falhas; return err }
+  let resto = entradas
+  while (resto.length) {
+    try {
+      enviadas.push(...await enviar(resto))
+      break
+    } catch (err) {
+      const ok = err.enviadas || []
+      enviadas.push(...ok)
+      if (err.exclusaoRecusada || tipoDeFalha(err) === 'rede') throw interromper(err)
+      const lote = err.lote?.length ? err.lote : resto.filter(e => !ok.includes(e))
+      if (lote.length === 1) falhas.push({ entrada: lote[0], err })
+      else {
+        for (const e of lote) {
+          try {
+            enviadas.push(...await enviar([e]))
+          } catch (err1) {
+            if (err1.exclusaoRecusada || tipoDeFalha(err1) === 'rede') throw interromper(err1)
+            falhas.push({ entrada: e, err: err1 })
+          }
+        }
+      }
+      const fora = new Set([...ok, ...lote])
+      resto = resto.filter(e => !fora.has(e))
+    }
+  }
+  return { enviadas, falhas }
+}
+
+// Motivo da recusa em português, para o aviso e o painel. `err.dados` = corpo da resposta da API
+// ({ error, codigo, codigoBanco, coluna }).
+const MOTIVO_DO_BANCO = {
+  23505: 'já existe um registro igual (duplicado)',
+  23503: 'ele depende de outro item que não existe mais (por exemplo, uma conta ou categoria apagada)',
+  23502: 'falta preencher um campo obrigatório',
+  23514: 'um valor não é aceito pelas regras do sistema',
+  22001: 'um texto passou do tamanho permitido',
+  22003: 'um número passou do tamanho permitido',
+  '22P02': 'algum valor está em formato inválido (data ou número)',
+  22007: 'uma data está em formato inválido',
+  22008: 'uma data está fora do permitido',
+  42703: 'o banco deste ambiente está desatualizado (falta um campo) — avise o suporte',
+  '42P01': 'o banco deste ambiente está desatualizado (falta uma tabela) — avise o suporte',
+}
+export function motivoDaRecusa(err) {
+  const d = err?.dados || {}
+  const doBanco = MOTIVO_DO_BANCO[d.codigoBanco]
+  if (doBanco) return d.coluna && d.codigoBanco === '23502' ? `${doBanco} (${d.coluna})` : doBanco
+  if (err?.status === 403) return 'seu nível de acesso não permite esta alteração'
+  if (err?.status === 413) return 'a alteração é grande demais para enviar de uma vez'
+  if (err?.status >= 500) return `o servidor não conseguiu gravar (erro ${err.status})`
+  if (d.error) return String(d.error)
+  return `o servidor recusou a alteração${err?.status ? ` (erro ${err.status})` : ''}`
 }
 
 // Erro de rede (sem conexão / servidor fora) × erro de resposta (o servidor respondeu com falha).

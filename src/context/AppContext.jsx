@@ -24,7 +24,7 @@ import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { casaAgendamento } from '../lib/agendamentoManda'
 import { categoriasEntrePerfis, transferenciaNaVisaoDoPerfil } from '../lib/transferenciaPerfis'
 import { nomeDoBanco, backendIndexedDb, criarArmazenamento, migrarDoLocalStorage, apagarCacheAntigo, apagarDadosLocalStorage } from '../lib/armazenamentoLocal'
-import { mudancasEntre, mesclarNaFila, removerEnviadas, aplicarFilaSobreDados, enviarFila, entradaRateios, ehErroDeRede } from '../lib/filaOffline'
+import { mudancasEntre, mesclarNaFila, removerEnviadas, aplicarFilaSobreDados, enviarFilaIsolando, entradaRateios, ehErroDeRede, tipoDeFalha, motivoDaRecusa, rotuloDaEntrada } from '../lib/filaOffline'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
@@ -66,6 +66,9 @@ import {
 import { hojeSP, isoLocal } from '../lib/hoje'
 
 const rb = v => Math.round(v * 100) / 100
+// Fila: erro 5xx sem motivo do banco é tentado algumas vezes (com espera) antes de virar "erro".
+const TENTATIVAS_SERVIDOR = 3
+const ESPERA_ERRO_SERVIDOR_MS = 30000
 const INSTALL_RE = /(?<!\d)\d{1,2}\/\d{1,2}(?!\d)/
 // Despesa parcelada (parte de uma série) — distinta de uma compra à vista. Usa a coluna
 // installment_num (parcelas manuais novas têm a MESMA descrição, sem marcador "N/N") e mantém
@@ -775,6 +778,9 @@ export function AppProvider({ children }) {
   const podeVer = useCallback((pagina) => podeVerPagina(usuario, pagina), [usuario])
   // Operação bloqueada por falta de Conta central no perfil do item (exibida por AvisoOperacao).
   const [avisoOperacao, setAvisoOperacao] = useState(null)
+  // Aviso curto (toast amarelo) que precisa sobreviver ao fechamento de um modal — ex.: conta salva
+  // sem vínculo que não aparece no filtro de perfil atual. Exibido pelo App.
+  const [avisoToast, setAvisoToast] = useState(null)
   const prevDataRef = useRef(null)
   const retryTimerRef = useRef(null)
   // Modo sem internet (src/lib/filaOffline.js, src/lib/armazenamentoLocal.js): estado e FILA de
@@ -793,6 +799,10 @@ export function AppProvider({ children }) {
   const estadoTimerRef = useRef(null)
   const dbStatusRef = useRef('connecting')
   const [filaPendentes, setFilaPendentes] = useState([])
+  // Alterações recusadas pelo servidor (ver marcarErroFila): [{ chave, versao, motivo, em }].
+  const [filaErros, setFilaErros] = useState([])
+  const errosFilaRef = useRef(new Map())
+  const tentativasFilaRef = useRef(new Map())
   const [erroArmazenamento, setErroArmazenamento] = useState(null)
   const [armazenamentoPersistente, setArmazenamentoPersistente] = useState(null)
   const autoRegisterDoneRef = useRef(false)
@@ -976,18 +986,64 @@ export function AppProvider({ children }) {
 
   // Envia a fila ao banco (só depois de um load que deu certo nesta sessão). O que foi enviado sai
   // da fila; o resto fica para a próxima tentativa.
+  // Entradas que o servidor RECUSOU (validação, permissão, regra do banco): ficam na fila, marcadas,
+  // e não são reenviadas sozinhas — repetir não adianta. Saem da marcação quando o item é alterado
+  // de novo (versão nova = o usuário corrigiu), com "Tentar de novo" ou "Descartar" no painel.
+  // Erro 5xx sem motivo do banco tenta TENTATIVAS_SERVIDOR vezes antes de marcar. Só na memória:
+  // ao reabrir o app, cada uma é tentada mais uma vez.
+  const marcarErroFila = (falhas) => {
+    const novas = []
+    for (const { entrada, err } of falhas) {
+      const tipo = tipoDeFalha(err)
+      const ant = tentativasFilaRef.current.get(entrada.chave)
+      const n = ant?.versao === entrada.versao ? ant.n + 1 : 1
+      tentativasFilaRef.current.set(entrada.chave, { versao: entrada.versao, n })
+      if (tipo === 'servidor' && n < TENTATIVAS_SERVIDOR) continue
+      const motivo = motivoDaRecusa(err)
+      errosFilaRef.current.set(entrada.chave, { chave: entrada.chave, versao: entrada.versao, motivo, em: Date.now() })
+      novas.push({ entrada, motivo })
+    }
+    setFilaErros([...errosFilaRef.current.values()])
+    if (novas.length) {
+      const { tela, nome } = rotuloDaEntrada(novas[0].entrada)
+      setSyncError(novas.length === 1
+        ? `Não foi possível salvar "${nome}" (${tela}): ${novas[0].motivo}. Veja em "alteração com erro" na barra lateral.`
+        : `${novas.length} alterações não foram salvas — o servidor recusou. Veja os detalhes em "alterações com erro" na barra lateral.`)
+    }
+  }
+  const pendentesParaEnviar = () => [...filaRef.current.values()]
+    .filter(e => errosFilaRef.current.get(e.chave)?.versao !== e.versao)
+  const limparErroFila = (chaves) => {
+    for (const c of chaves) { errosFilaRef.current.delete(c); tentativasFilaRef.current.delete(c) }
+    setFilaErros([...errosFilaRef.current.values()])
+  }
+  // Painel: "Tentar de novo" (tira a marca e envia) e "Descartar" (sai da fila e o app volta ao
+  // que está gravado no banco para aquele item).
+  const tentarDeNovoErroFila = (chave) => { limparErroFila([chave]); agendarEnvio() }
+  const descartarErroFila = (chave) => {
+    limparErroFila([chave])
+    tirarDaFila([chave])
+    recarregarRef.current?.({ forcar: true })
+  }
+
   const enviarPendentes = async () => {
     if (enviandoRef.current || !carregouDoBancoRef.current || dbStatusRef.current !== 'connected') return
-    const entradas = [...filaRef.current.values()]
+    // Versão nova de um item marcado com erro: o usuário mexeu nele — volta a tentar.
+    const marcadas = [...errosFilaRef.current.values()].filter(m => filaRef.current.get(m.chave)?.versao !== m.versao).map(m => m.chave)
+    if (marcadas.length) limparErroFila(marcadas)
+    const entradas = pendentesParaEnviar()
     if (!entradas.length) return
     enviandoRef.current = true
     setSyncing(true)
     let enviadas
     try {
-      enviadas = await enviarFila(entradas)
-      setSyncError(prev => (prev ? null : prev))
+      const r = await enviarFilaIsolando(entradas)
+      enviadas = r.enviadas
+      if (r.falhas.length) marcarErroFila(r.falhas)
+      else setSyncError(prev => (prev ? null : prev))
     } catch (err) {
       enviadas = err?.enviadas || []
+      if (err?.falhas?.length) marcarErroFila(err.falhas)
       if (err?.exclusaoRecusada) {
         // O usuário recusou a exclusão em massa: as exclusões daquela tabela saem da fila (foi o
         // pedido dele) e o app volta ao estado do banco.
@@ -998,11 +1054,9 @@ export function AppProvider({ children }) {
         window.location.reload()
         return
       }
+      // Só falha de REDE chega aqui (a recusa do servidor é separada em enviarFilaIsolando).
       console.error('[sync] falha ao enviar pendências:', err?.message || err)
       setDbStatus('local')
-      if (!ehErroDeRede(err)) {
-        setSyncError('Não foi possível enviar algumas alterações. Elas continuam guardadas no aparelho e o app tenta de novo.')
-      }
     } finally {
       const removidas = removerEnviadas(filaRef.current, enviadas)
       if (removidas.length) armazenamento.removerEntradas(removidas)
@@ -1010,13 +1064,18 @@ export function AppProvider({ children }) {
       enviandoRef.current = false
       setSyncing(false)
     }
-    // Entrou coisa nova durante o envio: manda em seguida.
-    if (filaRef.current.size && dbStatusRef.current === 'connected') agendarEnvio()
+    // Entrou coisa nova durante o envio: manda em seguida. Sobrou só o que deu erro 5xx (ainda com
+    // tentativas): espera um pouco antes de tentar de novo.
+    const sobra = pendentesParaEnviar()
+    if (sobra.length && dbStatusRef.current === 'connected') {
+      const soServidor = sobra.every(e => tentativasFilaRef.current.get(e.chave)?.versao === e.versao)
+      agendarEnvio(soServidor ? ESPERA_ERRO_SERVIDOR_MS : 500)
+    }
   }
 
-  const agendarEnvio = () => {
+  const agendarEnvio = (ms = 500) => {
     if (envioTimerRef.current) clearTimeout(envioTimerRef.current)
-    envioTimerRef.current = setTimeout(() => { enviarPendentes() }, 500)
+    envioTimerRef.current = setTimeout(() => { enviarPendentes() }, ms)
   }
 
   // Rateios (endpoint próprio): sem conexão, entram na fila; com conexão, vão direto — e uma
@@ -3310,6 +3369,7 @@ export function AppProvider({ children }) {
         : profiles
       return { ...d, profiles: [...updated, { ...profile, id, ordem: proximaOrdem(profiles) }] }
     })
+    return id
   }, [update])
 
   const updateProfile = useCallback((id, changes) => {
@@ -6090,6 +6150,7 @@ export function AppProvider({ children }) {
       profileAccounts, profileTransactions, profileReportTransactions, profileSchedules,
       addProfile, updateProfile, deleteProfile, moveProfile,
       avisoOperacao, setAvisoOperacao,
+      avisoToast, setAvisoToast,
       usuario, pode, podeVer,
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo, saveBalanceSnapshot, restoreBalanceSnapshot,
@@ -6136,6 +6197,7 @@ export function AppProvider({ children }) {
       recarregarDados, recarregando, ultimaCarga, avisoRecarga, fecharAvisoRecarga,
       // Modo sem internet: fila de pendências, envio manual e dados do aparelho.
       filaPendentes,
+      filaErros, tentarDeNovoErroFila, descartarErroFila,
       enviarPendentes,
       apagarDadosDoAparelho,
       sincronizarAntesDeSair,

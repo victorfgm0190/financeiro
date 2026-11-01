@@ -122,7 +122,7 @@ function AppContent() {
     setScope: setScrollScope,
     saveNow: () => saveScrollNow(mainRef, scrollScope ?? activePage),
   }), [scrollScope, activePage])
-  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, data, syncError, dismissSyncError, avisoRecarga, fecharAvisoRecarga, usuario, podeVer, pode } = useApp()
+  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, data, syncError, dismissSyncError, avisoRecarga, fecharAvisoRecarga, avisoToast, setAvisoToast, usuario, podeVer, pode } = useApp()
   const podeAssistente = pode('lancamentos', 'incluir')
   // Agenda no celular: gera e publica o .ics do usuário quando os dados mudam (hooks/useAgendaFeed).
   useAgendaFeed()
@@ -244,6 +244,9 @@ function AppContent() {
       )}
       {syncError && (
         <Toast message={syncError} variant="error" duration={8000} onClose={dismissSyncError} />
+      )}
+      {avisoToast && (
+        <Toast message={avisoToast} variant="aviso" duration={8000} onClose={() => setAvisoToast(null)} />
       )}
       <MonthStartModal />
       <ContratoFichaHost />

@@ -844,7 +844,19 @@ export default function AccountsPanel({ setActivePage }) {
       )}
 
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-texto-2">Contas ({accounts.length})</h2>
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <h2 className="text-sm font-semibold text-texto-2">Contas ({accounts.length})</h2>
+          {/* O total conta TODAS as contas do filtro; estas não estão nos grupos de cima. */}
+          {ungrouped.length > 0 && (
+            <button type="button" className="text-xs text-aviso hover:underline"
+              onClick={() => document.getElementById('contas-sem-grupo')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              {ungrouped.length} sem grupo (no fim da página) ↓
+            </button>
+          )}
+          {accounts.length > visibleAccounts.length && (
+            <span className="text-xs text-texto-3">{accounts.length - visibleAccounts.length} escondida{accounts.length - visibleAccounts.length !== 1 ? 's' : ''} no celular</span>
+          )}
+        </div>
         <div className="flex gap-2">
           <button className="btn-secondary flex items-center gap-1.5 text-sm" onClick={() => setShowGroupManager(true)}>
             <Settings size={13} /> Grupos
@@ -919,6 +931,7 @@ export default function AccountsPanel({ setActivePage }) {
 
           {(ungrouped.length > 0 || sortedGroups.length > 0) && (
             <div
+              id="contas-sem-grupo"
               className={`space-y-3 rounded-xl transition-colors ${dragOverGroup === 'ungrouped' ? 'ring-2 ring-borda-forte/50 bg-surface-2/50' : ''}`}
               onDragOver={e => { e.preventDefault(); setDragOverGroup('ungrouped') }}
               onDragLeave={e => { if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) setDragOverGroup(null) }}

@@ -128,7 +128,9 @@ async function handler(req, res) {
   } catch (err) {
     if (err instanceof ErroHttp || err instanceof ErroIdentificador) return res.status(err.status).json({ error: err.message })
     console.error('[api/sync]', err.message)
-    res.status(500).json({ error: err.message })
+    // codigoBanco/coluna: o app traduz a recusa do banco para o usuário (lib/filaOffline
+    // motivoDaRecusa) e para de reenviar a alteração — repetir não adianta.
+    res.status(500).json({ error: err.message, codigoBanco: err.code || null, coluna: err.column || null })
   }
 }
 
