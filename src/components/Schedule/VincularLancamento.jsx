@@ -4,18 +4,18 @@ import { fmt, fmtDate } from '../shared/utils'
 import { candidatosDaOcorrencia, divergenciaVinculo } from '../../lib/vinculo'
 
 // "Vincular a lançamento existente": liga a ocorrência `data` de `schedule` a um lançamento que já
-// existe, em vez de gerar outro (lib/vinculo). Candidatos: lançamentos livres do mesmo sentido e
-// conta, até 15 dias, ordenados por semelhança (valor, data, favorecido, categoria); a busca acha
+// existe, em vez de gerar outro (lib/vinculo). Candidatos: lançamentos livres do mesmo sentido, de
+// qualquer conta, até 15 dias, na ordem categoria > valor > favorecido > data; a busca acha
 // qualquer outro. `perguntarManter`: quando valor/data diferem, pergunta o que fica na ocorrência.
 // `onVincular(txId, manter)`.
-export default function VincularLancamento({ schedule, data, transactions, schedules, accounts, onVincular, abertoInicial = false, perguntarManter = false }) {
+export default function VincularLancamento({ schedule, data, transactions, schedules, accounts, onVincular, abertoInicial = false, perguntarManter = false, rateios = null }) {
   const [aberto, setAberto] = useState(abertoInicial)
   const [busca, setBusca] = useState('')
   const [escolhido, setEscolhido] = useState(null)
   const [manter, setManter] = useState('lancamento')
   const candidatos = useMemo(
-    () => (aberto ? candidatosDaOcorrencia(schedule, data, { transactions, schedules, busca }) : []),
-    [aberto, schedule, data, transactions, schedules, busca]
+    () => (aberto ? candidatosDaOcorrencia(schedule, data, { transactions, schedules, busca, rateios }) : []),
+    [aberto, schedule, data, transactions, schedules, busca, rateios]
   )
   if (!schedule || !data) return null
   const conta = (id) => { const a = (accounts || []).find(x => x.id === id); return a ? (a.apelido || a.name) : '—' }
@@ -55,13 +55,14 @@ export default function VincularLancamento({ schedule, data, transactions, sched
             </div>
           ) : candidatos.length === 0 ? (
             <p className="text-xs text-texto-3">
-              Nenhum lançamento livre da mesma conta ({conta(schedule.accountId)}) até 15 dias de {fmtDate(data)}. Use a busca para procurar outro.
+              Nenhum lançamento livre do mesmo tipo até 15 dias de {fmtDate(data)}. Use a busca para procurar outro.
             </p>
-          ) : candidatos.map(({ tx: t, diferenca }) => (
+          ) : candidatos.map(({ tx: t, diferenca, motivos }) => (
             <div key={t.id} className="flex items-center gap-2 text-xs border-t border-borda/60 pt-1.5 first:border-0 first:pt-0">
               <div className="flex-1 min-w-0">
                 <p className="text-texto-1 truncate">{t.description || t.payee || '(sem descrição)'}</p>
                 <p className="text-texto-3">{fmtDate(t.date)} · {conta(t.accountId)}{t.payee ? ` · ${t.payee}` : ''}</p>
+                {motivos?.length > 0 && <p className="text-[11px] text-texto-3">{motivos.join(' · ')}</p>}
               </div>
               <span className="text-right shrink-0">
                 <span className="block text-texto-1 font-medium">{fmt(t.amount)}</span>

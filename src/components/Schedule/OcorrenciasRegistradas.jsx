@@ -29,7 +29,7 @@ const Dif = ({ v }) => (v ? <span className={v > 0 ? 'text-despesa' : 'text-rece
 
 export default function OcorrenciasRegistradas({ schedule, transactions, accounts }) {
   const isMobile = useIsMobile()
-  const { schedules: todosAgendamentos, markScheduleRegistered, marcarDataOcorrencia, pode, desvincularLancamento } = useApp()
+  const { schedules: todosAgendamentos, markScheduleRegistered, marcarDataOcorrencia, pode, desvincularLancamento, rateiosByLancamento } = useApp()
   // Paga por um lançamento que NÃO foi gerado pelo agendamento (vínculo manual): corrente + Desvincular.
   const vinculada = (l) => l.status === ST.PAGA && l.txId && !transactions.find(t => t.id === l.txId)?.scheduleId
   const Corrente = ({ l }) => (vinculada(l) ? (
@@ -181,6 +181,7 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
                     transactions={transactions}
                     schedules={todosAgendamentos}
                     accounts={accounts}
+                    rateios={rateiosByLancamento}
                     onVincular={(txId) => { markScheduleRegistered(schedule.id, vinculando, metaBaixaGerada(txId)); marcarDataOcorrencia(txId, vinculando); setVinculando(null) }}
                   />
                   <button type="button" className="text-[11px] text-texto-3 hover:text-texto-2" onClick={() => setVinculando(null)}>Cancelar</button>

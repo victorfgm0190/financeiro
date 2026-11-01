@@ -809,6 +809,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
               transactions={transactions}
               schedules={todosAgendamentos}
               accounts={accounts}
+              rateios={rateiosByLancamento}
               perguntarManter
               onVincular={(txId, manter) => {
                 const r = vincularLancamento({ txId, scheduleId: schedule.id, data: nextDate || today, manter })

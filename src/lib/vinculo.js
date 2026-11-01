@@ -14,6 +14,7 @@ import { aplicarBaixa, desfazerBaixa, faturaDoLancamento } from './scheduleBaixa
 import { occEfetiva } from './fluxoCaixa.js'
 import { similaridade } from './matchLancamento.js'
 import { numeroParcelaDoTx, totalParcelasDoTx } from './revisaoImportacao.js'
+import { rateioDaOcorrencia } from './rateio.js'
 
 export const JANELA_VINCULO_DIAS = 15
 export const MAX_CANDIDATOS = 20
@@ -41,7 +42,8 @@ export function mapaVinculos(schedules = []) {
 const livre = (t, vinculados) => !vinculados.has(t.id) && !t.scheduleId && !t.reservaAuto && !t.isEspelho
   && (t.type === 'expense' || t.type === 'income')
 
-// Pontuação de semelhança (0–100): valor 40, data 30, nome 20, categoria 10.
+// Pontuação de semelhança (0–100): valor 40, data 30, nome 20, categoria 10. Só informativa — a
+// ORDEM é a de `ordemVinculo`.
 function pontuar({ valorA, valorB, dias, nomesA, nomesB, catA, catB, janela = JANELA_VINCULO_DIAS }) {
   const base = Math.max(1, Math.abs(Number(valorB) || 0) * 0.2)
   const pv = Math.max(0, 1 - Math.abs((Number(valorA) || 0) - (Number(valorB) || 0)) / base)
@@ -55,30 +57,76 @@ const casaBusca = (busca, ...textos) => {
   return !q || textos.some(t => norm(t).includes(q))
 }
 
+// ── Ordem dos candidatos (os dois sentidos e a mesclagem) ────────────────────────────────────────
+// 1. mesma categoria (a do item OU de qualquer linha do rateio, dos dois lados);
+// 2. valor: exato, depois aproximado (diferença até 10% do valor, mínimo R$ 1);
+// 3. favorecido parecido; 4. data mais próxima; desempate leve: mesma conta.
+export const TOLERANCIA_VALOR_PROXIMO = 0.1
+const MIN_SIM_FAVORECIDO = 0.6
+// Categorias de um item: a dele + as das linhas do rateio (lançamento: rateios[id]; ocorrência: o
+// rateio da série/da ocorrência).
+const categoriasDe = (categoryId, linhas = []) => new Set([categoryId, ...(linhas || []).map(l => l.categoriaId)].filter(Boolean))
+const mesmaCategoria = (a, b) => [...a].some(c => b.has(c))
+export function nivelValor(a, b) {
+  const x = Math.abs(Number(a) || 0), y = Math.abs(Number(b) || 0)
+  const dif = Math.abs(x - y)
+  if (dif < 0.005) return 2
+  return dif <= Math.max(1, Math.max(x, y) * TOLERANCIA_VALOR_PROXIMO) ? 1 : 0
+}
+function favorecidoParecido(nomesA, nomesB) {
+  let sim = 0
+  for (const a of nomesA.filter(Boolean)) for (const b of nomesB.filter(Boolean)) sim = Math.max(sim, similaridade(a, b))
+  return sim >= MIN_SIM_FAVORECIDO
+}
+// → { chave: [...], motivos: ['mesma categoria', 'mesmo valor' | 'valor próximo', 'favorecido parecido'] }
+function ordemVinculo({ catsA, catsB, valorA, valorB, nomesA, nomesB, dias, mesmaConta }) {
+  const cat = mesmaCategoria(catsA, catsB)
+  const val = nivelValor(valorA, valorB)
+  const fav = favorecidoParecido(nomesA, nomesB)
+  const motivos = []
+  if (cat) motivos.push('mesma categoria')
+  if (val === 2) motivos.push('mesmo valor')
+  else if (val === 1) motivos.push('valor próximo')
+  if (fav) motivos.push('favorecido parecido')
+  return { chave: [cat ? 1 : 0, val, fav ? 1 : 0, -(dias ?? 9999), mesmaConta ? 1 : 0], motivos }
+}
+const compararOrdem = (a, b) => {
+  for (let i = 0; i < a.ordem.length; i++) if (a.ordem[i] !== b.ordem[i]) return b.ordem[i] - a.ordem[i]
+  return 0
+}
+
 // Ocorrências pendentes (com a 1ª futura) de um agendamento, até `limite`.
 const pendentesDe = (s, getNextOccurrences, limite = 36) => (getNextOccurrences?.(s, limite) || [])
 
-// Do LANÇAMENTO: ocorrências pendentes de agendamentos (mesmo sentido, mesma conta/cartão, ±15 dias)
-// e, se for de cartão, parcelas de séries do mesmo cartão. Com `busca`, qualquer item que case com o
-// texto (fora da janela). Ordem: semelhança.
-export function candidatosDoLancamento(tx, { schedules = [], transactions = [], getNextOccurrences, closingDay = 14, busca = '' } = {}) {
+// Do LANÇAMENTO: ocorrências pendentes de agendamentos do mesmo sentido (entrada/saída), de QUALQUER
+// conta (agendado na conta, pago no cartão), ±15 dias; e, se for de cartão, parcelas de séries do
+// mesmo cartão (mesclagem só no mesmo cartão). Com `busca`, qualquer item que case com o texto
+// (fora da janela). `rateios`: Map id → linhas (lançamentos e agendamentos). Ordem: ordemVinculo.
+export function candidatosDoLancamento(tx, { schedules = [], transactions = [], getNextOccurrences, closingDay = 14, busca = '', rateios = null } = {}) {
   if (!tx) return []
   const out = []
   const tipo = tipoDe(tx)
   const nomesTx = [tx.payee, tx.description]
+  const catsTx = categoriasDe(tx.categoryId, rateios?.get?.(tx.id))
   for (const s of schedules) {
     if ((s.transactionType || 'expense') !== tipo || s.transactionType === 'transfer') continue
-    if (s.accountId !== tx.accountId && s.cardId !== tx.accountId) continue
+    const mesmaConta = s.accountId === tx.accountId || s.cardId === tx.accountId
     for (const data of pendentesDe(s, getNextOccurrences)) {
       const ef = occEfetiva(s, data)
       const dias = distDias(tx.date, ef.date)
       const naJanela = dias <= JANELA_VINCULO_DIAS
       if (!naJanela && !(busca && casaBusca(busca, s.description, s.payee))) continue
       if (busca && !casaBusca(busca, s.description, s.payee)) continue
+      const nomesS = [s.payee, s.description]
+      const o = ordemVinculo({
+        catsA: catsTx, catsB: categoriasDe(s.categoryId, rateioDaOcorrencia(s, data, rateios?.get?.(s.id) || [])),
+        valorA: tx.amount, valorB: ef.amount, nomesA: nomesTx, nomesB: nomesS, dias, mesmaConta,
+      })
       out.push({
         tipo: 'ocorrencia', id: `${s.id}@${data}`, scheduleId: s.id, schedule: s, data, dataEfetiva: ef.date,
         valor: r2(ef.amount), descricao: s.description, favorecido: s.payee, accountId: s.accountId,
-        score: pontuar({ valorA: tx.amount, valorB: ef.amount, dias, nomesA: nomesTx, nomesB: [s.payee, s.description], catA: tx.categoryId, catB: s.categoryId }),
+        score: pontuar({ valorA: tx.amount, valorB: ef.amount, dias, nomesA: nomesTx, nomesB: nomesS, catA: tx.categoryId, catB: s.categoryId }),
+        ordem: o.chave, motivos: o.motivos,
       })
     }
   }
@@ -93,31 +141,48 @@ export function candidatosDoLancamento(tx, { schedules = [], transactions = [], 
       const meses = Math.abs((Number(fatura.slice(0, 4)) * 12 + Number(fatura.slice(5, 7))) - (Number(faturaTx.slice(0, 4)) * 12 + Number(faturaTx.slice(5, 7))))
       if (meses > 1 && !(busca && casaBusca(busca, p.description, p.payee))) continue
       if (busca && !casaBusca(busca, p.description, p.payee)) continue
+      const nomesP = [p.payee, p.description]
+      const o = ordemVinculo({
+        catsA: catsTx, catsB: categoriasDe(p.categoryId, rateios?.get?.(p.id)), valorA: tx.amount, valorB: p.amount,
+        nomesA: nomesTx, nomesB: nomesP, dias: distDias(tx.date, p.date), mesmaConta: true,
+      })
       out.push({
         tipo: 'parcela', id: p.id, tx: p, num, total, fatura, valor: r2(p.amount), descricao: p.description,
         favorecido: p.payee, accountId: p.accountId, data: p.date,
-        score: pontuar({ valorA: tx.amount, valorB: p.amount, dias: meses * 30 / 2, nomesA: nomesTx, nomesB: [p.payee, p.description], catA: tx.categoryId, catB: p.categoryId }),
+        score: pontuar({ valorA: tx.amount, valorB: p.amount, dias: meses * 30 / 2, nomesA: nomesTx, nomesB: nomesP, catA: tx.categoryId, catB: p.categoryId }),
+        ordem: o.chave, motivos: o.motivos,
       })
     }
   }
-  return out.sort((a, b) => b.score - a.score || dia(a.data).localeCompare(dia(b.data))).slice(0, MAX_CANDIDATOS)
+  return out.sort((a, b) => compararOrdem(a, b) || dia(a.data).localeCompare(dia(b.data))).slice(0, MAX_CANDIDATOS)
 }
 
-// Da OCORRÊNCIA: lançamentos livres do mesmo sentido e conta, ±15 dias (ou qualquer um com `busca`).
-export function candidatosDaOcorrencia(schedule, data, { transactions = [], schedules = [], busca = '' } = {}) {
+// Da OCORRÊNCIA: lançamentos livres do mesmo sentido, de QUALQUER conta, ±15 dias (ou qualquer um
+// com `busca`). Mesma ordem do outro sentido (ordemVinculo).
+export function candidatosDaOcorrencia(schedule, data, { transactions = [], schedules = [], busca = '', rateios = null } = {}) {
   if (!schedule || !data) return []
   const vinculados = new Set(mapaVinculos(schedules).keys())
   const ef = occEfetiva(schedule, dia(data))
   const tipo = schedule.transactionType || 'expense'
+  const catsS = categoriasDe(schedule.categoryId, rateioDaOcorrencia(schedule, dia(data), rateios?.get?.(schedule.id) || []))
+  const nomesS = [schedule.payee, schedule.description]
   return transactions
-    .filter(t => livre(t, vinculados) && tipoDe(t) === tipo && (t.accountId === schedule.accountId || t.accountId === schedule.cardId))
+    .filter(t => livre(t, vinculados) && tipoDe(t) === tipo)
     .map(t => ({ t, dias: distDias(t.date, ef.date) }))
     .filter(({ t, dias }) => (busca ? casaBusca(busca, t.description, t.payee) : dias <= JANELA_VINCULO_DIAS))
-    .map(({ t, dias }) => ({
-      tx: t, diferenca: r2((Number(t.amount) || 0) - (Number(ef.amount) || 0)), dias,
-      score: pontuar({ valorA: t.amount, valorB: ef.amount, dias, nomesA: [t.payee, t.description], nomesB: [schedule.payee, schedule.description], catA: t.categoryId, catB: schedule.categoryId }),
-    }))
-    .sort((a, b) => b.score - a.score)
+    .map(({ t, dias }) => {
+      const nomesT = [t.payee, t.description]
+      const o = ordemVinculo({
+        catsA: categoriasDe(t.categoryId, rateios?.get?.(t.id)), catsB: catsS, valorA: t.amount, valorB: ef.amount,
+        nomesA: nomesT, nomesB: nomesS, dias, mesmaConta: t.accountId === schedule.accountId || t.accountId === schedule.cardId,
+      })
+      return {
+        tx: t, diferenca: r2((Number(t.amount) || 0) - (Number(ef.amount) || 0)), dias,
+        score: pontuar({ valorA: t.amount, valorB: ef.amount, dias, nomesA: nomesT, nomesB: nomesS, catA: t.categoryId, catB: schedule.categoryId }),
+        ordem: o.chave, motivos: o.motivos,
+      }
+    })
+    .sort(compararOrdem)
     .slice(0, MAX_CANDIDATOS)
 }
 

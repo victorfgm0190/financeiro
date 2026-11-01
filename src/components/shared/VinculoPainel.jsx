@@ -20,8 +20,8 @@ export default function VinculoPainel({ tx, onClose, onToast }) {
   const conta = (id) => { const a = accounts.find(x => x.id === id); return a ? (a.apelido || a.name) : '—' }
   const closingDay = accounts.find(a => a.id === tx.accountId)?.closingDay || 14
   const candidatos = useMemo(
-    () => candidatosDoLancamento(tx, { schedules, transactions, getNextOccurrences, closingDay, busca }),
-    [tx, schedules, transactions, getNextOccurrences, closingDay, busca]
+    () => candidatosDoLancamento(tx, { schedules, transactions, getNextOccurrences, closingDay, busca, rateios: rateiosByLancamento }),
+    [tx, schedules, transactions, getNextOccurrences, closingDay, busca, rateiosByLancamento]
   )
 
   const escolher = (c) => {
@@ -69,7 +69,7 @@ export default function VinculoPainel({ tx, onClose, onToast }) {
       </div>
       {!escolhido && (
         candidatos.length === 0
-          ? <p className="text-xs text-texto-3">Nenhum agendamento pendente ou parcela parecida (mesmo sentido e conta, até 15 dias). Use a busca para procurar outro.</p>
+          ? <p className="text-xs text-texto-3">Nenhum agendamento pendente ou parcela parecida (mesmo sentido, até 15 dias). Use a busca para procurar outro.</p>
           : (
             <ul className="space-y-1.5 max-h-[50vh] overflow-y-auto">
               {candidatos.map(c => (
@@ -83,6 +83,7 @@ export default function VinculoPainel({ tx, onClose, onToast }) {
                       {c.favorecido ? `${c.favorecido} · ` : ''}{fmtDate(c.tipo === 'ocorrencia' ? c.dataEfetiva : c.data)} · {conta(c.accountId)}
                       {c.tipo === 'parcela' ? ` · parcela ${c.num}/${c.total} – fatura ${fatura(c.fatura)}` : ' · agendamento pendente'}
                     </p>
+                    {c.motivos?.length > 0 && <p className="text-[11px] text-texto-3">{c.motivos.join(' · ')}</p>}
                   </div>
                   <span className="shrink-0 font-medium text-texto-1">{fmt(c.valor)}</span>
                   <button type="button" className="btn-secondary text-xs py-1 px-2 shrink-0" onClick={() => escolher(c)}>
