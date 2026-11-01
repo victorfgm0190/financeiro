@@ -1,12 +1,13 @@
-import { useState, useRef, useMemo, useEffect } from 'react'
+import { Fragment, useState, useRef, useMemo, useEffect } from 'react'
 import {
-  Upload, FileText, Check, AlertCircle, Wand2, Save,
+  Upload, Check, AlertCircle, Wand2, Save,
   Link, X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, RotateCcw, Pencil, Info,
+  ChevronDown, ChevronRight, Split,
 } from 'lucide-react'
 import { parseFile, fuzzyMatchAccount, parseDindinCC, parseDindinCartao } from '../../lib/dindinParse'
 import { useApp } from '../../context/AppContext'
 import { noAmbientePrincipal, getSessao } from '../../lib/api'
-import { contarRevisao, filtrarRevisao, filtroAoAbrir, lerFiltroLembrado, lembrarFiltro } from '../../lib/filtroRevisaoFatura'
+import { contarRevisaoFatura, abaInicial, linhasDaAba, agruparEstornosCentavos, conferenciaDaFatura, rotuloFatura } from '../../lib/contagemRevisaoFatura'
 import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings, fetchTransactionHistory, fetchFaturaConferencia } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
@@ -38,12 +39,12 @@ import Toast from '../shared/Toast'
 import { camposHerdadosProjecao } from '../../lib/herancaCampos'
 import { agendamentoQueManda, aplicarAgendamentoNaLinha, divergenciasDaEdicao, mudancasNoAgendamento, patchLancamentoDoAgendamento, CAMPOS_DO_AGENDAMENTO } from '../../lib/agendamentoManda'
 import { linhasHistorico, novoLoteId } from '../../lib/historico'
-import { JaLancadoStatus, ResumoRevisao } from './JaLancadoCelula'
-import { aplicarCorrespondencias, resumoRevisao } from '../../lib/importacaoCorrespondencias'
+import { JaLancadoStatus } from './JaLancadoCelula'
+import { ResumoRevisaoFatura, ConferenciaFatura, AbasRevisao, DataCelula, FaturaCelula, DescricaoCelula, Selo, DecisaoSelect, ParcelasJaNoBanco, BlocoRecolhido, LinkRegrasClassificacao, BarraAcoesRevisao } from './RevisaoFatura'
+import { aplicarCorrespondencias } from '../../lib/importacaoCorrespondencias'
 import { aplicarJaLancados, resumoJaLancados, favorecidoDaLinha, patchesJaLancado, termoDescricaoFatura } from '../../lib/casamentoFatura'
 import { listarPreLancamentos, listarApelidos, aprenderApelidos, concluirPreLancamento } from '../../lib/assistenteApi'
 import { ESCOPO } from '../../lib/camposSerie'
-import DateInput from '../shared/DateInput'
 import Modal from '../shared/Modal'
 import TransactionForm from '../Transactions/TransactionForm'
 import TransactionHistoryModal from '../shared/TransactionHistoryModal'
@@ -1915,7 +1916,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     return aplicarCorrespondencias(ja, { transactions, accounts, accountId: selectedAccount, apelidos: apelidosIa, faturasFechadas: settings?.faturasFechadas })
   }, [rows, selectedAccount, selectedAcc, editingImport, existingParcelaByKey, forcedDupSelect, transactions, preLancamentosIa, apelidosIa, accounts, settings?.faturasFechadas])
   const resumoJa = useMemo(() => resumoJaLancados(resolvedRows), [resolvedRows])
-  const resumoRev = useMemo(() => resumoRevisao(resolvedRows), [resolvedRows])
 
   // Confirmação das linhas "Já lançado": UPDATE no lançamento existente (nunca delete+insert; origin,
   // categoria, grupo gerencial, centro de custo e descrição intactos) com valor/data da fatura e o
@@ -2737,35 +2737,39 @@ Importar mesmo assim no mês selecionado?`)) return
     return () => { cancelado = true; clearTimeout(timer) }
   }, [conferencia, syncing])
 
-  const found = resolvedRows.length
-  const dups = resolvedRows.filter(r => r._isDuplicate).length
   const toImportCount = linhasAImportar(resolvedRows).length
   // Item 7: linhas que colidem com parcela já existente (mesma installment_key).
   const collisionRows = resolvedRows.filter(r => r._collisionTx)
   // Só as que mudam algo no banco: idênticas não entram no "+N↻" nem são gravadas.
   const collisionsToApplyCount = collisionRows.filter(r => !collisionSkip.has(r._id) && mudancasColisao(r).length > 0).length
 
-  // Filtro de EXIBIÇÃO da revisão (lib/filtroRevisaoFatura): Pendentes × Conciliados × Todos.
-  // Totais, seleção e gravação continuam sobre TODAS as linhas; só a tabela é recortada. A linha
-  // muda de grupo na hora (é derivado de resolvedRows). Reedição de importação: sem filtro.
-  const comFiltro = !editingImport && resolvedRows.length > 0
-  const contagemRevisao = contarRevisao(resolvedRows, { mudancas: mudancasColisao })
-  const [filtroRevisao, setFiltroRevisao] = useState('pendentes')
-  // Ao abrir uma fatura (arquivo carregado, cartão ou fatura trocados): Pendentes se houver
-  // pendência; senão o último filtro do usuário.
-  const aberturaRevisao = comFiltro ? `${selectedAccount}|${faturaMonthYear}|${filename}` : null
+  // Contagem ÚNICA da revisão (lib/contagemRevisaoFatura): cartões do resumo, abas e o botão
+  // Confirmar leem daqui (importar = linhasAImportar = toImportCount). Totais, seleção e gravação
+  // continuam sobre TODAS as linhas; a aba só recorta a tabela. Reedição de importação: sem abas.
+  const comAbas = !editingImport && resolvedRows.length > 0
+  const contagem = useMemo(() => contarRevisaoFatura(resolvedRows), [resolvedRows])
+  const [abaRevisao, setAbaRevisao] = useState('importar')
+  // Ao abrir uma fatura (arquivo carregado, cartão ou fatura trocados): "Precisam de decisão" se
+  // houver; senão "Para importar". Depois, a aba é do usuário.
+  const aberturaRevisao = comAbas ? `${selectedAccount}|${faturaMonthYear}|${filename}` : null
   useEffect(() => {
     if (!aberturaRevisao) return
-    setFiltroRevisao(filtroAoAbrir(contagemRevisao.pendentes, lerFiltroLembrado(getSessao())))
-  // Só na abertura: depois, o filtro é do usuário.
+    setAbaRevisao(abaInicial(contagem))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberturaRevisao])
-  const escolherFiltroRevisao = (f) => { setFiltroRevisao(f); lembrarFiltro(getSessao(), f) }
-  const linhasVisiveis = comFiltro ? filtrarRevisao(resolvedRows, filtroRevisao, { mudancas: mudancasColisao }) : resolvedRows
-  // Linha citada fora do filtro atual (ex.: lista da diferença): mostra todas e rola até ela.
+  const { linhas: linhasDaAbaAtual, desmarcadas: desmarcadasDaAba } = comAbas
+    ? linhasDaAba(resolvedRows, abaRevisao)
+    : { linhas: resolvedRows, desmarcadas: [] }
+  const linhasVisiveis = [...linhasDaAbaAtual, ...desmarcadasDaAba]
+  // Linha citada fora da aba atual (ex.: conferência da fatura): mostra todas e rola até ela.
   const irParaLinha = (id) => {
-    if (comFiltro && !linhasVisiveis.some(r => r._id === id)) setFiltroRevisao('todos')
-    setTimeout(() => document.getElementById(`ccrow-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
+    if (comAbas && !linhasVisiveis.some(r => r._id === id)) setAbaRevisao('todos')
+    const row = resolvedRows.find(r => r._id === id)
+    if (row) setGruposAbertos(prev => new Set([...prev, `centavos:${row.categoryId || ''}`]))
+    setTimeout(() => {
+      const el = [document.getElementById(`ccrow-${id}`), document.getElementById(`cccard-${id}`)].find(e => e && e.offsetParent)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 0)
   }
 
   // ── Corrigir Datas (modo reedição) ───────────────────────────────────────
@@ -2815,20 +2819,6 @@ Importar mesmo assim no mês selecionado?`)) return
     setCorrigirToast(`${changed.length} data${changed.length !== 1 ? 's' : ''} corrigida${changed.length !== 1 ? 's' : ''}`)
   }
 
-  // Totalizador da fatura (atualiza em tempo real conforme os checkboxes):
-  //   importar  = despesas "Novo" selecionadas | jaExistem = despesas "Duplicado"
-  //   estornos  = receitas dentro da fatura (abatidas do total)
-  //   total     = despesas - estornos  (pagamentos de fatura já são filtrados no parse)
-  const totais = useMemo(() => {
-    let importar = 0, jaExistem = 0
-    for (const r of resolvedRows) {
-      if (r._generated) continue
-      const val = (r.type === 'income' ? -1 : 1) * (Number(r.amount) || 0)
-      if (r._collisionTx || r._isDuplicate) jaExistem += val
-      else if (r.selected) importar += val
-    }
-    return { importar, jaExistem }
-  }, [resolvedRows])
   // Total do arquivo × total que a fatura terá no banco depois da confirmação. O antigo "Total da
   // fatura" somava só as linhas do arquivo e deixava de fora as desmarcadas (Aramis/M6 como
   // possível duplicata) sem dizer por quê.
@@ -2838,7 +2828,413 @@ Importar mesmo assim no mês selecionado?`)) return
       fatura: faturaMonthYear, accountId: selectedAccount, transactions, closingDay: selectedAcc?.closingDay || 14,
       aberta: cabecalhoArquivo?.aberta === true,
     }), [resolvedRows, faturaMonthYear, selectedAccount, selectedAcc, transactions, editingImport, cabecalhoArquivo])
-  const [verDiferencas, setVerDiferencas] = useState(true)
+  // ── Revisão: APRESENTAÇÃO das linhas (components/Import/RevisaoFatura). As ações de cada controle
+  // são as mesmas de antes (updateRow, toggleRow, toggleForcedDup, editarLinhaDoAgendamento…); só
+  // mudou onde e como aparecem. Funções de render (e não componentes) de propósito: componente
+  // declarado aqui dentro remontaria a cada render e perderia a edição em curso.
+  const conferenciaRevisao = useMemo(() => conferenciaDaFatura(projecao), [projecao])
+  const [linhasAbertas, setLinhasAbertas] = useState(() => new Set())
+  const [gruposAbertos, setGruposAbertos] = useState(() => new Set())
+  const alternarEm = (setter) => (k) => setter(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n })
+  const alternarLinha = alternarEm(setLinhasAbertas)
+  const alternarGrupo = alternarEm(setGruposAbertos)
+
+  // Itens da aba: estornos de centavos agrupados; em "Para importar", as desmarcadas no fim.
+  const itensTabela = [
+    ...agruparEstornosCentavos(linhasDaAbaAtual),
+    ...(desmarcadasDaAba.length ? [{ tipo: 'separador', qtd: desmarcadasDaAba.length }, ...agruparEstornosCentavos(desmarcadasDaAba)] : []),
+  ]
+
+  // Rodapé "Parcelas já no banco — atualizar?": os mesmos campos do patch da colisão.
+  const nomeDe = (arr, id) => (id && (arr || []).find(x => x.id === id)?.name) || '—'
+  const dataBr = (s) => (s || '').split('-').reverse().join('/')
+  const linhaColisao = (r) => {
+    const tx = r._collisionTx
+    const parcTx = numeroParcelaDoTx(tx) ? `${numeroParcelaDoTx(tx)}/${totalParcelasDoTx(tx) || '?'}` : '—'
+    const parcRow = r._installment ? `${r._installment.num}/${r._installment.total}` : parcTx
+    const par = (antes, depois) => ({ antes, depois })
+    return {
+      id: r._id, descricao: r.description || tx.description, parcela: parcRow, valor: tx.amount,
+      aplicar: !collisionSkip.has(r._id) && mudancasColisao(r).length > 0,
+      // O UPDATE da colisão NÃO grava `amount` — o valor do banco é o mantido; o do extrato aparece à parte.
+      csv: Math.abs((Number(tx.amount) || 0) - (Number(r.amount) || 0)) > 0.005 ? fmt(r.amount) : null,
+      campos: {
+        descricao: par(tx.description, r.description || tx.description),
+        parcela: par(parcTx, parcRow),
+        // computeSaveDate — a MESMA função da gravação.
+        data: par(dataBr(tx.date), dataBr(computeSaveDate(r))),
+        valor: par(fmt(tx.amount), fmt(tx.amount)),
+        categoria: par(nomeDe(categories, tx.categoryId), nomeDe(categories, r.categoryId)),
+        grupo: par(nomeDe(gerencialGroups, tx.grupoGerencial), nomeDe(gerencialGroups, r.grupoGerencial)),
+        reserva: par(nomeDe(reserveFunctions, tx.reservaFuncaoId), nomeDe(reserveFunctions, r._reservaFuncaoId)),
+      },
+    }
+  }
+  const colisoesComDiferenca = collisionRows.filter(r => mudancasColisao(r).length > 0).map(linhaColisao)
+  const colisoesIdenticas = collisionRows.filter(r => mudancasColisao(r).length === 0).map(linhaColisao)
+
+  // Possível duplicata: "importar mesmo assim" (forcedDupSelect) ou "é o mesmo" (_mesmoQueId).
+  const decidirPossivel = (row, escolha) => {
+    const tx = row._dupTx || row._collisionTx
+    const forcada = forcedDupSelect.has(row._id)
+    if (escolha === 'importar') {
+      if (row._mesmoQueId) updateRow(row._id, { _mesmoQueId: null })
+      if (!forcada) toggleForcedDup(row._id)
+    } else if (escolha === 'mesmo' && tx) {
+      if (forcada) toggleForcedDup(row._id)
+      updateRow(row._id, { _mesmoQueId: tx.id })
+    } else {
+      if (forcada) toggleForcedDup(row._id)
+      if (row._mesmoQueId) updateRow(row._id, { _mesmoQueId: null })
+    }
+  }
+  // Estornos de centavos: marca/desmarca o bloco (só as linhas que a marcação comum alcança).
+  const marcaveisDoGrupo = (item) => item.rows.filter(r => !r._dupLevel && !r._collisionTx && !r._jaLancado && !r._jaLancadoOpcoes)
+  const marcarGrupo = (linhas, v) => {
+    const ids = new Set(linhas.map(r => r._id))
+    setRows(prev => prev.map(r => ids.has(r._id) ? { ...r, selected: v } : r))
+  }
+
+  const celCheckbox = (row) => (
+    <input type="checkbox" className="accent-primary w-4 h-4" aria-label={`Importar ${row.description}`}
+      checked={row.selected} disabled={row._dupLevel === 'certeza' || !!row._collisionTx}
+      onChange={() => { row._dupLevel === 'possivel' ? toggleForcedDup(row._id) : toggleRow(row._id) }} />
+  )
+  const celDescricao = (row) => (
+    <DescricaoCelula row={row} onChange={ch => updateRow(row._id, ch)} selos={<>
+      <InstallmentControl
+        installment={row._installment}
+        description={row.description}
+        onChange={inst => updateRow(row._id, { _installment: inst, _serieId: inst ? (row._serieId || newSerieId()) : null })}
+      />
+      {row._doAgendamento && (!row._dbTx || row._collisionTx) && (
+        <span
+          className="text-[10px] bg-primary/15 text-primary-fg px-1.5 py-0.5 rounded whitespace-nowrap shrink-0"
+          title={`Grupo, função, categoria, favorecido e tipo de documento vêm do agendamento "${row._doAgendamento.descricao}"${row._atualizarAgendamento ? ' — o agendamento será atualizado com o que você trocou' : ''}`}
+        >
+          do agendamento{row._atualizarAgendamento ? ' ✎' : ''}
+        </span>
+      )}
+    </>} />
+  )
+  const celCategoria = (row) => (
+    <div className="flex items-center gap-1 min-w-0">
+      {/* Duplicata "certeza": não entra no banco de forma alguma → mostra a categoria REAL do
+          lançamento salvo, sem edição. Colisão segue editável (a classificação nova é gravada no
+          UPDATE). */}
+      {row._dbTx && !row._collisionTx ? (
+        <span className="text-xs text-texto-1 px-1 py-1 min-w-0 break-words" title="Categoria do lançamento já salvo no Finup (não editável aqui)">
+          {(() => { const c = categories.find(x => x.id === row._dbTx.categoryId); return c ? `${c.icon} ${c.name}` : '—' })()}
+        </span>
+      ) : row._rateios?.length > 0 ? (
+        <span className="text-xs text-texto-1 bg-surface-hover/50 rounded px-2 py-1 whitespace-nowrap" title={`${row._rateios.length} categorias separadas`}>
+          {row._rateios.length} separadas
+        </span>
+      ) : (
+        <CategorySelect
+          categories={categories}
+          perfilId={perfilCategorias}
+          className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-2 py-1 text-xs focus:outline-none w-[9.25rem]"
+          value={row.categoryId}
+          onChange={e => {
+            const newCat = e.target.value
+            // `_catEdit`: escolha manual — na colisão, prevalece sobre a categoria do banco.
+            const changes = { categoryId: newCat, _suggestedCategory: false, _manualEdit: true, _catEdit: true }
+            const cat = newCat ? categories.find(c => c.id === newCat) : null
+            // Grupo gerencial padrão da categoria: preenche quando o grupo atual está
+            // vazio ou no padrão D (não sobrescreve escolha manual ≠ D).
+            if (cat?.defaultGerencialGroup && (!row.grupoGerencial || row.grupoGerencial === defaultGrupoD)) {
+              changes.grupoGerencial = cat.defaultGerencialGroup
+              changes._gerEdit = true
+            }
+            editarLinhaDoAgendamento(row, changes)
+            if (newCat) learnClassification(row.description, newCat, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: changes.grupoGerencial || row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
+            if (newCat) offerApplyToAll(row, changes.grupoGerencial ? { categoryId: newCat, grupoGerencial: changes.grupoGerencial } : { categoryId: newCat })
+          }}
+          searchable
+        />
+      )}
+      {row._suggestedCategory && (!row._dbTx || row._collisionTx) && (
+        <button
+          type="button"
+          title="Categoria sugerida pelo histórico — clique para aceitar e criar regra permanente"
+          aria-label="Aceitar categoria sugerida"
+          onClick={() => {
+            if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
+            updateRow(row._id, { _suggestedCategory: false, _manualEdit: true })
+          }}
+          className="shrink-0 text-[11px] leading-5 px-1 rounded bg-primary/15 text-primary-fg hover:bg-primary/25"
+        >
+          💡✓
+        </button>
+      )}
+      {(!row._dbTx || row._collisionTx) && (
+        <button type="button" onClick={() => setRateioRow(row)} title="Separar em categorias" aria-label="Separar em categorias"
+          className="shrink-0 text-texto-2 hover:text-texto-1 p-0.5"><Split size={14} /></button>
+      )}
+    </div>
+  )
+  const celGrupo = (row) => (
+    <div className="min-w-0">
+      {/* Duplicata "certeza": o grupo gerencial REAL do lançamento salvo, somente leitura. */}
+      {row._dbTx && !row._collisionTx ? (
+        <span className="text-xs text-texto-1 px-1 py-1 inline-block break-words" title="Grupo gerencial já salvo no Finup (linha não será importada)">
+          {(() => { const g = gerencialGroups.find(x => x.id === row._dbTx.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
+        </span>
+      ) : (
+        <select
+          aria-label="Grupo gerencial"
+          className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-1 text-xs focus:outline-none w-full"
+          value={row.grupoGerencial}
+          onChange={e => {
+            const g = e.target.value
+            // `_gerEdit`: escolha manual — na colisão, prevalece sobre o grupo do banco.
+            editarLinhaDoAgendamento(row, { grupoGerencial: g, _reservaFuncaoId: null, _manualEdit: true, _gerEdit: true })
+            offerApplyToAll(row, { grupoGerencial: g, _reservaFuncaoId: null })
+          }}
+        >
+          {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
+        </select>
+      )}
+      {/* Colisão: o select acima é a classificação NOVA (vai no UPDATE); ao lado, o grupo gravado
+          hoje, quando diferente. */}
+      {row._collisionTx && row._collisionTx.grupoGerencial !== row.grupoGerencial && (
+        <p className="text-[10px] text-aviso mt-0.5 break-words" title="Grupo gerencial atualmente salvo no banco — será substituído se a atualização for aplicada">
+          ⚠ banco: {(() => { const g = gerencialGroups.find(x => x.id === row._collisionTx.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
+        </p>
+      )}
+      {(!row._dbTx || row._collisionTx) && (() => {
+        // Grupo numerado com mais de uma função de reserva na conta-origem: escolher de qual
+        // função virá o resgate (gravado no agendamento).
+        const funcs = reserveFuncsForGroup(row.grupoGerencial)
+        if (funcs.length <= 1) return null
+        const pendente = !row._reservaFuncaoId
+        return (
+          <>
+            <select
+              className={`mt-1 block bg-surface-2 border ${pendente ? 'border-aviso' : 'border-borda-campo'} text-texto-1 rounded px-1 py-1 text-xs focus:outline-none w-full`}
+              value={row._reservaFuncaoId || ''}
+              onChange={e => editarLinhaDoAgendamento(row, { _reservaFuncaoId: e.target.value || null, _suggestedReserva: false, _manualEdit: true, _gerEdit: true })}
+              title="Função de reserva do resgate"
+            >
+              <option value="">— Selecionar —</option>
+              {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+            {pendente && <p className="text-[10px] text-aviso mt-0.5">⚠ Selecione a função</p>}
+            {row._suggestedReserva && !pendente && <p className="text-[10px] text-primary-fg mt-0.5">💡 Sugerido</p>}
+          </>
+        )
+      })()}
+    </div>
+  )
+  const celValor = (row) => (
+    <span className={`text-xs font-semibold whitespace-nowrap tabular-nums ${row.isDeposit ? 'text-receita' : 'text-despesa'}`}>{fmt(row.amount)}</span>
+  )
+
+  // Detalhes da linha (abrem sob ela): o que antes empilhava na coluna Status.
+  const temDetalhes = (row) => !!(row._jaLancado || (row._jaLancadoOpcoes && row._jaLancadoEscolha) || row._dupLevel === 'possivel'
+    || row._mesmoConfirmado || row._tambemEm?.length || baixasPorLinha.get(row._id))
+  const detalhesLinha = (row) => (
+    <div className="space-y-1.5 text-xs text-texto-1">
+      {(row._jaLancado || (row._jaLancadoOpcoes && row._jaLancadoEscolha)) && (
+        <JaLancadoStatus row={row} categories={categories} payees={payees} updateRow={updateRow} />
+      )}
+      {(row._dupLevel === 'possivel' || row._mesmoConfirmado) && (() => {
+        const tx = row._dupTx || row._collisionTx
+        if (!tx) return null
+        return (
+          <div>
+            <p className="break-words">
+              No Finup: <span className="font-medium">{tx.description}</span>
+              {' · '}parcela {numeroParcelaDoTx(tx) ? `${numeroParcelaDoTx(tx)}${totalParcelasDoTx(tx) ? `/${totalParcelasDoTx(tx)}` : ''}` : '—'}
+              {' · '}fatura {fmtFatura(faturaDoLancamento(tx, importClosingDay))} · {fmtDate(tx.date)} · {fmt(tx.amount)}
+            </p>
+            {row._mesmoConfirmado
+              ? <button type="button" className="text-primary-fg hover:underline" onClick={() => updateRow(row._id, { _mesmoQueId: null })}>Desfazer "é o mesmo"</button>
+              : <button type="button" className="text-primary-fg hover:underline text-left" onClick={() => decidirPossivel(row, 'mesmo')}>É o mesmo — atualizar nome/parcela do existente</button>}
+          </div>
+        )
+      })()}
+      {row._tambemEm?.length > 0 && (
+        <p className="text-aviso break-words">
+          ⚠ Também em {row._tambemEm.map(o => `${fmtFatura(o.fatura)} (${o.tx.description} · ${fmt(o.tx.amount)})`).join(', ')}
+        </p>
+      )}
+      {(() => {
+        const baixa = baixasPorLinha.get(row._id)
+        if (!baixa) return null
+        const c = baixa.escolhido
+        const jaNoCartao = baixa.tipo === TIPO_BAIXA.JA_NO_CARTAO
+        return (
+          <div className="space-y-1">
+            <label className="flex items-center gap-1.5 cursor-pointer" title={jaNoCartao
+              ? 'O lançamento já está no cartão: ao confirmar, a ocorrência do agendamento é baixada apontando para ele, sem criar nada.'
+              : 'Ao confirmar, o lançamento quita esta ocorrência do agendamento (mesmo efeito do botão Pagar) e as parcelas futuras da série quitam as ocorrências das faturas delas. Desmarque para importar como lançamento avulso.'}>
+              <input type="checkbox" className="accent-primary w-4 h-4 shrink-0"
+                checked={baixa.ativa} disabled={!c}
+                onChange={e => updateRow(row._id, { _baixaOff: !e.target.checked })} />
+              <span className="break-words">
+                {jaNoCartao ? 'Já no cartão – baixa agendamento ' : 'Baixa agendamento: '}
+                {c ? `${c.description} (${fmtDate(c.occurrenceDate)})` : '—'}
+                {!jaNoCartao && baixa.ativa && baixa.coberturas.length > 0 && ` + cobre ${baixa.coberturas.length} ocorrência${baixa.coberturas.length !== 1 ? 's' : ''} futura${baixa.coberturas.length !== 1 ? 's' : ''}`}
+              </span>
+            </label>
+            {baixa.candidatos.length > 1 && (
+              <select
+                className="block bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-0.5 text-xs focus:outline-none max-w-[20rem]"
+                value={c ? baixaKey(c) : ''}
+                onChange={e => updateRow(row._id, { _baixaEscolha: e.target.value, _baixaOff: false })}
+              >
+                {baixa.candidatos.map(x => (
+                  <option key={baixaKey(x)} value={baixaKey(x)}>{x.description} ({fmtDate(x.occurrenceDate)})</option>
+                ))}
+              </select>
+            )}
+          </div>
+        )
+      })()}
+    </div>
+  )
+
+  // Status compacto (uma linha): selo, ou o controle de decisão; "detalhes" abre o resto.
+  const celStatus = (row) => {
+    let principal
+    if (row._jaLancadoOpcoes && !row._jaLancado) {
+      principal = <DecisaoSelect row={row} onPossivel={() => {}}
+        onEscolherCandidato={v => updateRow(row._id, v === 'novo' ? { _jaLancadoEscolha: 'novo', selected: true } : { _jaLancadoEscolha: v || null })} />
+    } else if (row._dupLevel === 'possivel' && !row._collisionTx) {
+      principal = <DecisaoSelect row={row} onEscolherCandidato={() => {}} onPossivel={v => decidirPossivel(row, v)} />
+    } else if (row._jaLancado) {
+      const j = row._jaLancado
+      const divergente = j.origem === 'match' && !!(j.divergente?.valor || j.divergente?.data)
+      principal = <Selo tom={divergente ? 'aviso' : 'ok'} title="Já está no Finup: não cria outro lançamento; o existente é atualizado com o que a fatura diz e fica conciliado. Detalhes ao lado.">
+        ✔ {j.origem === 'pre' ? 'Pré-lançamento' : divergente ? 'Já existe — valor diferente' : j.origem === 'match' ? 'Já existe' : 'Já lançado'}
+      </Selo>
+    } else if (row._collisionTx) {
+      principal = row._mesmoConfirmado
+        ? <Selo tom="aviso" title="Você confirmou que é o mesmo lançamento: ao confirmar, o registro do Finup recebe o nome e a parcela do arquivo — ver 'Parcelas já no banco — atualizar?'">É o mesmo ↻</Selo>
+        : mudancasColisao(row).length === 0
+          ? <Selo tom="ok" title="Mesma parcela, mesma fatura e mesmo valor já no Finup, sem nenhuma diferença — nada a atualizar">No banco ✓</Selo>
+          : <Selo tom="aviso" title="Mesma parcela, mesma fatura e mesmo valor já no Finup — ver 'Parcelas já no banco — atualizar?'">No banco ↻</Selo>
+    } else if (row._dupLevel === 'certeza') {
+      principal = <Selo tom="ok" title="Mesma fatura, mesmo valor, mesma descrição-base e mesma parcela — já existe no Finup">✔ Já existe</Selo>
+    } else if (!row.selected) {
+      principal = <Selo title="Desmarcada: não será importada">Não será importada</Selo>
+    } else if (row._estornoHerdado) {
+      principal = <Selo tom="receita" title={`Estorno — classificação herdada da compra "${row._estornoHerdado.description}" (${fmtDate(row._estornoHerdado.date)})`}>↩ Estorno herdado</Selo>
+    } else {
+      principal = <Selo tom="novo">Novo</Selo>
+    }
+    const baixa = baixasPorLinha.get(row._id)
+    const aviso = row._tambemEm?.length > 0
+    return (
+      <div className="flex items-center gap-1 min-w-0">
+        <div className="min-w-0 flex-1">{principal}</div>
+        {baixa?.ativa && <Selo title="Ao confirmar, baixa a ocorrência do agendamento — ver detalhes">↧ baixa</Selo>}
+        {temDetalhes(row) && (
+          <button type="button" onClick={() => alternarLinha(row._id)} aria-expanded={linhasAbertas.has(row._id)}
+            aria-label="Detalhes da linha" title={aviso ? 'Atenção: o mesmo lançamento aparece em outra fatura — ver detalhes' : 'Detalhes'}
+            className={`shrink-0 p-0.5 rounded ${aviso ? 'text-aviso' : 'text-texto-2 hover:text-texto-1'}`}>
+            {aviso ? <AlertCircle size={14} /> : linhasAbertas.has(row._id) ? <ChevronDown size={14} /> : <Info size={14} />}
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const nColunas = gerencialLigado ? 8 : 7
+  const renderLinhaTabela = (row, zebra) => (
+    <Fragment key={row._id}>
+      <tr
+        id={`ccrow-${row._id}`}
+        onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(row.description) }}
+        title="Ver histórico do fornecedor"
+        className={`border-b border-borda/50 cursor-pointer ${zebra ? 'bg-surface-2' : 'bg-surface'} hover:bg-surface-hover`}
+      >
+        <td className="px-2 py-1.5">{celCheckbox(row)}</td>
+        <td className="px-1.5 py-1.5"><DataCelula row={row} onChange={ch => updateRow(row._id, ch)} /></td>
+        <td className="px-1.5 py-1.5"><FaturaCelula row={row} referencia={faturaMonthYear} opcoes={monthOptionsCom(row.faturaMonthYear)} onChange={ch => updateRow(row._id, ch)} /></td>
+        <td className="px-1.5 py-1.5">{celDescricao(row)}</td>
+        <td className="px-1.5 py-1.5">{celCategoria(row)}</td>
+        {gerencialLigado && <td className="px-1.5 py-1.5">{celGrupo(row)}</td>}
+        <td className="px-1.5 py-1.5 text-right">{celValor(row)}</td>
+        <td className="px-2 py-1.5 sticky right-0 bg-inherit">{celStatus(row)}</td>
+      </tr>
+      {linhasAbertas.has(row._id) && (
+        <tr className={`border-b border-borda/50 ${zebra ? 'bg-surface-2' : 'bg-surface'}`}>
+          <td colSpan={nColunas} className="pl-10 pr-3 pb-2 pt-0.5">{detalhesLinha(row)}</td>
+        </tr>
+      )}
+    </Fragment>
+  )
+  const renderCartaoLinha = (row, zebra) => (
+    <div key={row._id} id={`cccard-${row._id}`} className={`px-3 py-2 border-b border-borda/50 ${zebra ? 'bg-surface-2' : 'bg-surface'}`}>
+      <div className="flex items-start gap-2">
+        <div className="pt-0.5">{celCheckbox(row)}</div>
+        <div className="flex-1 min-w-0">{celDescricao(row)}</div>
+        <div className="shrink-0 text-right">{celValor(row)}</div>
+      </div>
+      <div className="mt-1.5 pl-6 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <DataCelula row={row} onChange={ch => updateRow(row._id, ch)} />
+        <FaturaCelula row={row} referencia={faturaMonthYear} opcoes={monthOptionsCom(row.faturaMonthYear)} onChange={ch => updateRow(row._id, ch)} />
+        {celCategoria(row)}
+        {gerencialLigado && <div className="w-[8rem]">{celGrupo(row)}</div>}
+        <div className="min-w-[10rem]">{celStatus(row)}</div>
+      </div>
+      {linhasAbertas.has(row._id) && <div className="mt-1.5 pl-6">{detalhesLinha(row)}</div>}
+    </div>
+  )
+  const cabecalhoGrupoCentavos = (item) => {
+    const marcaveis = marcaveisDoGrupo(item)
+    const marcadas = item.rows.filter(r => r.selected).length
+    const todas = marcaveis.length > 0 && marcaveis.every(r => r.selected)
+    const cat = categories.find(c => c.id === item.rows[0].categoryId)
+    return {
+      checkbox: <input type="checkbox" className="accent-primary w-4 h-4" checked={todas} disabled={!marcaveis.length}
+        aria-label={`Marcar os ${item.rows.length} estornos de centavos`} onChange={() => marcarGrupo(marcaveis, !todas)} />,
+      titulo: (
+        <button type="button" onClick={() => alternarGrupo(item.chave)} aria-expanded={gruposAbertos.has(item.chave)}
+          className="flex items-center gap-1.5 text-xs text-texto-1 font-medium text-left">
+          {gruposAbertos.has(item.chave) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {item.rows.length} estornos de centavos — {fmt(Math.abs(item.total))}
+        </button>
+      ),
+      categoria: cat ? `${cat.icon} ${cat.name}` : 'Sem categoria',
+      status: <Selo>{marcadas} de {item.rows.length} marcados</Selo>,
+    }
+  }
+  const renderGrupoCentavosTabela = (item, zebra) => {
+    const h = cabecalhoGrupoCentavos(item)
+    return (
+      <Fragment key={item.chave}>
+        <tr className={`border-b border-borda/50 ${zebra ? 'bg-surface-2' : 'bg-surface'}`}>
+          <td className="px-2 py-1.5">{h.checkbox}</td>
+          <td colSpan={3} className="px-1.5 py-1.5">{h.titulo}</td>
+          <td className="px-1.5 py-1.5 text-xs text-texto-1 break-words">{h.categoria}</td>
+          {gerencialLigado && <td />}
+          <td className="px-1.5 py-1.5 text-right text-xs font-semibold tabular-nums text-receita">{fmt(Math.abs(item.total))}</td>
+          <td className="px-2 py-1.5 sticky right-0 bg-inherit">{h.status}</td>
+        </tr>
+        {gruposAbertos.has(item.chave) && item.rows.map((r, j) => renderLinhaTabela(r, j % 2 === 1))}
+      </Fragment>
+    )
+  }
+  const renderGrupoCentavosCartoes = (item, zebra) => {
+    const h = cabecalhoGrupoCentavos(item)
+    return (
+      <Fragment key={item.chave}>
+        <div className={`px-3 py-2 border-b border-borda/50 ${zebra ? 'bg-surface-2' : 'bg-surface'}`}>
+          <div className="flex items-start gap-2">
+            <div className="pt-0.5">{h.checkbox}</div>
+            <div className="flex-1 min-w-0">{h.titulo}</div>
+            <span className="shrink-0 text-xs font-semibold tabular-nums text-receita">{fmt(Math.abs(item.total))}</span>
+          </div>
+          <div className="mt-1 pl-6 flex flex-wrap gap-x-3 text-xs text-texto-1">{h.categoria} {h.status}</div>
+        </div>
+        {gruposAbertos.has(item.chave) && item.rows.map((r, j) => renderCartaoLinha(r, j % 2 === 1))}
+      </Fragment>
+    )
+  }
 
   // Cobranças recorrentes que a importação vai detectar com valor DIFERENTE do agendado (acima da
   // tolerância da baixa automática): viram "Precisa de ação" no Resumo da Importação.
@@ -3987,96 +4383,156 @@ Conciliar mesmo assim com o mês selecionado?`)) return
             </div>
           )}
 
-          {/* Totalizador da fatura */}
-          <div className="card py-3 space-y-2">
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-              <div className="flex items-baseline gap-2">
-                <span className="text-xs text-texto-3">A importar:</span>
-                <span className="text-sm font-semibold text-receita">{fmt(totais.importar)}</span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-xs text-texto-3">Já no banco:</span>
-                <span className="text-sm font-semibold text-aviso">{fmt(totais.jaExistem)}</span>
-              </div>
-              {projecao && (
-                <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 sm:ml-auto">
-                  <div className="flex items-baseline gap-2" title="Soma de todas as linhas do arquivo, com os estornos negativos">
-                    <span className="text-xs text-texto-2">Total do arquivo:</span>
-                    <span className="text-lg font-bold text-texto-1">{fmt(projecao.arquivo)}</span>
-                  </div>
-                  <div className="flex items-baseline gap-2" title={`O que a fatura ${fmtFatura(faturaMonthYear)} terá no banco depois da confirmação: o já gravado nela + as linhas que serão inseridas`}>
-                    <span className="text-xs text-texto-2">Total projetado da fatura:</span>
-                    <span className={`text-lg font-bold ${Math.abs(projecao.diferencaReal) > 0.01 ? 'text-perigo' : 'text-texto-1'}`}>{fmt(projecao.projetado)}</span>
-                  </div>
+          {/* 1. Resumo no topo — todos os números saem de `contagem` (lib/contagemRevisaoFatura). */}
+          {!editingImport && (
+            <ResumoRevisaoFatura contagem={contagem} projecao={projecao} faturaLabel={fmtFatura(faturaMonthYear)}>
+              {gerencialLigado && (
+                <div className="rounded-lg border border-borda overflow-hidden" aria-label="Totais por grupo gerencial">
+                  <GerencialTotalizer txs={totalizerRows} gerencialGroups={gerencialGroups} />
                 </div>
               )}
-            </div>
-            {projecao && projecao.itensAguardando.length > 0 && (
-              <div className="rounded border border-aviso/40 bg-aviso/10 px-3 py-2 space-y-1.5">
-                <p className="flex items-center gap-2 text-xs font-semibold text-aviso">
-                  <Info size={14} className="shrink-0" />
-                  Parcelas previstas que o banco ainda não lançou nesta fatura aberta
-                </p>
-                <ul className="space-y-0.5">
-                  {projecao.itensAguardando.map(it => (
-                    <li key={it.tx.id} className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-texto-2 min-w-0">
-                      <span className="w-20 shrink-0 text-right font-semibold text-texto-1">{fmt(-it.valor)}</span>
-                      <span className="truncate">{it.tx.description}</span>
-                      <span className="text-texto-3">— aguardando lançamento do banco</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-texto-2">
-                  Total do arquivo {fmt(projecao.arquivo)} + aguardando {fmt(projecao.aguardando)} = total projetado {fmt(projecao.projetado)}
-                  {Math.abs(projecao.diferencaReal) <= 0.01 && <Check size={13} className="text-receita" aria-label="confere" />}
-                </p>
+            </ResumoRevisaoFatura>
+          )}
+
+          {/* 2. Conferência da fatura — um painel, recolhido quando a diferença está explicada. */}
+          {!editingImport && conferenciaRevisao && (
+            <ConferenciaFatura key={`${selectedAccount}|${faturaMonthYear}|${filename}`} conferencia={conferenciaRevisao} sessao={getSessao()} onIrParaLinha={irParaLinha} />
+          )}
+
+          {error && <div className="flex items-center gap-2 text-perigo text-sm"><AlertCircle size={14} /> {error}</div>}
+
+          {/* 3. Tabela de lançamentos */}
+          <div className="card p-0">
+            {editingImport && gerencialLigado && <GerencialTotalizer txs={totalizerRows} gerencialGroups={gerencialGroups} />}
+            {comAbas && <AbasRevisao contagem={contagem} aba={abaRevisao} onAba={setAbaRevisao} />}
+            {comAbas && linhasVisiveis.length === 0 && (
+              <div className="flex flex-wrap items-center gap-2 px-3 py-4 text-sm text-texto-1">
+                <Check size={16} className="text-primary-fg shrink-0" />
+                <span>{abaRevisao === 'decisao' ? 'Nenhum item precisa de decisão.' : abaRevisao === 'importar' ? 'Nada novo para importar nesta fatura.' : 'Nenhuma linha aqui.'}</span>
+                <button type="button" className="text-xs text-primary-fg underline" onClick={() => setAbaRevisao('todos')}>Ver todas ({contagem.total})</button>
               </div>
             )}
-            {projecao && Math.abs(projecao.diferencaReal) > 0.01 && (
-              <div className="rounded border border-perigo/40 bg-perigo-bg px-3 py-2">
-                <button type="button" className="flex items-center gap-2 text-xs font-semibold text-perigo w-full text-left" onClick={() => setVerDiferencas(v => !v)}>
-                  <AlertCircle size={14} className="shrink-0" />
-                  Diferença de {fmt(projecao.diferencaReal)} entre o arquivo e a fatura projetada — {projecao.itensDivergencia.length} linha{projecao.itensDivergencia.length !== 1 ? 's' : ''} explica{projecao.itensDivergencia.length !== 1 ? 'm' : ''}
-                  <span className="ml-auto text-[10px] font-normal">{verDiferencas ? 'ocultar' : 'ver'}</span>
-                </button>
-                {verDiferencas && (
-                  <ul className="mt-1.5 space-y-0.5">
-                    {projecao.itensDivergencia.map((it, i) => {
-                      const ref = it.linha || it.tx
-                      return (
-                        <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-texto-2 min-w-0">
-                          <span className={`w-20 shrink-0 text-right font-semibold ${it.valor < 0 ? 'text-despesa' : 'text-texto-1'}`}>{fmt(it.valor)}</span>
-                          <button
-                            type="button"
-                            className="truncate text-left hover:text-texto-1 disabled:cursor-default"
-                            disabled={!it.linha}
-                            onClick={() => irParaLinha(it.linha._id)}
-                          >
-                            {ref.description} <span className="text-texto-3">({fmtDate(it.linha?._dateCartao || ref.dateCartao || ref.date)})</span>
-                          </button>
-                          <span className="text-texto-3">— {it.motivo}</span>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
+
+            {/* ≥ 1024px: tabela sem rolagem horizontal (Status fixa à direita). */}
+            {linhasVisiveis.length > 0 && (
+              <div className="hidden lg:block">
+                <table className="w-full text-sm table-fixed">
+                  <colgroup>
+                    <col className="w-8" />
+                    <col className="w-[5.5rem]" />
+                    <col className="w-[4.5rem]" />
+                    <col />
+                    <col className="w-[12.5rem]" />
+                    {gerencialLigado && <col className="w-[7rem]" />}
+                    <col className="w-[6rem]" />
+                    <col className="w-[11.5rem]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="border-b border-borda text-left">
+                      <th className="px-2 py-2">
+                        <input type="checkbox" className="accent-primary" aria-label="Marcar todas"
+                          checked={(() => { const sel = resolvedRows.filter(r => !r._dupLevel && !r._collisionTx); return sel.length > 0 && sel.every(r => r.selected) })()}
+                          onChange={e => toggleAll(e.target.checked)} />
+                      </th>
+                      <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Data</th>
+                      <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Fatura</th>
+                      <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Descrição</th>
+                      <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Categoria</th>
+                      {gerencialLigado && <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Ger.</th>}
+                      <th className="px-1.5 py-2 text-xs text-texto-2 font-medium text-right">Valor</th>
+                      <th className="px-2 py-2 text-xs text-texto-2 font-medium sticky right-0 bg-surface">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itensTabela.map((item, i) => item.tipo === 'separador' ? (
+                      <tr key="sep-desmarcadas" className="border-b border-borda bg-surface-2">
+                        <td colSpan={gerencialLigado ? 8 : 7} className="px-3 py-1.5 text-xs font-medium text-texto-2">
+                          Desmarcadas ({item.qtd}) — não serão importadas
+                        </td>
+                      </tr>
+                    ) : item.tipo === 'grupo' ? (
+                      renderGrupoCentavosTabela(item, i % 2 === 1)
+                    ) : (
+                      renderLinhaTabela(item.row, i % 2 === 1)
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* < 1024px: lista de cartões (nunca rolagem horizontal). */}
+            {linhasVisiveis.length > 0 && (
+              <div className="lg:hidden">
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-borda">
+                  <input type="checkbox" className="accent-primary w-4 h-4" aria-label="Marcar todas"
+                    checked={(() => { const sel = resolvedRows.filter(r => !r._dupLevel && !r._collisionTx); return sel.length > 0 && sel.every(r => r.selected) })()}
+                    onChange={e => toggleAll(e.target.checked)} />
+                  <span className="text-xs text-texto-2">Marcar todas</span>
+                </div>
+                {itensTabela.map((item, i) => item.tipo === 'separador' ? (
+                  <p key="sep-desmarcadas" className="px-3 py-1.5 text-xs font-medium text-texto-2 bg-surface-2 border-b border-borda">Desmarcadas ({item.qtd}) — não serão importadas</p>
+                ) : item.tipo === 'grupo' ? (
+                  renderGrupoCentavosCartoes(item, i % 2 === 1)
+                ) : (
+                  renderCartaoLinha(item.row, i % 2 === 1)
+                ))}
               </div>
             )}
           </div>
 
-          {error && <div className="flex items-center gap-2 text-perigo text-sm"><AlertCircle size={14} /> {error}</div>}
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="space-y-1">
-              <SummaryBar found={found} toImport={toImportCount} duplicates={dups} />
-              {!editingImport && <ResumoRevisao resumo={resumoRev} />}
-              {comFiltro && filtroRevisao === 'pendentes' && contagemRevisao.conciliados > 0 && (
-                <p className="text-xs text-texto-2">
-                  {contagemRevisao.conciliados} conciliado{contagemRevisao.conciliados !== 1 ? 's' : ''} oculto{contagemRevisao.conciliados !== 1 ? 's' : ''}
-                  {' · '}<button type="button" className="text-primary-fg hover:text-texto-1 underline" onClick={() => escolherFiltroRevisao('conciliados')}>ver</button>
-                </p>
-              )}
-            </div>
-            <div className="flex gap-2">
+          {/* 4. Rodapé */}
+          <ParcelasJaNoBanco
+            linhas={colisoesComDiferenca}
+            identicas={colisoesIdenticas}
+            aplicar={collisionsToApplyCount}
+            onToggle={toggleCollision}
+          />
+
+          {futureParcelas.length > 0 && (
+            <BlocoRecolhido
+              titulo={`Parcelas de faturas futuras — não serão importadas agora · ${futureParcelas.filter(f => !f._exists).length} a criar · ${futureParcelas.filter(f => f._exists).length} já existe${futureParcelas.filter(f => f._exists).length !== 1 ? 'm' : ''}`}
+              contador={futureParcelas.length}
+            >
+              <table className="w-full text-xs table-fixed">
+                <thead>
+                  <tr className="border-b border-borda text-left text-texto-2">
+                    <th className="px-2 py-2 font-medium w-24">Data</th>
+                    <th className="px-2 py-2 font-medium w-20">Fatura</th>
+                    <th className="px-2 py-2 font-medium">Descrição</th>
+                    <th className="px-2 py-2 font-medium">Categoria</th>
+                    {gerencialLigado && <th className="px-2 py-2 font-medium">Ger.</th>}
+                    <th className="px-2 py-2 font-medium w-24 text-right">Valor</th>
+                    <th className="px-2 py-2 font-medium w-24">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {futureParcelas.map((fp, i) => {
+                    const cat = categories.find(c => c.id === fp.categoryId)
+                    const ger = gerencialGroups.find(g => g.id === fp.grupoGerencial)
+                    return (
+                      <tr key={fp._id} className={`border-b border-borda/50 text-texto-1 ${i % 2 ? 'bg-surface-2' : ''}`}>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{fmtDate(fp.date)}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{rotuloFatura(fp.faturaMonthYear)}</td>
+                        <td className="px-2 py-1.5 break-words">{fp.description} <Selo>Parcela {fp.num} de {fp.total}</Selo></td>
+                        <td className="px-2 py-1.5 break-words">{cat ? `${cat.icon} ${cat.name}` : '—'}</td>
+                        {gerencialLigado && <td className="px-2 py-1.5 break-words">{ger ? `${ger.number} · ${ger.name}` : '—'}</td>}
+                        <td className="px-2 py-1.5 text-right tabular-nums">{fmt(fp.amount)}</td>
+                        <td className="px-2 py-1.5">{fp._exists ? <Selo>Já existe</Selo> : <Selo tom="novo">Será criada</Selo>}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </BlocoRecolhido>
+          )}
+
+          {/* Regras de classificação: administradas em Configurações › Regras. */}
+          <div className="px-1"><LinkRegrasClassificacao /></div>
+
+          {/* 5. Barra de ações fixa */}
+          <BarraAcoesRevisao
+            contagem={contagem}
+            acoes={<>
               {!editingImport && (
                 <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={autoClassify}>
                   <Wand2 size={12} /> Classificar Auto
@@ -4093,6 +4549,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
               <button className="btn-secondary text-xs py-1.5" onClick={() => { setRows([]); setEditingImport(null) }}>
                 <X size={12} className="mr-1 inline" /> Cancelar
               </button>
+            </>}
+            confirmar={
               <button
                 className="btn-primary flex items-center gap-1.5 text-xs py-1.5"
                 disabled={(editingImport && toImportCount === 0) || !selectedAccount || !faturaMonthYear}
@@ -4103,456 +4561,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                   ? `Salvar (${toImportCount})`
                   : `Confirmar (${toImportCount}${collisionsToApplyCount > 0 ? ` +${collisionsToApplyCount}↻` : ''})`}
               </button>
-            </div>
-          </div>
-
-          <div className="card p-0 overflow-hidden">
-            {gerencialLigado && <GerencialTotalizer txs={totalizerRows} gerencialGroups={gerencialGroups} />}
-            {comFiltro && (
-              <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-borda" role="tablist" aria-label="Filtrar linhas da fatura">
-                {[['pendentes', 'Pendentes'], ['conciliados', 'Conciliados'], ['todos', 'Todos']].map(([f, rotulo]) => (
-                  <button key={f} type="button" role="tab" aria-selected={filtroRevisao === f} onClick={() => escolherFiltroRevisao(f)}
-                    className={`text-xs px-3 min-h-[32px] rounded-full border transition-colors ${filtroRevisao === f
-                      ? 'bg-primary/15 border-primary/40 text-primary-fg font-medium'
-                      : 'bg-surface-2 border-borda-campo text-texto-2 hover:text-texto-1'}`}>
-                    {rotulo} ({contagemRevisao[f]})
-                  </button>
-                ))}
-              </div>
-            )}
-            {comFiltro && filtroRevisao === 'pendentes' && contagemRevisao.pendentes === 0 && (
-              <div className="flex flex-wrap items-center gap-2 px-3 py-4 text-sm text-texto-2">
-                <Check size={16} className="text-receita shrink-0" />
-                <span>Tudo conciliado nesta fatura.</span>
-                <button type="button" className="text-xs text-primary-fg hover:text-texto-1 underline" onClick={() => escolherFiltroRevisao('conciliados')}>
-                  Ver os {contagemRevisao.conciliados} conciliado{contagemRevisao.conciliados !== 1 ? 's' : ''}
-                </button>
-              </div>
-            )}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-borda">
-                    <th className="px-3 py-2.5 w-8">
-                      <input type="checkbox" className="accent-primary"
-                        checked={(() => { const sel = resolvedRows.filter(r => !r._dupLevel && !r._collisionTx); return sel.length > 0 && sel.every(r => r.selected) })()}
-                        onChange={e => toggleAll(e.target.checked)} />
-                    </th>
-                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Data Sistema</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Data Cartão</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Fatura</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Categoria</th>
-                    <th className={`text-left px-3 py-2.5 text-xs text-texto-2 font-medium ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>Ger.</th>
-                    <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {linhasVisiveis.map(row => (
-                    <tr
-                      key={row._id}
-                      id={`ccrow-${row._id}`}
-                      onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(row.description) }}
-                      title="Ver histórico do fornecedor"
-                      className={`border-b border-borda/50 cursor-pointer hover:bg-surface-hover/30 ${!row.selected ? 'opacity-40' : ''} ${row._jaLancado ? 'bg-receita/5' : row._jaLancadoOpcoes && !row._jaLancadoEscolha ? 'bg-aviso/5' : row._dupLevel === 'certeza' ? 'bg-perigo/5' : row._dupLevel ? 'bg-aviso/5' : ''} ${row._collisionTx ? 'bg-aviso/5' : ''}`}
-                    >
-                      <td className="px-3 py-2">
-                        <input type="checkbox" className="accent-primary"
-                          checked={row.selected} disabled={row._dupLevel === 'certeza' || !!row._collisionTx}
-                          onChange={() => { row._dupLevel === 'possivel' ? toggleForcedDup(row._id) : toggleRow(row._id) }} />
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <DateInput
-                          className="bg-surface-2 border border-borda-campo text-texto-2 rounded px-1.5 py-0.5 text-xs focus:outline-none w-32"
-                          value={row.date || ''}
-                          onChange={e => updateRow(row._id, { date: e.target.value })}
-                        />
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <DateInput
-                          className="bg-surface-2 border border-borda-campo text-texto-2 rounded px-1.5 py-0.5 text-xs focus:outline-none w-32"
-                          value={row._dateCartao || ''}
-                          onChange={e => updateRow(row._id, { _dateCartao: e.target.value || null })}
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <select
-                          className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-1.5 py-0.5 text-xs focus:outline-none"
-                          value={row.faturaMonthYear || ''}
-                          onChange={e => updateRow(row._id, { faturaMonthYear: e.target.value })}
-                        >
-                          <option value="">—</option>
-                          {monthOptionsCom(row.faturaMonthYear).map(o => (
-                            <option key={o.value} value={o.value}>{o.value.split('-').reverse().join('/')}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-2 text-texto-1 max-w-xs">
-                        <div className="flex items-center gap-1.5">
-                          <input className="bg-transparent text-xs focus:outline-none focus:bg-surface-hover rounded px-1 min-w-0 flex-1"
-                            value={row.description}
-                            onChange={e => updateRow(row._id, { description: e.target.value })} />
-                          <InstallmentControl
-                            installment={row._installment}
-                            description={row.description}
-                            onChange={inst => updateRow(row._id, { _installment: inst, _serieId: inst ? (row._serieId || newSerieId()) : null })}
-                          />
-                          {row._doAgendamento && (!row._dbTx || row._collisionTx) && (
-                            <span
-                              className="text-[10px] bg-primary/15 text-primary-fg px-1.5 py-0.5 rounded whitespace-nowrap shrink-0"
-                              title={`Grupo, função, categoria, favorecido e tipo de documento vêm do agendamento "${row._doAgendamento.descricao}"${row._atualizarAgendamento ? ' — o agendamento será atualizado com o que você trocou' : ''}`}
-                            >
-                              do agendamento{row._atualizarAgendamento ? ' ✎' : ''}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1.5">
-                          {/* Duplicata "certeza": não entra no banco de forma alguma → mostra a
-                              categoria REAL do lançamento salvo, sem edição. Colisão segue editável
-                              (a classificação nova é gravada no UPDATE), com o valor do banco à vista. */}
-                          {row._dbTx && !row._collisionTx ? (
-                            <span className="text-xs text-texto-2 bg-surface-hover/40 border border-borda-forte rounded px-2 py-1 w-36 inline-block truncate" title="Categoria do lançamento já salvo no banco (não editável aqui)">
-                              {(() => { const c = categories.find(x => x.id === row._dbTx.categoryId); return c ? `${c.icon} ${c.name}` : '—' })()}
-                            </span>
-                          ) : row._rateios?.length > 0 ? (
-                            <span className="text-xs text-texto-2 bg-surface-hover/50 rounded px-2 py-1 whitespace-nowrap w-36 inline-block truncate" title={`${row._rateios.length} categorias separadas`}>
-                              {row._rateios.length} separadas
-                            </span>
-                          ) : (
-                            <CategorySelect
-                              categories={categories}
-                              perfilId={perfilCategorias}
-                              className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-2 py-1 text-xs focus:outline-none w-36"
-                              value={row.categoryId}
-                              onChange={e => {
-                                const newCat = e.target.value
-                                // `_catEdit`: escolha manual — na colisão, prevalece sobre a categoria do banco.
-                                const changes = { categoryId: newCat, _suggestedCategory: false, _manualEdit: true, _catEdit: true }
-                                const cat = newCat ? categories.find(c => c.id === newCat) : null
-                                // Grupo gerencial padrão da categoria: preenche quando o grupo atual está
-                                // vazio ou no padrão D (não sobrescreve escolha manual ≠ D).
-                                if (cat?.defaultGerencialGroup && (!row.grupoGerencial || row.grupoGerencial === defaultGrupoD)) {
-                                  changes.grupoGerencial = cat.defaultGerencialGroup
-                                  changes._gerEdit = true
-                                }
-                                editarLinhaDoAgendamento(row, changes)
-                                if (newCat) learnClassification(row.description, newCat, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: changes.grupoGerencial || row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
-                                if (newCat) offerApplyToAll(row, changes.grupoGerencial ? { categoryId: newCat, grupoGerencial: changes.grupoGerencial } : { categoryId: newCat })
-                              }}
-                              searchable
-                            />
-                          )}
-                          {row._suggestedCategory && (!row._dbTx || row._collisionTx) && (
-                            <button
-                              type="button"
-                              title="Categoria sugerida pelo histórico — clique para aceitar e criar regra permanente"
-                              onClick={() => {
-                                if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
-                                updateRow(row._id, { _suggestedCategory: false, _manualEdit: true })
-                              }}
-                              className="inline-flex items-center gap-0.5 text-[10px] bg-primary/15 text-primary-fg px-1.5 py-0.5 rounded whitespace-nowrap hover:bg-primary/25 shrink-0"
-                            >
-                              💡 Sugerido ✓
-                            </button>
-                          )}
-                          {(!row._dbTx || row._collisionTx) && (
-                            <button type="button" onClick={() => setRateioRow(row)} title="Separar em categorias" className="text-[10px] text-primary-fg hover:text-texto-1 shrink-0">Separar</button>
-                          )}
-                        </div>
-                      </td>
-                      <td className={`px-3 py-2 ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>
-                        {/* Duplicata "certeza": badge com o grupo gerencial REAL do lançamento salvo —
-                            o mesmo que aparece no extrato —, somente leitura (a linha nunca é gravada). */}
-                        {row._dbTx && !row._collisionTx ? (
-                          <span className="text-xs text-texto-2 bg-surface-hover/40 border border-borda-forte rounded px-2 py-1 w-24 inline-block truncate" title="Grupo gerencial já salvo no banco (linha não será importada)">
-                            {(() => { const g = gerencialGroups.find(x => x.id === row._dbTx.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
-                          </span>
-                        ) : (
-                        <select
-                          className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-2 py-1 text-xs focus:outline-none w-24"
-                          value={row.grupoGerencial}
-                          onChange={e => {
-                            const g = e.target.value
-                            // `_gerEdit`: escolha manual — na colisão, prevalece sobre o grupo do banco.
-                            editarLinhaDoAgendamento(row, { grupoGerencial: g, _reservaFuncaoId: null, _manualEdit: true, _gerEdit: true })
-                            offerApplyToAll(row, { grupoGerencial: g, _reservaFuncaoId: null })
-                          }}
-                        >
-                          {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
-                        </select>
-                        )}
-                        {/* Colisão: o select acima é a classificação NOVA (vai no UPDATE). Mostra ao
-                            lado o grupo que está gravado hoje, quando diferente — evita achar que o
-                            valor exibido é o do extrato. */}
-                        {row._collisionTx && row._collisionTx.grupoGerencial !== row.grupoGerencial && (
-                          <p className="text-[10px] text-aviso mt-0.5 truncate" title="Grupo gerencial atualmente salvo no banco — será substituído se a atualização for aplicada">
-                            ⚠ banco: {(() => { const g = gerencialGroups.find(x => x.id === row._collisionTx.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
-                          </p>
-                        )}
-                        {(!row._dbTx || row._collisionTx) && (() => {
-                          // Grupo numerado com mais de uma função de reserva na conta-origem:
-                          // permite escolher de qual função virá o resgate (gravado no agendamento).
-                          const funcs = reserveFuncsForGroup(row.grupoGerencial)
-                          if (funcs.length <= 1) return null
-                          const pendente = !row._reservaFuncaoId
-                          return (
-                            <>
-                              <select
-                                className={`mt-1 block bg-surface-2 border ${pendente ? 'border-aviso' : 'border-borda-campo'} text-texto-2 rounded px-2 py-1 text-xs focus:outline-none w-24`}
-                                value={row._reservaFuncaoId || ''}
-                                onChange={e => editarLinhaDoAgendamento(row, { _reservaFuncaoId: e.target.value || null, _suggestedReserva: false, _manualEdit: true, _gerEdit: true })}
-                                title="Função de reserva do resgate"
-                              >
-                                <option value="">— Selecionar —</option>
-                                {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                              </select>
-                              {pendente && <p className="text-[10px] text-aviso mt-0.5">⚠ Selecione a função</p>}
-                              {row._suggestedReserva && !pendente && <p className="text-[10px] text-primary-fg mt-0.5">💡 Sugerido</p>}
-                            </>
-                          )
-                        })()}
-                      </td>
-                      <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${row.isDeposit ? 'text-receita' : 'text-despesa'}`}>
-                        {fmt(row.amount)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {(row._jaLancado || row._jaLancadoOpcoes)
-                          ? <JaLancadoStatus row={row} categories={categories} payees={payees} updateRow={updateRow} />
-                          : row._collisionTx
-                          ? (row._mesmoConfirmado
-                            ? <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="Você confirmou que é o mesmo lançamento: ao confirmar, o registro do banco recebe o nome e a parcela do arquivo — ver seção 'atualizar?'">É o mesmo ↻</span>
-                            : mudancasColisao(row).length === 0
-                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-3" title="Mesma parcela, mesma fatura e mesmo valor já no banco, sem nenhuma diferença — nada a atualizar">No banco ✓</span>
-                              : <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="Mesma parcela, mesma fatura e mesmo valor já no banco — ver seção 'atualizar?'">No banco ↻</span>)
-                          : row._dupLevel === 'certeza'
-                            ? <span className="text-xs px-1.5 py-0.5 rounded bg-perigo-bg text-perigo" title="Mesma fatura, mesmo valor, mesma descrição-base e mesma parcela — já existe no banco">🔴 Já existe</span>
-                            : row._dupLevel === 'possivel'
-                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-2" title="Mesma fatura e mesmo valor, mas descrição, parcela ou data diferente — pode importar marcando">🟡 Possível duplicata</span>
-                              : row._estornoHerdado
-                                ? <span className="text-xs px-1.5 py-0.5 rounded bg-receita/15 text-receita" title={`Estorno — classificação herdada da compra "${row._estornoHerdado.description}" (${fmtDate(row._estornoHerdado.date)})`}>↩ Estorno herdado</span>
-                                : <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary-fg">Novo</span>
-                        }
-                        {(row._dupLevel === 'possivel' || row._mesmoConfirmado) && (() => {
-                          const tx = row._dupTx || row._collisionTx
-                          return (
-                            <div className="mt-1 text-[10px] text-texto-3 max-w-[16rem]">
-                              <p className="truncate" title={tx.description}>
-                                Banco: <span className="text-texto-2">{tx.description}</span>
-                                {' · '}parcela {numeroParcelaDoTx(tx) ? `${numeroParcelaDoTx(tx)}${totalParcelasDoTx(tx) ? `/${totalParcelasDoTx(tx)}` : ''}` : '—'}
-                                {' · '}fatura {fmtFatura(faturaDoLancamento(tx, importClosingDay))}
-                              </p>
-                              {row._mesmoConfirmado
-                                ? <button type="button" className="text-primary-fg hover:text-texto-1" onClick={() => updateRow(row._id, { _mesmoQueId: null })}>Desfazer "é o mesmo"</button>
-                                : <button type="button" className="text-primary-fg hover:text-texto-1 text-left" onClick={() => updateRow(row._id, { _mesmoQueId: tx.id })}>É o mesmo — atualizar nome/parcela do existente</button>}
-                            </div>
-                          )
-                        })()}
-                        {row._tambemEm?.length > 0 && (
-                          <p className="mt-1 text-[10px] text-aviso" title={row._tambemEm.map(o => `${o.tx.description} · ${fmt(o.tx.amount)} · fatura ${fmtFatura(o.fatura)}`).join(' | ')}>
-                            ⚠ Também em {row._tambemEm.map(o => fmtFatura(o.fatura)).join(', ')}
-                          </p>
-                        )}
-                        {(() => {
-                          const baixa = baixasPorLinha.get(row._id)
-                          if (!baixa) return null
-                          const c = baixa.escolhido
-                          const jaNoCartao = baixa.tipo === TIPO_BAIXA.JA_NO_CARTAO
-                          return (
-                            <div className="mt-1 space-y-1">
-                              <label className="flex items-center gap-1 cursor-pointer" title={jaNoCartao
-                                ? 'O lançamento já está no cartão: ao confirmar, a ocorrência do agendamento é baixada apontando para ele, sem criar nada.'
-                                : 'Ao confirmar, o lançamento quita esta ocorrência do agendamento (mesmo efeito do botão Pagar) e as parcelas futuras da série quitam as ocorrências das faturas delas. Desmarque para importar como lançamento avulso.'}>
-                                <input type="checkbox" className="accent-primary w-3 h-3 shrink-0"
-                                  checked={baixa.ativa} disabled={!c}
-                                  onChange={e => updateRow(row._id, { _baixaOff: !e.target.checked })} />
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-texto-2 truncate max-w-[16rem]">
-                                  {jaNoCartao ? 'Já no cartão – baixa agendamento ' : 'Baixa agendamento: '}
-                                  {c ? `${c.description} (${fmtDate(c.occurrenceDate)})` : '—'}
-                                  {!jaNoCartao && baixa.ativa && baixa.coberturas.length > 0 && ` + cobre ${baixa.coberturas.length} ocorrência${baixa.coberturas.length !== 1 ? 's' : ''} futura${baixa.coberturas.length !== 1 ? 's' : ''}`}
-                                </span>
-                              </label>
-                              {baixa.candidatos.length > 1 && (
-                                <select
-                                  className="block bg-surface-2 border border-borda-campo text-texto-2 rounded px-1 py-0.5 text-[10px] focus:outline-none max-w-[14rem]"
-                                  value={c ? baixaKey(c) : ''}
-                                  onChange={e => updateRow(row._id, { _baixaEscolha: e.target.value, _baixaOff: false })}
-                                >
-                                  {baixa.candidatos.map(x => (
-                                    <option key={baixaKey(x)} value={baixaKey(x)}>{x.description} ({fmtDate(x.occurrenceDate)})</option>
-                                  ))}
-                                </select>
-                              )}
-                            </div>
-                          )
-                        })()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Item 7: parcelas que JÁ existem no banco (mesma installment_key) — prévia
-              antes/depois e confirmação item a item; aplicar = UPDATE, não INSERT. */}
-          {collisionRows.length > 0 && (
-            <div className="card p-0 overflow-hidden">
-              <div className="px-3 py-2.5 border-b border-borda bg-aviso/10 flex items-center gap-2 flex-wrap">
-                <Layers size={13} className="text-aviso shrink-0" />
-                <h3 className="text-xs font-semibold text-aviso">Parcelas já no banco — atualizar?</h3>
-                <span className="text-[10px] text-texto-3">
-                  {collisionRows.length} lançamento{collisionRows.length !== 1 ? 's' : ''} já gravado{collisionRows.length !== 1 ? 's' : ''} nesta fatura
-                  {' · '}{collisionsToApplyCount} marcada{collisionsToApplyCount !== 1 ? 's' : ''} p/ atualizar
-                </span>
-              </div>
-              <div className="divide-y divide-borda">
-                {collisionRows.map(r => {
-                  const tx = r._collisionTx
-                  // Idêntica ao banco: nada a gravar, mesmo marcada.
-                  const identica = mudancasColisao(r).length === 0
-                  const apply = !collisionSkip.has(r._id) && !identica
-                  const nm = (arr, id) => (id && arr.find(x => x.id === id)?.name) || '—'
-                  const dt = (s) => (s || '').split('-').reverse().join('/')
-                  // O UPDATE da colisão NÃO grava `amount` — o valor do banco é o confirmado.
-                  // Com a tolerância de ±R$0,50 os dois podem divergir em centavos, então a
-                  // linha "Valor" mostra o valor mantido (sem seta); a divergência do extrato
-                  // aparece no badge "CSV" ao lado da descrição.
-                  const valorCsvDiverge = Math.abs((Number(tx.amount) || 0) - (Number(r.amount) || 0)) > 0.005
-                  const parcTx = numeroParcelaDoTx(tx) ? `${numeroParcelaDoTx(tx)}/${totalParcelasDoTx(tx) || '?'}` : '—'
-                  const parcRow = r._installment ? `${r._installment.num}/${r._installment.total}` : parcTx
-                  const fields = [
-                    ['Descrição', tx.description, r.description || tx.description],
-                    ['Parcela', parcTx, parcRow],
-                    // computeSaveDate — a MESMA função da gravação (era dt(r.date), que divergia
-                    // do que o UPDATE realmente escrevia na parcela 1 do Dindin).
-                    ['Data', dt(tx.date), dt(computeSaveDate(r))],
-                    ['Valor', fmt(tx.amount), fmt(tx.amount)],
-                    ['Categoria', nm(categories, tx.categoryId), nm(categories, r.categoryId)],
-                    ['Grupo', nm(gerencialGroups, tx.grupoGerencial), nm(gerencialGroups, r.grupoGerencial)],
-                    ['Reserva', nm(reserveFunctions, tx.reservaFuncaoId), nm(reserveFunctions, r._reservaFuncaoId)],
-                  ]
-                  return (
-                    <div key={r._id} className={`px-3 py-2.5 ${apply ? '' : 'opacity-50'}`}>
-                      <label className="flex items-center gap-2 mb-1.5 cursor-pointer">
-                        <input type="checkbox" checked={apply} disabled={identica} onChange={() => toggleCollision(r._id)} className="accent-primary" />
-                        <span className="text-xs text-texto-2 truncate">{r.description}</span>
-                        {identica && <span className="shrink-0 text-[10px] text-texto-3">idêntico ao banco — nada a atualizar</span>}
-                        {r._installment && (
-                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">{r._installment.num}/{r._installment.total}</span>
-                        )}
-                        {valorCsvDiverge && (
-                          <span
-                            className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-surface-hover/60 text-texto-2"
-                            title="O extrato traz um valor diferente em centavos (dentro da tolerância de R$ 0,50). O valor do banco é mantido."
-                          >
-                            CSV {fmt(r.amount)}
-                          </span>
-                        )}
-                      </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-x-3 gap-y-1 pl-6">
-                        {fields.map(([label, before, after]) => {
-                          const changed = before !== after
-                          return (
-                            <div key={label} className="text-[11px] min-w-0">
-                              <div className="text-texto-3">{label}</div>
-                              {changed ? (
-                                <div className="flex items-center gap-1 flex-wrap">
-                                  <span className="text-texto-3 line-through truncate">{before}</span>
-                                  <span className="text-texto-1 truncate">→ {after}</span>
-                                </div>
-                              ) : (
-                                <div className="text-texto-2 truncate">{before}</div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Parcelas de faturas futuras — somente informativo (não importadas agora) */}
-          {futureParcelas.length > 0 && (
-            <div className="card p-0 overflow-hidden">
-              <div className="px-3 py-2.5 border-b border-borda bg-surface-2 flex items-center gap-2 flex-wrap">
-                <Layers size={13} className="text-texto-2 shrink-0" />
-                <h3 className="text-xs font-semibold text-texto-2">Parcelas de faturas futuras — não serão importadas agora</h3>
-                <span className="text-[10px] text-texto-3">
-                  {futureParcelas.length} parcela{futureParcelas.length !== 1 ? 's' : ''}
-                  {' · '}{futureParcelas.filter(f => !f._exists).length} a criar
-                  {' · '}{futureParcelas.filter(f => f._exists).length} já existe{futureParcelas.filter(f => f._exists).length !== 1 ? 'm' : ''}
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-borda">
-                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Data</th>
-                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Fatura</th>
-                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Descrição</th>
-                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Categoria</th>
-                      <th className={`text-left px-3 py-2.5 text-xs text-texto-3 font-medium ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>Ger.</th>
-                      <th className="text-right px-3 py-2.5 text-xs text-texto-3 font-medium">Valor</th>
-                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {futureParcelas.map(fp => {
-                      const cat = categories.find(c => c.id === fp.categoryId)
-                      const ger = gerencialGroups.find(g => g.id === fp.grupoGerencial)
-                      return (
-                        <tr key={fp._id} className="border-b border-borda/40 opacity-70">
-                          <td className="px-3 py-2 text-xs text-texto-3 whitespace-nowrap">{fp.date?.split('-').reverse().join('/')}</td>
-                          <td className="px-3 py-2 text-xs text-texto-2 whitespace-nowrap">{fp.faturaMonthYear?.split('-').reverse().join('/')}</td>
-                          <td className="px-3 py-2 text-texto-2 max-w-xs">
-                            <div className="flex items-center gap-1.5">
-                              <span className="truncate text-xs">{fp.description}</span>
-                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">{fp.num}/{fp.total}</span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-xs text-texto-2">{cat ? `${cat.icon} ${cat.name}` : <span className="text-texto-3">—</span>}</td>
-                          <td className={`px-3 py-2 text-xs text-texto-2 ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>{ger ? `${ger.number} · ${ger.name}` : <span className="text-texto-3">—</span>}</td>
-                          <td className="px-3 py-2 text-right text-xs font-semibold text-texto-2 whitespace-nowrap">{fmt(fp.amount)}</td>
-                          <td className="px-3 py-2">
-                            {fp._exists
-                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">Já existe</span>
-                              : <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary-fg">Será criada</span>
-                            }
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Classification rules */}
-          {classificationRules.length > 0 && (
-            <div className="card">
-              <h3 className="text-xs font-semibold text-texto-2 uppercase tracking-wide mb-3">Regras de Classificação ({classificationRules.length})</h3>
-              <div className="space-y-1.5">
-                {classificationRules.map(rule => {
-                  const cat = categories.find(c => c.id === rule.categoryId)
-                  return (
-                    <div key={rule.id} className="flex items-center gap-2 text-xs text-texto-2">
-                      <FileText size={10} className="text-texto-3 shrink-0" />
-                      Contém <span className="text-primary-fg mx-1">"{rule.contains}"</span>
-                      → {cat ? `${cat.icon} ${cat.name}` : rule.categoryId}
-                      {rule.payee && <span className="text-texto-3">({rule.payee})</span>}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+            }
+          />
         </>
       )}
 

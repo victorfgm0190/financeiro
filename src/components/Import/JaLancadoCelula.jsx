@@ -144,21 +144,6 @@ function SeletorFavorecido({ row, j, modo, payees, updateRow }) {
   )
 }
 
-// Resumo do topo da revisão (lib/importacaoCorrespondencias resumoRevisao).
-export function ResumoRevisao({ resumo }) {
-  const { novos, jaExistem, valorDiferente, parecidos } = resumo
-  if (!novos && !jaExistem && !valorDiferente && !parecidos) return null
-  const p = (n, um, varios) => `${n} ${n === 1 ? um : varios}`
-  return (
-    <p className="text-xs text-texto-2" aria-label="Resumo da revisão">
-      {p(novos, 'novo', 'novos')}
-      {' · '}<span className="text-receita font-medium">{p(jaExistem, 'já existe', 'já existem')}</span>
-      {' · '}<span className={valorDiferente ? 'text-aviso font-medium' : ''}>{valorDiferente} com valor diferente</span>
-      {' · '}<span className={parecidos ? 'text-aviso font-medium' : ''}>{p(parecidos, 'parecido', 'parecidos')}</span>
-    </p>
-  )
-}
-
 // Contador do topo: "X já lançados · Y novos · Z para escolher".
 export function ResumoJaLancados({ resumo }) {
   if (!resumo.ja && !resumo.escolher) return null
