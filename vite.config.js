@@ -43,16 +43,17 @@ export default defineConfig({
       // vale já no carregamento seguinte ao deploy, sem servir os assets antigos do precache.
       registerType: 'autoUpdate',
       injectRegister: false,
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['icons/*.{png,svg}'],
       manifest: {
         name: 'Finup',
         short_name: 'Finup',
         description: 'Gestão financeira pessoal',
         lang: 'pt-BR',
-        // = --color-page do tema escuro (padrão). O manifest é estático; a barra acompanha o
-        // tema efetivo via <meta name="theme-color"> (index.html + useTheme).
-        theme_color: '#030712',
-        background_color: '#030712',
+        // Cor da marca (= fundo do símbolo em public/brand/finup-logo.svg): splash do Android e barra
+        // antes de a página carregar. Com a página aberta, a barra acompanha o tema efetivo via
+        // <meta name="theme-color"> (index.html + useTheme).
+        theme_color: '#0F6E56',
+        background_color: '#0F6E56',
         display: 'standalone',
         orientation: 'portrait',
         // RELATIVOS de propósito: instalar a partir de <sigla>.finup.app.br abre aquele ambiente (o
@@ -61,23 +62,11 @@ export default defineConfig({
         id: '/',
         start_url: '/',
         scope: '/',
+        // Gerados por scripts/gerar-icones.mjs a partir da logo oficial (só o símbolo).
         icons: [
-          {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-          },
-          {
-            src: 'maskable-icon-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable',
-          },
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

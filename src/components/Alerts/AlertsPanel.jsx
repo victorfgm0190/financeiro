@@ -121,7 +121,7 @@ function VencimentosPanel({ setActivePage }) {
         const name = alert.kind === 'schedule' ? alert.schedule.description : alert.account.name
         new Notification(`Vence hoje! — ${name}`, {
           body: `Valor: ${fmt(alert.amount)}`,
-          icon: '/favicon.svg',
+          icon: '/icons/icon-192.png',
         })
       }
     })
