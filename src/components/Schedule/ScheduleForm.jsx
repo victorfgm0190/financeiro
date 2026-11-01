@@ -26,6 +26,7 @@ import {
 } from '../../lib/camposSerie'
 import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico'
 import RateioModal from '../shared/RateioModal'
+import ResumoRateio from '../shared/ResumoRateio'
 import { validarRateio, normalizarRateio, categoriaPrincipal, rateioDaOcorrencia } from '../../lib/rateio'
 import FimRepeticao from '../shared/FimRepeticao'
 import ContratoDoAgendamento from './ContratoDoAgendamento'
@@ -1097,10 +1098,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             <LabelTip tip={TIPS.category} confira={!!destaques?.includes('categoryId')}>Categoria</LabelTip>
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
-                <div className="input flex-1 flex items-center justify-between text-xs text-texto-2">
-                  <span title={rateioRows.map(r => `${categories.find(c => c.id === r.categoriaId)?.name || '?'}: ${fmt(r.valor)}`).join('\n')}>Rateado ({rateioRows.length}){rateioSoDestaOcorrencia ? ' · só desta ocorrência' : ''}</span>
-                  <span className="text-texto-3">Total: {fmt(rateioTotal)}</span>
-                </div>
+                <ResumoRateio linhas={rateioRows} categories={categories} total={Number(form.amount) || 0} extra={rateioSoDestaOcorrencia ? ' · só desta ocorrência' : ''} />
               ) : (
                 <div className="flex-1 min-w-0">
                   <SearchableSelect

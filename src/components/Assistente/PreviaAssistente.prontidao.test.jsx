@@ -12,7 +12,7 @@ vi.mock('../Transactions/TransactionForm', () => ({
   default: ({ initial }) => (
     <p data-testid="form">
       {`rep=${initial.repeatFrequency || '-'} ini=${initial.repeatStartDate || '-'} vezes=${initial.repeatInstallments || '-'} `}
-      {`rateio=${(initial.rateio || []).map(r => `${r.categoriaId}:${r.valor}`).join(',') || '-'} amount=${initial.amount} notes=${initial.notes || '-'}`}
+      {`rateio=${(initial.rateio || []).map(r => `${r.categoriaId}:${r.valor}`).join(',') || '-'} amount=${initial.amount} notes=${initial.notes || '-'} desc=${(initial.rateio || []).map(r => r.descricao).join(',') || '-'}`}
     </p>
   ),
 }))
@@ -127,5 +127,41 @@ describe('Prévia do Assistente: parcela já lançada e rateio', () => {
     expect(screen.getByText(/Faltam R\$\s?50,00\. Em qual categoria\?/)).toBeTruthy()
     fireEvent.click(botao('Alimentação'))
     expect(screen.getByTestId('form').textContent).toMatch(/rateio=cat_gas:200,cat_ali:50 amount=250/)
+  })
+})
+
+describe('Acabamento (teste manual 31/10, Parte B)', () => {
+  it('B5) descrição da linha do rateio com a 1ª letra maiúscula, o resto como foi escrito', () => {
+    base()
+    abrir(sug({ valor: 250, descricao: 'Posto', rateio: [{ categoria_id: 'cat_gas', valor: 200, termo: 'gasolina aditivada' }, { categoria_id: 'cat_ali', valor: 50, termo: 'pão de queijo' }], rateio_faltam: 0 }),
+      'gastei 250 no posto, 200 de gasolina aditivada e 50 de pão de queijo')
+    expect(screen.getByTestId('form').textContent).toMatch(/desc=Gasolina aditivada,Pão de queijo/)
+  })
+
+  it('B3) "Faltam": primeiro as categorias já usadas com o MESMO favorecido', () => {
+    base({
+      transactions: [
+        { id: 'a1', type: 'expense', categoryId: 'cat_net', payee: 'Farmácia Z', date: '2026-11-01' },
+        { id: 'a2', type: 'expense', categoryId: 'cat_net', payee: 'Farmácia Z', date: '2026-11-02' },
+        { id: 'p1', type: 'expense', categoryId: 'cat_ali', payee: 'Posto Alfa', date: '2025-01-01' },
+      ],
+      rateiosByLancamento: new Map(),
+    })
+    abrir(sug({ valor: 250, descricao: 'Posto', favorecido_novo: 'Posto Alfa', rateio: [{ categoria_id: 'cat_gas', valor: 200, termo: 'gasolina' }], rateio_faltam: 50 }), 'gastei 250 no posto alfa, 200 de gasolina')
+    const opcoes = screen.getAllByRole('button').map(b => b.textContent).filter(t => /Internet|Alimentação/.test(t))
+    expect(opcoes[0]).toMatch(/Alimentação/) // usada no Posto Alfa (mesmo há tempos) vem antes da mais usada no geral
+  })
+
+  it('B6) SMS "Parc8" sem o total: mensagem de parcela com o total completado pela série', () => {
+    const P8 = { id: 'yel_8', type: 'expense', accountId: 'card', accountType: 'credit', amount: 89.9, date: '2026-11-15', faturaMonthYear: '2026-12', description: 'YELUMSEG 08/12', payee: 'YelumSeg', installmentNum: 8, installmentTotal: 12, reconciled: false }
+    base({ transactions: [P8] })
+    const sms = 'Compra aprovada de R$ 89,90 em YelumSeg Parc8 cartao final 1234'
+    abrir(sug({ valor: 89.9, conta_id: 'card', descricao: 'YelumSeg', favorecido_novo: 'YelumSeg', categoria_id: null, parcela_atual: { numero: 8, total: null } }), sms)
+    expect(screen.getByText(/A parcela 8\/12 de YELUMSEG 08\/12 já está lançada na fatura de dez\/2026/)).toBeTruthy()
+    expect(botao('Confirmar vínculo')).toBeTruthy()
+    cleanup()
+    // Mesmo sem parcela_atual do modelo, o "Parc8" do SMS basta.
+    abrir(sug({ valor: 89.9, conta_id: 'card', descricao: 'YelumSeg', favorecido_novo: 'YelumSeg', categoria_id: null }), sms)
+    expect(screen.getByText(/A parcela 8\/12 de YELUMSEG/)).toBeTruthy()
   })
 })

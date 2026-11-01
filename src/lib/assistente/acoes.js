@@ -18,13 +18,13 @@
 //
 // REGRA FIXA: o Assistente NUNCA exclui. Nenhuma ação exclui, e nenhum id/descrição fala nisso
 // (src/lib/assistente/acoes.test.js garante). Estorno não é exclusão: é 🔴 (abrir_tela).
-import { semIntermediador } from './nomeParecido.js'
+import { semIntermediador, prefixoParecido } from './nomeParecido.js'
 import { contaParaGravar, escolherConta, contaCitada } from './contas.js'
 import { moedaDoTexto } from '../cambio.js'
 import { parcelaAtualDoTexto, numeroContratoDoTexto } from './prontidao.js'
 import { rateioDoTexto } from './rateioTexto.js'
 import {
-  normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra, parcelamentoDoTexto, descricaoGenericaDeCompra,
+  normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra, parcelamentoDoTexto, descricaoGenericaDeCompra, estabelecimentoDoTexto,
 } from './texto.js'
 
 export const NIVEIS = ['consulta', 'criacao', 'edicao', 'critica']
@@ -175,6 +175,15 @@ const cartaoValido = (ctx, id) => (ctx.idx.contas.get(id)?.type === 'credit' ? i
 const categoriaValida = (ctx, id) => (ctx.idx.categorias.has(id) ? id : null)
 const doEnum = (lista, v, padrao) => (lista.includes(v) ? v : padrao)
 
+// Lugar citado no pedido (texto.js estabelecimentoDoTexto), pulando o que é nome/apelido de conta
+// ("no nubank").
+function lugarDoPedido(ctx) {
+  const nomesConta = (ctx.contas || []).flatMap(c => [c.name, c.apelido]).map(normalizarTermo).filter(x => x.length >= 3)
+  const ignorar = (n) => nomesConta.some(x => x === n || x.includes(n) || n.includes(x))
+    || (ctx.apelidos || []).some(a => a.tipo === 'conta' && a.termo === n)
+  return estabelecimentoDoTexto(ctx.trechoItem ?? ctx.textoPedido, { ignorar })
+}
+
 // Apelido cujo termo é exatamente o trecho que o modelo citou → vence o palpite.
 function porApelido(ctx, tipo, termo) {
   const t = normalizarTermo(termo)
@@ -233,6 +242,18 @@ function validarLancamento(p, ctx, hoje) {
     const existente = ctx.idx.favorecidos.get(normalizarTermo(novo)) || ctx.idx.favorecidos.get(normalizarTermo(limpo))
     if (existente) favorecido = existente
     else favorecidoNovo = limpo
+  }
+  // Nenhum favorecido do modelo, mas o pedido cita o lugar ("gastei 250 no posto…"): o favorecido
+  // cadastrado/apelido com esse nome, senão o termo citado — sempre com "confira".
+  if (!favorecido && !favorecidoNovo && tipo !== 'transferencia' && !ctx.temImagem) {
+    const lugar = lugarDoPedido(ctx)
+    if (lugar) {
+      favorecido = porApelido(ctx, 'favorecido', lugar) || ctx.idx.favorecidos.get(normalizarTermo(lugar))
+        || [...ctx.idx.favorecidos.values()].find(nome => prefixoParecido(nome, lugar)) || null
+      if (!favorecido) favorecidoNovo = lugar.charAt(0).toUpperCase() + lugar.slice(1)
+      confianca.favorecido = Math.min(confianca.favorecido, 0.5)
+      termos.favorecido = termos.favorecido || lugar
+    }
   }
 
   const centro = p.centro_custo_id ? ctx.idx.centros.get(normalizarTermo(p.centro_custo_id)) || zera('centro_custo') : null

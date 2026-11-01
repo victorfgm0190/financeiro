@@ -185,3 +185,14 @@ export function partesPorGrupo(tx, rateios) {
   for (const l of linhasDoLancamento(tx, rateios)) soma(l.grupoGerencial || tx.grupoGerencial, l.valor)
   return m
 }
+
+// Situação do rateio frente ao total do lançamento → { estado: 'ok' | 'falta' | 'passa', diferenca }
+// (diferenca sempre ≥ 0). Usada no campo Categoria ("Rateado (1) · faltam R$ 50,00") e no modal.
+export function situacaoRateio(total, soma) {
+  const d = r2((Number(total) || 0) - (Number(soma) || 0))
+  if (Math.abs(d) <= TOLERANCIA) return { estado: 'ok', diferenca: 0 }
+  return d > 0 ? { estado: 'falta', diferenca: d } : { estado: 'passa', diferenca: -d }
+}
+// Classe de texto de cada estado: verde da marca (fecha), âmbar (falta), vermelho (passa). Sempre
+// acompanhada de texto/ícone — cor sozinha nunca é a informação (acessibilidade, ver index.css).
+export const COR_SITUACAO_RATEIO = { ok: 'text-primary-fg', falta: 'text-aviso', passa: 'text-perigo' }

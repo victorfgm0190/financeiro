@@ -23,7 +23,8 @@ describe('RateioModal', () => {
     const usar = screen.getAllByRole('button', { name: /Usar restante \(R\$\s?50,00\)/ })
     expect(usar).toHaveLength(2) // em cada linha: soma o restante àquela linha
     fireEvent.click(usar[1])
-    expect(screen.getByTestId('rateio-restante').className).toMatch(/text-receita/)
+    expect(screen.getByTestId('rateio-restante').className).toMatch(/text-primary-fg/)
+    expect(screen.getByTestId('rateio-restante').textContent).toMatch(/✓/)
     fireEvent.click(gravar)
     expect(onSave).toHaveBeenCalledWith([{ categoriaId: 'c1', valor: 200, descricao: '' }, { categoriaId: 'c2', valor: 50, descricao: '' }])
   })

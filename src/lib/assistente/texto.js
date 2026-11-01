@@ -73,3 +73,24 @@ export function descricaoGenericaDeCompra(descricao) {
   const t = normalizarTermo(descricao)
   return !t || /^compra( (aprovada|parcelada|no cartao|no credito|em \d{1,2} ?x|de r\$ ?[\d.,]+))*$/.test(t)
 }
+
+// ─── Estabelecimento citado no pedido ("gastei 250 no posto…", "na padaria do João") ─────────────
+// Trecho logo depois de no/na/nos/nas/num/numa/em, até vírgula, número, "e", "de", "sendo", outro
+// "no/na"… (até 4 palavras), como foi escrito. Meios de pagamento ("no cartão", "no pix", "no
+// débito") ficam de fora; conta citada o chamador descarta. Nada fixo do cadastro.
+const PAGAMENTO = /^(?:cartao|credito|debito|pix|dinheiro|especie|boleto|conta|carteira|vale|ted|doc|transferencia|fatura|parcelado|a vista|dolar|dolares|real|reais)\b/
+const RE_LUGAR = /\b(?:no|na|nos|nas|num|numa|em)\s+/gi
+const CORTE_LUGAR = /\s+(?:e|de|do|da|sendo|com|pelo|pela|no|na|nos|nas|em|hoje|ontem|anteontem|pago|paguei|gastei|foi|r)\b/i
+export function estabelecimentoDoTexto(texto, { ignorar = null } = {}) {
+  const s = String(texto ?? '').replace(/\s+/g, ' ')
+  for (const m of s.matchAll(RE_LUGAR)) {
+    let trecho = s.slice(m.index + m[0].length).split(/[\d,.;:!?()$]/)[0]
+    const corte = trecho.search(CORTE_LUGAR)
+    if (corte >= 0) trecho = trecho.slice(0, corte)
+    trecho = trecho.trim().split(' ').slice(0, 4).join(' ')
+    const n = normalizarTermo(trecho)
+    if (n.length < 3 || PAGAMENTO.test(n) || /^\d/.test(n) || ignorar?.(n)) continue
+    return trecho
+  }
+  return null
+}

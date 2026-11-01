@@ -41,6 +41,7 @@ import { diferencasLancamentoAgendamento, patchLancamentoDoAgendamento, mudancas
 import RenomearFavorecidoModal from '../shared/RenomearFavorecidoModal'
 import { metaBaixaGerada } from '../../lib/scheduleBaixa'
 import RateioModal from '../shared/RateioModal'
+import ResumoRateio from '../shared/ResumoRateio'
 import { validarRateio, normalizarRateio, categoriaPrincipal, rateioDaParcela } from '../../lib/rateio'
 import { primeiraOcorrencia } from '../../lib/assistente/prontidao'
 import DebtPlanModal from './DebtPlanModal'
@@ -1805,10 +1806,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             <label className="label">Categoria{confira('categoryId')}</label>
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
-                <div className="input flex-1 flex items-center justify-between text-xs text-texto-2">
-                  <span title={rateioRows.map(r => `${categories.find(c => c.id === r.categoriaId)?.name || '?'}: ${fmt(r.valor)}`).join('\n')}>Rateado ({rateioRows.length})</span>
-                  <span className="text-texto-3">Total: {fmt(rateioTotal)}</span>
-                </div>
+                <ResumoRateio linhas={rateioRows} categories={categories} total={Number(form.amount) || 0} />
               ) : (
                 <div className="flex-1 min-w-0">
                   <SearchableSelect

@@ -30,7 +30,8 @@ import CartaoAgendamentoPrevia from './CartaoAgendamentoPrevia'
 import RateioFaltando from './RateioFaltando'
 import { sugerirAcaoDespesa, repeticaoDaPrevia, categoriasProvaveis, ACAO } from '../../lib/assistente/prontidao'
 import { categoriaPrincipal } from '../../lib/rateio'
-import { buscarCorrespondencias, camposHerdados, categoriaMaisUsada, rotuloFatura } from '../../lib/matchLancamento'
+import { buscarCorrespondencias, camposHerdados, categoriaMaisUsada, rotuloFatura, parcelaDoTexto } from '../../lib/matchLancamento'
+import { numeroParcelaDoTx, totalParcelasDoTx } from '../../lib/revisaoImportacao'
 import { cotacaoDolar } from '../../lib/assistenteApi'
 import {
   spreadDoCartao, aliquotaIof, iofEmLinhaSeparada, planoCompraEstrangeira, camposDaCompra, categoriaDoIof, iofDe, lancamentoDoIof,
@@ -58,10 +59,13 @@ const fmtMoeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', curr
 //     IOF estimado ligado a ela. Sem cotação → o R$ fica para o usuário digitar.
 // Item de um LOTE (LoteAssistente): `guardarAoFechar` false (a lista guarda os não salvos) e
 // `onConcluido('salvo' | 'mesmo' | 'descartado')` avisa a lista do desfecho.
+// Descrição da linha do rateio como foi escrita, só com a 1ª letra maiúscula ("gasolina" → "Gasolina").
+const inicialMaiuscula = (t) => { const s = String(t || '').trim(); return s ? s.charAt(0).toLocaleUpperCase('pt-BR') + s.slice(1) : '' }
+
 export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, textoOriginal, preId = null, onClose, onToast, guardarAoFechar = true, onConcluido = null }) {
   const {
     transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences, settings, addTransaction, categories, payees,
-    gerencialGroups, reserveFunctions, tiposDocumento, setReconciled, vincularLancamento, contratos,
+    gerencialGroups, reserveFunctions, tiposDocumento, setReconciled, vincularLancamento, contratos, rateiosByLancamento,
   } = useApp()
   // Enquanto a prévia está aberta, as alterações vão para o histórico como "Assistente IA" + usuário.
   useEffect(() => entrarAutorAssistente(), [])
@@ -179,6 +183,14 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
     return buscarCorrespondencias(novoDoCartao, { transactions, accounts, apelidos, faturasFechadas: settings?.faturasFechadas })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agendamento, perguntaCartao, sugestao, contaEscolhida, transactions, accounts, apelidos, settings?.faturasFechadas, ptax])
+  // Parcela citada ("Parc8", "parcela 8/12"): a do pedido, senão a lida no SMS; sem o total, o
+  // total da série que casou (forte, mesma parcela) — "A parcela 8/12 … já está lançada".
+  const casouParcela = correspondencias.fortes.find(m => m.parcelaIgual)?.tx || null
+  const parcelaLida = novoDoCartao.parcela || parcelaDoTexto(textoOriginal, { aceitaBarra: false })
+  const parcelaCompleta = parcelaLida
+    ? { num: parcelaLida.num, total: parcelaLida.total || (casouParcela && numeroParcelaDoTx(casouParcela) === parcelaLida.num ? totalParcelasDoTx(casouParcela) : null) }
+    : null
+  const rotuloParcela = parcelaCompleta ? `${parcelaCompleta.num}${parcelaCompleta.total ? `/${parcelaCompleta.total}` : ''}` : ''
   // "Parc8" com correspondência: o lançamento herda categoria, centro de custo, tipo de documento e
   // grupo gerencial do existente (só o que a prévia não trouxe). Sem correspondência e sem categoria:
   // a categoria mais usada nos lançamentos do favorecido.
@@ -238,7 +250,7 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   const reaproveitar = prontidao?.reaproveitar || null
   // Rateio citado (regra 22): linhas editáveis; soma ≠ total → pergunta onde vai a diferença.
   const [rateioResolvido, setRateioResolvido] = useState(null)
-  const rateioBase = (sugestao.rateio || []).filter(l => l.categoria_id && l.valor > 0).map(l => ({ categoriaId: l.categoria_id, valor: l.valor, descricao: l.termo || '' }))
+  const rateioBase = (sugestao.rateio || []).filter(l => l.categoria_id && l.valor > 0).map(l => ({ categoriaId: l.categoria_id, valor: l.valor, descricao: inicialMaiuscula(l.termo) }))
   const rateioLinhas = rateioResolvido?.linhas || rateioBase
   // Parte citada sem categoria reconhecida entra no "Faltam … Em qual categoria?" (senão sumiria).
   const semCategoriaRateio = (sugestao.rateio || []).filter(l => !l.categoria_id && l.valor > 0).reduce((t, l) => t + Number(l.valor), 0)
@@ -360,7 +372,7 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   }
   if (!decisaoFatura && correspondencias.fortes.length > 0) {
     return (
-      <JaNaFatura fortes={correspondencias.fortes} novo={novoDoCartao} textoOriginal={textoOriginal} parcela={novoDoCartao.parcela}
+      <JaNaFatura fortes={correspondencias.fortes} novo={novoDoCartao} textoOriginal={textoOriginal} parcela={parcelaCompleta}
         onConfirmar={(tx) => {
           setReconciled([tx.id], true)
           ehOMesmo(tx)
@@ -422,14 +434,14 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
         return (
           <p className="rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2 text-xs text-texto-1">
             {naFechada
-              ? `A parcela ${sugestao.parcela_atual.numero}/${sugestao.parcela_atual.total} já está na fatura ${rotuloFatura(naFechada.fatura)}, que está FECHADA. Lance só se for mesmo outra cobrança.`
-              : `Não achei a parcela ${sugestao.parcela_atual.numero}/${sugestao.parcela_atual.total} desta compra neste cartão (fatura de referência e vizinhas abertas). Confira antes de lançar.`}
+              ? `A parcela ${rotuloParcela} já está na fatura ${rotuloFatura(naFechada.fatura)}, que está FECHADA. Lance só se for mesmo outra cobrança.`
+              : `Não achei a parcela ${rotuloParcela} desta compra neste cartão (fatura de referência e vizinhas abertas). Confira antes de lançar.`}
           </p>
         )
       })()}
       {faltamRateio !== 0 && rateioLinhas.length > 0 && (
         <RateioFaltando faltam={faltamRateio} soma={somaRateio} categories={categories}
-          categorias={categoriasProvaveis(transactions, { hoje: hojeIso, excluir: rateioLinhas.map(l => l.categoriaId) })}
+          categorias={categoriasProvaveis(transactions, { hoje: hojeIso, excluir: rateioLinhas.map(l => l.categoriaId), favorecido: sugestao.favorecido_id || sugestao.favorecido_novo || null, categoriasBase: rateioLinhas.map(l => l.categoriaId), rateios: rateiosByLancamento })}
           onCategoria={(id) => setRateioResolvido({ linhas: [...rateioLinhas, { categoriaId: id, valor: faltamRateio, descricao: '' }] })}
           onAjustarTotal={() => setRateioResolvido({ linhas: rateioLinhas, amount: somaRateio })} />
       )}

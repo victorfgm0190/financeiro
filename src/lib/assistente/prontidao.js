@@ -16,6 +16,7 @@
 //   g) sem indícios → nada destacado.
 // Boleto/fatura com vencimento futuro e sem sinal de pagamento → "Só agendamento" (destacado).
 import { normalizarTermo } from './texto.js'
+import { nomeCompacto, prefixoParecido } from './nomeParecido.js'
 import { contratoPorNumero, mesmoNumeroContrato } from '../contratos/numero.js'
 import {
   ROTULOS_CONTRATO, PALAVRAS_PARCELA, CONTAS_FIXAS, TRIBUTOS_ANUAIS, NATUREZAS, PEDIDO_AGENDAR, MESES_SEGUIDOS_PARA_MENSAL,
@@ -28,15 +29,21 @@ const contem = (texto, lista) => {
   return lista.find(p => t.includes(` ${p} `)) || null
 }
 
-// Parcela citada de algo que já existe: { numero, total } ou null.
+// Parcela citada de algo que já existe: { numero, total } (total null quando o texto não diz) ou null.
 export function parcelaAtualDoTexto(texto) {
   const t = norm(texto)
   const pal = PALAVRAS_PARCELA.join('|')
   let m = t.match(new RegExp(`\\b(?:${pal})\\.?\\s*(\\d{1,3})\\s*(?:/|de)\\s*(\\d{1,3})\\b`))
     || t.match(new RegExp(`\\b(\\d{1,3})\\s*(?:a|ª|o|º)?\\s*(?:${pal})\\s*de\\s*(\\d{1,3})\\b`))
-  if (!m) return null
-  const numero = Number(m[1]), total = Number(m[2])
-  return numero >= 1 && total > 1 && numero <= total ? { numero, total } : null
+  if (m) {
+    const numero = Number(m[1]), total = Number(m[2])
+    return numero >= 1 && total > 1 && numero <= total ? { numero, total } : null
+  }
+  // Sem o total ("Parc8", "Parc 8", "PARC08", "P8" do SMS): o número; o total a prévia completa pela
+  // série existente no cartão.
+  m = t.match(new RegExp(`\\b(?:${pal})\\.?\\s*0*(\\d{1,2})\\b`)) || t.match(/(?:^|[^a-z0-9])p0*(\d{1,2})(?![0-9a-z])/)
+  const numero = m ? Number(m[1]) : 0
+  return numero >= 1 ? { numero, total: null } : null
 }
 
 // Número de contrato depois de um rótulo ("Contrato nº 12345", "nº do contrato: AB-778/2026").
@@ -236,13 +243,44 @@ export function repeticaoDaPrevia({ data, recorrencia, dia = null, ate = null, v
 
 // Categorias mais prováveis para completar um rateio: as de despesa mais usadas nos últimos 90 dias,
 // fora as que já estão nas linhas.
-export function categoriasProvaveis(transactions = [], { hoje, excluir = [], n = 4 } = {}) {
+export function categoriasProvaveis(transactions = [], { hoje, excluir = [], n = 4, favorecido = null, categoriasBase = [], rateios = null } = {}) {
+  // "Faltam R$ X. Em qual categoria?" — em ordem:
+  //   1. categorias já usadas com o MESMO favorecido (nome igual ou parecido), em todo o histórico;
+  //   2. mesmo TIPO de estabelecimento: categorias usadas nos favorecidos que já tiveram alguma das
+  //      categorias do rateio (posto com Combustível → o que mais se comprou em postos);
+  //   3. as mais usadas nos últimos 3 meses.
+  // Categoria de rateio conta pelas linhas (rateios: Map lançamento → linhas). Nada fixo.
   const limite = somarMeses(hoje, -3)
   const fora = new Set(excluir)
-  const cont = new Map()
-  for (const t of transactions) {
-    if (t.type !== 'expense' || !t.categoryId || fora.has(t.categoryId) || String(t.date) < limite) continue
-    cont.set(t.categoryId, (cont.get(t.categoryId) || 0) + 1)
+  const base = new Set(categoriasBase.filter(Boolean))
+  const catsDe = (t) => {
+    const linhas = rateios?.get?.(t.id)
+    return linhas?.length ? [...new Set(linhas.map(l => l.categoriaId).filter(Boolean))] : (t.categoryId ? [t.categoryId] : [])
   }
-  return [...cont.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([id]) => id)
+  const alvo = nomeCompacto(favorecido)
+  const mesmoFav = (t) => !!alvo && !!t.payee && (nomeCompacto(t.payee) === alvo || prefixoParecido(t.payee, favorecido))
+  const despesas = transactions.filter(t => t.type === 'expense')
+  // Favorecidos do mesmo tipo: já tiveram alguma categoria do rateio.
+  const favsDoTipo = new Set(base.size ? despesas.filter(t => t.payee && catsDe(t).some(c => base.has(c))).map(t => nomeCompacto(t.payee)) : [])
+  const nivel1 = new Map(), nivel2 = new Map(), nivel3 = new Map()
+  const soma = (m, c) => m.set(c, (m.get(c) || 0) + 1)
+  for (const t of despesas) {
+    const doFav = mesmoFav(t)
+    const doTipo = !doFav && t.payee && favsDoTipo.has(nomeCompacto(t.payee))
+    const recente = String(t.date) >= limite
+    for (const c of catsDe(t)) {
+      if (fora.has(c)) continue
+      if (doFav) soma(nivel1, c)
+      else if (doTipo) soma(nivel2, c)
+      if (recente) soma(nivel3, c)
+    }
+  }
+  const out = []
+  for (const m of [nivel1, nivel2, nivel3]) {
+    for (const [c] of [...m.entries()].sort((x, y) => y[1] - x[1])) {
+      if (out.length >= n) return out
+      if (!out.includes(c)) out.push(c)
+    }
+  }
+  return out
 }

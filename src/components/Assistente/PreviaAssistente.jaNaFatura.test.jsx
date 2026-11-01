@@ -44,20 +44,20 @@ const abrir = (s = sugestao(), texto = SMS) => {
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 describe('PreviaAssistente: lançamento que já está na fatura', () => {
-  it('parcela existente → aviso; "Confirmar o existente" concilia e não cria nada', () => {
+  // "Parc8" do SMS (sem o total) já é parcela: mensagem de parcela com o total da série (31/10).
+  it('parcela existente → "A parcela 8/12 … já está lançada"; "Confirmar vínculo" concilia e não cria nada', () => {
     const { onClose } = abrir()
-    expect(screen.getByText(/parece já estar na Fatura 11\/2026/)).toBeTruthy()
-    expect(screen.getByText(/parcela 8\/12/)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /Ajustar o existente/ })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /Confirmar o existente/ }))
+    expect(screen.getByText(/A parcela 8\/12 de Seguradora Alfa Parc2 08\/12 já está lançada na fatura de nov\/2026/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Ajustar valor/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar vínculo/ }))
     expect(app.setReconciled).toHaveBeenCalledWith(['p8'], true)
     expect(app.addTransaction).not.toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('valor R$ 2,00 diferente → "Ajustar o existente" de R$ 205,61 para R$ 207,61 abre a edição do existente', () => {
+  it('valor R$ 2,00 diferente → "Ajustar valor" de R$ 205,61 para R$ 207,61 abre a edição do existente', () => {
     abrir(sugestao({ valor: 207.61 }), SMS.replace('205,61', '207,61'))
-    const btn = screen.getByRole('button', { name: /Ajustar o existente/ })
+    const btn = screen.getByRole('button', { name: /Ajustar valor/ })
     expect(btn.textContent).toMatch(/de R\$\s?205,61 para R\$\s?207,61/)
     fireEvent.click(btn)
     expect(screen.getByText(/FORMULÁRIO id=p8 .*ajustes=\{"amount":207.61\}/)).toBeTruthy()
@@ -67,6 +67,7 @@ describe('PreviaAssistente: lançamento que já está na fatura', () => {
   it('"Lançar mesmo assim" → prévia normal com aviso de possível duplicidade e categoria herdada', () => {
     abrir()
     fireEvent.click(screen.getByRole('button', { name: /Lançar mesmo assim/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Sim, lançar em dobro/ })) // parcela: confirma o dobro
     expect(screen.getByText(/Possível duplicidade/)).toBeTruthy()
     expect(screen.getByText(/FORMULÁRIO id=novo cat=cat_seguro/)).toBeTruthy()
   })

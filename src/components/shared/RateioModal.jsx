@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash2, X } from 'lucide-react'
 import { fmt } from './utils'
-import { validarRateio } from '../../lib/rateio'
+import { validarRateio, situacaoRateio, COR_SITUACAO_RATEIO } from '../../lib/rateio'
 import CategorySelect from './CategorySelect'
 import InputMoeda from './InputMoeda'
 import { MOBILE_MEDIA_QUERY } from '../../lib/breakpoints'
@@ -70,7 +70,9 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
     const v = restanteDaLinha(k)
     if (v > 0) setRow(k, { valor: String(v) })
   }
-  const corRestante = Math.abs(naoAtribuido) < 0.005 ? 'text-receita' : naoAtribuido < 0 ? 'text-despesa' : 'text-aviso'
+  // Verde (✓) quando fecha, âmbar quando falta, vermelho quando passa — com o símbolo, não só a cor.
+  const sitRestante = situacaoRateio(total, atribuido)
+  const corRestante = COR_SITUACAO_RATEIO[sitRestante.estado]
 
   // Tocar no valor (celular): depois que o teclado sobe, o cartão rola para ficar visível.
   const mostrarCartao = (e) => {
@@ -198,7 +200,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
           </div>
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="text-texto-2">Restante a distribuir</span>
-            <span className={`font-semibold ${corRestante}`} data-testid="rateio-restante">{fmt(naoAtribuido)}</span>
+            <span className={`font-semibold ${corRestante}`} data-testid="rateio-restante">{sitRestante.estado === 'ok' ? '✓ ' : ''}{fmt(naoAtribuido)}</span>
           </div>
           {!podeGravar && preenchidas.length > 0 && (
             <p role="status" className="text-sm text-aviso">{validacao.motivo}</p>
