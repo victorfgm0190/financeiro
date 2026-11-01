@@ -10,7 +10,17 @@
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#EEF1F6" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#030712" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!--
+      Status bar do iPhone no app instalado (Tela de Início). "default" de propósito: o iOS desenha a
+      barra do relógio com texto escuro/claro legível e o app começa ABAIXO dela. "black-translucent"
+      deixa o texto do relógio SEMPRE branco e o app por baixo dele — no tema claro o relógio some (ou
+      é preciso pintar uma faixa escura fixa, que destoa do tema). A meta só é lida ao abrir o app.
+      viewport-fit=cover continua: dá o env(safe-area-inset-bottom) da barra de início (home
+      indicator), que a barra inferior e o fim da rolagem compensam. O topo também usa
+      env(safe-area-inset-top) (MobileShell, TelaCheia, Modal): com "default" ele vale 0 no retrato,
+      mas a conta continua certa se a barra mudar.
+    -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Finup" />
     <title>Finup</title>
     <!--

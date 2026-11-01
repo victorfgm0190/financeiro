@@ -113,33 +113,11 @@
   --color-barra-estouro-claro: #EFA3A3;
 }
 
-/* Faixa da safe-area superior no tema claro (iPhone PWA).
-   A status bar continua "black-translucent" (texto branco — commit ec1aedc, não mexer). No claro,
-   pinta só a faixa env(safe-area-inset-top) do header fixo com fundo escuro fixo, para o texto
-   branco da barra continuar legível. É uma camada de background-image: não muda altura, padding
-   nem layout. Fora do iOS standalone o inset é 0 → faixa de altura 0 (no-op).
-   .header-safe-top = Header.jsx; .faixa-safe-top = classe-marcador do <header> do MobileShell. */
-[data-theme="light"] .header-safe-top,
-[data-theme="light"] .faixa-safe-top {
-  background-image: linear-gradient(#111827, #111827);
-  background-repeat: no-repeat;
-  background-size: 100% env(safe-area-inset-top, 0px);
-}
-/* Mesma faixa para as telas do mobile SEM header (Início, Mais): elemento fixo no topo do
-   MobileShell, só no tema claro. Altura = inset (0 fora do iOS standalone → invisível), não
-   participa do layout (fixed) nem recebe toque (pointer-events: none). O conteúdo rolado passa
-   por baixo dela. z-index acima do conteúdo e da barra inferior (z-40), abaixo de modais. */
-.faixa-status-ios { display: none; }
-[data-theme="light"] .faixa-status-ios {
-  display: block;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: env(safe-area-inset-top, 0px);
-  background: #111827;
-  pointer-events: none;
-  z-index: 45;
+/* Altura da tela do app: 100dvh = área realmente visível (no iPhone, 100vh pode passar da tela e
+   empurrar o fim da rolagem para baixo da barra inferior). 100vh fica de reserva p/ navegador antigo. */
+.altura-tela {
+  height: 100vh;
+  height: 100dvh;
 }
 
 :root {

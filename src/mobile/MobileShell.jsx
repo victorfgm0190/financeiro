@@ -58,6 +58,13 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
       ? <Tela modules={modules} irPara={ir} saldosPrincipais={saldosPrincipais} onToast={onToast} onOpenSearch={onOpenSearch} />
       : panels[modulo.page]
 
+  // Safe-area do iPhone, UMA vez por tela: no <header> quando há; sem ele (Início, Mais), no topo
+  // do <main>. O fundo é o bg-page do próprio elemento (segue o tema).
+  const temCabecalho = modulo.id !== 'inicio' && modulo.id !== 'mais'
+  // Fim da rolagem: o último card termina acima da barra inferior (68px), do "+" que sobe 20px
+  // dela e de uma folga de 16px, mais a barra de início do iPhone.
+  const RESPIRO_RODAPE = 68 + 20 + 16
+
   const meio = Math.ceil(tabs.length / 2)
   const botaoAba = (m) => {
     const Icon = m.icon
@@ -77,14 +84,11 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
   }
 
   return (
-    <div className="flex flex-col h-screen w-full max-w-full overflow-hidden bg-page">
-      {/* Faixa escura sob a status bar do iPhone no tema claro (Início/Mais não têm header).
-          Fixa, sem layout nem toque; altura = safe-area (0 fora do iOS standalone). index.css */}
-      <div className="faixa-status-ios" aria-hidden="true" />
+    <div className="flex flex-col altura-tela w-full max-w-full overflow-hidden bg-page">
       {/* content-box: h-14 é a área do título; a safe-area soma por cima (em border-box o padding
           comia a altura e o conteúdo subia para baixo do relógio). Mesmo padrão do TelaCheia. */}
-      {modulo.id !== 'inicio' && modulo.id !== 'mais' && (
-        <header className="faixa-safe-top flex items-center gap-1 px-2 h-14 shrink-0 border-b border-borda bg-page" style={{ paddingTop: 'env(safe-area-inset-top)', boxSizing: 'content-box' }}>
+      {temCabecalho && (
+        <header className="flex items-center gap-1 px-2 h-14 shrink-0 border-b border-borda bg-page" style={{ paddingTop: 'env(safe-area-inset-top)', boxSizing: 'content-box' }}>
           {!ehAba ? (
             <button type="button" onClick={() => ir('mais')} aria-label="Voltar para Mais" className="w-11 h-11 flex items-center justify-center text-texto-2">
               <ChevronLeft size={22} />
@@ -100,7 +104,10 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
       <main
         ref={contentRef}
         className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 pt-4"
-        style={{ paddingBottom: 'calc(104px + env(safe-area-inset-bottom))' }}
+        style={{
+          paddingTop: temCabecalho ? undefined : 'calc(1rem + env(safe-area-inset-top))',
+          paddingBottom: `calc(${RESPIRO_RODAPE}px + env(safe-area-inset-bottom))`,
+        }}
       >
         <div
           aria-live="polite"
