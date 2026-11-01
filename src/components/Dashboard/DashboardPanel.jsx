@@ -1,4 +1,5 @@
 import { BannerPerfisSemContaCentral } from '../shared/ContaCentralAvisos'
+import PrimeirosPassos from '../BoasVindas/PrimeirosPassos'
 import AvisoPreLancamentos from '../Assistente/AvisoPreLancamentos'
 import { useMemo, useState } from 'react'
 import {
@@ -311,6 +312,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   return (
     <div className="space-y-4">
       <BannerPerfisSemContaCentral />
+      <PrimeirosPassos />
       <AvisoPreLancamentos />
       {/* Credit card alert banner */}
       {creditAlerts.length > 0 && (

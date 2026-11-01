@@ -12,6 +12,7 @@ import FaixaOffline from '../components/Offline/FaixaOffline'
 import AtualizadoHa from '../components/Offline/AtualizadoHa'
 import { useApp } from '../context/AppContext'
 import { usePuxarParaAtualizar, LIMIAR_PUXAR } from '../hooks/usePuxarParaAtualizar'
+import AjudaTela from '../components/BoasVindas/AjudaTela'
 
 
 // Layout mobile: conteúdo com scroll + barra inferior [aba aba (+) aba aba]. Tudo vem de
@@ -94,7 +95,9 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
               <ChevronLeft size={22} />
             </button>
           ) : <span className="w-2" />}
-          <h1 className="flex-1 text-base font-semibold text-texto-1 truncate">{modulo.label}</h1>
+          <h1 className="min-w-0 text-base font-semibold text-texto-1 truncate">{modulo.label}</h1>
+          {modulo.page && <AjudaTela pagina={modulo.page} />}
+          <span className="flex-1" />
           <button type="button" onClick={onOpenSearch} aria-label="Buscar" className="w-11 h-11 flex items-center justify-center text-texto-2">
             <Search size={20} />
           </button>

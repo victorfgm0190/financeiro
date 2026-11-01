@@ -1,4 +1,6 @@
 import { BannerPerfisSemContaCentral } from '../components/shared/ContaCentralAvisos'
+import PrimeirosPassos from '../components/BoasVindas/PrimeirosPassos'
+import AjudaTela from '../components/BoasVindas/AjudaTela'
 import AvisoPreLancamentos from '../components/Assistente/AvisoPreLancamentos'
 import { useMemo, useState } from 'react'
 import { format, addDays, parseISO } from 'date-fns'
@@ -62,11 +64,15 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpen
   return (
     <div className="space-y-4">
       <BannerPerfisSemContaCentral />
+      <PrimeirosPassos />
       <AvisoPreLancamentos onToast={onToast} />
       <header className="flex items-start justify-between gap-3 pt-1">
         <div>
           <p className="text-xs text-texto-3">{mes}</p>
-          <h1 className="text-xl font-bold text-texto-1">{nome ? `Olá, ${nome}` : 'Olá'}</h1>
+          <div className="flex items-center gap-1">
+            <h1 className="text-xl font-bold text-texto-1">{nome ? `Olá, ${nome}` : 'Olá'}</h1>
+            <AjudaTela pagina="dashboard" />
+          </div>
         </div>
         <button
           type="button"

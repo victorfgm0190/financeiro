@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { UserCircle2, KeyRound, ShieldAlert, LogOut, Smartphone, CalendarDays } from 'lucide-react'
+import { UserCircle2, KeyRound, ShieldAlert, LogOut, Smartphone, CalendarDays, Compass } from 'lucide-react'
+import { abrirTour } from '../../lib/boasVindasApi'
+import { LINK_REVER_TOUR } from '../../lib/ajudaTelas'
 import { getSessao } from '../../lib/api'
 import { useSair } from '../Offline/useSair'
 import AvisoSairModal from '../Offline/AvisoSairModal'
@@ -47,6 +49,9 @@ export default function SessaoUsuario({ comSair = false }) {
             <CalendarDays size={11} /> Agenda no celular
           </button>
         )}
+        <button type="button" onClick={abrirTour} className="flex items-center gap-1 text-[11px] text-texto-3 hover:text-texto-1 min-h-[28px]">
+          <Compass size={11} /> {LINK_REVER_TOUR}
+        </button>
         <a href="/instalar" className="flex items-center gap-1 text-[11px] text-texto-3 hover:text-texto-1 min-h-[28px]">
           <Smartphone size={11} /> Instalar no celular
         </a>

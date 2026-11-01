@@ -993,6 +993,17 @@ CREATE TABLE IF NOT EXISTS atalhos_usuario (
 );
 ALTER TABLE atalhos_usuario DISABLE ROW LEVEL SECURITY;
 
+-- BOAS-VINDAS por usuário: quando viu o tour (pulou ou concluiu) e quando ocultou o checklist
+-- "Primeiros passos". No banco (não no navegador) para não reaparecer em outro aparelho.
+-- user_id sem FK pelo mesmo motivo dos atalhos. Também criada pela API (api/boas-vindas.js).
+CREATE TABLE IF NOT EXISTS boas_vindas_usuario (
+  user_id TEXT PRIMARY KEY,
+  tour_visto_em TIMESTAMPTZ,
+  checklist_oculto_em TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE boas_vindas_usuario DISABLE ROW LEVEL SECURITY;
+
 -- ============================================================
 -- USUÁRIOS E NÍVEIS DE ACESSO
 -- Migrações: supabase/migrations/2026-10-14_usuarios.sql e 2026-10-17_niveis_acesso.sql.

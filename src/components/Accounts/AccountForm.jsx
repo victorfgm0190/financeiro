@@ -89,7 +89,8 @@ function LinhaToggle({ nome, ajuda, selo, checked, onChange, disabled = false })
   )
 }
 
-export default function AccountForm({ initial, onClose }) {
+// tipoInicial: tipo já marcado numa conta NOVA (ex.: 'credit' no "Cadastrar um cartão" dos Primeiros passos).
+export default function AccountForm({ initial, onClose, tipoInicial = null }) {
   const { accounts, accountGroups = [], activeAccountGroups = [], profiles = [], categories = [], addAccount, updateAccount, recalcularSaldo, pode, activeProfileId = null, setAvisoToast } = useApp()
   const [perfilRapido, setPerfilRapido] = useState(false)
   // Salvar: conta nova exige incluir; existente exige editar (src/lib/permissoes.js).
@@ -97,7 +98,7 @@ export default function AccountForm({ initial, onClose }) {
   const [form, setForm] = useState({
     name: initial?.name || '',
     apelido: initial?.apelido || '',
-    type: initial?.type || 'checking',
+    type: initial?.type || tipoInicial || 'checking',
     balance: initial?.balance ?? '',
     bank: initial?.bank || '',
     creditLimit: initial?.creditLimit ?? '',

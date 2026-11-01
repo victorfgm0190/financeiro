@@ -8,6 +8,7 @@ import { useSair } from '../Offline/useSair'
 import AvisoSairModal from '../Offline/AvisoSairModal'
 import BotaoRecarregar from '../Offline/BotaoRecarregar'
 import { cabecalhoDaPagina } from './cabecalhoPagina'
+import AjudaTela from '../BoasVindas/AjudaTela'
 
 const PAGE_TITLES = {
   dashboard: 'Painel Geral',
@@ -43,7 +44,10 @@ export default function Header({ page, financialPeriod, onOpenSearch, onOpenAssi
     <header className="border-b border-borda bg-page px-4 md:px-6 pb-2.5 header-safe-top flex items-center gap-3 sticky top-0 z-10">
       {/* Title + period */}
       <div className="min-w-0">
-        <h1 className="text-base font-semibold text-texto-1 leading-tight">{PAGE_TITLES[page] || page}</h1>
+        <div className="flex items-center gap-1">
+          <h1 className="text-base font-semibold text-texto-1 leading-tight">{PAGE_TITLES[page] || page}</h1>
+          <AjudaTela pagina={page} />
+        </div>
         {financialPeriod && comPeriodo && (
           <p className="text-xs text-texto-3 leading-tight">
             {format(financialPeriod.start, 'dd/MM/yyyy')} – {format(financialPeriod.end, 'dd/MM/yyyy')}
