@@ -2,7 +2,7 @@
 
 Gerado de `src/lib/tarefasGuiadas.js`. Para mudar um texto, edite aquele arquivo. Cada passo acende o botão/campo indicado e espera o que está entre parênteses; o guia nunca preenche nem salva nada.
 
-Total: 38 tarefas (22 no ar).
+Total: 41 tarefas (41 no ar).
 
 ## Configurações
 
@@ -33,7 +33,7 @@ Total: 38 tarefas (22 no ar).
 
 **No fim:** Pronto! Use o filtro do topo para ver só a empresa, ou "Tudo" para ver tudo junto.
 
-### Criar uma categoria _(entra na próxima fase)_
+### Criar uma categoria
 
 `settings.categoria` — Crie uma categoria nova para classificar receitas ou despesas do seu jeito.
 
@@ -46,7 +46,7 @@ Total: 38 tarefas (22 no ar).
 
 **No fim:** Pronto! A categoria já aparece para escolher nos lançamentos e agendamentos.
 
-### Criar um grupo de contas _(entra na próxima fase)_
+### Criar um grupo de contas
 
 `settings.grupo-contas` — Organize as suas contas em grupos, por exemplo por banco ou por tipo de bem.
 
@@ -57,7 +57,7 @@ Total: 38 tarefas (22 no ar).
 
 **No fim:** Pronto! Agora edite as suas contas na tela Contas e escolha este grupo para elas.
 
-### Ver as contas na agenda do celular _(entra na próxima fase)_
+### Ver as contas na agenda do celular
 
 `settings.agenda-celular` — Crie o seu link de agenda para ver os vencimentos no calendário do celular.
 
@@ -68,7 +68,7 @@ Total: 38 tarefas (22 no ar).
 
 **No fim:** Pronto! Agora use "Adicionar ao iPhone" ou "Adicionar ao Google Agenda" (de preferência abrindo esta tela no próprio celular) e confirme a assinatura.
 
-### Personalizar um atalho de teclado _(entra na próxima fase)_
+### Personalizar um atalho de teclado
 
 `settings.atalhos` — Troque a combinação de teclas de uma ação. Vale só no computador.
 
@@ -80,7 +80,7 @@ Total: 38 tarefas (22 no ar).
 
 **No fim:** Pronto! O atalho novo já vale e fica salvo para você.
 
-### Ajustar o mês financeiro _(entra na próxima fase)_
+### Ajustar o mês financeiro
 
 `settings.periodo` — Faça o mês do Finup começar no dia em que você recebe, para os totais fazerem sentido.
 
@@ -93,7 +93,7 @@ Total: 38 tarefas (22 no ar).
 
 ## Contratos
 
-### Cadastrar o primeiro contrato _(entra na próxima fase)_
+### Cadastrar o primeiro contrato
 
 `contratos.primeiro-contrato` — Cadastre um aluguel ou serviço e deixe o Finup gerar as parcelas sozinho.
 
@@ -111,7 +111,7 @@ Total: 38 tarefas (22 no ar).
 
 ## Relatórios
 
-### Abrir um relatório e exportar para Excel _(entra na próxima fase)_
+### Abrir um relatório e exportar para Excel
 
 `reports.exportar` — Monte o Demonstrativo Financeiro do período e baixe a planilha.
 
@@ -194,7 +194,7 @@ Total: 38 tarefas (22 no ar).
 
 **No fim:** Pronto! O cartão aparece na tela Cartão de Crédito, com as faturas mês a mês.
 
-### Cadastrar o primeiro bem _(entra na próxima fase)_
+### Cadastrar o primeiro bem
 
 `accounts.primeiro-bem` — Registre um imóvel, veículo ou outro bem para ele entrar no seu Patrimônio.
 
@@ -339,7 +339,7 @@ Total: 38 tarefas (22 no ar).
 
 ## Fluxo de Caixa
 
-### Ler o fluxo de caixa futuro _(entra na próxima fase)_
+### Ler o fluxo de caixa futuro
 
 `cashflow.ler-fluxo` — Entenda como o seu saldo vai ficar nos próximos dias e se vai faltar dinheiro.
 
@@ -351,7 +351,7 @@ Total: 38 tarefas (22 no ar).
 
 **No fim:** Pronto! Volte aqui sempre que for decidir um gasto grande: o Mínimo mostra se há folga.
 
-### Filtrar e simular movimentações _(entra na próxima fase)_
+### Filtrar e simular movimentações
 
 `cashflow.filtrar-movimentacoes` — Esconda reservas, inclua envelopes e tire eventos da conta para simular, sem mudar nada de verdade.
 
@@ -452,7 +452,7 @@ Total: 38 tarefas (22 no ar).
 
 ## Importar Fatura
 
-### Importar uma fatura do cartão _(entra na próxima fase)_
+### Importar uma fatura do cartão
 
 `import.fatura` — Traga o arquivo da fatura do banco, revise e grave só o que falta.
 
@@ -466,7 +466,7 @@ Total: 38 tarefas (22 no ar).
 
 **No fim:** Pronto! As compras novas estão na fatura e a importação aparece no Histórico de Importações.
 
-### Conciliar uma fatura já lançada _(entra na próxima fase)_
+### Conciliar uma fatura já lançada
 
 `import.conciliar` — Compare o arquivo do banco com a fatura que você já lançou e zere a diferença.
 
@@ -482,7 +482,7 @@ Total: 38 tarefas (22 no ar).
 
 ## Importar lançamentos
 
-### Importar um extrato ou planilha _(entra na próxima fase)_
+### Importar um extrato ou planilha
 
 `importar-lancamentos.arquivo` — Traga os lançamentos de uma conta a partir de um arquivo, revise e grave.
 
@@ -497,7 +497,7 @@ Total: 38 tarefas (22 no ar).
 
 ## Reservas
 
-### Criar o primeiro objetivo de reserva _(entra na próxima fase)_
+### Criar o primeiro objetivo de reserva
 
 `reservas.primeira-funcao` — Crie uma função de reserva para guardar dinheiro para um gasto futuro, como IPVA ou férias.
 
@@ -514,7 +514,7 @@ Total: 38 tarefas (22 no ar).
 
 ## Orçamento
 
-### Criar o primeiro orçamento _(entra na próxima fase)_
+### Criar o primeiro orçamento
 
 `budget.primeiro` — Defina quanto quer gastar por mês numa categoria e acompanhe.
 
@@ -527,7 +527,7 @@ Total: 38 tarefas (22 no ar).
 
 ## Envelopes
 
-### Criar o primeiro envelope _(entra na próxima fase)_
+### Criar o primeiro envelope
 
 `envelopes.primeiro` — Separe um limite de gasto mensal para um assunto, como mercado ou lazer.
 
@@ -540,3 +540,36 @@ Total: 38 tarefas (22 no ar).
 7. Clique em Salvar. _(espera salvar)_
 
 **No fim:** Pronto! Todo gasto nessas categorias passa a encher a barra do envelope.
+
+## Assistente
+
+### Lançar escrevendo uma frase
+
+`assistente.frase` — Conte o que aconteceu com as suas palavras e o Assistente prepara o lançamento.
+
+1. Toque em "✨ Assistente", no alto da tela. _(espera o clique)_
+2. Escreva o que aconteceu. Exemplo: "gastei 50 no mercado no cartão". _(espera preencher)_
+3. Toque em Enviar. _(espera o clique)_
+
+**No fim:** Pronto! Confira a prévia, mude o que quiser e salve. Nada é gravado sem a sua confirmação.
+
+### Lançar por foto, print ou PDF
+
+`assistente.foto-pdf` — Mande a foto de um cupom, o print de um comprovante ou o PDF de um boleto ou fatura.
+
+1. Toque em "✨ Assistente", no alto da tela. _(espera o clique)_
+2. Toque em Anexar e escolha a foto, o print ou o PDF (boleto, fatura, nota, comprovante). _(espera o clique)_
+3. Se quiser, escreva algo junto (ex.: "foi no cartão") e toque em Enviar. _(espera o clique)_
+
+**No fim:** Pronto! O Assistente leu o documento: confira a prévia e salve. Fatura ou extrato com vários lançamentos vira uma lista para confirmar um por um.
+
+### Lançar falando
+
+`assistente.audio` — Fale o que aconteceu em vez de digitar.
+
+1. Toque em "✨ Assistente", no alto da tela. _(espera o clique)_
+2. Toque no microfone e fale depois do bipe. Exemplo: "recebi 200 de aluguel". _(espera o clique)_
+3. O que você falou aparece aqui. Ele para sozinho quando você fica em silêncio. _(só explica)_
+4. Confira o texto e toque em Enviar. _(espera o clique)_
+
+**No fim:** Pronto! Confira a prévia e salve. Se o seu navegador não reconhecer voz, use o microfone do teclado ou digite.

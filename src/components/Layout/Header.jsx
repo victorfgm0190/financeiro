@@ -104,6 +104,7 @@ export default function Header({ page, financialPeriod, onOpenSearch, onOpenAssi
             onClick={onOpenAssistente}
             title="Assistente: lance ou consulte por texto, voz ou foto"
             aria-label="Assistente"
+            data-guia="header.assistente"
             className="hidden md:inline-flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-texto-2 hover:text-texto-1 hover:bg-surface-hover transition-colors"
           >
             <Sparkles size={16} className="text-primary-fg" /> Assistente

@@ -277,7 +277,7 @@ export default function ImportPreviewModal({
           </div>
         ))}
 
-        <div className="flex flex-wrap items-center gap-3 justify-end pt-2">
+        <div className="flex flex-wrap items-center gap-3 justify-end pt-2" data-guia="importacao-previa.acoes">
           {pendencias.length > 0 ? (
             <>
               <span className="text-xs text-perigo mr-auto">{pendencias.length} {pendencias.length === 1 ? 'pendência' : 'pendências'}</span>

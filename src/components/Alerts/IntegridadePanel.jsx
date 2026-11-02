@@ -263,7 +263,7 @@ export default function IntegridadePanel({ setActivePage }) {
                   </details>
                   <div className="flex flex-wrap gap-2 pt-1">
                     {podeAjustar(p) && podeEditarAl && (
-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-primary text-white hover:bg-primary-hover"
+                      <button data-guia="alerts:integridade.corrigir" className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-primary text-white hover:bg-primary-hover"
                         onClick={() => setAjustar({ pendencias: [p] })}>
                         <Wrench size={12} /> Corrigir
                       </button>
@@ -276,25 +276,25 @@ export default function IntegridadePanel({ setActivePage }) {
                       </button>
                     )}
                     {lancId && (
-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
+                      <button data-guia="alerts:integridade.abrir-lancamento" className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
                         onClick={() => setEditTx(txById.get(lancId))}>
                         <FileText size={12} /> Abrir lançamento
                       </button>
                     )}
                     {p.conta_id && accById.get(p.conta_id)?.type === 'credit' && (
-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
+                      <button data-guia="alerts:integridade.abrir-lancamento" className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
                         onClick={() => irParaFatura(p)}>
                         <ExternalLink size={12} /> Ir para a fatura
                       </button>
                     )}
                     {p.status === 'pendente' && podeEditarAl && (
-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
+                      <button data-guia="alerts:integridade.ignorar" className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
                         onClick={() => mudarStatus(p, 'ignorar')}>
                         <EyeOff size={12} /> Ignorar
                       </button>
                     )}
                     {p.status === 'ignorada' && podeEditarAl && (
-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
+                      <button data-guia="alerts:integridade.ignorar" className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
                         onClick={() => mudarStatus(p, 'reabrir')}>
                         <RotateCcw size={12} /> Reabrir
                       </button>

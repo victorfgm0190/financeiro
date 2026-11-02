@@ -62,9 +62,9 @@ const texto = () => screen.getByTestId('texto-tarefa').textContent
 const conta = tarefaPorId('schedule.conta-pagar')
 
 describe('conteúdo', () => {
-  it('38 tarefas guardadas; as desta fase no ar; todo alvo é um data-guia', () => {
-    expect(TODAS_AS_TAREFAS).toHaveLength(38)
-    expect(TAREFAS.length).toBeGreaterThan(20)
+  it('41 tarefas, todas no ar (38 do levantamento + 3 do Assistente)', () => {
+    expect(TODAS_AS_TAREFAS).toHaveLength(41)
+    expect(TAREFAS).toHaveLength(41)
     for (const t of TAREFAS) {
       expect(t.passos.length, t.id).toBeGreaterThanOrEqual(3)
       for (const p of t.passos) expect(['clique', 'preencher', 'salvar', 'nenhuma'], t.id).toContain(p.espera)
@@ -82,6 +82,19 @@ describe('conteúdo', () => {
     const ctx = montarContextoAjuda({ podeVer: () => true, pode: () => true, settings: {} })
     expect(tarefaDisponivel(tarefaPorId('schedule.provisao'), ctx, { celular: true })).toBe(false)
     expect(tarefaDisponivel(tarefaPorId('schedule.provisao'), ctx, { celular: false })).toBe(true)
+  })
+  it('Assistente: só com IA; não troca de tela; no celular abre pelo "+"; listadas no "?" do Assistente', () => {
+    const com = montarContextoAjuda({ podeVer: () => true, pode: () => true, settings: {} })
+    const sem = montarContextoAjuda({ podeVer: () => true, pode: (m) => m !== 'lancamentos', settings: {} })
+    expect(tarefasDaTela('assistente', com).map(t => t.id)).toEqual(['assistente.frase', 'assistente.foto-pdf', 'assistente.audio'])
+    expect(tarefasDaTela('assistente', sem)).toEqual([])
+    expect(tarefaPorId('assistente.frase').navegar).toBe(false)
+    expect(passosDaTarefa(tarefaPorId('assistente.frase'), { celular: true }).slice(0, 2).map(x => x.alvo)).toEqual(['mobile.novo', 'mobile.acao-assistente'])
+  })
+  it('tarefas que começam em Contas aparecem também no "?" do Cartão e do Patrimônio', () => {
+    const ctx = montarContextoAjuda({ podeVer: () => true, pode: () => true, settings: {} })
+    expect(tarefasDaTela('credit', ctx).map(t => t.id)).toContain('accounts.cadastrar-cartao')
+    expect(tarefasDaTela('patrimonio', ctx).map(t => t.id)).toContain('accounts.primeiro-bem')
   })
   it('item novo = não estava no começo e passa no filtro', () => {
     expect(itemNovo([{ id: 'a' }, { id: 'b', transactionType: 'income' }], new Set(['a']), (s) => s.transactionType === 'expense')).toBeNull()
@@ -143,6 +156,16 @@ describe('tarefa na tela', () => {
     for (let k = 0; k < conta.passos.length; k++) fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
     expect(addSchedule).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Descrição').value).toBe('')
+  })
+})
+
+describe('Assistente já aberto', () => {
+  it('"abra o Assistente" é pulado quando ele já está na tela; nada navega', async () => {
+    render(<><textarea data-guia="assistente.texto" ref={visivel} aria-label="Pedido" /><GuiaInterativo /></>)
+    navegarPara.mockClear()
+    act(() => iniciarTarefa('assistente.frase'))
+    await waitFor(() => expect(texto()).toBe(tarefaPorId('assistente.frase').passos[1].texto))
+    expect(navegarPara).not.toHaveBeenCalled()
   })
 })
 

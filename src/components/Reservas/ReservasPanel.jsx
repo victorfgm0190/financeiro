@@ -230,23 +230,23 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
       categoryId: form.categoryId || null,
       exibirComoDespesa: !!form.exibirComoDespesa,
     }) }} className="space-y-4">
-      <div>
+      <div data-guia="reserva-form.nome">
         <label className="label">Nome da Função *</label>
         <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Digite o nome da função" />
       </div>
-      <div>
+      <div data-guia="reserva-form.conta">
         <label className="label">Conta Vinculada</label>
         <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)}>
           <option value="">— Sem conta —</option>
           {accountsForView(accounts.filter(a => a.active !== false), isMobile).map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
         </select>
       </div>
-      <div>
+      <div data-guia="reserva-form.saldo-inicial">
         <label className="label">Saldo Inicial (R$)</label>
         <InputMoeda negativo className="input" value={form.saldoInicial} onChange={e => set('saldoInicial', e.target.value)} placeholder="0,00 (aceita negativo)" />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <div>
+        <div data-guia="reserva-form.despesa-anual">
           <label className="label">Despesa Anual (R$)</label>
           <InputMoeda negativo className="input" value={form.despesaAnual} onChange={e => set('despesaAnual', e.target.value)} placeholder="0,00" />
           {suggestions && (suggestions.enough
@@ -256,7 +256,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
             : <p className="text-xs text-texto-3 mt-1">Dados insuficientes para calcular</p>
           )}
         </div>
-        <div>
+        <div data-guia="reserva-form.deposito-mensal">
           <label className="label">Depósito Mensal (R$)</label>
           <InputMoeda negativo className="input" value={form.depositoMensal} onChange={e => set('depositoMensal', e.target.value)} placeholder="0,00" />
           {suggestions && (suggestions.enough
@@ -267,7 +267,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
           )}
         </div>
       </div>
-      <div>
+      <div data-guia="reserva-form.mes-vencimento">
         <label className="label">Mês de Vencimento da Despesa</label>
         <select className="input" value={form.mesVencimento} onChange={e => set('mesVencimento', e.target.value)}>
           <option value="">Rateio mensal (÷ 12)</option>
@@ -280,7 +280,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
           </p>
         )}
       </div>
-      <div>
+      <div data-guia="reserva-form.categoria">
         <label className="label">Categoria da Despesa</label>
         <select className="input" value={form.categoryId} onChange={e => set('categoryId', e.target.value)}>
           <option value="">Sem categoria vinculada</option>
@@ -305,7 +305,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
       </div>
       <div className="flex gap-3 pt-2">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        {podeSalvar && <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar'}</button>}
+        {podeSalvar && <button type="submit" data-guia="reserva-form.salvar" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar'}</button>}
       </div>
       {!podeSalvar && <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
     </form>
@@ -2395,6 +2395,7 @@ export default function ReservasPanel() {
         ].map(t => (
           <button
             key={t.id}
+            data-guia={t.id === 'resumo' ? 'reservas.aba-resumo' : undefined}
             onClick={() => setTab(t.id)}
             className={`px-3 sm:px-4 pb-3 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
               tab === t.id

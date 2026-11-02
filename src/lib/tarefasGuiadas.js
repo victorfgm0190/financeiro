@@ -2,11 +2,13 @@
 // pisca na ordem e o guia espera o clique, o preenchimento ou o salvar. O guia NUNCA preenche nem salva
 // nada pela pessoa. Motor: src/components/BoasVindas/GuiaInterativo.jsx (o mesmo do tour da tela).
 //
-// Formato: { id, tela (página onde começa), hash? (seção de Configurações), titulo, descricao,
+// Formato: { id, tela (página onde começa), hash? (seção de Configurações), navegar? (false: não troca de
+//   tela, ex.: Assistente, que abre por cima), telasExtras? (aparece também no "?" destas), titulo, descricao,
 //   requer: condições (TODAS) no formato de `modulo` de AJUDA_TELAS ('gerencial' | 'ia' | 'contratos' |
 //   'pode:<modulo>:<acao>' | 'pagina:<id>'), passos: [{ alvo: <data-guia>, espera, texto }],
 //   novoItem: { colecao (do useApp), filtro? } — o que conta como "salvou" (espera 'salvar'), final }.
 // espera: 'clique' (no alvo) | 'preencher' (o campo muda) | 'salvar' (aparece o novoItem) | 'nenhuma'.
+// pularSe (passo): se este data-guia já está na tela, o passo é pulado (ex.: "abra o Assistente").
 // Textos para revisão: docs/tarefas-guiadas-revisao.md. Nada específico de um cliente.
 import { itemVisivel } from './ajudaTelas.js'
 
@@ -217,7 +219,7 @@ export const TODAS_AS_TAREFAS = [
     final: 'Pronto! A conta agora aparece no filtro do perfil e entra nos totais dele.',
   },
   {
-    id: 'accounts.cadastrar-cartao', tela: 'accounts',
+    id: 'accounts.cadastrar-cartao', tela: 'accounts', telasExtras: ['credit'],
     titulo: 'Cadastrar um cartão de crédito',
     descricao: 'Cadastre o cartão com limite e os dias de fechamento e vencimento, para cada compra cair na fatura certa.',
     requer: ['pode:contas:incluir', 'pagina:credit'],
@@ -251,7 +253,7 @@ export const TODAS_AS_TAREFAS = [
     final: 'Pronto! Use as setas sempre que quiser ver parcelas de faturas futuras ou conferir faturas passadas.',
   },
   {
-    id: 'accounts.primeiro-bem', tela: 'accounts',
+    id: 'accounts.primeiro-bem', tela: 'accounts', telasExtras: ['patrimonio'],
     titulo: 'Cadastrar o primeiro bem',
     descricao: 'Registre um imóvel, veículo ou outro bem para ele entrar no seu Patrimônio.',
     requer: ['pode:contas:incluir', 'pagina:patrimonio'],
@@ -636,25 +638,57 @@ export const TODAS_AS_TAREFAS = [
     novoItem: { colecao: 'envelopes' },
     final: 'Pronto! Todo gasto nessas categorias passa a encher a barra do envelope.',
   },
+  {
+    id: 'assistente.frase', tela: 'assistente', navegar: false,
+    titulo: 'Lançar escrevendo uma frase',
+    descricao: 'Conte o que aconteceu com as suas palavras e o Assistente prepara o lançamento.',
+    requer: ['ia'],
+    passos: [
+      { alvo: 'header.assistente', espera: 'clique', pularSe: 'assistente.texto', texto: 'Toque em "✨ Assistente", no alto da tela.' },
+      { alvo: 'assistente.texto', espera: 'preencher', texto: 'Escreva o que aconteceu. Exemplo: "gastei 50 no mercado no cartão".' },
+      { alvo: 'assistente.enviar', espera: 'clique', texto: 'Toque em Enviar.' },
+    ],
+    novoItem: null,
+    final: 'Pronto! Confira a prévia, mude o que quiser e salve. Nada é gravado sem a sua confirmação.',
+  },
+  {
+    id: 'assistente.foto-pdf', tela: 'assistente', navegar: false,
+    titulo: 'Lançar por foto, print ou PDF',
+    descricao: 'Mande a foto de um cupom, o print de um comprovante ou o PDF de um boleto ou fatura.',
+    requer: ['ia'],
+    passos: [
+      { alvo: 'header.assistente', espera: 'clique', pularSe: 'assistente.texto', texto: 'Toque em "✨ Assistente", no alto da tela.' },
+      { alvo: 'assistente.anexar', espera: 'clique', texto: 'Toque em Anexar e escolha a foto, o print ou o PDF (boleto, fatura, nota, comprovante).' },
+      { alvo: 'assistente.enviar', espera: 'clique', texto: 'Se quiser, escreva algo junto (ex.: "foi no cartão") e toque em Enviar.' },
+    ],
+    novoItem: null,
+    final: 'Pronto! O Assistente leu o documento: confira a prévia e salve. Fatura ou extrato com vários lançamentos vira uma lista para confirmar um por um.',
+  },
+  {
+    id: 'assistente.audio', tela: 'assistente', navegar: false,
+    titulo: 'Lançar falando',
+    descricao: 'Fale o que aconteceu em vez de digitar.',
+    requer: ['ia'],
+    passos: [
+      { alvo: 'header.assistente', espera: 'clique', pularSe: 'assistente.texto', texto: 'Toque em "✨ Assistente", no alto da tela.' },
+      { alvo: 'assistente.microfone', espera: 'clique', texto: 'Toque no microfone e fale depois do bipe. Exemplo: "recebi 200 de aluguel".' },
+      { alvo: 'assistente.texto', espera: 'nenhuma', texto: 'O que você falou aparece aqui. Ele para sozinho quando você fica em silêncio.' },
+      { alvo: 'assistente.enviar', espera: 'clique', texto: 'Confira o texto e toque em Enviar.' },
+    ],
+    novoItem: null,
+    final: 'Pronto! Confira a prévia e salve. Se o seu navegador não reconhecer voz, use o microfone do teclado ou digite.',
+  },
 ]
 
-// Tarefas no ar (as demais entram na fase seguinte).
-const LIBERADAS = new Set([
-  'settings.perfil-cpf', 'settings.perfil-cnpj',
-  'accounts.conta-corrente', 'accounts.conta-reserva', 'accounts.favorita', 'accounts.sem-vinculo', 'accounts.cadastrar-cartao',
-  'credit.navegar-faturas',
-  'schedule.conta-pagar', 'schedule.conta-receber', 'schedule.recorrente-mensal', 'schedule.parcelada', 'schedule.transferencia',
-  'schedule.provisao', 'schedule.pagar-ocorrencia', 'schedule.filtro-tipo',
-  'transactions.despesa', 'transactions.receita', 'transactions.transferencia', 'transactions.rateio', 'transactions.parcelada-cartao',
-  'transactions.conferir-fatura',
-])
-export const TAREFAS = TODAS_AS_TAREFAS.filter(t => LIBERADAS.has(t.id))
+// Todas no ar.
+export const TAREFAS = TODAS_AS_TAREFAS
 
 // No celular estes passos não existem (botão só no computador): o motor troca pelo "+" da barra de
 // baixo e a ação do menu dele. Tarefa que começa num passo sem caminho no celular fica só no computador.
 export const INICIO_NO_CELULAR = {
   'schedule.novo': { acao: 'agendamento', texto: 'No celular, toque no "+" da barra de baixo e escolha "Agendamento".' },
   'transactions.novo': { acao: 'lancamento', texto: 'No celular, toque no "+" da barra de baixo e escolha "Lançamento".' },
+  'header.assistente': { acao: 'assistente', texto: 'No celular, toque no "+" da barra de baixo e escolha "Assistente".' },
 }
 const SO_COMPUTADOR = new Set(['schedule.lancar-provisao', 'transactions.novo-cartao', 'settings:atalhos.gravar'])
 
@@ -670,7 +704,7 @@ export function tarefaDisponivel(t, ctx, { celular = false } = {}) {
 // Tarefas de uma tela (para o "?" › Faça comigo e o fim do tour). Subtela → as da página também.
 export function tarefasDaTela(tela, ctx, opcoes) {
   const pagina = String(tela || '').split(':')[0]
-  return TAREFAS.filter(t => (t.tela === tela || t.tela === pagina || (t.hash && tela === `settings:${t.hash.split('/').pop()}`)) && tarefaDisponivel(t, ctx, opcoes))
+  return TAREFAS.filter(t => (t.tela === tela || t.tela === pagina || (t.telasExtras || []).includes(tela) || (t.hash && tela === `settings:${t.hash.split('/').pop()}`)) && tarefaDisponivel(t, ctx, opcoes))
 }
 
 // Primeiros passos: "Fazer agora" de cada etapa inicia esta tarefa (se estiver no ar e disponível).

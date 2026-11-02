@@ -42,7 +42,7 @@ export default function TarefaGuiada({ tarefaId }) {
   const passo = passos[i]
 
   // Começa na tela da tarefa (e na seção certa de Configurações).
-  useEffect(() => { if (t) navegarPara(t.tela, t.hash ? { hash: t.hash } : undefined) }, [t])
+  useEffect(() => { if (t && t.navegar !== false) navegarPara(t.tela, t.hash ? { hash: t.hash } : undefined) }, [t])
 
   // Salvou (em qualquer passo, mesmo antes da hora): a tarefa está pronta.
   const salvou = !!(colecao && itemNovo(lista, idsAntes, t?.novoItem?.filtro))
@@ -61,6 +61,8 @@ export default function TarefaGuiada({ tarefaId }) {
     const inicio = Date.now()
     const procurar = () => {
       if (!vivo) return
+      // Passo desnecessário agora (ex.: "abra o Assistente" com ele já aberto): segue.
+      if (passo.pularSe && elementoPorGuia(passo.pularSe)) { setI(v => Math.min(v + 1, passos.length - 1)); return }
       const e = elementoPorGuia(passo.alvo)
       if (e) { setEl(e); setNaoAchou(false); e.scrollIntoView?.({ block: 'center', inline: 'nearest' }); return }
       setEl(null)
@@ -69,7 +71,7 @@ export default function TarefaGuiada({ tarefaId }) {
     }
     let timer = setTimeout(procurar, 0)
     return () => { vivo = false; clearTimeout(timer) }
-  }, [passo, terminou])
+  }, [passo, terminou, passos.length])
 
   // Posição do elemento (acompanha rolagem, modal se mexendo).
   useEffect(() => {

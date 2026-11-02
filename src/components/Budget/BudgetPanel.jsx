@@ -165,7 +165,7 @@ export default function BudgetPanel() {
 
       <Modal open={showForm} onClose={() => { setShowForm(false); setEditBudget(null) }} title={editBudget ? 'Editar Orçamento' : 'Novo Orçamento'} size="sm">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
+          <div data-guia="orcamento-form.categoria">
             <label className="label">Categoria *</label>
             <CategorySelect
               categories={availableCategories}
@@ -176,13 +176,13 @@ export default function BudgetPanel() {
               required
             />
           </div>
-          <div>
+          <div data-guia="orcamento-form.valor">
             <label className="label">Valor Orçado (R$) *</label>
             <InputMoeda min="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required />
           </div>
           <div className="flex gap-3 pt-1">
             <button type="button" className="btn-secondary flex-1" onClick={() => { setShowForm(false); setEditBudget(null) }}>Cancelar</button>
-            <button type="submit" className="btn-primary flex-1">{editBudget ? 'Salvar' : 'Criar'}</button>
+            <button type="submit" data-guia="orcamento-form.salvar" className="btn-primary flex-1">{editBudget ? 'Salvar' : 'Criar'}</button>
           </div>
         </form>
       </Modal>

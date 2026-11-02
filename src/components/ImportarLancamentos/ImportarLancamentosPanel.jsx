@@ -83,7 +83,7 @@ export function ListaLotes({ lotes, erroLotes, nomeConta, podeExcluir, ocupado, 
                 ? <span className="px-1.5 py-0.5 rounded bg-aviso/15 text-aviso">Importação incompleta ({l.gravados} de {l.qtd})</span>
                 : <span className="px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">Em andamento</span>)}
               {l.status !== 'desfeita' && podeExcluir && (
-                <button className="ml-auto btn-secondary !py-1 text-xs inline-flex items-center gap-1" disabled={ocupado} onClick={() => onDesfazer(l)}>
+                <button data-guia={l === lotes.find(x => x.status !== 'desfeita') ? 'importar-lancamentos.desfazer' : undefined} className="ml-auto btn-secondary !py-1 text-xs inline-flex items-center gap-1" disabled={ocupado} onClick={() => onDesfazer(l)}>
                   <Undo2 size={12} /> Desfazer importação
                 </button>
               )}

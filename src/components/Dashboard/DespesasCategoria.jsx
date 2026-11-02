@@ -65,6 +65,7 @@ function BotaoTodas({ total, todas, onAlternar, grande }) {
   return (
     <button
       type="button"
+      data-guia="despesas.ver-todas"
       onClick={onAlternar}
       aria-expanded={todas}
       className={`w-full mt-2 text-xs text-primary-fg hover:text-texto-1 rounded-lg ${grande ? 'min-h-[44px]' : 'py-1.5'}`}

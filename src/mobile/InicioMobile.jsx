@@ -107,7 +107,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpen
           <section key={modulo.id} className="card p-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-texto-1">{modulo.cardTitle || modulo.label}</h2>
-              <button type="button" onClick={() => irPara(modulo.id)} className="flex items-center gap-0.5 text-xs text-primary-fg min-h-[44px] -my-3 px-1">
+              <button type="button" data-guia="inicio.ver-tudo" onClick={() => irPara(modulo.id)} className="flex items-center gap-0.5 text-xs text-primary-fg min-h-[44px] -my-3 px-1">
                 Ver tudo <ChevronRight size={14} />
               </button>
             </div>

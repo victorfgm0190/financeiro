@@ -73,13 +73,13 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
 
   return (
     <div className="space-y-4">
-      <div>
+      <div data-guia="envelope-form.nome">
         <label className="label">Nome do Envelope</label>
         <input className="input" placeholder="Digite o nome do envelope" value={name} onChange={e => setName(e.target.value)} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
+        <div data-guia="envelope-form.limite">
           <label className="label">Limite Mensal (R$)</label>
           <InputMoeda
             min="0"
@@ -87,7 +87,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
             onChange={e => setLimitAmount(e.target.value)}
           />
         </div>
-        <div>
+        <div data-guia="envelope-form.dia">
           <label className="label">Dia de Vencimento (1–28)</label>
           <input
             className="input" type="number" min="1" max="28"
@@ -96,7 +96,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
         </div>
       </div>
 
-      <div>
+      <div data-guia="envelope-form.conta">
         <label className="label">Conta Vinculada</label>
         <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}>
           <AccountOptions
@@ -108,7 +108,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
         </select>
       </div>
 
-      <div>
+      <div data-guia="envelope-form.categorias">
         <label className="label">Categorias Vinculadas ({categoryIds.length} selecionada{categoryIds.length !== 1 ? 's' : ''})</label>
         <div className="max-h-52 overflow-y-auto border border-borda-forte rounded-lg divide-y divide-borda/50">
           {grouped.map(([group, cats]) => (
@@ -133,7 +133,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
       <div className="flex gap-2 justify-end pt-1">
         <button className="btn-ghost" onClick={onCancel}>Cancelar</button>
         {podeSalvar && (
-        <button className="btn-primary" onClick={() => onSave({ name: name.trim(), limitAmount: Number(limitAmount), dueDay: Number(dueDay), categoryIds, accountId: accountId || null })} disabled={!valid}>
+        <button className="btn-primary" data-guia="envelope-form.salvar" onClick={() => onSave({ name: name.trim(), limitAmount: Number(limitAmount), dueDay: Number(dueDay), categoryIds, accountId: accountId || null })} disabled={!valid}>
           Salvar
         </button>
         )}

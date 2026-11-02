@@ -178,7 +178,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   const proxReaj = proximoReajuste(dados, hoje)
   return (
     <div className="space-y-4">
-      <ol className="flex flex-wrap gap-1.5 text-[11px]">
+      <ol data-guia="contrato-form.etapas" className="flex flex-wrap gap-1.5 text-[11px]">
         {ETAPAS.map((e, i) => (
           <li key={e}>
             <button type="button" onClick={() => (i < etapa ? setEtapa(i) : null)}
@@ -192,7 +192,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       {etapa === 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Campo label="Tipo">
-            <select className="input" value={f.tipo} disabled={edicao} onChange={e => {
+            <select data-guia="contrato-form.tipo" className="input" value={f.tipo} disabled={edicao} onChange={e => {
               const t = e.target.value
               const sug = sugerirCategoria(categories, t === 'receber' ? 'income' : 'expense')
               setErro('')
@@ -203,12 +203,12 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </select>
           </Campo>
           <Campo label="Modalidade">
-            <select className="input" value={f.modalidade} onChange={e => set('modalidade', e.target.value)}>
+            <select data-guia="contrato-form.modalidade" className="input" value={f.modalidade} onChange={e => set('modalidade', e.target.value)}>
               <option value="aluguel">Aluguel</option><option value="servico">Serviço</option><option value="outro">Outro</option>
             </select>
           </Campo>
           <Campo label="Perfil">
-            <select className="input" value={f.perfil_id} onChange={e => set('perfil_id', e.target.value)}>
+            <select data-guia="contrato-form.perfil" className="input" value={f.perfil_id} onChange={e => set('perfil_id', e.target.value)}>
               <option value="">Escolha…</option>
               {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -217,13 +217,13 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             <input autoComplete="off" className="input" value={f.numero} onChange={e => set('numero', e.target.value)} maxLength={60} />
           </Campo>
           <Campo label="Objeto (ex.: Apto 302 — Ed. Sol)" className="sm:col-span-2">
-            <input autoComplete="off" className="input" value={f.objeto} onChange={e => set('objeto', e.target.value)} maxLength={200} />
+            <input data-guia="contrato-form.objeto" autoComplete="off" className="input" value={f.objeto} onChange={e => set('objeto', e.target.value)} maxLength={200} />
           </Campo>
           <Campo label={f.tipo === 'receber' ? 'Inquilino (favorecido)' : 'Favorecido do aluguel (imobiliária / proprietário)'} className="sm:col-span-2">
             <FavorecidoAutocomplete value={f.favorecido} onChange={v => set('favorecido', v)} suggestions={payees || []} />
           </Campo>
           <Campo label="Início da vigência">
-            <input autoComplete="off" type="date" className="input" value={f.data_inicio} onChange={e => set('data_inicio', e.target.value)} />
+            <input data-guia="contrato-form.inicio" autoComplete="off" type="date" className="input" value={f.data_inicio} onChange={e => set('data_inicio', e.target.value)} />
           </Campo>
           <Campo label="Fim da vigência">
             <input autoComplete="off" type="date" className="input" value={f.sem_fim ? '' : f.data_fim} disabled={f.sem_fim} onChange={e => set('data_fim', e.target.value)} />
@@ -253,7 +253,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       {etapa === 1 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Campo label="Conta de pagamento">
-            <select className="input" value={f.conta_id} onChange={e => set('conta_id', e.target.value)}>
+            <select data-guia="contrato-form.conta" className="input" value={f.conta_id} onChange={e => set('conta_id', e.target.value)}>
               <option value="">Escolha…</option>
               {contas.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
             </select>
@@ -263,7 +263,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             <CategorySelect categories={categories} value={f.categoria_id} onChange={e => set('categoria_id', e.target.value)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
           </Campo>
           <Campo label="Valor do aluguel (contratual)">
-            <CampoValor value={f.valor_base} onChange={v => set('valor_base', v)} placeholder="0,00" />
+            <CampoValor data-guia="contrato-form.valor" value={f.valor_base} onChange={v => set('valor_base', v)} placeholder="0,00" />
           </Campo>
           <Campo label="Periodicidade">
             <select className="input" value={f.periodicidade} onChange={e => set('periodicidade', e.target.value)}>
@@ -272,7 +272,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </select>
           </Campo>
           <Campo label="Dia de vencimento">
-            <input autoComplete="off" type="number" min="1" max="31" className="input" value={f.dia_vencimento} onChange={e => set('dia_vencimento', e.target.value)} />
+            <input autoComplete="off" type="number" min="1" max="31" data-guia="contrato-form.dia-vencimento" className="input" value={f.dia_vencimento} onChange={e => set('dia_vencimento', e.target.value)} />
           </Campo>
           <Campo label="Tipo de documento">
             <select className="input" value={f.tipo_documento_id} onChange={e => set('tipo_documento_id', e.target.value)}>
@@ -304,7 +304,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       {etapa === 2 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Campo label="Índice de reajuste">
-            <select className="input" value={f.indice_reajuste} onChange={e => set('indice_reajuste', e.target.value)}>
+            <select data-guia="contrato-form.reajuste" className="input" value={f.indice_reajuste} onChange={e => set('indice_reajuste', e.target.value)}>
               <option value="IPCA">IPCA</option><option value="IGPM">IGP-M</option>
               <option value="FIXO">Percentual fixo</option><option value="NENHUM">Sem reajuste</option>
             </select>
@@ -437,9 +437,9 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           <ChevronLeft size={14} /> {etapa === 0 ? 'Cancelar' : 'Voltar'}
         </button>
         {etapa < ETAPAS.length - 1 ? (
-          <button type="button" className="btn-primary flex items-center gap-1" onClick={avancar}>Avançar <ChevronRight size={14} /></button>
+          <button type="button" data-guia="contrato-form.avancar" className="btn-primary flex items-center gap-1" onClick={avancar}>Avançar <ChevronRight size={14} /></button>
         ) : (
-          <button type="button" className="btn-primary flex items-center gap-1" disabled={salvando} onClick={confirmar}>
+          <button type="button" data-guia="contrato-form.salvar" className="btn-primary flex items-center gap-1" disabled={salvando} onClick={confirmar}>
             <Check size={14} /> {edicao ? 'Salvar aditivo' : 'Confirmar'}
           </button>
         )}
