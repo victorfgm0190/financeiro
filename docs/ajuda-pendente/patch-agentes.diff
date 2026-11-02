@@ -1,0 +1,1434 @@
+diff --git a/src/components/Accounts/AccountForm.jsx b/src/components/Accounts/AccountForm.jsx
+index e7211e7..3e205bd 100644
+--- a/src/components/Accounts/AccountForm.jsx
++++ b/src/components/Accounts/AccountForm.jsx
+@@ -70,9 +70,9 @@ function Bloco({ titulo, children }) {
+ }
+ 
+ // Linha de toggle: nome em negrito, ajuda fixa abaixo, toggle à direita. A linha toda é o rótulo.
+-function LinhaToggle({ nome, ajuda, selo, checked, onChange, disabled = false }) {
++function LinhaToggle({ nome, ajuda, selo, checked, onChange, disabled = false, guia }) {
+   return (
+-    <label className={`flex items-center gap-3 px-3 py-2.5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-primary ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-surface-hover/50'}`}>
++    <label data-guia={guia} className={`flex items-center gap-3 px-3 py-2.5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-primary ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-surface-hover/50'}`}>
+       <div className="flex-1 min-w-0">
+         <p className="flex items-center gap-1.5 text-sm font-semibold text-texto-1">
+           {nome}
+@@ -299,12 +299,13 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+ 
+   return (
+     <form onSubmit={handleSubmit} className="space-y-4">
+-      <div>
++      <div data-guia="conta-form.tipo">
+         <label className="label">Tipo de Conta</label>
+         <div className="grid grid-cols-2 gap-2">
+           {TYPES.map(t => (
+             <label
+               key={t.value}
++              data-guia={`conta-form.tipo-${t.value}`}
+               className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                 form.type === t.value
+                   ? 'border-primary bg-primary/10 text-primary-fg'
+@@ -326,7 +327,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+       </div>
+ 
+       <div className="grid grid-cols-3 gap-3">
+-        <div className="col-span-2">
++        <div data-guia="conta-form.nome" className="col-span-2">
+           <label className="label">Nome da Conta *</label>
+           <input
+             className="input disabled:opacity-60 disabled:cursor-not-allowed"
+@@ -338,7 +339,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+           />
+           {nomeTravado && <p className="text-xs text-texto-3 mt-0.5">Nome usado pelo controle gerencial — não pode ser alterado.</p>}
+         </div>
+-        <div>
++        <div data-guia="conta-form.apelido">
+           <label className="label flex items-center gap-1">
+             Apelido
+             <Tooltip text="Nome curto usado no extrato gerencial (máx. 8 caracteres)" />
+@@ -355,7 +356,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+       </div>
+ 
+       <div className="grid grid-cols-2 gap-3">
+-        <div>
++        <div data-guia="conta-form.banco">
+           <label className="label">Banco / Instituição</label>
+           <input
+             className="input"
+@@ -364,7 +365,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+             placeholder="Digite o nome do banco"
+           />
+         </div>
+-        <div>
++        <div data-guia="conta-form.grupo">
+           <label className="label">Grupo</label>
+           <select className="input" value={form.accountGroupId || ''} onChange={e => set('accountGroupId', e.target.value || null)}>
+             <option value="">Sem grupo</option>
+@@ -375,7 +376,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+         </div>
+       </div>
+ 
+-      <div>
++      <div data-guia="conta-form.vinculo">
+         <label className="label" htmlFor="conta-vinculo">Vínculo (CPF / CNPJ)</label>
+         {profiles.length > 0 ? (
+           <>
+@@ -405,7 +406,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+       </div>
+ 
+       {!isCredit && !isPatrimonial && !initial && (
+-        <div>
++        <div data-guia="conta-form.saldo-inicial">
+           <label className="label">Saldo Inicial (R$)</label>
+           <InputMoeda
+             negativo
+@@ -418,7 +419,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+ 
+       {!isCredit && !isPatrimonial && initial && (
+         <div className="space-y-2">
+-          <div>
++          <div data-guia="conta-form.saldo-inicial">
+             <label className="label">Saldo Inicial (R$)</label>
+             <InputMoeda
+               negativo
+@@ -452,7 +453,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+ 
+       {isPatrimonial && (
+         <>
+-          <div>
++          <div data-guia="conta-form.valor-atual">
+             <label className="label">{form.type === 'asset' ? 'Valor Atual (R$)' : saldoDoFinanciamento ? 'Saldo devedor (principal)' : 'Saldo Devedor (R$)'}</label>
+             {saldoDoFinanciamento ? (
+               <>
+@@ -469,7 +470,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+             )}
+           </div>
+           <div className="grid grid-cols-2 gap-3">
+-            <div>
++            <div data-guia="conta-form.valor-aquisicao">
+               <label className="label">Valor de Aquisição (R$)</label>
+               <InputMoeda
+                 negativo
+@@ -478,7 +479,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+                 placeholder="0,00"
+               />
+             </div>
+-            <div>
++            <div data-guia="conta-form.data-aquisicao">
+               <label className="label">Data de Aquisição</label>
+               <DateInput
+                 className="input"
+@@ -492,7 +493,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+ 
+       {isCredit && (
+         <>
+-          <div>
++          <div data-guia="conta-form.limite">
+             <label className="label">Limite do Cartão (R$)</label>
+             <InputMoeda
+               negativo
+@@ -508,7 +509,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+             </p>
+           )}
+           <div className="grid grid-cols-2 gap-3">
+-            <div>
++            <div data-guia="conta-form.fechamento">
+               <label className="label">Dia de Fechamento *</label>
+               <input
+                 className="input"
+@@ -520,7 +521,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+                 onChange={e => { set('closingDay', e.target.value); setDiasErro('') }}
+               />
+             </div>
+-            <div>
++            <div data-guia="conta-form.vencimento">
+               <label className="label">Dia de Vencimento *</label>
+               <input
+                 className="input"
+@@ -534,7 +535,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+             </div>
+           </div>
+           {diasErro && <p className="text-xs text-perigo">{diasErro}</p>}
+-          <div>
++          <div data-guia="conta-form.finais">
+             <label className="label">Finais do cartão</label>
+             <input
+               className="input"
+@@ -563,7 +564,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+             Compra em dólar pelo Assistente: R$ = US$ × PTAX × (1 + spread). O spread usado é a média das últimas 3 compras
+             em dólar já conferidas pela fatura; sem elas, este (vazio = 2,5%).
+           </p>
+-          <div>
++          <div data-guia="conta-form.pagadora">
+             <label className="label">Conta Pagadora</label>
+             <select
+               className="input"
+@@ -592,6 +593,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+             onChange={e => set('appPriority', e.target.checked)}
+           />
+           <LinhaToggle
++            guia="conta-form.favorita"
+             nome="Conta favorita ★"
+             ajuda="Marcada com ★ e listada primeiro em Lançamentos. Uma por perfil"
+             checked={form.isMain}
+@@ -615,6 +617,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+ 
+         <Bloco titulo="Saldos e cálculos">
+           <LinhaToggle
++            guia="conta-form.fc"
+             nome="Somar no Saldo Principal"
+             selo={SELOS.FC}
+             ajuda="Entra no Saldo Principal ('Como chegamos aqui'), no Fluxo de Caixa e nos relatórios por padrão"
+@@ -634,6 +637,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+         {isChecking && (
+           <Bloco titulo="Tipo da conta">
+             <LinhaToggle
++              guia="conta-form.central"
+               nome="Conta central"
+               selo={SELOS.CC}
+               ajuda="Paga faturas, movimenta o gerencial do cartão e recebe resgates de reserva. Só uma por vez"
+@@ -665,7 +669,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+ 
+         {!isCredit && !isPatrimonial && (
+           <>
+-            <fieldset>
++            <fieldset data-guia="conta-form.vinculo-tipo">
+               <legend className="text-xs text-texto-3 uppercase tracking-wide mb-1.5">Finalidade da conta</legend>
+               <div role="radiogroup" aria-label="Finalidade da conta" className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                 {FINALIDADES.map(f => {
+@@ -673,6 +677,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+                   return (
+                     <label
+                       key={f.value}
++                      data-guia={`conta-form.vinculo-tipo-${f.value}`}
+                       className={`flex flex-col gap-0.5 p-3 rounded-lg border cursor-pointer transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${
+                         sel ? 'border-primary bg-primary/10' : 'border-borda-forte bg-surface-2 hover:bg-surface-hover'
+                       }`}
+@@ -700,7 +705,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+             </fieldset>
+ 
+             {form.vinculoTipo === 'reserva' && (
+-              <div className="ml-3 space-y-3 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
++              <div data-guia="conta-form.reserva" className="ml-3 space-y-3 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
+                 <div>
+                   <label className="label">Tipo de reserva</label>
+                   <select
+@@ -868,7 +873,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
+           </div>
+         )}
+         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+-        {podeSalvar && <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar Conta'}</button>}
++        {podeSalvar && <button type="submit" data-guia="conta-form.salvar" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar Conta'}</button>}
+       </div>
+       {!podeSalvar && <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
+     </form>
+diff --git a/src/components/Accounts/AccountsPanel.jsx b/src/components/Accounts/AccountsPanel.jsx
+index 76607e1..67f8043 100644
+--- a/src/components/Accounts/AccountsPanel.jsx
++++ b/src/components/Accounts/AccountsPanel.jsx
+@@ -522,6 +522,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
+           )}
+           {isAsset && podeEditar && (
+             <button
++              data-guia="accounts.atualizar-valor"
+               onClick={(e) => { e.stopPropagation(); onUpdateValue(account) }}
+               className={`mt-1.5 text-xs flex items-center gap-1 ${txtSec} hover:text-white transition-colors`}
+             >
+diff --git a/src/components/Alerts/IntegridadePanel.jsx b/src/components/Alerts/IntegridadePanel.jsx
+index 70cd370..13d7695 100644
+--- a/src/components/Alerts/IntegridadePanel.jsx
++++ b/src/components/Alerts/IntegridadePanel.jsx
+@@ -263,7 +263,7 @@ export default function IntegridadePanel({ setActivePage }) {
+                   </details>
+                   <div className="flex flex-wrap gap-2 pt-1">
+                     {podeAjustar(p) && podeEditarAl && (
+-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-primary text-white hover:bg-primary-hover"
++                      <button data-guia="alerts:integridade.corrigir" className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-primary text-white hover:bg-primary-hover"
+                         onClick={() => setAjustar({ pendencias: [p] })}>
+                         <Wrench size={12} /> Corrigir
+                       </button>
+@@ -276,25 +276,25 @@ export default function IntegridadePanel({ setActivePage }) {
+                       </button>
+                     )}
+                     {lancId && (
+-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
++                      <button data-guia="alerts:integridade.abrir-lancamento" className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
+                         onClick={() => setEditTx(txById.get(lancId))}>
+                         <FileText size={12} /> Abrir lançamento
+                       </button>
+                     )}
+                     {p.conta_id && accById.get(p.conta_id)?.type === 'credit' && (
+-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
++                      <button data-guia="alerts:integridade.abrir-lancamento" className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
+                         onClick={() => irParaFatura(p)}>
+                         <ExternalLink size={12} /> Ir para a fatura
+                       </button>
+                     )}
+                     {p.status === 'pendente' && podeEditarAl && (
+-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
++                      <button data-guia="alerts:integridade.ignorar" className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
+                         onClick={() => mudarStatus(p, 'ignorar')}>
+                         <EyeOff size={12} /> Ignorar
+                       </button>
+                     )}
+                     {p.status === 'ignorada' && podeEditarAl && (
+-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
++                      <button data-guia="alerts:integridade.ignorar" className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
+                         onClick={() => mudarStatus(p, 'reabrir')}>
+                         <RotateCcw size={12} /> Reabrir
+                       </button>
+diff --git a/src/components/Budget/BudgetPanel.jsx b/src/components/Budget/BudgetPanel.jsx
+index 2e482dc..73cb57f 100644
+--- a/src/components/Budget/BudgetPanel.jsx
++++ b/src/components/Budget/BudgetPanel.jsx
+@@ -165,7 +165,7 @@ export default function BudgetPanel() {
+ 
+       <Modal open={showForm} onClose={() => { setShowForm(false); setEditBudget(null) }} title={editBudget ? 'Editar Orçamento' : 'Novo Orçamento'} size="sm">
+         <form onSubmit={handleSubmit} className="space-y-4">
+-          <div>
++          <div data-guia="orcamento-form.categoria">
+             <label className="label">Categoria *</label>
+             <CategorySelect
+               categories={availableCategories}
+@@ -176,13 +176,13 @@ export default function BudgetPanel() {
+               required
+             />
+           </div>
+-          <div>
++          <div data-guia="orcamento-form.valor">
+             <label className="label">Valor Orçado (R$) *</label>
+             <InputMoeda min="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required />
+           </div>
+           <div className="flex gap-3 pt-1">
+             <button type="button" className="btn-secondary flex-1" onClick={() => { setShowForm(false); setEditBudget(null) }}>Cancelar</button>
+-            <button type="submit" className="btn-primary flex-1">{editBudget ? 'Salvar' : 'Criar'}</button>
++            <button type="submit" data-guia="orcamento-form.salvar" className="btn-primary flex-1">{editBudget ? 'Salvar' : 'Criar'}</button>
+           </div>
+         </form>
+       </Modal>
+diff --git a/src/components/Contratos/ContratoWizard.jsx b/src/components/Contratos/ContratoWizard.jsx
+index 725f6ce..56c5997 100644
+--- a/src/components/Contratos/ContratoWizard.jsx
++++ b/src/components/Contratos/ContratoWizard.jsx
+@@ -178,7 +178,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
+   const proxReaj = proximoReajuste(dados, hoje)
+   return (
+     <div className="space-y-4">
+-      <ol className="flex flex-wrap gap-1.5 text-[11px]">
++      <ol data-guia="contrato-form.etapas" className="flex flex-wrap gap-1.5 text-[11px]">
+         {ETAPAS.map((e, i) => (
+           <li key={e}>
+             <button type="button" onClick={() => (i < etapa ? setEtapa(i) : null)}
+@@ -192,7 +192,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
+       {etapa === 0 && (
+         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+           <Campo label="Tipo">
+-            <select className="input" value={f.tipo} disabled={edicao} onChange={e => {
++            <select data-guia="contrato-form.tipo" className="input" value={f.tipo} disabled={edicao} onChange={e => {
+               const t = e.target.value
+               const sug = sugerirCategoria(categories, t === 'receber' ? 'income' : 'expense')
+               setErro('')
+@@ -203,12 +203,12 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
+             </select>
+           </Campo>
+           <Campo label="Modalidade">
+-            <select className="input" value={f.modalidade} onChange={e => set('modalidade', e.target.value)}>
++            <select data-guia="contrato-form.modalidade" className="input" value={f.modalidade} onChange={e => set('modalidade', e.target.value)}>
+               <option value="aluguel">Aluguel</option><option value="servico">Serviço</option><option value="outro">Outro</option>
+             </select>
+           </Campo>
+           <Campo label="Perfil">
+-            <select className="input" value={f.perfil_id} onChange={e => set('perfil_id', e.target.value)}>
++            <select data-guia="contrato-form.perfil" className="input" value={f.perfil_id} onChange={e => set('perfil_id', e.target.value)}>
+               <option value="">Escolha…</option>
+               {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+             </select>
+@@ -217,13 +217,13 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
+             <input autoComplete="off" className="input" value={f.numero} onChange={e => set('numero', e.target.value)} maxLength={60} />
+           </Campo>
+           <Campo label="Objeto (ex.: Apto 302 — Ed. Sol)" className="sm:col-span-2">
+-            <input autoComplete="off" className="input" value={f.objeto} onChange={e => set('objeto', e.target.value)} maxLength={200} />
++            <input data-guia="contrato-form.objeto" autoComplete="off" className="input" value={f.objeto} onChange={e => set('objeto', e.target.value)} maxLength={200} />
+           </Campo>
+           <Campo label={f.tipo === 'receber' ? 'Inquilino (favorecido)' : 'Favorecido do aluguel (imobiliária / proprietário)'} className="sm:col-span-2">
+             <FavorecidoAutocomplete value={f.favorecido} onChange={v => set('favorecido', v)} suggestions={payees || []} />
+           </Campo>
+           <Campo label="Início da vigência">
+-            <input autoComplete="off" type="date" className="input" value={f.data_inicio} onChange={e => set('data_inicio', e.target.value)} />
++            <input data-guia="contrato-form.inicio" autoComplete="off" type="date" className="input" value={f.data_inicio} onChange={e => set('data_inicio', e.target.value)} />
+           </Campo>
+           <Campo label="Fim da vigência">
+             <input autoComplete="off" type="date" className="input" value={f.sem_fim ? '' : f.data_fim} disabled={f.sem_fim} onChange={e => set('data_fim', e.target.value)} />
+@@ -253,7 +253,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
+       {etapa === 1 && (
+         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+           <Campo label="Conta de pagamento">
+-            <select className="input" value={f.conta_id} onChange={e => set('conta_id', e.target.value)}>
++            <select data-guia="contrato-form.conta" className="input" value={f.conta_id} onChange={e => set('conta_id', e.target.value)}>
+               <option value="">Escolha…</option>
+               {contas.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
+             </select>
+@@ -263,7 +263,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
+             <CategorySelect categories={categories} value={f.categoria_id} onChange={e => set('categoria_id', e.target.value)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
+           </Campo>
+           <Campo label="Valor do aluguel (contratual)">
+-            <CampoValor value={f.valor_base} onChange={v => set('valor_base', v)} placeholder="0,00" />
++            <CampoValor data-guia="contrato-form.valor" value={f.valor_base} onChange={v => set('valor_base', v)} placeholder="0,00" />
+           </Campo>
+           <Campo label="Periodicidade">
+             <select className="input" value={f.periodicidade} onChange={e => set('periodicidade', e.target.value)}>
+@@ -272,7 +272,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
+             </select>
+           </Campo>
+           <Campo label="Dia de vencimento">
+-            <input autoComplete="off" type="number" min="1" max="31" className="input" value={f.dia_vencimento} onChange={e => set('dia_vencimento', e.target.value)} />
++            <input autoComplete="off" type="number" min="1" max="31" data-guia="contrato-form.dia-vencimento" className="input" value={f.dia_vencimento} onChange={e => set('dia_vencimento', e.target.value)} />
+           </Campo>
+           <Campo label="Tipo de documento">
+             <select className="input" value={f.tipo_documento_id} onChange={e => set('tipo_documento_id', e.target.value)}>
+@@ -304,7 +304,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
+       {etapa === 2 && (
+         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+           <Campo label="Índice de reajuste">
+-            <select className="input" value={f.indice_reajuste} onChange={e => set('indice_reajuste', e.target.value)}>
++            <select data-guia="contrato-form.reajuste" className="input" value={f.indice_reajuste} onChange={e => set('indice_reajuste', e.target.value)}>
+               <option value="IPCA">IPCA</option><option value="IGPM">IGP-M</option>
+               <option value="FIXO">Percentual fixo</option><option value="NENHUM">Sem reajuste</option>
+             </select>
+@@ -437,9 +437,9 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
+           <ChevronLeft size={14} /> {etapa === 0 ? 'Cancelar' : 'Voltar'}
+         </button>
+         {etapa < ETAPAS.length - 1 ? (
+-          <button type="button" className="btn-primary flex items-center gap-1" onClick={avancar}>Avançar <ChevronRight size={14} /></button>
++          <button type="button" data-guia="contrato-form.avancar" className="btn-primary flex items-center gap-1" onClick={avancar}>Avançar <ChevronRight size={14} /></button>
+         ) : (
+-          <button type="button" className="btn-primary flex items-center gap-1" disabled={salvando} onClick={confirmar}>
++          <button type="button" data-guia="contrato-form.salvar" className="btn-primary flex items-center gap-1" disabled={salvando} onClick={confirmar}>
+             <Check size={14} /> {edicao ? 'Salvar aditivo' : 'Confirmar'}
+           </button>
+         )}
+diff --git a/src/components/CreditCard/CreditCardPanel.jsx b/src/components/CreditCard/CreditCardPanel.jsx
+index 626c8a5..e9acb50 100644
+--- a/src/components/CreditCard/CreditCardPanel.jsx
++++ b/src/components/CreditCard/CreditCardPanel.jsx
+@@ -909,7 +909,7 @@ export default function CreditCardPanel() {
+             </>
+           )}
+         </div>
+-        <div className="card">
++        <div data-guia="credit.limite" className="card">
+           <div className="flex items-center gap-2 mb-2 text-texto-2">
+             <DollarSign size={13} />
+             <span className="text-xs uppercase tracking-wide">Limite Disponível</span>
+@@ -919,7 +919,7 @@ export default function CreditCardPanel() {
+           </p>
+           <p className="text-xs text-texto-3 mt-1">de {fmt(selectedCard?.creditLimit || 0)}</p>
+         </div>
+-        <div className="card">
++        <div data-guia="credit.divida-total" className="card">
+           <div className="flex items-center gap-2 mb-2 text-texto-2">
+             <CreditCard size={13} />
+             <span className="text-xs uppercase tracking-wide">Dívida Total</span>
+diff --git a/src/components/Dashboard/DespesasCategoria.jsx b/src/components/Dashboard/DespesasCategoria.jsx
+index c2732a1..d3e50a9 100644
+--- a/src/components/Dashboard/DespesasCategoria.jsx
++++ b/src/components/Dashboard/DespesasCategoria.jsx
+@@ -65,6 +65,7 @@ function BotaoTodas({ total, todas, onAlternar, grande }) {
+   return (
+     <button
+       type="button"
++      data-guia="despesas.ver-todas"
+       onClick={onAlternar}
+       aria-expanded={todas}
+       className={`w-full mt-2 text-xs text-primary-fg hover:text-texto-1 rounded-lg ${grande ? 'min-h-[44px]' : 'py-1.5'}`}
+diff --git a/src/components/Envelopes/EnvelopeResumo.jsx b/src/components/Envelopes/EnvelopeResumo.jsx
+index ae00942..417701d 100644
+--- a/src/components/Envelopes/EnvelopeResumo.jsx
++++ b/src/components/Envelopes/EnvelopeResumo.jsx
+@@ -35,7 +35,7 @@ export function TotaisEnvelopes({ totais, v = fmtPadrao, embutido = false }) {
+     { rotulo: estourou ? 'Estourou' : 'Ainda posso gastar', valor: v(Math.abs(totais.disponivel)), cor: estourou ? 'text-perigo' : 'text-primary-fg' },
+   ]
+   return (
+-    <div className={`grid grid-cols-3 divide-x divide-borda ${embutido ? 'rounded-lg bg-surface-2/50' : 'card p-0'}`}>
++    <div data-guia={embutido ? undefined : 'envelopes.totais'} className={`grid grid-cols-3 divide-x divide-borda ${embutido ? 'rounded-lg bg-surface-2/50' : 'card p-0'}`}>
+       {celulas.map(c => (
+         <div key={c.rotulo} className="min-w-0 px-2 py-2.5 sm:px-4 sm:py-3">
+           <p className="text-[10px] sm:text-xs text-texto-2 uppercase tracking-wide leading-tight">{c.rotulo}</p>
+@@ -82,6 +82,7 @@ export function MenuEnvelope({ nome, onEditar, onExcluir }) {
+     <div ref={ref} className="relative shrink-0 -mr-1.5 -mt-1.5">
+       <button
+         type="button"
++        data-guia="envelopes.opcoes"
+         onClick={() => setAberto(a => !a)}
+         aria-label={`Opções do envelope ${nome}`}
+         aria-expanded={aberto}
+diff --git a/src/components/Envelopes/EnvelopesPanel.jsx b/src/components/Envelopes/EnvelopesPanel.jsx
+index aa3a002..3cf915d 100644
+--- a/src/components/Envelopes/EnvelopesPanel.jsx
++++ b/src/components/Envelopes/EnvelopesPanel.jsx
+@@ -73,13 +73,13 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
+ 
+   return (
+     <div className="space-y-4">
+-      <div>
++      <div data-guia="envelope-form.nome">
+         <label className="label">Nome do Envelope</label>
+         <input className="input" placeholder="Digite o nome do envelope" value={name} onChange={e => setName(e.target.value)} />
+       </div>
+ 
+       <div className="grid grid-cols-2 gap-3">
+-        <div>
++        <div data-guia="envelope-form.limite">
+           <label className="label">Limite Mensal (R$)</label>
+           <InputMoeda
+             min="0"
+@@ -87,7 +87,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
+             onChange={e => setLimitAmount(e.target.value)}
+           />
+         </div>
+-        <div>
++        <div data-guia="envelope-form.dia">
+           <label className="label">Dia de Vencimento (1–28)</label>
+           <input
+             className="input" type="number" min="1" max="28"
+@@ -96,7 +96,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
+         </div>
+       </div>
+ 
+-      <div>
++      <div data-guia="envelope-form.conta">
+         <label className="label">Conta Vinculada</label>
+         <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}>
+           <AccountOptions
+@@ -108,7 +108,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
+         </select>
+       </div>
+ 
+-      <div>
++      <div data-guia="envelope-form.categorias">
+         <label className="label">Categorias Vinculadas ({categoryIds.length} selecionada{categoryIds.length !== 1 ? 's' : ''})</label>
+         <div className="max-h-52 overflow-y-auto border border-borda-forte rounded-lg divide-y divide-borda/50">
+           {grouped.map(([group, cats]) => (
+@@ -133,7 +133,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
+       <div className="flex gap-2 justify-end pt-1">
+         <button className="btn-ghost" onClick={onCancel}>Cancelar</button>
+         {podeSalvar && (
+-        <button className="btn-primary" onClick={() => onSave({ name: name.trim(), limitAmount: Number(limitAmount), dueDay: Number(dueDay), categoryIds, accountId: accountId || null })} disabled={!valid}>
++        <button className="btn-primary" data-guia="envelope-form.salvar" onClick={() => onSave({ name: name.trim(), limitAmount: Number(limitAmount), dueDay: Number(dueDay), categoryIds, accountId: accountId || null })} disabled={!valid}>
+           Salvar
+         </button>
+         )}
+diff --git a/src/components/Import/ImportPanel.jsx b/src/components/Import/ImportPanel.jsx
+index 9c85695..38e2619 100644
+--- a/src/components/Import/ImportPanel.jsx
++++ b/src/components/Import/ImportPanel.jsx
+@@ -48,6 +48,7 @@ import { ESCOPO } from '../../lib/camposSerie'
+ import Modal from '../shared/Modal'
+ import TransactionForm from '../Transactions/TransactionForm'
+ import TransactionHistoryModal from '../shared/TransactionHistoryModal'
++import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
+ 
+ // ─── Shared helpers ────────────────────────────────────────────────────────────
+ 
+@@ -1347,6 +1348,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
+ 
+   // ── Modo Conciliação de Fatura ───────────────────────────────────────────
+   const [conciliarMode, setConciliarMode] = useState(false)
++  useSubtelaGuia(conciliarMode ? 'import:conciliacao' : null)
+   const [concMatched, setConcMatched] = useState([])   // [{ csv, sys }]
+   const [concSoItau, setConcSoItau] = useState([])      // itens do CSV ausentes no sistema
+   const [concSoSistema, setConcSoSistema] = useState([])// lançamentos do sistema ausentes no CSV
+@@ -3724,7 +3726,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
+     return (
+       <div className="space-y-4">
+         {/* Cabeçalho */}
+-        <div className="card flex flex-wrap items-center gap-3">
++        <div className="card flex flex-wrap items-center gap-3" data-guia="import:conciliacao.cabecalho">
+           <div className="flex items-center gap-2 text-primary-fg">
+             <ArrowLeftRight size={16} />
+             <span className="text-sm font-semibold">Conciliação de Fatura</span>
+@@ -3733,13 +3735,13 @@ Conciliar mesmo assim com o mês selecionado?`)) return
+             {selectedAcc?.apelido || selectedAcc?.name} · {faturaMonthYear?.split('-').reverse().join('/')}
+             {filename ? ` · ${filename}` : ''}
+           </span>
+-          <button className="ml-auto btn-secondary text-xs py-1.5" onClick={exitConciliacao}>
++          <button className="ml-auto btn-secondary text-xs py-1.5" onClick={exitConciliacao} data-guia="import:conciliacao.sair">
+             <X size={12} className="mr-1 inline" /> Sair
+           </button>
+         </div>
+ 
+         {/* Totalizador */}
+-        <div className="card flex flex-wrap items-center gap-x-6 gap-y-2 py-3">
++        <div className="card flex flex-wrap items-center gap-x-6 gap-y-2 py-3" data-guia="import:conciliacao.totais">
+           <div className="flex items-baseline gap-2">
+             <span className="text-xs text-texto-3">Total CSV Itaú:</span>
+             <span className="text-sm font-semibold text-texto-1">{fmt(concTotais.csv)}</span>
+@@ -3762,7 +3764,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
+         {/* Toggle "Fatura encerrada" — só quando há parcelas de série em "Só no sistema" */}
+         {/* Fatura aberta: nada é empurrado — as parcelas ausentes só não foram lançadas ainda. */}
+         {hasParcelaSistema && !faturaAbertaArquivo && (
+-          <div className="card flex flex-col gap-2 py-3">
++          <div className="card flex flex-col gap-2 py-3" data-guia="import:conciliacao.fatura-encerrada">
+             <label className="flex items-center gap-2 cursor-pointer">
+               <input
+                 type="checkbox"
+@@ -3800,12 +3802,12 @@ Conciliar mesmo assim com o mês selecionado?`)) return
+         )}
+ 
+         {/* Ação */}
+-        <div className="flex items-center justify-end gap-2">
++        <div className="flex items-center justify-end gap-2" data-guia="import:conciliacao.acoes">
+           <span className="text-xs text-texto-3 mr-auto">
+             {concMatched.length} conciliado{concMatched.length !== 1 ? 's' : ''} ·
+             {' '}{importarCount} a importar · {excluirCount} a excluir
+           </span>
+-          <button className="btn-secondary text-xs py-1.5" onClick={exitConciliacao}>Cancelar</button>
++          <button className="btn-secondary text-xs py-1.5" onClick={exitConciliacao} data-guia="import:conciliacao.cancelar">Cancelar</button>
+           <button
+             className="btn-primary flex items-center gap-1.5 text-xs py-1.5"
+             disabled={importarCount === 0 && excluirCount === 0 && parcelasEmpurraveis.length === 0}
+@@ -3817,7 +3819,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
+         </div>
+ 
+         {/* SEÇÃO B — Só no Itaú */}
+-        <div className="card p-0 overflow-hidden">
++        <div className="card p-0 overflow-hidden" data-guia="import:conciliacao.so-arquivo">
+           <div className="px-3 py-2.5 border-b border-borda bg-primary/10 flex items-center gap-2 flex-wrap">
+             <ArrowDownCircle size={13} className="text-primary-fg shrink-0" />
+             <h3 className="text-xs font-semibold text-primary-fg">Só no Itaú — falta no sistema</h3>
+@@ -3919,7 +3921,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
+                         {fmt(item.amount)}
+                       </td>
+                       <td className="px-3 py-2">
+-                        <div className="flex items-center justify-center gap-3 text-xs">
++                        <div className="flex items-center justify-center gap-3 text-xs" data-guia={item === concSoItau[0] ? 'import:conciliacao.importar-ignorar' : undefined}>
+                           <label className="flex items-center gap-1 cursor-pointer">
+                             <input type="radio" className="accent-primary" name={`itau_${item._id}`}
+                               checked={item.acao === 'importar'} onChange={() => setItauField(item._id, { acao: 'importar' })} />
+@@ -3941,7 +3943,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
+         </div>
+ 
+         {/* SEÇÃO C — Só no sistema */}
+-        <div className="card p-0 overflow-hidden">
++        <div className="card p-0 overflow-hidden" data-guia="import:conciliacao.so-sistema">
+           <div className="px-3 py-2.5 border-b border-borda bg-aviso/10 flex items-center gap-2 flex-wrap">
+             <ArrowUpCircle size={13} className="text-aviso shrink-0" />
+             <h3 className="text-xs font-semibold text-aviso">Só no sistema — não está no CSV do Itaú</h3>
+@@ -3984,7 +3986,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
+                         {fmt(item.amount)}
+                       </td>
+                       <td className="px-3 py-2">
+-                        <div className="flex items-center justify-center gap-3 text-xs">
++                        <div className="flex items-center justify-center gap-3 text-xs" data-guia={item === concSoSistema[0] ? 'import:conciliacao.manter-excluir' : undefined}>
+                           <label className="flex items-center gap-1 cursor-pointer">
+                             <input type="radio" className="accent-primary" name={`sys_${item.id}`}
+                               checked={item.acao === 'manter'} onChange={() => setSistemaAcao(item.id, 'manter')} />
+@@ -4008,7 +4010,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
+         </div>
+ 
+         {/* SEÇÃO A — Conciliados */}
+-        <div className="card p-0 overflow-hidden">
++        <div className="card p-0 overflow-hidden" data-guia="import:conciliacao.conciliados">
+           <div className="px-3 py-2.5 border-b border-borda bg-surface-2/40 flex items-center gap-2 flex-wrap">
+             <Check size={13} className="text-texto-2 shrink-0" />
+             <h3 className="text-xs font-semibold text-texto-2">Conciliados</h3>
+@@ -4043,6 +4045,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
+                       <td className="px-3 py-2 text-center">
+                         <button
+                           type="button"
++                          data-guia={m === concMatched[0] ? 'import:conciliacao.editar' : undefined}
+                           onClick={() => setConcEditTx(m.sys)}
+                           title="Editar lançamento"
+                           className="p-1 text-texto-3 hover:text-texto-1 hover:bg-surface-hover rounded transition-colors"
+diff --git a/src/components/Import/ImportPreviewModal.jsx b/src/components/Import/ImportPreviewModal.jsx
+index c32b4e8..88aa3a9 100644
+--- a/src/components/Import/ImportPreviewModal.jsx
++++ b/src/components/Import/ImportPreviewModal.jsx
+@@ -277,7 +277,7 @@ export default function ImportPreviewModal({
+           </div>
+         ))}
+ 
+-        <div className="flex flex-wrap items-center gap-3 justify-end pt-2">
++        <div className="flex flex-wrap items-center gap-3 justify-end pt-2" data-guia="importacao-previa.acoes">
+           {pendencias.length > 0 ? (
+             <>
+               <span className="text-xs text-perigo mr-auto">{pendencias.length} {pendencias.length === 1 ? 'pendência' : 'pendências'}</span>
+diff --git a/src/components/ImportarLancamentos/ImportarLancamentosPanel.jsx b/src/components/ImportarLancamentos/ImportarLancamentosPanel.jsx
+index 1a6723c..8db7c57 100644
+--- a/src/components/ImportarLancamentos/ImportarLancamentosPanel.jsx
++++ b/src/components/ImportarLancamentos/ImportarLancamentosPanel.jsx
+@@ -83,7 +83,7 @@ export function ListaLotes({ lotes, erroLotes, nomeConta, podeExcluir, ocupado,
+                 ? <span className="px-1.5 py-0.5 rounded bg-aviso/15 text-aviso">Importação incompleta ({l.gravados} de {l.qtd})</span>
+                 : <span className="px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">Em andamento</span>)}
+               {l.status !== 'desfeita' && podeExcluir && (
+-                <button className="ml-auto btn-secondary !py-1 text-xs inline-flex items-center gap-1" disabled={ocupado} onClick={() => onDesfazer(l)}>
++                <button data-guia={l === lotes.find(x => x.status !== 'desfeita') ? 'importar-lancamentos.desfazer' : undefined} className="ml-auto btn-secondary !py-1 text-xs inline-flex items-center gap-1" disabled={ocupado} onClick={() => onDesfazer(l)}>
+                   <Undo2 size={12} /> Desfazer importação
+                 </button>
+               )}
+diff --git a/src/components/Reservas/ReservasPanel.jsx b/src/components/Reservas/ReservasPanel.jsx
+index 657c6cd..9c8b3b4 100644
+--- a/src/components/Reservas/ReservasPanel.jsx
++++ b/src/components/Reservas/ReservasPanel.jsx
+@@ -230,23 +230,23 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
+       categoryId: form.categoryId || null,
+       exibirComoDespesa: !!form.exibirComoDespesa,
+     }) }} className="space-y-4">
+-      <div>
++      <div data-guia="reserva-form.nome">
+         <label className="label">Nome da Função *</label>
+         <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Digite o nome da função" />
+       </div>
+-      <div>
++      <div data-guia="reserva-form.conta">
+         <label className="label">Conta Vinculada</label>
+         <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)}>
+           <option value="">— Sem conta —</option>
+           {accountsForView(accounts.filter(a => a.active !== false), isMobile).map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
+         </select>
+       </div>
+-      <div>
++      <div data-guia="reserva-form.saldo-inicial">
+         <label className="label">Saldo Inicial (R$)</label>
+         <InputMoeda negativo className="input" value={form.saldoInicial} onChange={e => set('saldoInicial', e.target.value)} placeholder="0,00 (aceita negativo)" />
+       </div>
+       <div className="grid grid-cols-2 gap-3">
+-        <div>
++        <div data-guia="reserva-form.despesa-anual">
+           <label className="label">Despesa Anual (R$)</label>
+           <InputMoeda negativo className="input" value={form.despesaAnual} onChange={e => set('despesaAnual', e.target.value)} placeholder="0,00" />
+           {suggestions && (suggestions.enough
+@@ -256,7 +256,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
+             : <p className="text-xs text-texto-3 mt-1">Dados insuficientes para calcular</p>
+           )}
+         </div>
+-        <div>
++        <div data-guia="reserva-form.deposito-mensal">
+           <label className="label">Depósito Mensal (R$)</label>
+           <InputMoeda negativo className="input" value={form.depositoMensal} onChange={e => set('depositoMensal', e.target.value)} placeholder="0,00" />
+           {suggestions && (suggestions.enough
+@@ -267,7 +267,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
+           )}
+         </div>
+       </div>
+-      <div>
++      <div data-guia="reserva-form.mes-vencimento">
+         <label className="label">Mês de Vencimento da Despesa</label>
+         <select className="input" value={form.mesVencimento} onChange={e => set('mesVencimento', e.target.value)}>
+           <option value="">Rateio mensal (÷ 12)</option>
+@@ -280,7 +280,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
+           </p>
+         )}
+       </div>
+-      <div>
++      <div data-guia="reserva-form.categoria">
+         <label className="label">Categoria da Despesa</label>
+         <select className="input" value={form.categoryId} onChange={e => set('categoryId', e.target.value)}>
+           <option value="">Sem categoria vinculada</option>
+@@ -305,7 +305,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
+       </div>
+       <div className="flex gap-3 pt-2">
+         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+-        {podeSalvar && <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar'}</button>}
++        {podeSalvar && <button type="submit" data-guia="reserva-form.salvar" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar'}</button>}
+       </div>
+       {!podeSalvar && <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
+     </form>
+@@ -2395,6 +2395,7 @@ export default function ReservasPanel() {
+         ].map(t => (
+           <button
+             key={t.id}
++            data-guia={t.id === 'resumo' ? 'reservas.aba-resumo' : undefined}
+             onClick={() => setTab(t.id)}
+             className={`px-3 sm:px-4 pb-3 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
+               tab === t.id
+diff --git a/src/components/Schedule/ProvisaoForm.jsx b/src/components/Schedule/ProvisaoForm.jsx
+index 3072926..cc1182b 100644
+--- a/src/components/Schedule/ProvisaoForm.jsx
++++ b/src/components/Schedule/ProvisaoForm.jsx
+@@ -204,7 +204,7 @@ export default function ProvisaoForm({ initial, onClose }) {
+       )}
+ 
+       {/* Descrição */}
+-      <div>
++      <div data-guia="provisao-form.descricao">
+         <label className="label">Descrição *</label>
+         <input
+           className="input"
+@@ -217,7 +217,7 @@ export default function ProvisaoForm({ initial, onClose }) {
+ 
+       <div className="grid grid-cols-2 gap-4">
+         {/* Valor estimado */}
+-        <div>
++        <div data-guia="provisao-form.valor">
+           <label className="label">Valor estimado (R$) *</label>
+           <InputMoeda
+             min="0.01"
+@@ -228,7 +228,7 @@ export default function ProvisaoForm({ initial, onClose }) {
+         </div>
+ 
+         {/* Data estimada (1ª ocorrência quando recorrente) */}
+-        <div>
++        <div data-guia="provisao-form.data">
+           <label className="label">{isRecorrente ? 'Data estimada (1ª ocorrência) *' : 'Data estimada *'}</label>
+           <input
+             className="input"
+@@ -242,7 +242,7 @@ export default function ProvisaoForm({ initial, onClose }) {
+ 
+       {/* Frequência + Ocorrência (mesmo padrão do agendamento normal) */}
+       <div className="grid grid-cols-2 gap-4">
+-        <div>
++        <div data-guia="provisao-form.frequencia">
+           <label className="label">Frequência *</label>
+           <SearchableSelect
+             options={FREQ_OPTIONS}
+@@ -313,7 +313,7 @@ export default function ProvisaoForm({ initial, onClose }) {
+       )}
+ 
+       {/* Conta (de onde o dinheiro sai) — padrão: Conta central do perfil */}
+-      <div>
++      <div data-guia="provisao-form.conta">
+         <label className="label">Conta (de onde o dinheiro sai) *</label>
+         <SearchableSelect
+           options={contaOpts}
+@@ -337,7 +337,7 @@ export default function ProvisaoForm({ initial, onClose }) {
+       </div>
+ 
+       {/* Categoria (opcional) */}
+-      <div>
++      <div data-guia="provisao-form.categoria">
+         <label className="label">Categoria</label>
+         <SearchableSelect
+           options={expenseCatOpts}
+@@ -351,7 +351,7 @@ export default function ProvisaoForm({ initial, onClose }) {
+       </div>
+ 
+       {/* Será pago com reserva */}
+-      <div className="bg-surface-2/40 rounded-xl p-3.5 space-y-3">
++      <div data-guia="provisao-form.reserva" className="bg-surface-2/40 rounded-xl p-3.5 space-y-3">
+         <label className="flex items-center gap-2.5 cursor-pointer select-none">
+           <input
+             type="checkbox"
+@@ -388,7 +388,7 @@ export default function ProvisaoForm({ initial, onClose }) {
+       <div className="flex gap-3 pt-1">
+         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+         {podeGravarForm
+-          ? <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Lançar Provisão'}</button>
++          ? <button type="submit" data-guia="provisao-form.salvar" className="btn-primary flex-1">{initial ? 'Salvar' : 'Lançar Provisão'}</button>
+           : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
+       </div>
+     </form>
+diff --git a/src/components/Schedule/ScheduleForm.jsx b/src/components/Schedule/ScheduleForm.jsx
+index ae2bca8..4600321 100644
+--- a/src/components/Schedule/ScheduleForm.jsx
++++ b/src/components/Schedule/ScheduleForm.jsx
+@@ -878,7 +878,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+         )}
+ 
+         {/* Movimentação */}
+-        <div className="max-sm:-order-1 sm:col-span-2">
++        <div data-guia="agendamento-form.tipo" className="max-sm:-order-1 sm:col-span-2">
+           <LabelTip tip={TIPS.transactionType}>Movimentação</LabelTip>
+           <div className="flex rounded-lg overflow-hidden border border-borda-forte">
+             {['expense', 'income', 'transfer'].map(t => (
+@@ -901,7 +901,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+         </div>
+ 
+         {/* Descrição */}
+-        <div className="max-sm:-order-1 sm:col-span-2">
++        <div data-guia="agendamento-form.descricao" className="max-sm:-order-1 sm:col-span-2">
+           <LabelTip tip={TIPS.description} required confira={!!destaques?.includes('description')}>Descrição</LabelTip>
+           <input
+             className="input"
+@@ -915,7 +915,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+         </div>
+ 
+         {/* Conta */}
+-        <div>
++        <div data-guia="agendamento-form.conta">
+           <LabelTip tip={TIPS.account} required confira={!!destaques?.includes('accountId')}>{form.transactionType === 'transfer' ? 'Conta Origem' : 'Conta'}</LabelTip>
+           {trava
+             ? <div className="input opacity-60 cursor-not-allowed" title={trava}>{selectedAccount?.apelido || selectedAccount?.name || '—'}</div>
+@@ -932,7 +932,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+         </div>
+ 
+         {/* Valor */}
+-        <div className="max-sm:-order-1">
++        <div data-guia="agendamento-form.valor" className="max-sm:-order-1">
+           <LabelTip tip={TIPS.amount} required confira={!!destaques?.includes('amount')}>Valor (R$)</LabelTip>
+           <InputMoeda
+             className="input valor-destaque"
+@@ -985,7 +985,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+ 
+         {/* Conta Destino (apenas para transferências) */}
+         {form.transactionType === 'transfer' && (
+-          <div className="sm:col-span-2">
++          <div data-guia="agendamento-form.conta-destino" className="sm:col-span-2">
+             <LabelTip tip="Conta que receberá a transferência" required confira={!!destaques?.includes('toAccountId')}>Conta Destino</LabelTip>
+             <SearchableSelect
+               options={destAccountOpts}
+@@ -1094,7 +1094,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+ 
+         {/* Categoria */}
+         {form.transactionType !== 'transfer' && (
+-          <div>
++          <div data-guia="agendamento-form.categoria">
+             <LabelTip tip={TIPS.category} confira={!!destaques?.includes('categoryId')}>Categoria</LabelTip>
+             <div className="flex items-center gap-2">
+               {rateioRows.length > 0 ? (
+@@ -1123,7 +1123,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+ 
+         {/* Favorecido — também na parcela de financiamento (transferência), onde é campo da série */}
+         {(form.transactionType !== 'transfer' || ehFinanciamento) && (
+-          <div>
++          <div data-guia="agendamento-form.favorecido">
+             <LabelTip tip={TIPS.payee} confira={!!destaques?.includes('payee')}>Favorecido</LabelTip>
+             <FavorecidoAutocomplete
+               value={form.payee}
+@@ -1158,14 +1158,14 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+ 
+         {/* Frequência — parcela de contrato: do contrato, só leitura */}
+         {ehParcelaContrato ? (
+-          <div>
++          <div data-guia="agendamento-form.frequencia">
+             <LabelTip tip={TIPS.frequency}>Frequência</LabelTip>
+             <div className="input bg-surface-2/60 text-texto-2 cursor-not-allowed" title="Definida pelo contrato">
+               {rotuloFrequencia(contratoPorId?.(initial.contratoId), initial.contratoPapel)}
+             </div>
+           </div>
+         ) : (
+-        <div>
++        <div data-guia="agendamento-form.frequencia">
+           <LabelTip tip={TIPS.frequency}>Frequência</LabelTip>
+           <SearchableSelect
+             options={FREQ_OPTIONS}
+@@ -1206,7 +1206,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+             </div>
+           </>
+         ) : (
+-        <div>
++        <div data-guia="agendamento-form.data">
+           <LabelTip tip={TIPS.startDate} required confira={!!destaques?.includes('startDate')}>Data de Início</LabelTip>
+           <DateInput
+             className="input"
+@@ -1242,7 +1242,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+ 
+         {/* Até quando — Sem fim | Número de vezes | Até a data (só com frequência recorrente escolhida) */}
+         {form.frequency !== 'once' && (
+-          <div className={`sm:col-span-2 ${!form.frequency ? 'opacity-40 pointer-events-none' : ''}`}>
++          <div data-guia="agendamento-form.ate-quando" className={`sm:col-span-2 ${!form.frequency ? 'opacity-40 pointer-events-none' : ''}`}>
+             <LabelTip tip={TIPS.occurrence}>Até quando</LabelTip>
+             <FimRepeticao
+               inicio={form.startDate}
+@@ -1257,7 +1257,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+         )}
+ 
+         {/* Automações */}
+-        <div className="sm:col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-3">
++        <div data-guia="agendamento-form.automacoes" className="sm:col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-3">
+           <p className="text-[11px] font-medium text-texto-3 uppercase tracking-wider">Automações</p>
+ 
+           {/* Texto à esquerda (quebra se precisar) e toggle sempre à direita. No celular o
+@@ -1429,7 +1429,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
+         <div className="sm:col-span-2 flex gap-3 pt-1 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:bg-surface max-sm:border-t max-sm:border-borda max-sm:pt-3 acoes-safe-bottom">
+           <button type="button" className="btn-secondary flex-1" onClick={() => { if (podeDescartar()) onClose() }}>Cancelar</button>
+           {podeGravarForm
+-            ? <button type="submit" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
++            ? <button type="submit" data-guia="agendamento-form.salvar" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
+             : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
+         </div>
+       </form>
+diff --git a/src/components/Schedule/SchedulePanel.jsx b/src/components/Schedule/SchedulePanel.jsx
+index 85e93db..387e6b8 100644
+--- a/src/components/Schedule/SchedulePanel.jsx
++++ b/src/components/Schedule/SchedulePanel.jsx
+@@ -524,7 +524,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+         {aviso && <div className="px-5 pt-3 shrink-0">{aviso}</div>}
+ 
+         {!parcelaFin && (
+-          <div className="flex border-b border-borda shrink-0">
++          <div data-guia="baixa-form.abas" className="flex border-b border-borda shrink-0">
+             {['pagamento', 'recebimento', 'transferencia'].map(t => (
+               <button key={t} onClick={() => setTab(t)}
+                 className={`flex-1 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+@@ -557,7 +557,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+                   <span className="text-xs font-bold text-texto-1">{fmt(parcelaFin.total)}</span>
+                 </div>
+               </div>
+-              <div>
++              <div data-guia="baixa-form.valor">
+                 <label className="label">Quanto você vai pagar? (R$)</label>
+                 <InputMoeda
+                   min="0.01"
+@@ -617,7 +617,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+                 um na categoria parametrizada do bem (prestação e taxa de financiamento). Pagando
+                 menos que a parcela ela fica parcial e o saldo continua em aberto.
+               </p>
+-              <div>
++              <div data-guia="baixa-form.conta">
+                 <label className="label">Banco de</label>
+                 {/* Só conta corrente/poupança: os dois lançamentos são criados pelo backend, que
+                     não sabe montar gasto de cartão (fatura, dívida do cartão). É o mesmo conjunto
+@@ -630,7 +630,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+                   />
+                 </select>
+               </div>
+-              <div>
++              <div data-guia="baixa-form.data">
+                 <label className="label">Data</label>
+                 <DataPagamentoField value={finDate} onChange={e => setFinDate(e.target.value)} vencimento={nextDate} />
+               </div>
+@@ -640,7 +640,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+ 
+           {!parcelaFin && tab === 'pagamento' && (
+             <>
+-              <div>
++              <div data-guia="baixa-form.conta">
+                 <label className="label">Banco de</label>
+                 <select className="input" value={payAccountId} onChange={e => setPayAccountId(e.target.value)}>
+                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
+@@ -650,17 +650,17 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+                 <label className="label">Favorecido</label>
+                 <FavorecidoAutocomplete value={payPayee} onChange={setPayPayee} suggestions={sortedPayees} placeholder="Digite o nome do favorecido" />
+               </div>
+-              <div>
++              <div data-guia="baixa-form.valor">
+                 <label className="label">Valor</label>
+                 <InputMoeda className={`input ${valorOk ? '' : '!border-perigo'}`} placeholder="" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                 {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
+               </div>
+               {blocoAjusteRateio}
+-              <div>
++              <div data-guia="baixa-form.data">
+                 <label className="label">Data</label>
+                 <DataPagamentoField value={payDate} onChange={e => setPayDate(e.target.value)} vencimento={occVenc} />
+               </div>
+-              <div>
++              <div data-guia="baixa-form.categoria">
+                 <label className="label">Categoria</label>
+                 <CategorySelect categories={categories} perfilId={accounts.find(a => a.id === payAccountId)?.profileId || undefined} type="expense" value={payCategoryId} onChange={e => setPayCategoryId(e.target.value)} />
+               </div>
+@@ -682,7 +682,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+ 
+           {!parcelaFin && tab === 'recebimento' && (
+             <>
+-              <div>
++              <div data-guia="baixa-form.conta">
+                 <label className="label">Banco para</label>
+                 <select className="input" value={recAccountId} onChange={e => setRecAccountId(e.target.value)}>
+                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
+@@ -692,17 +692,17 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+                 <label className="label">Pagador</label>
+                 <FavorecidoAutocomplete value={recPayee} onChange={setRecPayee} suggestions={sortedPayees} placeholder="Digite o nome do pagador" />
+               </div>
+-              <div>
++              <div data-guia="baixa-form.valor">
+                 <label className="label">Valor</label>
+                 <InputMoeda className={`input ${valorOk ? '' : '!border-perigo'}`} placeholder="" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
+                 {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
+               </div>
+               {blocoAjusteRateio}
+-              <div>
++              <div data-guia="baixa-form.data">
+                 <label className="label">Data</label>
+                 <DataPagamentoField value={recDate} onChange={e => setRecDate(e.target.value)} vencimento={occVenc} />
+               </div>
+-              <div>
++              <div data-guia="baixa-form.categoria">
+                 <label className="label">Categoria</label>
+                 <CategorySelect categories={categories} perfilId={accounts.find(a => a.id === recAccountId)?.profileId || undefined} type="income" value={recCategoryId} onChange={e => setRecCategoryId(e.target.value)} />
+               </div>
+@@ -733,7 +733,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+                   </div>
+                 </div>
+               )}
+-              <div>
++              <div data-guia="baixa-form.conta">
+                 <label className="label">Banco de</label>
+                 <select className="input" value={trfFromId} onChange={e => setTrfContas(e.target.value, trfToId)} disabled={hasDetalhe}>
+                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
+@@ -745,7 +745,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
+                 </select>
+               </div>
+-              <div>
++              <div data-guia="baixa-form.valor">
+                 <label className="label">Valor{hasDetalhe ? ' (soma das funções)' : ''}</label>
+                 <InputMoeda
+                   className={`input ${valorOk ? '' : '!border-perigo'}`}
+@@ -768,7 +768,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+                   onChangeCpf={id => setTrfCatCpf(id || '')}
+                 />
+               )}
+-              <div>
++              <div data-guia="baixa-form.data">
+                 <label className="label">Data</label>
+                 <DataPagamentoField value={trfDate} onChange={e => setTrfDate(e.target.value)} vencimento={occVenc} />
+               </div>
+@@ -839,6 +839,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+           <button className="btn-secondary flex-1" onClick={onClose} disabled={finLoading}>Cancelar</button>
+           {parcelaFin ? (
+             <button
++              data-guia="baixa-form.confirmar"
+               className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-60"
+               onClick={handleConfirmFinanciamento}
+               disabled={finLoading}
+@@ -847,7 +848,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
+               {finLoading ? 'Baixando...' : 'Confirmar Pagamento'}
+             </button>
+           ) : (
+-            <button className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40" disabled={!valorOk || !!avisoPulo} onClick={() => handleConfirm()}>
++            <button data-guia="baixa-form.confirmar" className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40" disabled={!valorOk || !!avisoPulo} onClick={() => handleConfirm()}>
+               <CheckCircle size={14} /> {duplicado ? 'Registrar mesmo assim' : `Confirmar ${TAB_LABELS[tab]}`}
+             </button>
+           )}
+@@ -1365,6 +1366,7 @@ function ScheduleRow({
+           <div className="flex flex-wrap items-center justify-end gap-1.5">
+             {isProvisaoPendente && podeEditar && (
+               <button
++                data-guia="schedule.efetivar-provisao"
+                 onClick={() => setShowEfetivar(true)}
+                 title="Efetivar Provisão — informar valor e data reais"
+                 className="flex items-center gap-1 h-7 px-2.5 text-xs bg-ambar/15 text-ambar rounded-md hover:bg-ambar/25 transition-colors font-medium"
+@@ -1405,6 +1407,7 @@ function ScheduleRow({
+             {nextDate && podeEditar && !futura && (
+               <>
+                 <button
++                  data-guia="schedule.pagar"
+                   onClick={() => setShowPay(true)}
+                   title="Pagar"
+                   aria-label="Pagar"
+@@ -1413,6 +1416,7 @@ function ScheduleRow({
+                   <CheckCircle size={12} /> <span className="hidden 2xl:inline">Pagar</span>
+                 </button>
+                 <button
++                  data-guia="schedule.estornar"
+                   onClick={() => setShowEstornar(true)}
+                   title="Estornar"
+                   aria-label="Estornar"
+@@ -1421,6 +1425,7 @@ function ScheduleRow({
+                   <RotateCcw size={12} /> <span className="hidden 2xl:inline">Estornar</span>
+                 </button>
+                 <button
++                  data-guia="schedule.pular"
+                   onClick={handlePular}
+                   title={isRecorrente ? 'Pular — esta ocorrência (avança para a próxima)' : 'Pular — cancela o agendamento único'}
+                   aria-label="Pular"
+@@ -1434,10 +1439,10 @@ function ScheduleRow({
+               <History size={13} />
+               {comHistorico && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary-fg" />}
+             </button>
+-            {podeEditar && <button onClick={() => onEditSchedule(schedule)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0" title="Editar agendamento" aria-label="Editar">
++            {podeEditar && <button data-guia="schedule.editar" onClick={() => onEditSchedule(schedule)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0" title="Editar agendamento" aria-label="Editar">
+               <Edit2 size={13} />
+             </button>}
+-            {podeExcluir && !futura && <button onClick={() => setShowExcluir(true)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0 hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg" title="Excluir agendamento" aria-label="Excluir">
++            {podeExcluir && !futura && <button data-guia="schedule.excluir" onClick={() => setShowExcluir(true)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0 hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg" title="Excluir agendamento" aria-label="Excluir">
+               <Trash2 size={13} />
+             </button>}
+           </div>
+diff --git a/src/components/Settings/SettingsPanel.jsx b/src/components/Settings/SettingsPanel.jsx
+index a3d48bc..25694bf 100644
+--- a/src/components/Settings/SettingsPanel.jsx
++++ b/src/components/Settings/SettingsPanel.jsx
+@@ -876,7 +876,7 @@ export default function SettingsPanel() {
+             <p className="text-xs font-medium text-texto-2">{editingProfile ? 'Editar perfil' : 'Novo perfil'}</p>
+ 
+             <div className="grid grid-cols-2 gap-3">
+-              <div>
++              <div data-guia="perfil-form.tipo">
+                 <label className="label">Tipo</label>
+                 <div className="flex rounded-lg overflow-hidden border border-borda-forte">
+                   {[['pf', 'Pessoa Física'], ['pj', 'Pessoa Jurídica']].map(([v, l]) => (
+@@ -887,13 +887,13 @@ export default function SettingsPanel() {
+                   ))}
+                 </div>
+               </div>
+-              <div>
++              <div data-guia="perfil-form.nome">
+                 <label className="label">Nome / Razão Social *</label>
+                 <input className="input" value={profileForm.name} onChange={e => setProfileField('name', e.target.value)} placeholder="Digite o nome ou razão social" required />
+               </div>
+             </div>
+ 
+-            <div>
++            <div data-guia="perfil-form.documento">
+               <label className="label">{profileForm.type === 'pf' ? 'CPF' : 'CNPJ'}</label>
+               <input
+                 className="input"
+@@ -904,7 +904,7 @@ export default function SettingsPanel() {
+               />
+             </div>
+ 
+-            <div>
++            <div data-guia="perfil-form.cor">
+               <label className="label">Cor de identificação</label>
+               <div className="flex gap-2 flex-wrap">
+                 {PROFILE_COLORS.map(c => (
+@@ -917,7 +917,7 @@ export default function SettingsPanel() {
+             </div>
+ 
+             <label data-guia="settings:perfis.principal" className="flex items-center gap-2.5 cursor-pointer">
+-              <div className="relative shrink-0">
++              <div data-guia="perfil-form.principal" className="relative shrink-0">
+                 <input type="checkbox" checked={profileForm.isDefault} onChange={e => setProfileField('isDefault', e.target.checked)} className="sr-only peer" />
+                 <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
+                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+@@ -927,7 +927,7 @@ export default function SettingsPanel() {
+ 
+             <div className="flex gap-2 pt-1">
+               <button type="button" className="btn-secondary flex-1 text-xs py-1.5" onClick={closeProfileForm}>Cancelar</button>
+-              <button type="submit" className="btn-primary flex-1 text-xs py-1.5">{editingProfile ? 'Salvar' : 'Adicionar'}</button>
++              <button type="submit" data-guia="perfil-form.salvar" className="btn-primary flex-1 text-xs py-1.5">{editingProfile ? 'Salvar' : 'Adicionar'}</button>
+             </div>
+           </form>
+         )}
+@@ -1076,8 +1076,9 @@ export default function SettingsPanel() {
+ 
+         {/* Criar categoria — Grupo obrigatório (escolher existente ou digitar novo) */}
+         <form onSubmit={handleAddCategory} data-guia="settings:categorias.nova-categoria" className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+-          <input className="input col-span-2 sm:col-span-1" placeholder="Digite o nome da categoria" value={newCategory.name} onChange={e => setNewCategory(f => ({ ...f, name: e.target.value }))} />
++          <input data-guia="categoria-form.nome" className="input col-span-2 sm:col-span-1" placeholder="Digite o nome da categoria" value={newCategory.name} onChange={e => setNewCategory(f => ({ ...f, name: e.target.value }))} />
+           <input
++            data-guia="categoria-form.grupo"
+             className="input"
+             list="category-groups-list"
+             placeholder="Nome do grupo"
+@@ -1088,19 +1089,19 @@ export default function SettingsPanel() {
+           <datalist id="category-groups-list">
+             {categoryGroups.map(g => <option key={g} value={g} />)}
+           </datalist>
+-          <select className="input" value={newCategory.type} onChange={e => setNewCategory(f => ({ ...f, type: e.target.value }))}>
++          <select data-guia="categoria-form.tipo" className="input" value={newCategory.type} onChange={e => setNewCategory(f => ({ ...f, type: e.target.value }))}>
+             <option value="expense">Despesa</option>
+             <option value="income">Receita</option>
+             <option value="both">Ambos</option>
+           </select>
+-          <input className="input" placeholder="Emoji" value={newCategory.icon} onChange={e => setNewCategory(f => ({ ...f, icon: e.target.value }))} maxLength={2} />
++          <input data-guia="categoria-form.emoji" className="input" placeholder="Emoji" value={newCategory.icon} onChange={e => setNewCategory(f => ({ ...f, icon: e.target.value }))} maxLength={2} />
+           <PerfisMultiSelect
+             value={newCategory.perfilIds}
+             onChange={ids => setNewCategory(f => ({ ...f, perfilIds: ids }))}
+             profiles={profiles}
+             className="!w-full !py-2 !text-sm"
+           />
+-          <button type="submit" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
++          <button type="submit" data-guia="categoria-form.salvar" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
+         </form>
+         <p className="text-[11px] text-texto-3 mt-1.5">O campo <span className="text-texto-2">Grupo</span> é obrigatório — selecione um existente ou digite um novo para criá-lo junto.</p>
+       </div>
+@@ -1444,6 +1445,7 @@ export default function SettingsPanel() {
+         {/* Add new group */}
+         <div data-guia="settings:grupos-contas.novo" className="flex gap-2 pt-2 border-t border-borda-forte">
+           <select
++            data-guia="grupo-form.tipo"
+             className="input w-36 text-sm"
+             value={agNewType}
+             onChange={e => setAgNewType(e.target.value)}
+@@ -1452,6 +1454,7 @@ export default function SettingsPanel() {
+             <option value="patrimonial">Patrimonial</option>
+           </select>
+           <input
++            data-guia="grupo-form.nome"
+             className="input flex-1 text-sm"
+             value={agNewName}
+             onChange={e => setAgNewName(e.target.value)}
+@@ -1464,6 +1467,7 @@ export default function SettingsPanel() {
+             }}
+           />
+           <button
++            data-guia="grupo-form.salvar"
+             className="btn-primary px-3"
+             onClick={() => {
+               if (!agNewName.trim()) return
+diff --git a/src/components/Transactions/TransactionForm.jsx b/src/components/Transactions/TransactionForm.jsx
+index bc39571..df9a68f 100644
+--- a/src/components/Transactions/TransactionForm.jsx
++++ b/src/components/Transactions/TransactionForm.jsx
+@@ -1564,7 +1564,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+           onClose={() => setShowRateio(false)}
+         />
+       )}
+-      <div>
++      <div data-guia="lancamento-form.tipo">
+         <label className="label">Tipo</label>
+         <div className="flex rounded-lg overflow-hidden border border-borda-forte">
+           {TYPE_OPTIONS.map(t => (
+@@ -1588,7 +1588,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+       </div>
+ 
+       <div className="grid grid-cols-2 gap-3">
+-        <div>
++        <div data-guia="lancamento-form.conta">
+           <label className="label">Conta {form.type === 'transfer' ? 'Origem' : ''} *{confira('accountId')}</label>
+           {trava
+             ? <div className="input opacity-60 cursor-not-allowed" title={trava}>{selectedAccount?.apelido || selectedAccount?.name || '—'}</div>
+@@ -1603,7 +1603,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+               />}
+         </div>
+         {form.type === 'transfer' ? (
+-          <div>
++          <div data-guia="lancamento-form.conta-destino">
+             <label className="label">Conta Destino *{confira('toAccountId')}</label>
+             <SearchableSelect
+               options={destAccountOpts}
+@@ -1616,7 +1616,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+             />
+           </div>
+         ) : (
+-          <div>
++          <div data-guia="lancamento-form.valor">
+             <label className="label">{isCredit && form.type === 'expense' && form.installments > 1 ? 'Total (R$) *' : 'Valor (R$) *'}{confira('amount')}</label>
+             <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required disabled={!!trava} />
+           </div>
+@@ -1628,7 +1628,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+ 
+       {form.type === 'transfer' && (
+         <>
+-          <div>
++          <div data-guia="lancamento-form.valor">
+             <label className="label">Valor (R$) *{confira('amount')}</label>
+             <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required />
+           </div>
+@@ -1784,7 +1784,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+         confira={!!destaques?.includes('tipoDocumentoId')}
+       />
+ 
+-      <div>
++      <div data-guia="lancamento-form.data">
+         <label className="label">Data *{confira('date')}</label>
+         <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required hoje disabled={!!trava} />
+       </div>
+@@ -1802,7 +1802,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+ 
+       {form.type !== 'transfer' && (
+         <>
+-          <div>
++          <div data-guia="lancamento-form.categoria">
+             <label className="label">Categoria{confira('categoryId')}</label>
+             <div className="flex items-center gap-2">
+               {rateioRows.length > 0 ? (
+@@ -1821,14 +1821,14 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+                   {categoriaForaDoPerfil && <p className="text-[11px] text-aviso mt-0.5">⚠ Categoria de outro perfil</p>}
+                 </div>
+               )}
+-              <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0" title="Dividir este lançamento em várias categorias">
++              <button type="button" data-guia="lancamento-form.dividir" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0" title="Dividir este lançamento em várias categorias">
+                 <span className="hidden sm:inline">Dividir em categorias</span><span className="sm:hidden">Dividir</span>
+               </button>
+             </div>
+             {erroRateio && <p className="text-[11px] text-aviso mt-1" role="alert">{erroRateio}</p>}
+           </div>
+ 
+-          <div>
++          <div data-guia="lancamento-form.favorecido">
+             <div className="flex items-center justify-between gap-2">
+               <label className="label">Favorecido{confira('payee')}</label>
+               {initial?.id && (initial.payee || '').trim() && (
+@@ -1867,7 +1867,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+         </>
+       )}
+ 
+-      <div>
++      <div data-guia="lancamento-form.descricao">
+         <label className="label">Descrição{confira('description')}</label>
+         <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Digite a descrição do lançamento" />
+       </div>
+@@ -2054,7 +2054,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+       )}
+ 
+       {isCredit && form.type === 'expense' && !initial?.id && (
+-        <div className="p-3 bg-surface-2/60 border border-borda-forte rounded-lg space-y-3">
++        <div className="p-3 bg-surface-2/60 border border-borda-forte rounded-lg space-y-3" data-guia="lancamento-form.parcelado">
+           <label className="flex items-center gap-2.5 cursor-pointer">
+             <div className="relative shrink-0">
+               <input
+@@ -2072,6 +2072,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+             <div className="flex items-center gap-3">
+               <label className="text-xs text-texto-2 shrink-0">Parcelas:</label>
+               <input
++                data-guia="lancamento-form.parcelas"
+                 className="input w-20 text-center"
+                 type="number"
+                 min="2"
+@@ -2093,7 +2094,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+       )}
+ 
+       {isCredit && form.type === 'expense' && (
+-        <div>
++        <div data-guia="lancamento-form.fatura">
+           <label className="label">Fatura de referência{confira('faturaMonthYear')}</label>
+           <select
+             className="input disabled:opacity-60"
+@@ -2315,7 +2316,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
+       <div className="flex gap-3 pt-1">
+         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+         {podeGravarForm ? (
+-          <button type="submit" className="btn-primary flex-1" title={tituloGravar}>
++          <button type="submit" data-guia="lancamento-form.salvar" className="btn-primary flex-1" title={tituloGravar}>
+             {rotuloGravar || (initial ? 'Salvar' : 'Registrar')}
+             <ShortcutHint actionId="lancamento.gravar" habilitado={atalhosForm} className="ml-2" />
+           </button>
+diff --git a/src/components/shared/RateioModal.jsx b/src/components/shared/RateioModal.jsx
+index e76e682..6424031 100644
+--- a/src/components/shared/RateioModal.jsx
++++ b/src/components/shared/RateioModal.jsx
+@@ -122,7 +122,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
+                 className="rounded-xl border border-borda bg-surface-2/40 p-3 space-y-2 md:space-y-0 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:flex md:items-start md:gap-2">
+                 {/* Categoria na largura toda (nome inteiro) + lixeira */}
+                 <div className="flex items-start gap-2 md:flex-1 md:min-w-0">
+-                  <div className="flex-1 min-w-0">
++                  <div className="flex-1 min-w-0" data-guia={i === 0 ? 'rateio-form.categoria' : undefined}>
+                     <CategorySelect
+                       categories={categories}
+                       perfilId={perfilId}
+@@ -141,7 +141,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
+                   </button>
+                 </div>
+                 {/* Valor + "Usar restante" */}
+-                <div className="flex items-center gap-2 md:shrink-0">
++                <div className="flex items-center gap-2 md:shrink-0" data-guia={i === 0 ? 'rateio-form.valor' : undefined}>
+                   <InputMoeda
+                     min="0"
+                     value={r.valor}
+@@ -186,7 +186,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
+             )
+           })}
+ 
+-          <button type="button" onClick={addRow}
++          <button type="button" onClick={addRow} data-guia="rateio-form.adicionar"
+             className="btn-secondary w-full md:w-auto min-h-[44px] md:min-h-0 text-sm md:text-xs flex items-center justify-center gap-1.5">
+             <Plus size={14} /> Categoria
+           </button>
+@@ -198,7 +198,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
+             <span className="text-texto-2">Total do lançamento</span>
+             <span className="font-semibold text-texto-1">{fmt(total)}</span>
+           </div>
+-          <div className="flex items-center justify-between gap-3 text-sm">
++          <div className="flex items-center justify-between gap-3 text-sm" data-guia="rateio-form.restante">
+             <span className="text-texto-2">Restante a distribuir</span>
+             <span className={`font-semibold ${corRestante}`} data-testid="rateio-restante">{sitRestante.estado === 'ok' ? '✓ ' : ''}{fmt(naoAtribuido)}</span>
+           </div>
+@@ -206,7 +206,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
+             <p role="status" className="text-sm text-aviso">{validacao.motivo}</p>
+           )}
+           <div className="flex justify-end">
+-            <button type="button" onClick={handleSave} disabled={!podeGravar}
++            <button type="button" onClick={handleSave} disabled={!podeGravar} data-guia="rateio-form.gravar"
+               className="btn-primary w-full md:w-auto min-h-[44px] md:min-h-0 text-sm disabled:opacity-50">
+               Gravar
+             </button>
+diff --git a/src/mobile/InicioMobile.jsx b/src/mobile/InicioMobile.jsx
+index a66f8bf..e31bd01 100644
+--- a/src/mobile/InicioMobile.jsx
++++ b/src/mobile/InicioMobile.jsx
+@@ -107,7 +107,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpen
+           <section key={modulo.id} className="card p-4">
+             <div className="flex items-center justify-between mb-3">
+               <h2 className="text-sm font-semibold text-texto-1">{modulo.cardTitle || modulo.label}</h2>
+-              <button type="button" onClick={() => irPara(modulo.id)} className="flex items-center gap-0.5 text-xs text-primary-fg min-h-[44px] -my-3 px-1">
++              <button type="button" data-guia="inicio.ver-tudo" onClick={() => irPara(modulo.id)} className="flex items-center gap-0.5 text-xs text-primary-fg min-h-[44px] -my-3 px-1">
+                 Ver tudo <ChevronRight size={14} />
+               </button>
+             </div>
