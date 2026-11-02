@@ -9,6 +9,7 @@ import AvisoSairModal from '../Offline/AvisoSairModal'
 import BotaoRecarregar from '../Offline/BotaoRecarregar'
 import { cabecalhoDaPagina } from './cabecalhoPagina'
 import AjudaTela from '../BoasVindas/AjudaTela'
+import MarcaDagua from '../MarcaDagua'
 
 const PAGE_TITLES = {
   dashboard: 'Painel Geral',
@@ -29,6 +30,22 @@ const PAGE_TITLES = {
   settings: 'Configurações',
   ajuda: 'Central de Ajuda',
   clientes: 'Clientes Finup',
+}
+
+// Espaço livre do cabeçalho com a marca-d'água (MarcaDagua) centralizada. A marca é absoluta: não muda
+// a altura nem a largura de nada. Só desktop (lg+) e só quando a sobra tem pelo menos 72px (container
+// query); com menos, some — nunca aperta os outros elementos.
+// `comMarca`: a marca existe uma vez só no cabeçalho (com chips, no bloco deles; sem chips, no spacer).
+function EspacoMarca({ className = '', classeMarca = '', comMarca = true }) {
+  return (
+    <div className={`flex-1 min-w-0 self-stretch relative @container ${className}`}>
+      {comMarca && (
+        <div className={`hidden lg:flex absolute inset-y-0 left-0 items-center justify-center pointer-events-none print:hidden ${classeMarca}`}>
+          <MarcaDagua className="hidden @min-[72px]:block h-[52px] w-auto shrink-0" />
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function Header({ page, financialPeriod, onOpenSearch, onOpenAssistente }) {
@@ -57,45 +74,52 @@ export default function Header({ page, financialPeriod, onOpenSearch, onOpenAssi
       </div>
 
       {/* Profile filter chips — desktop only (seletor de perfil do desktop) */}
+      {/* Bloco com o mesmo lugar do antigo (flex-1, base 0): o título não muda. Dentro, os chips ficam
+          com a largura deles (encolhem/rolam só quando falta lugar) e a sobra vai para a marca-d'água. */}
       {profiles.length > 0 && (
-        <div className="hidden md:flex items-center gap-1.5 flex-1 overflow-x-auto scrollbar-none px-1 min-w-0">
-          {profiles.map(p => {
-            const isActive = activeProfileId === p.id
-            const Icon = p.type === 'pf' ? User : Building2
-            return (
-              <button
-                key={p.id}
-                onClick={() => setActiveProfileId(isActive ? null : p.id)}
-                title={`${p.name} — ${p.type === 'pf' ? 'CPF' : 'CNPJ'} ${p.document || ''}`}
-                className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
-                  isActive
-                    ? 'bg-surface-2 text-texto-1 border-transparent ring-2 ring-inset'
-                    : 'bg-surface-2/60 border-borda-forte text-texto-2 hover:text-texto-1 hover:bg-surface-hover'
-                }`}
-                style={isActive ? { '--tw-ring-color': p.color } : {}}
-              >
-                <Icon size={11} className="shrink-0" />
-                <span className="hidden sm:inline truncate max-w-24">{p.name}</span>
-              </button>
-            )
-          })}
-          {/* "Tudo" chip — sempre por último */}
-          <button
-            onClick={() => setActiveProfileId(null)}
-            className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
-              activeProfileId === null
-                ? 'bg-primary/15 border-primary/40 text-primary-fg'
-                : 'bg-surface-2/60 border-borda-forte text-texto-2 hover:text-texto-1 hover:bg-surface-hover'
-            }`}
-          >
-            Tudo
-          </button>
+        <div className="hidden md:flex flex-1 min-w-0 self-stretch items-center px-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none min-w-0">
+            {profiles.map(p => {
+              const isActive = activeProfileId === p.id
+              const Icon = p.type === 'pf' ? User : Building2
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setActiveProfileId(isActive ? null : p.id)}
+                  title={`${p.name} — ${p.type === 'pf' ? 'CPF' : 'CNPJ'} ${p.document || ''}`}
+                  className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
+                    isActive
+                      ? 'bg-surface-2 text-texto-1 border-transparent ring-2 ring-inset'
+                      : 'bg-surface-2/60 border-borda-forte text-texto-2 hover:text-texto-1 hover:bg-surface-hover'
+                  }`}
+                  style={isActive ? { '--tw-ring-color': p.color } : {}}
+                >
+                  <Icon size={11} className="shrink-0" />
+                  <span className="hidden sm:inline truncate max-w-24">{p.name}</span>
+                </button>
+              )
+            })}
+            {/* "Tudo" chip — sempre por último */}
+            <button
+              onClick={() => setActiveProfileId(null)}
+              className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
+                activeProfileId === null
+                  ? 'bg-primary/15 border-primary/40 text-primary-fg'
+                  : 'bg-surface-2/60 border-borda-forte text-texto-2 hover:text-texto-1 hover:bg-surface-hover'
+              }`}
+            >
+              Tudo
+            </button>
 
+          </div>
+          {/* -right-4: centraliza no vão até o "Assistente" (inclui o px-1 do bloco e o gap do cabeçalho). */}
+          <EspacoMarca classeMarca="-right-4" />
         </div>
       )}
 
-      {/* Spacer — empurra o cluster da direita (sempre no mobile; no desktop só quando não há chips) */}
-      <div className={`flex-1 ${profiles.length > 0 ? 'md:hidden' : ''}`} />
+      {/* Spacer — empurra o cluster da direita (sempre no mobile; no desktop só quando não há chips,
+          e aí a marca-d'água fica nele). */}
+      <EspacoMarca className={profiles.length > 0 ? 'md:hidden' : ''} classeMarca="right-0" comMarca={profiles.length === 0} />
 
       {/* Right: busca global + seletor de perfil (mobile) + data (desktop) */}
       <div className="flex items-center gap-3 shrink-0">
