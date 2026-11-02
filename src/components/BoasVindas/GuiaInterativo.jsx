@@ -20,7 +20,9 @@ import { useTourAtivo, encerrarTour, iniciarTarefa } from './tourEstado'
 import TarefaGuiada from './TarefaGuiada'
 import { tarefasDaTela } from '../../lib/tarefasGuiadas'
 import { useIsMobile } from '../../hooks/useIsMobile'
-import { MARGEM, LARGURA_BALAO, montarPassos, posicaoBalao } from './tourPassos'
+import { navegarPara } from '../../lib/abrirTela'
+import { ajudaHash } from '../../lib/ajudaRota'
+import { MARGEM, LARGURA_BALAO, montarPassos, posicaoBalao, indiceDoItem } from './tourPassos'
 
 export default function GuiaInterativo() {
   const ativo = useTourAtivo()
@@ -35,11 +37,7 @@ function Tour({ tela, chaveInicial }) {
   const guia = useMemo(() => guiaDaTela(tela, ctx), [tela, ctx])
   // Os passos são montados uma vez, na abertura (a tela acabou de desenhar o que tem).
   const [passos] = useState(() => montarPassos(guia, tela))
-  const [i, setI] = useState(() => {
-    if (!chaveInicial) return 0
-    const k = passos.findIndex(p => p.item?.chave === chaveInicial)
-    return k > 0 ? k : 0
-  })
+  const [i, setI] = useState(() => indiceDoItem(passos, chaveInicial))
   const [rect, setRect] = useState(null)
   const [confirmarDesligar, setConfirmarDesligar] = useState(false)
   const balao = useRef(null)
@@ -73,7 +71,7 @@ function Tour({ tela, chaveInicial }) {
 
   // Elemento sumiu no meio do tour (aba trocou, lista recarregou): segue para o próximo.
   useEffect(() => {
-    if (passo?.tipo === 'item' && !alvo()) {
+    if (passo?.tipo === 'item' && !passo.item.porLinha && !alvo()) {
       const t = setTimeout(() => { if (!alvo()) setI(v => Math.min(v + 1, total - 1)) }, 400)
       return () => clearTimeout(t)
     }
@@ -95,6 +93,12 @@ function Tour({ tela, chaveInicial }) {
   const fecharMarcando = useCallback(() => { ocultarGuia(tela); encerrarTour() }, [tela])
   const proximo = useCallback(() => { if (i >= total - 1) fecharMarcando(); else setI(i + 1) }, [i, total, fecharMarcando])
   const voltar = () => setI(v => Math.max(0, v - 1))
+  // "Ver com exemplos": fecha o tour e abre a Central de Ajuda no item da vez (ou na tela).
+  const verComExemplos = () => {
+    ocultarGuia(tela)
+    encerrarTour()
+    navegarPara('ajuda', { hash: ajudaHash(tela, passos[i]?.tipo === 'item' ? passos[i].item.chave : null) })
+  }
 
   useEffect(() => {
     const tecla = (e) => {
@@ -114,10 +118,11 @@ function Tour({ tela, chaveInicial }) {
   const pos = posicaoBalao(comAlvo ? rect : null, tamBalao, { vw, vh })
   // Fim do tour: as tarefas "Faça comigo" desta tela, para praticar.
   const praticar = passo.tipo === 'fim' ? tarefasDaTela(tela, ctx, { celular: isMobile }) : []
-  const titulo = passo.tipo === 'intro' ? guia.titulo : passo.tipo === 'fim' ? (praticar.length ? 'Pronto! Quer praticar?' : 'Pronto!') : passo.item.rotulo
+  const titulo = passo.tipo === 'intro' ? guia.titulo : passo.tipo === 'fim' ? (praticar.length ? 'Pronto! Quer praticar?' : 'Pronto!')
+    : passo.tipo === 'linhas' ? 'Em cada linha da lista' : passo.item.rotulo
   const texto = passo.tipo === 'intro' ? guia.descricao
     : passo.tipo === 'fim' ? (praticar.length ? 'Escolha uma tarefa e o Finup mostra cada passo enquanto você faz.' : 'Você conheceu esta tela. O "?" ao lado do título refaz o tour quando quiser.')
-      : passo.item.texto
+      : passo.tipo === 'linhas' ? 'Quando a lista tiver itens, cada linha mostra também:' : passo.item.texto
 
   return createPortal(
     <div className="fixed inset-0 z-[100]" data-testid="tour-tela">
@@ -132,7 +137,7 @@ function Tour({ tela, chaveInicial }) {
       <div ref={balao} role="dialog" aria-modal="true" aria-label={`Tour: ${guia.titulo}`} tabIndex={-1} data-testid="balao-tour"
         className={isMobile
           ? 'absolute inset-x-0 bottom-[calc(68px+env(safe-area-inset-bottom))] max-h-[45vh] overflow-y-auto bg-surface border-t border-borda-forte rounded-t-2xl shadow-2xl p-4 outline-none'
-          : 'absolute bg-surface border border-borda-forte rounded-2xl shadow-2xl p-4 outline-none'}
+          : 'absolute max-h-[85vh] overflow-y-auto bg-surface border border-borda-forte rounded-2xl shadow-2xl p-4 outline-none'}
         style={isMobile ? undefined : { top: pos.top, left: pos.left, width: LARGURA_BALAO }}>
         <div className="flex items-start gap-2">
           <HelpCircle size={18} className="text-primary-fg shrink-0 mt-0.5" aria-hidden="true" />
@@ -159,6 +164,11 @@ function Tour({ tela, chaveInicial }) {
           </button>
         ))}
 
+        {passo.tipo === 'linhas' && (
+          <ul className="mt-2 space-y-1.5 text-sm text-texto-1" data-testid="tour-linhas">
+            {passo.itens.map(x => <li key={x.chave}><span className="font-semibold">{x.rotulo}:</span> {x.texto}</li>)}
+          </ul>
+        )}
         {praticar.length > 0 && (
           <ul className="mt-2 space-y-1" aria-label="Faça comigo">
             {praticar.map(x => (
@@ -177,8 +187,9 @@ function Tour({ tela, chaveInicial }) {
           </button>
         </div>
         {passo.tipo !== 'fim' && (
-          <div className="mt-2 pt-2 border-t border-borda">
+          <div className="mt-2 pt-2 border-t border-borda flex items-center gap-3">
             <button type="button" className="text-[11px] text-texto-2 hover:text-texto-1" onClick={fecharMarcando}>Não mostrar mais nesta tela</button>
+            <button type="button" className="text-[11px] text-primary-fg hover:underline ml-auto" onClick={verComExemplos}>Ver com exemplos</button>
           </div>
         )}
       </div>

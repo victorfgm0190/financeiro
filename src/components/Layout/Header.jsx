@@ -27,6 +27,7 @@ const PAGE_TITLES = {
   envelopes: 'Envelopes',
   alerts: 'Alertas de Vencimento',
   settings: 'Configurações',
+  ajuda: 'Central de Ajuda',
   clientes: 'Clientes Finup',
 }
 

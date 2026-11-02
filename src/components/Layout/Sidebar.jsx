@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CreditCard, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
-  Wallet, Loader, Layers, Package, Cloud, AlertTriangle, User, Building2, Gem, Briefcase, FileSpreadsheet, FileSignature,
+  Wallet, Loader, Layers, Package, Cloud, AlertTriangle, User, Building2, Gem, Briefcase, FileSpreadsheet, FileSignature, LifeBuoy,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from './RodapeIdentidade'
@@ -27,6 +27,8 @@ const NAV = [
   { id: 'reports', label: 'Relatórios', icon: BarChart3 },
   { id: 'alerts', label: 'Alertas', icon: Bell },
   { id: 'settings', label: 'Configurações', icon: Settings },
+  // Central de Ajuda: sempre no menu, mesmo com os guias desligados.
+  { id: 'ajuda', label: 'Ajuda', icon: LifeBuoy },
   // Só para o administrador da plataforma (prop `plataforma`, decidida pela API).
   { id: 'clientes', label: 'Clientes Finup', icon: Briefcase, plataforma: true },
 ]

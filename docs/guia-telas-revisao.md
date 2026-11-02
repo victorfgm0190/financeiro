@@ -1,10 +1,11 @@
 # Guia da Tela — textos para revisão
 
 Gerado de `src/lib/ajudaTelas.js` (AJUDA_TELAS). Para mudar um texto, edite aquele arquivo — este documento é só para leitura.
-O tour da tela mostra, nesta ordem: o "Para que serve" (1º balão), um balão por item (o número abaixo) e "Pronto!". Item cujo botão não está na tela no momento é pulado.
-`(só se: …)` = o item só aparece com o módulo ligado ou com a permissão.
+O tour da tela mostra, nesta ordem: o "Para que serve" (1º balão), um balão por item com o botão na tela (o número abaixo), um balão "Em cada linha da lista" com os itens marcados (por linha) quando a lista está vazia, e "Pronto!". Item cujo botão não está na tela no momento é pulado.
+A explicação longa e o exemplo de cada item estão em `docs/central-ajuda-revisao.md` (Central de Ajuda).
+`(só se: …)` = o item só aparece com o módulo ligado ou com a permissão. `(por linha)` = botão repetido em cada linha da lista.
 
-Total: 58 telas e subtelas, 402 itens.
+Total: 58 telas e subtelas, 410 itens.
 
 ## Painel `dashboard`
 
@@ -70,16 +71,17 @@ Todas as suas contas e bens, separados em grupos (conta corrente, poupança, inv
 3. **N sem grupo (no fim da página) ↓** — Aparece ao lado de "Contas (N)" quando há contas fora dos grupos. Clique para descer até a seção "Sem Grupo".
 4. **Grupos** — Organiza as contas em grupos e define a ordem em que aparecem.
 5. **Nova Conta** — Cadastra uma conta. Escolha o perfil (CPF/CNPJ) dela para que apareça nos totais certos. _(só se: pode:contas:incluir)_
-6. **Cabeçalho do grupo** — Mostra o total do grupo. Clique para recolher ou abrir as contas dele.
-7. **Cartão da conta** — Mostra o saldo de hoje e o saldo futuro. Clique para abrir o extrato. Arraste o cartão para outro grupo para mudá-lo de lugar.
-8. **Selos da conta** — Perfil dono da conta (ou "Sem vínculo"), apelido, FC (soma no Saldo Principal), INV (investimento), CC (Conta central) e Inativa.
-9. **Lançar rendimento** — Registra o rendimento do mês. Só aparece em contas com categoria de rendimento definida. _(só se: pode:contas:editar)_
-10. **Editar conta (lápis)** — Abre o cadastro da conta para mudar nome, perfil, grupo e opções. _(só se: pode:contas:editar)_
-11. **Inativar / Reativar (olho)** — Inativa a conta sem apagar nada: ela some dos formulários de lançamento. Clique de novo para reativar. _(só se: pode:contas:editar)_
-12. **Excluir conta (lixeira)** — Apaga a conta de vez. Pede confirmação antes. _(só se: pode:contas:excluir)_
-13. **Setas ↑ ↓** — Mudam a posição da conta dentro do grupo. _(só se: pode:contas:editar)_
-14. **Recalcular** — Refaz o saldo da conta a partir dos lançamentos dela. _(só se: pode:contas:editar)_
-15. **Definir como favorita** — Marca a conta com estrela e a lista primeiro em Lançamentos. Vale uma favorita por perfil. _(só se: pode:contas:editar)_
+6. **Cabeçalho do grupo** — Mostra o total do grupo. Clique para recolher ou abrir as contas dele. _(por linha)_
+7. **Cartão da conta** — Mostra o saldo de hoje e o saldo futuro. Clique para abrir o extrato. Arraste o cartão para outro grupo para mudá-lo de lugar. _(por linha)_
+8. **Selos da conta** — Perfil dono da conta (ou "Sem vínculo"), apelido, FC (soma no Saldo Principal), INV (investimento), CC (Conta central) e Inativa. _(por linha)_
+9. **Lançar rendimento** — Registra o rendimento do mês. Só aparece em contas com categoria de rendimento definida. _(por linha)_ _(só se: pode:contas:editar)_
+10. **Editar conta (lápis)** — Abre o cadastro da conta para mudar nome, perfil, grupo e opções. _(por linha)_ _(só se: pode:contas:editar)_
+11. **Inativar / Reativar (olho)** — Inativa a conta sem apagar nada: ela some dos formulários de lançamento. Clique de novo para reativar. _(por linha)_ _(só se: pode:contas:editar)_
+12. **Excluir conta (lixeira)** — Apaga a conta de vez. Pede confirmação antes. _(por linha)_ _(só se: pode:contas:excluir)_
+13. **Setas ↑ ↓** — Mudam a posição da conta dentro do grupo. _(por linha)_ _(só se: pode:contas:editar)_
+14. **Recalcular** — Refaz o saldo da conta a partir dos lançamentos dela. _(por linha)_ _(só se: pode:contas:editar)_
+15. **Atualizar Valor** — Em contas de bem, informa quanto o bem vale hoje; o valor antigo vai para o histórico. _(por linha)_ _(só se: pode:contas:editar)_
+16. **Definir como favorita** — Marca a conta com estrela e a lista primeiro em Lançamentos. Vale uma favorita por perfil. _(por linha)_ _(só se: pode:contas:editar)_
 
 **Dicas**
 
@@ -103,7 +105,7 @@ Todos os lançamentos da conta no mês escolhido, com o saldo depois de cada um.
 10. **Filtros** — Digite data, histórico, favorecido ou conta para encontrar lançamentos; Entrada e Saída filtram por valor.
 11. **Todos / Conciliados / Pendentes** — Mostra todos os lançamentos, só os já conferidos ou só os que faltam conferir.
 12. **Limpar filtros (X)** — Apaga tudo o que foi digitado nos filtros.
-13. **Ações da linha** — Ao passar o mouse na linha: editar, duplicar, estornar ou excluir o lançamento.
+13. **Ações da linha** — Ao passar o mouse na linha: editar, duplicar, estornar ou excluir o lançamento. _(por linha)_
 14. **Coluna R** — Clique no círculo para marcar o lançamento como conferido com o banco (ou desmarcar).
 15. **Barra de seleção** — No modo Selecionar: Alterar Selecionados, Conciliar, Desconciliar ou Excluir os lançamentos marcados.
 
@@ -122,17 +124,19 @@ Acompanhe cada fatura do cartão: as compras, as parcelas, o total e o pagamento
 4. **Extrato** — Abre o extrato gerencial do cartão, com os grupos e o saldo corrido. Só no computador. _(só se: gerencial)_
 5. **Relatório** — Abre o relatório da fatura, pronto para conferir ou exportar.
 6. **Fatura Selecionada** — O total da fatura e quantos lançamentos ela tem, somando os agendamentos previstos quando houver.
-7. **Saldo a Pagar / Valor Pago** — Quanto falta pagar ou quanto já foi pago, e se a fatura está paga, parcialmente paga ou não paga.
-8. **Fechar / Abrir Fatura** — Fecha a fatura para ninguém lançar nela sem querer. Abra de novo se precisar ajustar. _(só se: pode:cartao:editar)_
-9. **Novo Lançamento** — Registra uma compra ou estorno neste cartão. Fica bloqueado com a fatura fechada. _(só se: pode:cartao:incluir)_
-10. **Pagar Fatura** — Registra o pagamento a partir da conta pagadora do cartão. _(só se: pode:cartao:incluir)_
-11. **Atualizar** — Recalcula o total da fatura e atualiza a conta a pagar dela. _(só se: pode:cartao:editar)_
-12. **Revisar Movimentos Automáticos** — Mostra os ajustes automáticos pendentes da fatura antes de aplicar. _(só se: pode:cartao:editar)_
-13. **Selecionar** — Liga a seleção para marcar vários lançamentos e alterar ou conciliar de uma vez. _(só se: pode:cartao:editar)_
-14. **Reconciliar** — Abre a lista da fatura para marcar como conferido o que bate com a fatura do banco. Só no computador. _(só se: pode:cartao:editar)_
-15. **Ações da linha** — Editar, duplicar ou excluir a compra.
-16. **Coluna R** — Clique no círculo para marcar a compra como conferida (ou desmarcar).
-17. **Agendamentos previstos** — Despesas agendadas que ainda vão entrar nesta fatura. Clique para ver a lista.
+7. **Limite Disponível** — Quanto do limite do cartão ainda está livre.
+8. **Dívida Total** — Tudo o que você deve no cartão, com os dias de fechamento e vencimento.
+9. **Saldo a Pagar / Valor Pago** — Quanto falta pagar ou quanto já foi pago, e se a fatura está paga, parcialmente paga ou não paga.
+10. **Fechar / Abrir Fatura** — Fecha a fatura para ninguém lançar nela sem querer. Abra de novo se precisar ajustar. _(só se: pode:cartao:editar)_
+11. **Novo Lançamento** — Registra uma compra ou estorno neste cartão. Fica bloqueado com a fatura fechada. _(só se: pode:cartao:incluir)_
+12. **Pagar Fatura** — Registra o pagamento a partir da conta pagadora do cartão. _(só se: pode:cartao:incluir)_
+13. **Atualizar** — Recalcula o total da fatura e atualiza a conta a pagar dela. _(só se: pode:cartao:editar)_
+14. **Revisar Movimentos Automáticos** — Mostra os ajustes automáticos pendentes da fatura antes de aplicar. _(só se: pode:cartao:editar)_
+15. **Selecionar** — Liga a seleção para marcar vários lançamentos e alterar ou conciliar de uma vez. _(só se: pode:cartao:editar)_
+16. **Reconciliar** — Abre a lista da fatura para marcar como conferido o que bate com a fatura do banco. Só no computador. _(só se: pode:cartao:editar)_
+17. **Ações da linha** — Editar, duplicar ou excluir a compra. _(por linha)_
+18. **Coluna R** — Clique no círculo para marcar a compra como conferida (ou desmarcar).
+19. **Agendamentos previstos** — Despesas agendadas que ainda vão entrar nesta fatura. Clique para ver a lista.
 
 **Dicas**
 
@@ -170,8 +174,12 @@ Suas contas a pagar e a receber, com as datas de cada ocorrência.
 10. **Conta de reserva** — Na aba Contas Anuais, mostra só os agendamentos de uma conta de reserva.
 11. **Todos / Entradas / Saídas / Transferências** — Filtra a lista pelo tipo de movimento.
 12. **Selecionar** — Marca vários agendamentos para pagar, pular ou alterar todos de uma vez. _(só se: pode:agendamentos:editar)_
-13. **Pagar / Receber** — Na data, confirma que aconteceu: o agendamento vira um lançamento na conta. _(só se: pode:agendamentos:editar)_
-14. **Editar (lápis na linha)** — Muda os dados do agendamento, como valor, data ou categoria. _(só se: pode:agendamentos:editar)_
+13. **Pagar / Receber** — Na data, confirma que aconteceu: o agendamento vira um lançamento na conta. _(por linha)_ _(só se: pode:agendamentos:editar)_
+14. **Efetivar Provisão** — Informa o valor e a data reais de uma provisão quando a conta chega. _(por linha)_ _(só se: pode:agendamentos:editar)_
+15. **Pular** — Pula esta ocorrência sem lançar nada e passa para a próxima. _(por linha)_ _(só se: pode:agendamentos:editar)_
+16. **Estornar** — Cancela esta ocorrência, sem lançar nada. Pede confirmação. _(por linha)_ _(só se: pode:agendamentos:editar)_
+17. **Editar (lápis na linha)** — Muda os dados do agendamento, como valor, data ou categoria. _(por linha)_ _(só se: pode:agendamentos:editar)_
+18. **Excluir (lixeira na linha)** — Apaga o agendamento inteiro, com todas as próximas ocorrências. _(por linha)_ _(só se: pode:agendamentos:excluir)_
 
 **Dicas**
 
@@ -182,9 +190,9 @@ Suas contas a pagar e a receber, com as datas de cada ocorrência.
 Tudo o que já entrou ou saiu das suas contas e cartões. Escolha uma conta ou uma fatura para ver os lançamentos.
 
 1. **Novo** — Registra uma receita, despesa ou transferência. Primeiro você escolhe a conta. _(só se: pode:lancamentos:incluir)_
-2. **Cartão da conta** — Mostra o saldo atual da conta. Clique para abrir o extrato com os lançamentos dela.
-3. **+ no cartão de crédito** — Registra uma compra direto nesse cartão. _(só se: pode:lancamentos:incluir)_
-4. **Fatura do cartão** — Cada mês de fatura com o total e a quantidade de compras. Clique para ver as compras dela.
+2. **Cartão da conta** — Mostra o saldo atual da conta. Clique para abrir o extrato com os lançamentos dela. _(por linha)_
+3. **+ no cartão de crédito** — Registra uma compra direto nesse cartão. _(por linha)_ _(só se: pode:lancamentos:incluir)_
+4. **Fatura do cartão** — Cada mês de fatura com o total e a quantidade de compras. Clique para ver as compras dela. _(por linha)_
 
 **Dicas**
 
@@ -200,11 +208,11 @@ As compras de uma fatura do cartão, com o total e o que já foi conferido.
 4. **Fatura e Lançamentos** — O valor total da fatura e quantas compras ela tem.
 5. **Filtros** — Encontre compras por data, histórico, favorecido, categoria ou valor. O total da fatura não muda.
 6. **Conciliados / Pendentes** — Quanto das compras na tela já foi conferido e quanto ainda falta.
-7. **Estornar (seta na linha)** — Registra a devolução de uma compra, sem apagar a original. _(só se: pode:lancamentos:incluir)_
-8. **Editar (lápis na linha)** — Abre a compra para ver ou mudar os dados.
-9. **Duplicar** — Cria uma cópia da compra numa data que você escolhe. _(só se: pode:lancamentos:incluir)_
-10. **Excluir (lixeira na linha)** — Apaga a compra. Se ela tiver um resgate ligado, o Finup avisa antes. _(só se: pode:lancamentos:excluir)_
-11. **R (conferido)** — Marca ou desmarca a compra como conferida com a fatura do banco.
+7. **Estornar (seta na linha)** — Registra a devolução de uma compra, sem apagar a original. _(por linha)_ _(só se: pode:lancamentos:incluir)_
+8. **Editar (lápis na linha)** — Abre a compra para ver ou mudar os dados. _(por linha)_
+9. **Duplicar** — Cria uma cópia da compra numa data que você escolhe. _(por linha)_ _(só se: pode:lancamentos:incluir)_
+10. **Excluir (lixeira na linha)** — Apaga a compra. Se ela tiver um resgate ligado, o Finup avisa antes. _(por linha)_ _(só se: pode:lancamentos:excluir)_
+11. **R (conferido)** — Marca ou desmarca a compra como conferida com a fatura do banco. _(por linha)_
 
 **Dicas**
 
@@ -246,11 +254,11 @@ Compare o arquivo da fatura do banco com a fatura que já está no Finup e decid
 5. **Resumo e Confirmar Conciliação** — Quantos itens já batem, quantos serão importados e excluídos, e o botão para gravar.
 6. **Cancelar** — Desiste da conciliação sem gravar nada.
 7. **Só no arquivo — falta no Finup** — Compras que estão no arquivo do banco e não foram achadas no Finup.
-8. **Importar / Ignorar** — Escolha se a compra entra no Finup ou fica de fora.
+8. **Importar / Ignorar** — Escolha se a compra entra no Finup ou fica de fora. _(por linha)_
 9. **Só no Finup — não está no arquivo** — Lançamentos da fatura no Finup que não aparecem no arquivo do banco.
-10. **Manter / Excluir** — Mantenha o lançamento ou marque para excluir ao confirmar.
+10. **Manter / Excluir** — Mantenha o lançamento ou marque para excluir ao confirmar. _(por linha)_
 11. **Conciliados** — Compras que estão nos dois lados e já batem. Não precisam de ação.
-12. **Editar (lápis)** — Abre o lançamento do Finup para corrigir algum dado.
+12. **Editar (lápis)** — Abre o lançamento do Finup para corrigir algum dado. _(por linha)_
 
 ## Importar lançamentos `importar-lancamentos`
 
@@ -265,7 +273,7 @@ Traga extratos e planilhas (Excel, CSV ou OFX) de qualquer banco para dentro do 
 7. **Cancelar** — Descarta o arquivo lido sem gravar nada.
 8. **Últimas importações** — A lista das importações feitas. Cada uma pode ser desfeita depois, se algo não sair como esperado.
 9. **Recarregar** — Atualiza a lista das últimas importações.
-10. **Desfazer importação** — Apaga os lançamentos daquela importação e o saldo da conta volta ao que era. _(só se: pode:lancamentos:excluir)_
+10. **Desfazer importação** — Apaga os lançamentos daquela importação e o saldo da conta volta ao que era. _(por linha)_ _(só se: pode:lancamentos:excluir)_
 
 **Dicas**
 
@@ -302,9 +310,10 @@ Mostra como o seu saldo vai ficar nos próximos dias e meses, somando o que já 
 O dinheiro separado para objetivos — quanto há em cada reserva e para onde ele foi.
 
 1. **Abas** — Troca entre as contas reserva, o resumo das funções, o fluxo futuro, o razão diário e o histórico.
-2. **Total Reservado / Depósitos / Resgates** — Quanto há guardado nas contas reserva e quanto entrou e saiu no mês.
-3. **Saldo das reservas** — Quanto há guardado em cada conta reserva e o que entrou e saiu dela no mês.
-4. **Ver Extrato** — Mostra os depósitos e resgates da conta reserva.
+2. **Aba Resumo** — Abre o Resumo: cada objetivo de reserva, com saldo, entradas e saídas.
+3. **Total Reservado / Depósitos / Resgates** — Quanto há guardado nas contas reserva e quanto entrou e saiu no mês.
+4. **Saldo das reservas** — Quanto há guardado em cada conta reserva e o que entrou e saiu dela no mês. _(por linha)_
+5. **Ver Extrato** — Mostra os depósitos e resgates da conta reserva. _(por linha)_
 
 **Dicas**
 
@@ -340,7 +349,7 @@ Um registro por função por dia, para conferir a evolução de cada reserva.
 4. **Funções** — Clique nas funções para ver só elas na tabela e no gráfico.
 5. **Gráfico** — A evolução do saldo das funções ao longo dos dias.
 6. **Tabela do razão** — Entradas, saídas, ajustes e saldos por dia. Clique no título de uma coluna para ordenar.
-7. **Ver período** — Abre no Histórico o período fechado a que a linha pertence.
+7. **Ver período** — Abre no Histórico o período fechado a que a linha pertence. _(por linha)_
 
 **Dicas**
 
@@ -356,13 +365,13 @@ Cada objetivo (função de reserva) com o saldo, as entradas e saídas e o que a
 4. **Virar Saldo** — Fecha o período: o saldo de hoje vira o saldo inicial do próximo, e o fechado vai para o Histórico. _(só se: pode:reservas:editar)_
 5. **Nova Função** — Cria um objetivo de reserva, com conta, valor anual e mês de vencimento. _(só se: pode:reservas:incluir)_
 6. **Saldo Real** — Digite o saldo do banco para ver quanto falta distribuir entre as funções.
-7. **Exibir como despesa** — Liga ou desliga se o depósito dessa função conta como despesa nos relatórios. _(só se: pode:reservas:editar)_
-8. **Entradas / Saídas** — Clique no valor para ver de onde veio cada entrada ou saída.
-9. **Ajuste** — Mostra o histórico de ajustes da função; o "+" grava um ajuste novo.
+7. **Exibir como despesa** — Liga ou desliga se o depósito dessa função conta como despesa nos relatórios. _(por linha)_ _(só se: pode:reservas:editar)_
+8. **Entradas / Saídas** — Clique no valor para ver de onde veio cada entrada ou saída. _(por linha)_
+9. **Ajuste** — Mostra o histórico de ajustes da função; o "+" grava um ajuste novo. _(por linha)_
 10. **Distribuir** — Reparte a diferença entre o saldo do banco e as funções. Não move dinheiro entre contas. _(só se: pode:reservas:editar)_
-11. **Mov. Futuros** — Os depósitos e resgates já agendados para essa função.
-12. **Editar (lápis)** — Muda os dados da função. _(só se: pode:reservas:editar)_
-13. **Excluir (lixeira)** — Apaga a função de reserva. _(só se: pode:reservas:excluir)_
+11. **Mov. Futuros** — Os depósitos e resgates já agendados para essa função. _(por linha)_
+12. **Editar (lápis)** — Muda os dados da função. _(por linha)_ _(só se: pode:reservas:editar)_
+13. **Excluir (lixeira)** — Apaga a função de reserva. _(por linha)_ _(só se: pode:reservas:excluir)_
 
 **Dicas**
 
@@ -375,8 +384,8 @@ Limites de gasto por assunto no mês (mercado, lazer…) e quanto já foi usado 
 1. **Novo Envelope** — Cria um envelope com nome, limite mensal e as categorias que entram nele. _(só se: pode:envelopes:incluir)_
 2. **Competência** — Use as setas para ver os envelopes de outro mês.
 3. **Total limite / Já gasto / Ainda posso gastar** — A soma de todos os envelopes do mês.
-4. **Barra do envelope** — A parte cheia é o que já foi gasto; a cor avisa quando está perto do limite ou passou dele. Toque para ver os lançamentos.
-5. **Opções (⋯)** — Edita ou exclui o envelope. _(só se: pode:envelopes:editar)_
+4. **Barra do envelope** — A parte cheia é o que já foi gasto; a cor avisa quando está perto do limite ou passou dele. Toque para ver os lançamentos. _(por linha)_
+5. **Opções (⋯)** — Edita ou exclui o envelope. _(por linha)_ _(só se: pode:envelopes:editar)_
 
 **Dicas**
 
@@ -389,9 +398,9 @@ Defina quanto pretende gastar em cada categoria e compare com o que realmente ac
 1. **Total Orçado / Gasto / Saldo** — Quanto foi planejado no mês, quanto já foi gasto e quanto ainda sobra.
 2. **Despesa real / Valor pago** — Escolhe como contar os lançamentos de contratos nos gastos. _(só se: contratos)_
 3. **Novo Orçamento** — Define um limite de gasto no mês para uma categoria. _(só se: pode:orcamento:incluir)_
-4. **Previsto × realizado** — Para cada categoria, o valor planejado ao lado do valor gasto. A barra muda de cor perto do limite e quando estoura.
-5. **Editar (lápis)** — Muda a categoria ou o valor orçado. _(só se: pode:orcamento:editar)_
-6. **Excluir (lixeira)** — Remove o orçamento dessa categoria. _(só se: pode:orcamento:excluir)_
+4. **Previsto × realizado** — Para cada categoria, o valor planejado ao lado do valor gasto. A barra muda de cor perto do limite e quando estoura. _(por linha)_
+5. **Editar (lápis)** — Muda a categoria ou o valor orçado. _(por linha)_ _(só se: pode:orcamento:editar)_
+6. **Excluir (lixeira)** — Remove o orçamento dessa categoria. _(por linha)_ _(só se: pode:orcamento:excluir)_
 
 **Dicas**
 
@@ -404,11 +413,11 @@ Tudo o que você tem menos o que você deve: contas, investimentos, bens, dívid
 1. **Bens, Investimentos, Contas, Dívidas e Cartão** — O total de cada parte do patrimônio. Clique em qualquer um para ver de onde vem o valor.
 2. **Patrimônio Líquido** — O valor final, somando os bens e descontando as dívidas. Clique para ver a composição.
 3. **Evolução do Patrimônio Líquido** — Como o patrimônio mudou nos últimos 6 meses. Fica mais real quando você atualiza o valor dos bens.
-4. **Nome do bem** — Clique para ver os detalhes do bem: nota fiscal, financiamento e parcelas.
-5. **Atualizações** — Mostra ou esconde o histórico de valores do bem.
-6. **Detalhar bem (lápis)** — Abre a ficha do bem, onde dá para registrar entrada, financiamento e pagar parcelas.
-7. **Atualizar valor** — Informa quanto o bem vale hoje; o valor antigo fica guardado no histórico. _(só se: pode:patrimonio:editar)_
-8. **Dívida ou financiamento** — O saldo devedor. Em financiamento, clique para consultar as parcelas.
+4. **Nome do bem** — Clique para ver os detalhes do bem: nota fiscal, financiamento e parcelas. _(por linha)_
+5. **Atualizações** — Mostra ou esconde o histórico de valores do bem. _(por linha)_
+6. **Detalhar bem (lápis)** — Abre a ficha do bem, onde dá para registrar entrada, financiamento e pagar parcelas. _(por linha)_
+7. **Atualizar valor** — Informa quanto o bem vale hoje; o valor antigo fica guardado no histórico. _(por linha)_ _(só se: pode:patrimonio:editar)_
+8. **Dívida ou financiamento** — O saldo devedor. Em financiamento, clique para consultar as parcelas. _(por linha)_
 9. **Resumo Patrimonial** — A conta completa, linha por linha. Clique numa linha para ver a composição dela.
 
 **Dicas**
@@ -529,7 +538,7 @@ O que vence hoje e nos próximos dias, e os avisos que precisam da sua atenção
 2. **Ativar Notificações** — Deixa o navegador avisar quando uma conta vence hoje.
 3. **Conferir em Agendamentos** — Uma ocorrência não foi registrada sozinha porque já existe um lançamento parecido; confira e decida em Agendamentos. _(só se: pagina:schedule)_
 4. **Alertas de vencimento** — Contas a pagar e faturas perto do vencimento.
-5. **Dispensar** — Tira o alerta da lista quando você já cuidou dele.
+5. **Dispensar** — Tira o alerta da lista quando você já cuidou dele. _(por linha)_
 6. **Calendário de Vencimentos — Cartões** — O próximo vencimento de cada cartão, quantos dias faltam e o valor da fatura.
 
 **Dicas**
@@ -543,9 +552,9 @@ Confere faturas, parcelas e subcontas com as regras do Finup e lista o que não 
 1. **Varrer agora** — Faz uma nova conferência de todos os dados. _(só se: pode:alertas:editar)_
 2. **Pendentes / Ignoradas / Resolvidas** — Escolha quais pendências quer ver.
 3. **Corrigir todas** — Aplica de uma vez as correções que o Finup sabe fazer sozinho e confere de novo. _(só se: pode:alertas:editar)_
-4. **Corrigir** — Mostra a correção proposta para a pendência antes de aplicar. _(só se: pode:alertas:editar)_
-5. **Abrir lançamento / Ir para a fatura** — Abre o lançamento ou a fatura envolvidos para você conferir.
-6. **Ignorar / Reabrir** — Tira da lista uma pendência que você sabe que está certa, ou traz de volta uma ignorada. _(só se: pode:alertas:editar)_
+4. **Corrigir** — Mostra a correção proposta para a pendência antes de aplicar. _(por linha)_ _(só se: pode:alertas:editar)_
+5. **Abrir lançamento / Ir para a fatura** — Abre o lançamento ou a fatura envolvidos para você conferir. _(por linha)_
+6. **Ignorar / Reabrir** — Tira da lista uma pendência que você sabe que está certa, ou traz de volta uma ignorada. _(por linha)_ _(só se: pode:alertas:editar)_
 
 **Dicas**
 

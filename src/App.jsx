@@ -37,6 +37,8 @@ import FaixaOffline from './components/Offline/FaixaOffline'
 import SoComInternet from './components/Offline/SoComInternet'
 import SettingsPanel from './components/Settings/SettingsPanel'
 import { ehHashConfig } from './lib/configRota'
+import { ehHashAjuda } from './lib/ajudaRota'
+import CentralAjuda from './components/Ajuda/CentralAjuda'
 import { EVENTO_NAVEGAR } from './lib/abrirTela'
 import BoasVindasTour from './components/BoasVindas/BoasVindasTour'
 import GuiaInterativo from './components/BoasVindas/GuiaInterativo'
@@ -65,16 +67,18 @@ import { podeVerModuloMobile } from './lib/permissoes'
 
 function AppContent() {
   // #config/<aba>/<seção> na URL abre Configurações direto — vale no reload e em links internos.
-  const [activePage, setActivePage] = useState(() => (ehHashConfig(window.location.hash) ? 'settings' : 'dashboard'))
+  // #ajuda/<tela>/<item> abre a Central de Ajuda já na seção.
+  const [activePage, setActivePage] = useState(() => (ehHashConfig(window.location.hash) ? 'settings' : ehHashAjuda(window.location.hash) ? 'ajuda' : 'dashboard'))
   // Mobile: módulo aberto no MobileShell (id de src/mobile/modules.js). Acompanha activePage quando
   // um painel navega por página (ex.: "Ver alertas" → Alertas).
   const isMobile = useIsMobile()
-  const [mobileAtivo, setMobileAtivo] = useState(() => (ehHashConfig(window.location.hash) ? 'configuracoes' : 'inicio'))
+  const [mobileAtivo, setMobileAtivo] = useState(() => (ehHashConfig(window.location.hash) ? 'configuracoes' : ehHashAjuda(window.location.hash) ? 'ajuda' : 'inicio'))
   useEffect(() => {
     const onHash = () => {
-      if (!ehHashConfig(window.location.hash)) return
-      setActivePage('settings')
-      setMobileAtivo(atual => moduloAposNavegar(mobileModules, 'settings', atual))
+      const page = ehHashConfig(window.location.hash) ? 'settings' : ehHashAjuda(window.location.hash) ? 'ajuda' : null
+      if (!page) return
+      setActivePage(page)
+      setMobileAtivo(atual => moduloAposNavegar(mobileModules, page, atual))
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
@@ -98,7 +102,7 @@ function AppContent() {
     if (page !== activePage) saveScrollNow(mainRef, scrollScope ?? activePage)
     setScrollScope(null)
     // Saindo de Configurações, o hash dela sai da URL — senão o reload voltaria para lá.
-    if (page !== 'settings' && ehHashConfig(window.location.hash)) {
+    if ((page !== 'settings' && ehHashConfig(window.location.hash)) || (page !== 'ajuda' && ehHashAjuda(window.location.hash))) {
       window.history.replaceState(null, '', window.location.pathname + window.location.search)
     }
     setActivePage(page)
@@ -222,6 +226,7 @@ function AppContent() {
     reports: <ReportsPanel />,
     alerts: <AlertsPanel setActivePage={navigate} integridadePendentes={integridadePendentes} />,
     settings: <SettingsPanel />,
+    ajuda: <CentralAjuda />,
     clientes: <SoComInternet titulo="Clientes Finup"><ClientesPanel onMudou={atualizarPlataforma} /></SoComInternet>,
   }
 

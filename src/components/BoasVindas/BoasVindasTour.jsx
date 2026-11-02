@@ -54,6 +54,7 @@ export default function BoasVindasTour() {
   const escolher = (opcao) => {
     fechar()
     if (opcao === 'primeiros-passos') abrirPrimeirosPassos()
+    else if (opcao === 'detalhes') navegarPara('ajuda')
   }
   const avancar = () => setI(v => Math.min(v + 1, passos.length - 1))
 

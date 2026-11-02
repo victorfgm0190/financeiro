@@ -8,7 +8,7 @@ import GuiaInterativo from './GuiaInterativo'
 import GuiasTelasPanel from './GuiasTelasPanel'
 import { useSubtelaGuia } from './subtelaGuia'
 import { _reiniciarTour } from './tourEstado'
-import { montarPassos, posicaoBalao } from './tourPassos'
+import { montarPassos, posicaoBalao, indiceDoItem } from './tourPassos'
 import { _reiniciarBoasVindas, definirTourAberto } from '../../lib/boasVindasApi'
 import { AJUDA_TELAS, TELAS_COM_GUIA, itemVisivel, guiaDaTela } from '../../lib/ajudaTelas'
 import { montarContextoAjuda } from './contextoAjuda'
@@ -64,10 +64,14 @@ describe('tour da tela', () => {
     render(<Tela />)
     await esperarTour()
     expect(screen.getByTestId('balao-tour').textContent).toContain(AJUDA_TELAS.accounts.descricao)
-    expect(screen.getByTestId('indicador-tour').textContent).toBe('1 de 4') // intro + 2 botões + fim
+    expect(screen.getByTestId('indicador-tour').textContent).toBe('1 de 5') // intro + 2 botões + "em cada linha" + fim
     fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
-    expect(screen.getByTestId('balao-tour').textContent).toMatch(/^2 de 4(Grupos|Nova Conta)/)
+    expect(screen.getByTestId('balao-tour').textContent).toMatch(/^2 de 5(Grupos|Nova Conta)/)
     fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    // Botões de cada linha (lista vazia na tela): um passo só, com a lista deles.
+    expect(screen.getByTestId('balao-tour').textContent).toContain('Em cada linha da lista')
+    expect(screen.getByTestId('tour-linhas').textContent).toContain('Excluir')
     fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
     expect(screen.getByTestId('balao-tour').textContent).toContain('Pronto!')
     fireEvent.click(screen.getByRole('button', { name: 'Concluir' }))
@@ -110,6 +114,25 @@ describe('tour da tela', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ajuda: Contas' }))
     fireEvent.click(screen.getByRole('menuitem', { name: /Voltar a mostrar o tour sozinho/ }))
     await waitFor(() => expect(banco.guiasOcultos).toEqual([]))
+  })
+  it('"?" → "Ajuda detalhada com exemplos" e o "Ver com exemplos" do tour abrem a Central no ponto certo', async () => {
+    banco.guiasOcultos = ['accounts']
+    const ir = vi.fn()
+    window.addEventListener('finup:navegar', ir)
+    render(<Tela />)
+    await semTour()
+    fireEvent.click(screen.getByRole('button', { name: 'Ajuda: Contas' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Ajuda detalhada com exemplos' }))
+    expect(ir.mock.calls.at(-1)[0].detail.page).toBe('ajuda')
+    expect(window.location.hash).toBe('#ajuda/accounts')
+    fireEvent.click(screen.getByRole('button', { name: 'Ajuda: Contas' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Tour desta tela' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ver com exemplos' }))
+    expect(tour()).toBeNull()
+    expect(window.location.hash).toMatch(/^#ajuda\/accounts\/(nova|grupos)$/)
+    window.removeEventListener('finup:navegar', ir)
+    window.history.replaceState(null, '', '/')
   })
   it('não abre por cima das boas-vindas: espera fechar; sem tour de boas-vindas visto, não abre', async () => {
     banco.tourVistoEm = null
@@ -154,6 +177,15 @@ describe('partes puras', () => {
     const guia = { itens: [{ chave: 'a' }, { chave: 'b' }, { chave: 'c' }] }
     const passos = montarPassos(guia, 't', (tela, chave) => (chave === 'b' ? {} : null))
     expect(passos.map(p => p.tipo + (p.item ? `:${p.item.chave}` : ''))).toEqual(['intro', 'item:b', 'fim'])
+  })
+  it('passos: botões "de cada linha" sem linha na tela viram um passo só; abrir num deles cai nesse passo', () => {
+    const guia = { itens: [{ chave: 'a' }, { chave: 'b', porLinha: true }, { chave: 'c', porLinha: true }, { chave: 'd' }] }
+    const passos = montarPassos(guia, 't', (tela, chave) => (chave === 'a' || chave === 'd' ? {} : null))
+    expect(passos.map(p => p.tipo)).toEqual(['intro', 'item', 'item', 'linhas', 'fim'])
+    expect(passos[3].itens.map(i => i.chave)).toEqual(['b', 'c'])
+    expect(indiceDoItem(passos, 'c')).toBe(3)
+    expect(indiceDoItem(passos, 'd')).toBe(2)
+    expect(indiceDoItem(passos, 'zz')).toBe(0)
   })
   it('balão nunca sai da tela', () => {
     const vw = 400, vh = 600, t = { largura: 340, altura: 200 }

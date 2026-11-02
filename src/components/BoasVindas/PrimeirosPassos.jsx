@@ -62,7 +62,7 @@ export default function PrimeirosPassos({ className = '' }) {
                   : <Circle size={18} className="text-texto-3 shrink-0" aria-label="a fazer" />}
                 <span className={`flex-1 min-w-[12rem] ${i.feito ? 'text-texto-2 line-through' : 'text-texto-1'}`}>{i.texto}</span>
                 {!i.feito && (
-                  <span className="flex flex-wrap gap-1.5 shrink-0">
+                  <span className="flex flex-wrap gap-1.5 shrink-0 max-w-full">
                     <button type="button" className="btn-primary text-xs py-1.5" onClick={() => fazerAgora(i)}>{B.fazer}</button>
                     <button type="button" className="btn-secondary text-xs py-1.5" onClick={() => pular(i)}>{B.pular}</button>
                     {i.naoSeAplica && <button type="button" className="btn-secondary text-xs py-1.5" onClick={() => marcarEtapa(i.id, 'nao-se-aplica')}>{i.naoSeAplica}</button>}

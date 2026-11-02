@@ -68,8 +68,8 @@ describe('boas-vindas: resumo geral curto', () => {
     expect(passosVisiveis(ctxDe({ gerencial: false })).map(p => p.id)).not.toContain('gerencial')
     expect(passosVisiveis(ctxDe({ paginas: ['credit'] })).map(p => p.id)).toEqual(['perfis', 'cartao', 'painel', 'assistente'])
   })
-  it('saídas finais desta fase: Começar a usar e Primeiros passos ("ver tudo em detalhes" ainda escondido)', () => {
-    expect(opcoesFinaisBoasVindas().map(o => o.id)).toEqual(['usar', 'primeiros-passos'])
+  it('saídas finais: Começar a usar, Primeiros passos e Quero ver tudo em detalhes (Central de Ajuda)', () => {
+    expect(opcoesFinaisBoasVindas().map(o => o.id)).toEqual(['usar', 'primeiros-passos', 'detalhes'])
   })
   it('primeiro acesso: aparece; Avançar, Voltar, Pular etapa; "Pular" grava e não reaparece em outro navegador', async () => {
     app()
@@ -95,7 +95,7 @@ describe('boas-vindas: resumo geral curto', () => {
     await screen.findByText('Perfis (CPF/CNPJ)')
     for (let k = 0; k < 20 && screen.queryByRole('button', { name: 'Avançar' }); k++) fireEvent.click(screen.getByRole('button', { name: 'Avançar' }))
     expect(screen.getByText('Como você quer continuar?')).toBeTruthy()
-    expect(screen.queryByText('Quero ver tudo em detalhes')).toBeNull()
+    expect(screen.getByText('Quero ver tudo em detalhes')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Primeiros passos/ }))
     expect(navegarPara).toHaveBeenCalledWith('dashboard')
     await waitFor(() => expect(posts()).toEqual([{ tourVisto: true }]))

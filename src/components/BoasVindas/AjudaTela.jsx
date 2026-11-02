@@ -10,7 +10,9 @@
 // com guia próprio vale no lugar dela.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { HelpCircle, X, Play, ListOrdered, RotateCcw, LayoutGrid, Hand, Check } from 'lucide-react'
+import { HelpCircle, X, Play, ListOrdered, RotateCcw, LayoutGrid, Hand, Check, BookOpen } from 'lucide-react'
+import { navegarPara } from '../../lib/abrirTela'
+import { ajudaHash } from '../../lib/ajudaRota'
 import { ajudaDaTela, guiaDaTela } from '../../lib/ajudaTelas'
 import { useSubtelaAtiva } from './subtelaGuia'
 import { useContextoAjuda } from './contextoAjuda'
@@ -134,6 +136,9 @@ export default function AjudaTela({ pagina, className = '' }) {
             {tarefas.length > 0 && <div className="my-1 border-t border-borda" />}
             <button type="button" role="menuitem" className={opcao} onClick={() => { setMenu(false); abrirLista() }}>
               <ListOrdered size={15} className="text-texto-2 shrink-0" /> Ver todas as funções desta tela
+            </button>
+            <button type="button" role="menuitem" className={opcao} onClick={() => { setMenu(false); navegarPara('ajuda', { hash: ajudaHash(tela) }) }}>
+              <BookOpen size={15} className="text-texto-2 shrink-0" /> Ajuda detalhada com exemplos
             </button>
             {oculto && (
               <button type="button" role="menuitem" className={opcao} onClick={() => { setMenu(false); voltarAMostrar() }}>
