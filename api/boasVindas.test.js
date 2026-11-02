@@ -16,7 +16,7 @@ describe('/api/boas-vindas', () => {
   })
   it('tour visto: upsert que preserva a primeira data', async () => {
     const { q, chamadas } = fakeQ()
-    expect(await gravarBoasVindas(q, 'u1', { tourVisto: true })).toEqual({ tourVistoEm: 't', checklistOcultoEm: null, guiasLigados: true })
+    expect(await gravarBoasVindas(q, 'u1', { tourVisto: true })).toEqual({ tourVistoEm: 't', checklistOcultoEm: null, guiasLigados: true, progresso: {} })
     expect(chamadas[0].sql).toMatch(/ON CONFLICT \(user_id\) DO UPDATE SET tour_visto_em = COALESCE\(boas_vindas_usuario.tour_visto_em, now\(\)\)/)
     expect(chamadas[0].sql).not.toMatch(/checklist_oculto_em = /)
     expect(chamadas[0].params).toEqual(['u1'])

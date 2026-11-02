@@ -11,111 +11,137 @@
 
 const sempre = () => true
 
-// ── 1. Boas-vindas (carrossel) ───────────────────────────────────────────────────────────────────
+// ── 1. Boas-vindas (carrossel) — RESUMO GERAL: um passo por área, 1 frase cada (< 1 minuto) ────
+// Os detalhes ficam no tour de cada tela (o "?") e na ajuda detalhada.
+export const BOAS_VINDAS_TITULO = 'Bem-vindo ao Finup'
 export const PASSOS_BOAS_VINDAS = [
-  {
-    id: 'bem-vindo', icone: 'Sparkles', mostrar: sempre,
-    titulo: 'Bem-vindo ao Finup!',
-    texto: 'O Finup organiza o seu dinheiro num lugar só: contas, cartões, contas a pagar e a receber — da pessoa física e da empresa, cada uma separada, mas visíveis juntas quando você quiser.',
-  },
   {
     id: 'perfis', icone: 'Users', mostrar: sempre,
     titulo: 'Perfis (CPF/CNPJ)',
-    texto: 'Perfil é a pessoa ou a empresa dona do dinheiro. Toda conta deve ter um perfil: assim você vê os números de cada um separado, ou de todos juntos no filtro "Tudo", no topo da tela.',
-    dica: 'Conta "Sem vínculo" (sem perfil) só aparece no filtro "Tudo" e fica de fora dos totais de cada perfil.',
+    texto: 'Cada pessoa ou empresa dona do dinheiro é um perfil, e toda conta deve ter um para os números ficarem separados.',
   },
   {
     id: 'contas', icone: 'Wallet', mostrar: (c) => c.podeVer('accounts'),
     titulo: 'Contas',
-    texto: 'Cadastre suas contas bancárias, poupança, dinheiro em espécie e investimentos. O saldo de cada uma é calculado pelos lançamentos.',
-    itens: [
-      'Conta favorita: a que já vem escolhida quando você faz um lançamento.',
-      'Conta central: a conta principal de cada perfil, usada nos pagamentos automáticos (como a fatura do cartão).',
-      'Saldo Principal: soma das contas marcadas com "Somar no Saldo Principal" — é o dinheiro disponível do dia a dia.',
-    ],
+    texto: 'Cadastre bancos, poupança, dinheiro e investimentos; o saldo de cada um é calculado pelos lançamentos.',
   },
   {
     id: 'cartao', icone: 'CreditCard', mostrar: (c) => c.podeVer('credit'),
-    titulo: 'Cartão de Crédito',
-    texto: 'Cadastre o cartão com o dia de fechamento e o de vencimento. As compras vão para a fatura certa sozinhas, e você acompanha cada fatura mês a mês.',
-    dica: 'Em "Importar Fatura" você traz o arquivo do banco e o Finup confere o que já está lançado.',
-    dicaSe: (c) => c.podeVer('import'),
+    titulo: 'Cartões',
+    texto: 'Com o dia de fechamento e de vencimento, cada compra cai sozinha na fatura certa.',
   },
   {
     id: 'agendamentos', icone: 'Calendar', mostrar: (c) => c.podeVer('schedule'),
     titulo: 'Agendamentos',
-    texto: 'São as contas a pagar e a receber: aluguel, salário, mensalidades. Podem se repetir todo mês (recorrência) ou ser divididas em parcelas. Na data, você confirma o pagamento com um clique.',
+    texto: 'São as contas a pagar e a receber — únicas, todo mês ou parceladas — que você confirma na data.',
   },
   {
     id: 'lancamentos', icone: 'TrendingUp', mostrar: (c) => c.podeVer('transactions') || c.podeVer('cashflow'),
     titulo: 'Lançamentos e Fluxo de Caixa',
-    texto: 'Lançamento é o que já aconteceu: o dinheiro que entrou ou saiu. O Fluxo de Caixa mostra o que ainda vai acontecer, somando os agendamentos, para você ver como o saldo fica nos próximos dias e meses.',
+    texto: 'Lançamento é o que já aconteceu; o Fluxo de Caixa mostra como o saldo vai ficar com o que está agendado.',
   },
   {
     id: 'painel', icone: 'LayoutDashboard', mostrar: sempre,
     titulo: 'Painel',
-    texto: 'É a tela inicial, com o resumo de tudo: o Saldo Principal, as receitas e despesas do mês e a projeção de como o mês vai terminar.',
+    texto: 'A tela inicial resume tudo: Saldo Principal, receitas e despesas do mês e como o mês deve terminar.',
+  },
+  {
+    id: 'gerencial', icone: 'Layers', mostrar: (c) => c.gerencialAtivo && c.podeVer('reservas'),
+    titulo: 'Reservas e controle gerencial',
+    texto: 'Separe dinheiro para objetivos e acompanhe quanto de cada gasto sai das reservas.',
+  },
+  {
+    id: 'contratos', icone: 'FileSignature', mostrar: (c) => c.podeVer('contratos'),
+    titulo: 'Contratos',
+    texto: 'Contratos com cobrança que se repete geram as parcelas e mostram o andamento de cada um.',
   },
   {
     id: 'assistente', icone: 'Sparkles', mostrar: (c) => c.iaAtiva,
     titulo: 'Assistente',
-    texto: 'Escreva, fale ou mande a foto de um comprovante — por exemplo, "gastei 50 no mercado no cartão". O Assistente prepara o lançamento e você só confere antes de salvar. Nada é gravado sem a sua confirmação.',
-  },
-  {
-    id: 'gerencial', icone: 'Layers', mostrar: (c) => c.gerencialAtivo && c.podeVer('reservas'),
-    titulo: 'Controle gerencial e Reservas',
-    texto: 'Separe dinheiro para objetivos (viagem, reforma, emergência) em reservas, e acompanhe quanto de cada gasto sai delas. O Finup faz as transferências de controle para você.',
+    texto: 'Escreva, fale ou mande foto ou PDF e o Assistente prepara o lançamento para você só conferir.',
   },
 ]
 
-// Último passo: atalhos para começar. `acao` = o que o botão faz (resolvido pelo componente).
-export const PRIMEIROS_PASSOS_TOUR = {
-  id: 'primeiros-passos', icone: 'Rocket',
-  titulo: 'Primeiros passos',
-  texto: 'Comece por aqui. Você pode voltar a este tour quando quiser pelo link "Rever tour de boas-vindas".',
+// Último passo: "Como você quer continuar?". `quando` esconde a opção até a fase que a completa.
+export const FINAL_BOAS_VINDAS = {
+  id: 'continuar', icone: 'Rocket',
+  titulo: 'Como você quer continuar?',
+  texto: 'Escolha um caminho. Você pode rever este resumo quando quiser pelo link "Rever tour de boas-vindas".',
+  opcoes: [
+    { id: 'usar', titulo: 'Começar a usar', texto: 'Cada tela mostra um tour rápido na primeira vez que você entrar nela.' },
+    { id: 'primeiros-passos', titulo: 'Primeiros passos', texto: 'Uma lista curta do que configurar primeiro.' },
+    { id: 'detalhes', titulo: 'Quero ver tudo em detalhes', texto: 'A ajuda completa, com exemplos.', oculta: true },
+  ],
 }
 
-// ── 2. Checklist "Primeiros passos" (Painel) ─────────────────────────────────────────────────────
-// `feito(dados)`: dados = { profiles, accounts, schedules }.
+// ── 2. Checklist "Primeiros passos" (Painel / Início) ─────────────────────────────────────────────
+// Cada etapa: pendente → feita (pelos dados) | pulada ("Pular por enquanto", retomável) |
+// não se aplica (botão próprio — sai da lista e do progresso). `feito(dados)`: dados = { profiles,
+// accounts, schedules, cardImports, contratos, progresso }. `naoSeAplica`: texto do botão (sem ele,
+// a etapa só tem "Pular por enquanto"). `dependeDe`: some se aquela etapa "não se aplica".
+// `avisoAoPular`: aviso mostrado antes de pular. Etapas `opcional` só com o módulo ativo e permissão.
 export const CHECKLIST = [
   {
     id: 'perfil', acao: 'perfil', mostrar: sempre,
     texto: 'Criar o seu perfil (CPF ou CNPJ)',
-    botao: 'Fazer agora',
     feito: (d) => (d.profiles || []).length > 0,
+    avisoAoPular: 'Sem perfil, as contas ficam "Sem vínculo": só aparecem no filtro "Tudo" e ficam de fora dos totais de cada perfil.',
   },
   {
     id: 'conta', acao: 'conta', mostrar: (c) => c.podeVer('accounts') && c.podeIncluir('contas'),
     texto: 'Cadastrar a primeira conta (ligada a um perfil)',
-    botao: 'Fazer agora',
     feito: (d) => (d.accounts || []).some(a => a.type !== 'credit' && a.profileId && !a.isGerencial),
   },
   {
     id: 'cartao', acao: 'cartao', mostrar: (c) => c.podeVer('credit') && c.podeIncluir('contas'),
     texto: 'Cadastrar o primeiro cartão de crédito',
-    botao: 'Fazer agora',
+    naoSeAplica: 'Não tenho cartão de crédito',
     feito: (d) => (d.accounts || []).some(a => a.type === 'credit'),
   },
   {
     id: 'agendamento', acao: 'agendamento', mostrar: (c) => c.podeVer('schedule') && c.podeIncluir('agendamentos'),
     texto: 'Criar o primeiro agendamento (uma conta a pagar ou a receber)',
-    botao: 'Fazer agora',
-    feito: (d) => (d.schedules || []).length > 0,
+    feito: (d) => (d.schedules || []).some(s => !s.isProvisao),
+  },
+  {
+    id: 'provisao', acao: 'provisao', opcional: true, mostrar: (c) => c.podeVer('schedule') && c.podeIncluir('agendamentos'),
+    texto: 'Criar uma provisão (um gasto previsto, como IPVA ou material escolar)',
+    feito: (d) => (d.schedules || []).some(s => !!s.isProvisao),
+  },
+  {
+    id: 'reserva', acao: 'reserva', opcional: true, mostrar: (c) => c.podeVer('reservas') && c.podeIncluir('contas'),
+    texto: 'Cadastrar uma conta de reserva (dinheiro guardado para um objetivo)',
+    naoSeAplica: 'Não uso reservas',
+    feito: (d) => (d.accounts || []).some(a => a.isReserva === true || a.vinculoTipo === 'reserva'),
+  },
+  {
+    id: 'importar-fatura', acao: 'importar-fatura', opcional: true, dependeDe: 'cartao',
+    mostrar: (c) => c.podeVer('import') && c.podeIncluir('importar'),
+    texto: 'Importar a primeira fatura do cartão',
+    feito: (d) => (d.cardImports || []).some(i => !String(i.filename || '').startsWith('Conciliação')),
+  },
+  {
+    id: 'contrato', acao: 'contrato', opcional: true, mostrar: (c) => c.podeVer('contratos') && c.podeIncluir('contratos'),
+    texto: 'Cadastrar um contrato',
+    naoSeAplica: 'Não tenho contratos',
+    feito: (d) => (d.contratos || []).length > 0,
+  },
+  {
+    id: 'assistente', acao: 'assistente', opcional: true, mostrar: (c) => c.iaAtiva,
+    texto: 'Usar o Assistente uma vez (escreva o que gastou)',
+    feito: (d) => d.progresso?.etapas?.assistente?.estado === 'feita',
   },
 ]
 export const CHECKLIST_TITULO = 'Primeiros passos'
 export const CHECKLIST_SUBTITULO = 'Faltam poucos passos para o Finup ficar com a sua cara.'
 export const CHECKLIST_OCULTAR = 'Ocultar'
-
-// Botões do último passo do tour (mesmas ações do checklist).
-export const BOTOES_PRIMEIROS_PASSOS = {
-  perfil: 'Criar ou conferir perfil',
-  conta: 'Criar a primeira conta',
-  cartao: 'Cadastrar um cartão',
-  agendamento: 'Criar o primeiro agendamento',
+export const CHECKLIST_BOTOES = {
+  fazer: 'Fazer agora', pular: 'Pular por enquanto', pularMesmoAssim: 'Pular mesmo assim', cancelar: 'Cancelar',
+  verPuladas: 'Ver etapas puladas', esconderPuladas: 'Esconder etapas puladas', retomar: 'Retomar', desfazer: 'Desfazer',
 }
+export const progressoTexto = (feitas, total) => `${feitas} de ${total} ${total === 1 ? 'concluída' : 'concluídas'}`
 
-export const TOUR_BOTOES = { proximo: 'Próximo', voltar: 'Voltar', pular: 'Pular', concluir: 'Começar a usar' }
+export const TOUR_BOTOES = { proximo: 'Avançar', voltar: 'Voltar', pularEtapa: 'Pular etapa', pular: 'Pular', concluir: 'Começar a usar' }
 export const LINK_REVER_TOUR = 'Rever tour de boas-vindas'
 
 // ── 3. Ajuda de cada tela (botão "?" ao lado do título) ─────────────────────────────────────────
@@ -1048,14 +1074,34 @@ export const AJUDA_TELAS = {
 
 // Passos do tour visíveis no ambiente/usuário (o último, "Primeiros passos", sempre vai no fim).
 export function passosVisiveis(ctx) {
-  return PASSOS_BOAS_VINDAS.filter(p => p.mostrar(ctx)).map(p => ({ ...p, dica: p.dicaSe && !p.dicaSe(ctx) ? null : p.dica || null }))
+  return PASSOS_BOAS_VINDAS.filter(p => p.mostrar(ctx))
+}
+// Opções do último passo das boas-vindas (as escondidas só aparecem na fase que as completa).
+export const opcoesFinaisBoasVindas = () => FINAL_BOAS_VINDAS.opcoes.filter(o => !o.oculta)
+
+// Checklist com o estado de cada etapa. `progresso.etapas[id].estado`: 'pulada' | 'nao-se-aplica'
+// (o 'feita' vem dos dados). → { itens: [{ ...etapa, estado: 'pendente'|'feita'|'pulada'|'nao-se-aplica' }],
+//   pendentes, puladas, feitas, total (fora "não se aplica"), completo (nada pendente) }
+export function checklistComStatus(ctx, dados = {}) {
+  const etapas = dados.progresso?.etapas || {}
+  const marcada = (id) => etapas[id]?.estado
+  const itens = CHECKLIST
+    .filter(i => i.mostrar(ctx))
+    .filter(i => !i.dependeDe || marcada(i.dependeDe) !== 'nao-se-aplica')
+    .map(i => {
+      const m = marcada(i.id)
+      const estado = i.feito(dados) ? 'feita' : m === 'nao-se-aplica' ? 'nao-se-aplica' : m === 'pulada' ? 'pulada' : 'pendente'
+      return { ...i, estado, feito: estado === 'feita' }
+    })
+  const contaveis = itens.filter(i => i.estado !== 'nao-se-aplica')
+  const feitas = contaveis.filter(i => i.estado === 'feita').length
+  const pendentes = itens.filter(i => i.estado === 'pendente')
+  const puladas = itens.filter(i => i.estado === 'pulada' || i.estado === 'nao-se-aplica')
+  return { itens, pendentes, puladas, feitas, total: contaveis.length, completo: pendentes.length === 0 }
 }
 
-// Itens do checklist visíveis e o status de cada um. → { itens: [{ ...item, feito }], completo }
-export function checklistComStatus(ctx, dados) {
-  const itens = CHECKLIST.filter(i => i.mostrar(ctx)).map(i => ({ ...i, feito: !!i.feito(dados) }))
-  return { itens, completo: itens.every(i => i.feito) }
-}
+// Etapas aceitas pela API (POST { etapa, estado }).
+export const ETAPAS_CHECKLIST = CHECKLIST.map(i => i.id)
 
 // ── Guia da Tela ───────────────────────────────────────────────────────────────────────────────────
 // Telas com guia (ids aceitos pela API para "Não mostrar mais").

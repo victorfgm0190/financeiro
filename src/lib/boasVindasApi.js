@@ -29,6 +29,7 @@ const doServidor = (r) => ({
   checklistOcultoEm: r.checklistOcultoEm || null,
   guiasOcultos: Array.isArray(r.guiasOcultos) ? r.guiasOcultos : [],
   guiasLigados: r.guiasLigados !== false,
+  progresso: r.progresso && typeof r.progresso === 'object' ? r.progresso : {},
 })
 
 export function assinarBoasVindas(fn) { ouvintes.add(fn); return () => ouvintes.delete(fn) }
@@ -59,6 +60,14 @@ async function gravar(metodo, corpo, otimista) {
 }
 export const marcarTourVisto = () => gravar('POST', { tourVisto: true }, (e) => ({ tourVistoEm: e.tourVistoEm || new Date().toISOString() }))
 export const ocultarChecklist = () => gravar('POST', { checklistOculto: true }, () => ({ checklistOcultoEm: new Date().toISOString() }))
+export const mostrarChecklist = () => gravar('POST', { checklistOculto: false }, () => ({ checklistOcultoEm: null }))
+// Primeiros passos: estado de uma etapa ('pulada' | 'nao-se-aplica' | 'feita' | null = desfazer).
+export const marcarEtapa = (etapa, estado) => gravar('POST', { etapa, estado: estado ?? null }, (e) => {
+  const etapas = { ...(e.progresso?.etapas || {}) }
+  if (estado) etapas[etapa] = { estado, em: new Date().toISOString() }
+  else delete etapas[etapa]
+  return { progresso: { ...(e.progresso || {}), etapas } }
+})
 // Guia da Tela: "Não mostrar mais" (uma tela), "Desativar todos" e "Reativar todos".
 export const ocultarGuia = (tela) => gravar('POST', { guiaOculto: tela }, (e) => ({ guiasOcultos: [...new Set([...(e.guiasOcultos || []), tela])] }))
 export const ocultarTodosGuias = (telas = []) => gravar('POST', { guiasTodos: true }, () => ({ guiasOcultos: telas }))

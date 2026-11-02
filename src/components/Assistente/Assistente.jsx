@@ -8,6 +8,7 @@ import LoteAssistente from './LoteAssistente'
 import { Pergunta } from './respostas'
 import { useMicrofone, BARRAS, mensagemSemSuporte } from './useMicrofone'
 import AjudaTela from '../BoasVindas/AjudaTela'
+import { estadoBoasVindas, marcarEtapa } from '../../lib/boasVindasApi'
 
 // ASSISTENTE IA: texto, voz (pt-BR), imagem (câmera, galeria ou Ctrl+V de um print) ou PDF (boleto,
 // fatura, nota, comprovante, extrato) → /api/assistente. A imagem é reduzida no aparelho (lado maior
@@ -78,6 +79,9 @@ export default function Assistente({ onClose, onToast }) {
         ...extra,
       })
       const { ferramenta, parametros, ...resto } = r
+      // Primeiros passos: "Usar o Assistente uma vez" fica feita no 1º pedido que deu certo.
+      const bv = estadoBoasVindas()
+      if (bv && bv.progresso?.etapas?.assistente?.estado !== 'feita') marcarEtapa('assistente', 'feita')
       // 'lote': vários lançamentos/agendamentos num pedido (LoteAssistente) — não é ação do registro.
       setFase({ tipo: 'resultado', ferramenta: EXECUTORES[ferramenta] || ferramenta === 'lote' ? ferramenta : 'perguntar', parametros: parametros || {}, extra: resto })
     } catch (err) {
