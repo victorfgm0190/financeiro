@@ -69,7 +69,7 @@ export default function Sidebar({ active, setActive, alertCount, plataforma }) {
           <span className="font-bold text-sm text-texto-1">Finup</span>
         </div>
       </div>
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-2 py-3 space-y-0.5">
         {NAV.filter((n) => (n.plataforma ? plataforma?.admin : podeVer(n.id))).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -90,7 +90,8 @@ export default function Sidebar({ active, setActive, alertCount, plataforma }) {
           </button>
         ))}
       </nav>
-      <div className="px-4 pt-3 pb-2 border-t border-borda space-y-2.5">
+      {/* shrink-0: com pouca altura, quem rola é a lista do menu (nav), nunca esta parte de baixo. */}
+      <div className="shrink-0 px-4 pt-3 pb-2 border-t border-borda space-y-2.5">
         <div className="space-y-1">
           <DbStatusBadge status={dbStatus} />
           <IndicadorSync />

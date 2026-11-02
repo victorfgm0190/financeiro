@@ -32,11 +32,8 @@ describe('Identidade do ambiente', () => {
     expect(screen.queryByRole('button', { name: /Salvar/ })).toBeNull()
   })
 
-  it('rodapé: só o que está configurado, sem texto fixo', () => {
-    Object.assign(app, { settings: {} })
-    const { container } = render(<RodapeIdentidade classeTitulo="t" classeFrase="f" />)
-    expect(container.textContent).toBe('')
-    cleanup()
+  // Vazio no ambiente principal = texto de sempre; num cliente = nada: ver RodapeIdentidade.test.jsx.
+  it('rodapé: o que está configurado tem prioridade', () => {
     Object.assign(app, { settings: { rodapeTitulo: 'Família Exemplo', rodapeFrase: '' } })
     render(<RodapeIdentidade classeTitulo="t" classeFrase="f" />)
     expect(screen.getByText('Família Exemplo')).toBeTruthy()
