@@ -108,8 +108,13 @@ describe('regras', () => {
   })
 })
 
+// Este teste desenha a Central inteira (todas as seções, funções e perguntas). Sozinho leva ~2 s, mas
+// com a suíte toda rodando em paralelo já passou dos 5 s padrão do Vitest (na rodada da suíte com o
+// relógio em 15/11/2026; não tem relação com a data). O limite maior é só folga de tempo: o que o teste confere não mudou.
+const LIMITE_CENTRAL_INTEIRA_MS = 20000
+
 describe('tela', () => {
-  it('busca, "Comece por aqui", perguntas e uma seção por tela visível', () => {
+  it('busca, "Comece por aqui", perguntas e uma seção por tela visível', { timeout: LIMITE_CENTRAL_INTEIRA_MS }, () => {
     app({ ver: (p) => p !== 'contratos' })
     render(<CentralAjuda />)
     expect(screen.getByTestId('comece-por-aqui')).toBeTruthy()
