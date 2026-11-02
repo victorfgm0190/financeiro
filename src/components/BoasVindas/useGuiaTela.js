@@ -1,28 +1,18 @@
-// GUIA DA TELA — decide quando o guia de uma tela abre sozinho e qual guia está na frente.
-//   • abre ao entrar na tela, se ela tem guia e o usuário não marcou "Não mostrar mais" (banco);
-//   • nunca por cima do tour de boas-vindas: espera ele fechar;
-//   • só depois de carregar o estado do banco (falhou → não abre sozinho; o "?" continua abrindo);
-//   • "Esconder" vale só até recarregar a página (memória, nada no navegador);
-//   • um guia na frente por vez: o do Assistente (aberto por cima da tela) passa à frente.
-import { useCallback, useEffect, useId, useState, useSyncExternalStore } from 'react'
+// GUIA DA TELA — quando o TOUR de uma tela abre sozinho e o painel "Ver todas as funções".
+//   • o tour abre sozinho na PRIMEIRA visita de cada tela/subtela com guia (até a pessoa concluir,
+//     pular ou marcar "Não mostrar mais" — gravado no banco, guia_telas_ocultas);
+//   • sair no meio trocando de tela não marca nada: abre de novo na próxima visita;
+//   • nunca por cima das boas-vindas nem de outro tour; espera fechar;
+//   • só depois de carregar o estado do banco (falhou → não abre sozinho; o "?" continua funcionando);
+//   • interruptor geral desligado (guiasLigados false): nada abre sozinho e o "?" some.
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ajudaDaTela } from '../../lib/ajudaTelas'
-import { assinarBoasVindas, carregarBoasVindas, estadoBoasVindas, ocultarGuia } from '../../lib/boasVindasApi'
+import { assinarBoasVindas, carregarBoasVindas, estadoBoasVindas, reativarGuia } from '../../lib/boasVindasApi'
 import { useApp } from '../../context/AppContext'
+import { iniciarTour, encerrarTourDaTela, tourAtivo, useTourAtivo } from './tourEstado'
 
-// "Esconder": telas escondidas nesta carga da página (some ao recarregar).
-const escondidas = new Set()
-// "Reativar todos os guias": esquece também os "Esconder" desta carga.
-export function limparEscondidos() { escondidas.clear() }
-export function _reiniciarGuias() { escondidas.clear(); pilha.length = 0; avisar() }
-
-// Guias abertos agora (ids de instância); o último é o que aparece.
-const pilha = []
-const ouvintes = new Set()
-const avisar = () => { for (const f of ouvintes) f() }
-const assinar = (f) => { ouvintes.add(f); return () => ouvintes.delete(f) }
-const topo = () => pilha[pilha.length - 1] || null
-function empilhar(id) { if (!pilha.includes(id)) { pilha.push(id); avisar() } }
-function desempilhar(id) { const i = pilha.indexOf(id); if (i >= 0) { pilha.splice(i, 1); avisar() } }
+// Espera a tela desenhar antes de montar os passos do tour.
+export const ESPERA_TOUR_MS = 700
 
 export function useEstadoBoasVindas() {
   const [e, setE] = useState(estadoBoasVindas)
@@ -30,34 +20,46 @@ export function useEstadoBoasVindas() {
   return e
 }
 
-export function useGuiaTela(tela) {
-  const id = useId()
+// `tela`: o guia desta tela (ou da subtela aberta). `primeiraTela` (opcional): um tour que vem ANTES
+// na primeira visita (ex.: o tour geral de Configurações, antes do da seção).
+export function useGuiaTela(tela, { primeiraTela = null } = {}) {
   const { dbStatus } = useApp()
   const estado = useEstadoBoasVindas()
-  // Escolha manual nesta tela ("?" / Esconder / Não mostrar mais); sem ela, vale a abertura automática.
-  const [pedido, setPedido] = useState(null) // { tela, aberto }
-  const naFrente = useSyncExternalStore(assinar, topo, () => null) === id
+  const tour = useTourAtivo()
+  const [lista, setLista] = useState(null) // tela cujo painel "Ver todas as funções" está aberto
   const temGuia = !!ajudaDaTela(tela)
+  const ligados = estado ? estado.guiasLigados !== false : true
+  const ocultas = estado?.guiasOcultos || []
+  const oculto = ocultas.includes(tela)
 
   useEffect(() => { if (dbStatus === 'connected') carregarBoasVindas() }, [dbStatus])
 
-  // Abertura automática ao entrar na tela: estado do banco carregado, tour já visto e fechado, tela
-  // sem "Não mostrar mais" e não escondida nesta carga da página.
-  const pronto = !!estado && !!estado.tourVistoEm && !estado.tourAberto
-  const oculto = !!estado?.guiasOcultos?.includes(tela)
-  const automatico = temGuia && pronto && !oculto && !escondidas.has(tela)
-  const aberto = pedido?.tela === tela ? pedido.aberto : automatico
-  // Tour aberto por cima: o guia sai da frente até ele fechar.
-  const visivel = aberto && temGuia && !estado?.tourAberto
+  // Qual tour abriria sozinho agora: o "primeiro" (se ainda não visto) ou o desta tela.
+  const pronto = !!estado && ligados && !!estado.tourVistoEm && !estado.tourAberto && !tour
+  const alvoAuto = !pronto ? null
+    : primeiraTela && ajudaDaTela(primeiraTela) && !ocultas.includes(primeiraTela) ? primeiraTela
+      : temGuia && !oculto ? tela : null
+  const iniciado = useRef(null)
   useEffect(() => {
-    if (visivel) empilhar(id)
-    else desempilhar(id)
-    return () => desempilhar(id)
-  }, [visivel, id])
+    if (!alvoAuto || iniciado.current === alvoAuto) return
+    const t = setTimeout(() => {
+      if (tourAtivo()) return
+      iniciado.current = alvoAuto
+      iniciarTour(alvoAuto)
+    }, ESPERA_TOUR_MS)
+    return () => clearTimeout(t)
+  }, [alvoAuto])
+  // Trocou de tela: o tour desta (se aberto no meio) fecha sem marcar e volta na próxima visita.
+  useEffect(() => () => {
+    iniciado.current = null
+    encerrarTourDaTela(tela)
+    if (primeiraTela) encerrarTourDaTela(primeiraTela)
+  }, [tela, primeiraTela])
 
-  const abrir = useCallback(() => { escondidas.delete(tela); setPedido({ tela, aberto: true }) }, [tela])
-  const esconder = useCallback(() => { escondidas.add(tela); setPedido({ tela, aberto: false }) }, [tela])
-  const naoMostrarMais = useCallback(() => { escondidas.add(tela); setPedido({ tela, aberto: false }); ocultarGuia(tela) }, [tela])
+  const abrirTour = useCallback((t = tela, opcoes) => { setLista(null); iniciarTour(t, opcoes) }, [tela])
+  const abrirLista = useCallback(() => setLista(tela), [tela])
+  const fecharLista = useCallback(() => setLista(null), [])
+  const voltarAMostrar = useCallback(() => reativarGuia(tela), [tela])
 
-  return { aberto: visivel && naFrente, abrir, esconder, naoMostrarMais, oculto, temGuia }
+  return { ligados, oculto, temGuia, listaAberta: lista === tela && temGuia, abrirTour, abrirLista, fecharLista, voltarAMostrar }
 }

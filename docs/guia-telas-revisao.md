@@ -1,9 +1,10 @@
 # Guia da Tela — textos para revisão
 
 Gerado de `src/lib/ajudaTelas.js` (AJUDA_TELAS). Para mudar um texto, edite aquele arquivo — este documento é só para leitura.
-O número de cada item é o do selo que aparece em cima do botão na tela. `(só se: …)` = o item só aparece com o módulo ligado ou com a permissão.
+O tour da tela mostra, nesta ordem: o "Para que serve" (1º balão), um balão por item (o número abaixo) e "Pronto!". Item cujo botão não está na tela no momento é pulado.
+`(só se: …)` = o item só aparece com o módulo ligado ou com a permissão.
 
-Total: 57 telas e subtelas, 388 itens.
+Total: 58 telas e subtelas, 402 itens.
 
 ## Painel `dashboard`
 
@@ -233,6 +234,23 @@ Traga o arquivo da fatura do cartão (do site do banco) e confira com o que já 
 
 - Os números do resumo, das abas e do botão Confirmar sempre batem entre si.
 - Itens que precisam de decisão ficam de fora até você escolher o que fazer com eles.
+
+## Conciliar Fatura `import:conciliacao`
+
+Compare o arquivo da fatura do banco com a fatura que já está no Finup e decida o que importar, excluir ou manter até a diferença zerar.
+
+1. **Conciliação de Fatura** — Mostra o cartão, o mês e o arquivo que estão sendo comparados.
+2. **Sair** — Sai da conciliação sem gravar nada.
+3. **Totais e Diferença** — Total do arquivo, total no Finup depois das suas escolhas e a diferença entre eles.
+4. **Fatura encerrada** — Marque quando o fechamento já passou: parcelas que faltam vão para a fatura seguinte.
+5. **Resumo e Confirmar Conciliação** — Quantos itens já batem, quantos serão importados e excluídos, e o botão para gravar.
+6. **Cancelar** — Desiste da conciliação sem gravar nada.
+7. **Só no arquivo — falta no Finup** — Compras que estão no arquivo do banco e não foram achadas no Finup.
+8. **Importar / Ignorar** — Escolha se a compra entra no Finup ou fica de fora.
+9. **Só no Finup — não está no arquivo** — Lançamentos da fatura no Finup que não aparecem no arquivo do banco.
+10. **Manter / Excluir** — Mantenha o lançamento ou marque para excluir ao confirmar.
+11. **Conciliados** — Compras que estão nos dois lados e já batem. Não precisam de ação.
+12. **Editar (lápis)** — Abre o lançamento do Finup para corrigir algum dado.
 
 ## Importar lançamentos `importar-lancamentos`
 
@@ -779,8 +797,10 @@ Agrupam as contas (por exemplo, por banco) e definem a ordem em que aparecem nos
 
 Escolha se o guia de cada tela deve aparecer sozinho quando você entra nela. O botão "?" ao lado do título continua abrindo o guia quando quiser.
 
-1. **Reativar todos os guias** — Volta a mostrar o guia de todas as telas, inclusive as que você marcou "Não mostrar mais".
-2. **Desativar todos os guias** — Para de abrir o guia sozinho em todas as telas, de uma vez.
+1. **Guias do sistema** — Liga ou desliga todos os guias de uma vez. Desligados, nenhum tour abre sozinho e o "?" some.
+2. **Reativar todos os guias** — Volta a mostrar o guia de todas as telas, inclusive as que você marcou "Não mostrar mais".
+3. **Desativar todos os guias** — Para de abrir o guia sozinho em todas as telas, de uma vez.
+4. **Lista de telas** — Mostra se o tour de cada tela abre sozinho e deixa mudar uma por uma.
 
 **Dicas**
 

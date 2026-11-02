@@ -39,6 +39,7 @@ import SettingsPanel from './components/Settings/SettingsPanel'
 import { ehHashConfig } from './lib/configRota'
 import { EVENTO_NAVEGAR } from './lib/abrirTela'
 import BoasVindasTour from './components/BoasVindas/BoasVindasTour'
+import GuiaInterativo from './components/BoasVindas/GuiaInterativo'
 import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
 import ContratosPanel from './components/Contratos/ContratosPanel'
 import ContratoFichaHost from './components/Contratos/ContratoFichaHost'
@@ -259,6 +260,7 @@ function AppContent() {
       <AtalhosAjudaModal />
       <ModoAltAtalhos />
       <BoasVindasTour />
+      <GuiaInterativo />
     </>
   )
 

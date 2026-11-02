@@ -18,7 +18,8 @@ export default function PrimeirosPassos({ className = '' }) {
 
   const { itens, completo } = checklistComStatus(ctx, { profiles, accounts, schedules })
   // Sem saber do banco (null), não aparece: melhor do que reaparecer para quem ocultou.
-  if (!estado || estado.checklistOcultoEm || completo || !itens.length) return modais
+  // Guias desligados: o checklist some (volta ao religar).
+  if (!estado || estado.guiasLigados === false || estado.checklistOcultoEm || completo || !itens.length) return modais
   const feitos = itens.filter(i => i.feito).length
 
   return (

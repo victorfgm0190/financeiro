@@ -147,10 +147,11 @@ describe('ajuda da tela', () => {
     app()
     render(<AjudaTela pagina="accounts" />)
     fireEvent.click(screen.getByRole('button', { name: 'Ajuda: Contas' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Ver todas as funções desta tela' }))
     const guia = screen.getByTestId('guia-tela')
     expect(guia.textContent).toContain(AJUDA_TELAS.accounts.descricao)
     expect(guia.textContent).toContain('Nova Conta')
-    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar' }))
     expect(screen.queryByTestId('guia-tela')).toBeNull()
   })
   it('tela sem texto de ajuda: sem botão', () => {

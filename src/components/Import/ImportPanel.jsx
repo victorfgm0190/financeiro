@@ -48,6 +48,7 @@ import { ESCOPO } from '../../lib/camposSerie'
 import Modal from '../shared/Modal'
 import TransactionForm from '../Transactions/TransactionForm'
 import TransactionHistoryModal from '../shared/TransactionHistoryModal'
+import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -1347,6 +1348,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   // ── Modo Conciliação de Fatura ───────────────────────────────────────────
   const [conciliarMode, setConciliarMode] = useState(false)
+  useSubtelaGuia(conciliarMode ? 'import:conciliacao' : null)
   const [concMatched, setConcMatched] = useState([])   // [{ csv, sys }]
   const [concSoItau, setConcSoItau] = useState([])      // itens do CSV ausentes no sistema
   const [concSoSistema, setConcSoSistema] = useState([])// lançamentos do sistema ausentes no CSV
@@ -3724,7 +3726,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
     return (
       <div className="space-y-4">
         {/* Cabeçalho */}
-        <div className="card flex flex-wrap items-center gap-3">
+        <div className="card flex flex-wrap items-center gap-3" data-guia="import:conciliacao.cabecalho">
           <div className="flex items-center gap-2 text-primary-fg">
             <ArrowLeftRight size={16} />
             <span className="text-sm font-semibold">Conciliação de Fatura</span>
@@ -3733,13 +3735,13 @@ Conciliar mesmo assim com o mês selecionado?`)) return
             {selectedAcc?.apelido || selectedAcc?.name} · {faturaMonthYear?.split('-').reverse().join('/')}
             {filename ? ` · ${filename}` : ''}
           </span>
-          <button className="ml-auto btn-secondary text-xs py-1.5" onClick={exitConciliacao}>
+          <button className="ml-auto btn-secondary text-xs py-1.5" onClick={exitConciliacao} data-guia="import:conciliacao.sair">
             <X size={12} className="mr-1 inline" /> Sair
           </button>
         </div>
 
         {/* Totalizador */}
-        <div className="card flex flex-wrap items-center gap-x-6 gap-y-2 py-3">
+        <div className="card flex flex-wrap items-center gap-x-6 gap-y-2 py-3" data-guia="import:conciliacao.totais">
           <div className="flex items-baseline gap-2">
             <span className="text-xs text-texto-3">Total CSV Itaú:</span>
             <span className="text-sm font-semibold text-texto-1">{fmt(concTotais.csv)}</span>
@@ -3762,7 +3764,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         {/* Toggle "Fatura encerrada" — só quando há parcelas de série em "Só no sistema" */}
         {/* Fatura aberta: nada é empurrado — as parcelas ausentes só não foram lançadas ainda. */}
         {hasParcelaSistema && !faturaAbertaArquivo && (
-          <div className="card flex flex-col gap-2 py-3">
+          <div className="card flex flex-col gap-2 py-3" data-guia="import:conciliacao.fatura-encerrada">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -3800,12 +3802,12 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         )}
 
         {/* Ação */}
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-2" data-guia="import:conciliacao.acoes">
           <span className="text-xs text-texto-3 mr-auto">
             {concMatched.length} conciliado{concMatched.length !== 1 ? 's' : ''} ·
             {' '}{importarCount} a importar · {excluirCount} a excluir
           </span>
-          <button className="btn-secondary text-xs py-1.5" onClick={exitConciliacao}>Cancelar</button>
+          <button className="btn-secondary text-xs py-1.5" onClick={exitConciliacao} data-guia="import:conciliacao.cancelar">Cancelar</button>
           <button
             className="btn-primary flex items-center gap-1.5 text-xs py-1.5"
             disabled={importarCount === 0 && excluirCount === 0 && parcelasEmpurraveis.length === 0}
@@ -3817,7 +3819,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         </div>
 
         {/* SEÇÃO B — Só no Itaú */}
-        <div className="card p-0 overflow-hidden">
+        <div className="card p-0 overflow-hidden" data-guia="import:conciliacao.so-arquivo">
           <div className="px-3 py-2.5 border-b border-borda bg-primary/10 flex items-center gap-2 flex-wrap">
             <ArrowDownCircle size={13} className="text-primary-fg shrink-0" />
             <h3 className="text-xs font-semibold text-primary-fg">Só no Itaú — falta no sistema</h3>
@@ -3919,7 +3921,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                         {fmt(item.amount)}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center justify-center gap-3 text-xs">
+                        <div className="flex items-center justify-center gap-3 text-xs" data-guia={item === concSoItau[0] ? 'import:conciliacao.importar-ignorar' : undefined}>
                           <label className="flex items-center gap-1 cursor-pointer">
                             <input type="radio" className="accent-primary" name={`itau_${item._id}`}
                               checked={item.acao === 'importar'} onChange={() => setItauField(item._id, { acao: 'importar' })} />
@@ -3941,7 +3943,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         </div>
 
         {/* SEÇÃO C — Só no sistema */}
-        <div className="card p-0 overflow-hidden">
+        <div className="card p-0 overflow-hidden" data-guia="import:conciliacao.so-sistema">
           <div className="px-3 py-2.5 border-b border-borda bg-aviso/10 flex items-center gap-2 flex-wrap">
             <ArrowUpCircle size={13} className="text-aviso shrink-0" />
             <h3 className="text-xs font-semibold text-aviso">Só no sistema — não está no CSV do Itaú</h3>
@@ -3984,7 +3986,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                         {fmt(item.amount)}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center justify-center gap-3 text-xs">
+                        <div className="flex items-center justify-center gap-3 text-xs" data-guia={item === concSoSistema[0] ? 'import:conciliacao.manter-excluir' : undefined}>
                           <label className="flex items-center gap-1 cursor-pointer">
                             <input type="radio" className="accent-primary" name={`sys_${item.id}`}
                               checked={item.acao === 'manter'} onChange={() => setSistemaAcao(item.id, 'manter')} />
@@ -4008,7 +4010,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         </div>
 
         {/* SEÇÃO A — Conciliados */}
-        <div className="card p-0 overflow-hidden">
+        <div className="card p-0 overflow-hidden" data-guia="import:conciliacao.conciliados">
           <div className="px-3 py-2.5 border-b border-borda bg-surface-2/40 flex items-center gap-2 flex-wrap">
             <Check size={13} className="text-texto-2 shrink-0" />
             <h3 className="text-xs font-semibold text-texto-2">Conciliados</h3>
@@ -4043,6 +4045,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                       <td className="px-3 py-2 text-center">
                         <button
                           type="button"
+                          data-guia={m === concMatched[0] ? 'import:conciliacao.editar' : undefined}
                           onClick={() => setConcEditTx(m.sys)}
                           title="Editar lançamento"
                           className="p-1 text-texto-3 hover:text-texto-1 hover:bg-surface-hover rounded transition-colors"

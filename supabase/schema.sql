@@ -1003,6 +1003,19 @@ CREATE TABLE IF NOT EXISTS boas_vindas_usuario (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE boas_vindas_usuario DISABLE ROW LEVEL SECURITY;
+-- Interruptor geral dos guias (Configurações › Geral › Guias das telas). Também criada pela API.
+ALTER TABLE boas_vindas_usuario ADD COLUMN IF NOT EXISTS guias_ligados BOOLEAN NOT NULL DEFAULT true;
+
+-- GUIA DA TELA: telas em que o usuário não quer mais o tour/guia abrindo sozinho ("Não mostrar mais",
+-- concluir ou pular o tour). user_id sem FK, como acima. Também criada pela API (api/boas-vindas.js).
+CREATE TABLE IF NOT EXISTS guia_telas_ocultas (
+  id SERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  tela_id TEXT NOT NULL,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, tela_id)
+);
+ALTER TABLE guia_telas_ocultas DISABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- USUÁRIOS E NÍVEIS DE ACESSO

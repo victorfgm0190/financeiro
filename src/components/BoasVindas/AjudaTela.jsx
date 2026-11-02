@@ -1,16 +1,15 @@
-// GUIA DA TELA — o botão "?" ao lado do título de cada tela e o guia que ele abre (também sozinho, ao
-// entrar na tela: useGuiaTela). O guia lista, numerados, os botões e controles da tela; enquanto está
-// aberto, cada botão listado ganha um selo com o mesmo número, e passar o mouse/tocar num item
-// destaca o botão (contorno pulsante) e rola a tela até ele.
-//   • desktop: painel flutuante à direita (não cobre a tela inteira); celular: folha inferior rolável,
-//     acima da barra de navegação;
-//   • rodapé: "Esconder" (só agora — volta ao recarregar) e "Não mostrar mais" (grava no banco).
-// Os botões são achados pelo atributo data-guia="<tela>.<chave>"; o que não estiver visível (menu
-// fechado, outra aba) fica na lista sem selo. Textos: src/lib/ajudaTelas.js (AJUDA_TELAS).
-// `pagina`: a tela; uma subtela aberta (useSubtelaGuia) com guia próprio vale no lugar dela.
+// "?" DE CADA TELA — o ponto único de ajuda da tela. Toque abre um menu:
+//   • "Tour desta tela" (sempre funciona, mesmo com "Não mostrar mais") — GuiaInterativo;
+//   • "Ver todas as funções desta tela" — painel com a lista numerada e um selo com o mesmo número em
+//     cima de cada botão (passar o mouse/tocar no item destaca o botão e rola até ele);
+//   • "Voltar a mostrar o tour sozinho nesta tela" — só se a tela estiver marcada "Não mostrar mais".
+// O tour abre SOZINHO na primeira visita (useGuiaTela). Com os guias desligados (Configurações ›
+// Geral › Guias das telas), o "?" não aparece. Botões achados por data-guia="<tela>.<chave>".
+// Textos: src/lib/ajudaTelas.js (AJUDA_TELAS). `pagina`: a tela; uma subtela aberta (useSubtelaGuia)
+// com guia próprio vale no lugar dela.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { HelpCircle, X } from 'lucide-react'
+import { HelpCircle, X, Play, ListOrdered, RotateCcw, LayoutGrid } from 'lucide-react'
 import { ajudaDaTela, guiaDaTela } from '../../lib/ajudaTelas'
 import { useSubtelaAtiva } from './subtelaGuia'
 import { useContextoAjuda } from './contextoAjuda'
@@ -51,7 +50,19 @@ export default function AjudaTela({ pagina, className = '' }) {
   const tela = subtela && ajudaDaTela(subtela) ? subtela : pagina
   const ctx = useContextoAjuda()
   const guia = guiaDaTela(tela, ctx)
-  const { aberto, abrir, esconder, naoMostrarMais, oculto } = useGuiaTela(tela)
+  // Configurações: na primeira visita, o tour geral (abas) vem antes do tour da seção.
+  const telaGeral = pagina === 'settings' && tela !== pagina && ajudaDaTela(pagina) ? pagina : null
+  const { ligados, oculto, listaAberta: aberto, abrirTour, abrirLista, fecharLista: esconder, voltarAMostrar } = useGuiaTela(tela, { primeiraTela: telaGeral })
+  const [menu, setMenu] = useState(false)
+  const menuRef = useRef(null)
+  useEffect(() => {
+    if (!menu) return
+    const fora = (e) => { if (!menuRef.current?.contains(e.target)) setMenu(false) }
+    const esc = (e) => { if (e.key === 'Escape') setMenu(false) }
+    document.addEventListener('mousedown', fora)
+    window.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', fora); window.removeEventListener('keydown', esc) }
+  }, [menu])
   const isMobile = useIsMobile()
   const itens = guia?.itens || []
   const selos = useSelos(tela, itens, aberto)
@@ -81,14 +92,39 @@ export default function AjudaTela({ pagina, className = '' }) {
     return () => window.removeEventListener('keydown', esc)
   }, [aberto, esconder])
 
-  if (!guia) return null
+  if (!guia || !ligados) return null
   const comSelo = new Set(selos.map(s => s.chave))
+  const opcao = 'w-full flex items-center gap-2 px-3 min-h-[40px] text-left text-sm text-texto-1 hover:bg-surface-hover rounded-lg'
   return (
     <>
-      <button type="button" onClick={abrir} aria-label={`Ajuda: ${guia.titulo}`} title="Guia desta tela"
-        className={`shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-full text-texto-2 hover:text-texto-1 hover:bg-surface-hover ${className}`}>
-        <HelpCircle size={17} />
-      </button>
+      <span className="relative inline-flex" ref={menuRef}>
+        <button type="button" onClick={() => setMenu(v => !v)} aria-label={`Ajuda: ${guia.titulo}`} title="Ajuda desta tela"
+          aria-haspopup="menu" aria-expanded={menu}
+          className={`shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-full text-texto-2 hover:text-texto-1 hover:bg-surface-hover ${className}`}>
+          <HelpCircle size={17} />
+        </button>
+        {menu && (
+          <div role="menu" aria-label="Ajuda desta tela" data-testid="menu-ajuda"
+            className="absolute left-0 top-full mt-1 z-[70] w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-borda-forte bg-surface shadow-2xl p-1.5">
+            <button type="button" role="menuitem" className={opcao} onClick={() => { setMenu(false); abrirTour(tela) }}>
+              <Play size={15} className="text-primary-fg shrink-0" /> Tour desta tela
+            </button>
+            {telaGeral && (
+              <button type="button" role="menuitem" className={opcao} onClick={() => { setMenu(false); abrirTour(telaGeral) }}>
+                <LayoutGrid size={15} className="text-texto-2 shrink-0" /> Tour geral de Configurações
+              </button>
+            )}
+            <button type="button" role="menuitem" className={opcao} onClick={() => { setMenu(false); abrirLista() }}>
+              <ListOrdered size={15} className="text-texto-2 shrink-0" /> Ver todas as funções desta tela
+            </button>
+            {oculto && (
+              <button type="button" role="menuitem" className={opcao} onClick={() => { setMenu(false); voltarAMostrar() }}>
+                <RotateCcw size={15} className="text-texto-2 shrink-0" /> Voltar a mostrar o tour sozinho nesta tela
+              </button>
+            )}
+          </div>
+        )}
+      </span>
       {aberto && createPortal(
         <>
           {selos.map(s => (
@@ -128,11 +164,8 @@ export default function AjudaTela({ pagina, className = '' }) {
               )}
             </div>
             <div className="flex gap-2 px-4 py-3 border-t border-borda shrink-0">
-              <button type="button" className="btn-secondary flex-1 min-h-[44px]" onClick={esconder}>Esconder</button>
-              <button type="button" className="btn-secondary flex-1 min-h-[44px]" onClick={naoMostrarMais} disabled={oculto}
-                title={oculto ? 'Este guia já não abre sozinho. Para voltar, use Configurações › Guias das telas.' : 'Este guia não abre mais sozinho nesta tela (em nenhum aparelho). O "?" continua funcionando.'}>
-                {oculto ? 'Não abre sozinho' : 'Não mostrar mais'}
-              </button>
+              <button type="button" className="btn-secondary flex-1 min-h-[44px]" onClick={esconder}>Fechar</button>
+              <button type="button" className="btn-primary flex-1 min-h-[44px]" onClick={() => abrirTour(tela)}>Tour desta tela</button>
             </div>
           </aside>
         </>,

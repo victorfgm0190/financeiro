@@ -29,7 +29,8 @@ export default function BoasVindasTour() {
   useEffect(() => {
     if (dbStatus !== 'connected' || !getSessao()) return
     let vivo = true
-    carregarBoasVindas().then(e => { if (vivo && e && !e.tourVistoEm) { setI(0); setAberto(true) } })
+    // Guias desligados (Configurações › Geral › Guias das telas): não abre sozinho; "Rever tour" ainda abre.
+    carregarBoasVindas().then(e => { if (vivo && e && !e.tourVistoEm && e.guiasLigados !== false) { setI(0); setAberto(true) } })
     return () => { vivo = false }
   }, [dbStatus])
   // O Guia da Tela espera o tour fechar.

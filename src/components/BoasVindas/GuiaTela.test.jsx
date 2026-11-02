@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
-// Guia da Tela: abre sozinho (não por cima do tour), Esconder × Não mostrar mais, "?" reabre,
-// selos numerados e destaque, subtelas, Reativar/Desativar todos. Dados fictícios.
+// Tour da tela (spotlight) e interruptor geral dos guias. Dados fictícios.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
 import { useApp } from '../../context/AppContext'
 import AjudaTela from './AjudaTela'
+import GuiaInterativo from './GuiaInterativo'
 import GuiasTelasPanel from './GuiasTelasPanel'
 import { useSubtelaGuia } from './subtelaGuia'
-import { _reiniciarGuias } from './useGuiaTela'
+import { _reiniciarTour } from './tourEstado'
+import { montarPassos, posicaoBalao } from './tourPassos'
 import { _reiniciarBoasVindas, definirTourAberto } from '../../lib/boasVindasApi'
 import { AJUDA_TELAS, TELAS_COM_GUIA, itemVisivel, guiaDaTela } from '../../lib/ajudaTelas'
 import { montarContextoAjuda } from './contextoAjuda'
-import { DDL_GUIAS, ocultarGuias } from '../../../api/boas-vindas.js'
+import { DDL_GUIAS, DDL_GUIAS_LIGADOS, ocultarGuias, gravarGuiasLigados } from '../../../api/boas-vindas.js'
 
 vi.mock('../../context/AppContext', () => ({ useApp: vi.fn() }))
 const app = (gerencial = true) => useApp.mockReturnValue({
@@ -22,135 +23,198 @@ const app = (gerencial = true) => useApp.mockReturnValue({
 let banco
 const servidor = () => vi.fn(async (url, opts = {}) => {
   const b = opts.body ? JSON.parse(opts.body) : {}
-  if (opts.method === 'POST' && b.guiaOculto) banco.guiasOcultos = [...new Set([...banco.guiasOcultos, b.guiaOculto])]
-  if (opts.method === 'POST' && b.guiasTodos) banco.guiasOcultos = [...TELAS_COM_GUIA]
+  if (opts.method === 'POST') {
+    if (b.guiaOculto) banco.guiasOcultos = [...new Set([...banco.guiasOcultos, b.guiaOculto])]
+    if (b.guiasTodos) banco.guiasOcultos = [...TELAS_COM_GUIA]
+    if (b.guiaReativar) banco.guiasOcultos = banco.guiasOcultos.filter(t => t !== b.guiaReativar)
+    if (typeof b.guiasLigados === 'boolean') banco.guiasLigados = b.guiasLigados
+  }
   if (opts.method === 'DELETE') banco.guiasOcultos = []
   return { ok: true, status: 200, json: async () => ({ ...banco, guiasOcultos: [...banco.guiasOcultos] }) }
 })
-const recarregar = () => { cleanup(); _reiniciarGuias(); _reiniciarBoasVindas() }
+const recarregar = () => { cleanup(); _reiniciarTour(); _reiniciarBoasVindas() }
 beforeEach(() => {
   recarregar()
-  banco = { tourVistoEm: '2026-11-01T10:00:00Z', checklistOcultoEm: null, guiasOcultos: [] }
+  banco = { tourVistoEm: '2026-11-01T10:00:00Z', checklistOcultoEm: null, guiasOcultos: [], guiasLigados: true }
   vi.stubGlobal('fetch', servidor())
   app()
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
-const guia = () => screen.queryByTestId('guia-tela')
 
-describe('abertura automática', () => {
-  it('ao entrar na tela o guia aparece; "Esconder" fecha só agora — ao recarregar, volta', async () => {
-    render(<AjudaTela pagina="accounts" />)
-    expect(await screen.findByTestId('guia-tela')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Esconder' }))
-    expect(guia()).toBeNull()
-    expect(fetch.mock.calls.filter(([, o]) => o?.method === 'POST')).toHaveLength(0) // nada gravado
-    recarregar()
-    render(<AjudaTela pagina="accounts" />)
-    expect(await screen.findByTestId('guia-tela')).toBeTruthy()
-  })
-  it('"Não mostrar mais" grava no banco: não volta ao recarregar nem em outro navegador; o "?" reabre', async () => {
-    render(<AjudaTela pagina="accounts" />)
-    await screen.findByTestId('guia-tela')
-    fireEvent.click(screen.getByRole('button', { name: 'Não mostrar mais' }))
-    expect(guia()).toBeNull()
+// Tela fictícia com dois botões do guia de Contas (visíveis) — o resto não existe na tela.
+const visivel = (el) => { if (el) el.getBoundingClientRect = () => ({ top: 100, bottom: 130, left: 100, right: 220, width: 120, height: 30 }) }
+function Tela({ pagina = 'accounts', children }) {
+  return (
+    <>
+      <button data-guia="accounts.nova" ref={visivel}>Nova Conta</button>
+      <button data-guia="accounts.grupos" ref={visivel}>Grupos</button>
+      {children}
+      <AjudaTela pagina={pagina} />
+      <GuiaInterativo />
+    </>
+  )
+}
+const tour = () => screen.queryByTestId('tour-tela')
+const esperarTour = () => screen.findByTestId('tour-tela', {}, { timeout: 3000 })
+const semTour = async () => { await act(async () => { await new Promise(r => setTimeout(r, 900)) }); expect(tour()).toBeNull() }
+const posts = () => fetch.mock.calls.filter(([, o]) => o?.method === 'POST').map(([, o]) => JSON.parse(o.body))
+
+describe('tour da tela', () => {
+  it('abre sozinho na primeira visita: intro "para que serve", um passo por botão presente, "Pronto!" → Concluir não abre mais', async () => {
+    render(<Tela />)
+    await esperarTour()
+    expect(screen.getByTestId('balao-tour').textContent).toContain(AJUDA_TELAS.accounts.descricao)
+    expect(screen.getByTestId('indicador-tour').textContent).toBe('1 de 4') // intro + 2 botões + fim
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    expect(screen.getByTestId('balao-tour').textContent).toMatch(/^2 de 4(Grupos|Nova Conta)/)
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    expect(screen.getByTestId('balao-tour').textContent).toContain('Pronto!')
+    fireEvent.click(screen.getByRole('button', { name: 'Concluir' }))
+    expect(tour()).toBeNull()
     await waitFor(() => expect(banco.guiasOcultos).toEqual(['accounts']))
     recarregar()
-    render(<AjudaTela pagina="accounts" />)
-    await waitFor(() => expect(fetch).toHaveBeenCalled())
-    await act(async () => {})
-    expect(guia()).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Ajuda: Contas' }))
-    expect(guia()).toBeTruthy()
-    // outra tela continua abrindo
-    recarregar()
-    render(<AjudaTela pagina="credit" />)
-    expect(await screen.findByTestId('guia-tela')).toBeTruthy()
+    render(<Tela />)
+    await semTour()
   })
-  it('não abre por cima do tour: espera ele fechar; sem tour visto (vai abrir o tour), não abre', async () => {
-    banco.tourVistoEm = null
-    render(<AjudaTela pagina="accounts" />)
-    await waitFor(() => expect(fetch).toHaveBeenCalled())
-    await act(async () => {})
-    expect(guia()).toBeNull()
+  it('Esc (pular) e "Não mostrar mais nesta tela" também impedem a reabertura', async () => {
+    render(<Tela />)
+    await esperarTour()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(tour()).toBeNull()
+    await waitFor(() => expect(posts()).toEqual([{ guiaOculto: 'accounts' }]))
+    recarregar(); banco.guiasOcultos = []
+    render(<Tela />)
+    await esperarTour()
+    fireEvent.click(screen.getByRole('button', { name: 'Não mostrar mais nesta tela' }))
+    await waitFor(() => expect(banco.guiasOcultos).toEqual(['accounts']))
+  })
+  it('sair no meio trocando de tela não marca nada e o tour volta na próxima visita', async () => {
+    const { rerender } = render(<Tela />)
+    await esperarTour()
+    rerender(<Tela pagina="credit" />) // trocou de tela
+    await waitFor(() => expect(screen.queryByText(AJUDA_TELAS.accounts.descricao)).toBeNull())
+    expect(banco.guiasOcultos).toEqual([])
     recarregar()
-    banco.tourVistoEm = '2026-11-01T10:00:00Z'
+    render(<Tela />)
+    await esperarTour()
+  })
+  it('"?" → "Tour desta tela" funciona sempre (mesmo com "Não mostrar mais"); "Voltar a mostrar" reativa', async () => {
+    banco.guiasOcultos = ['accounts']
+    render(<Tela />)
+    await semTour()
+    fireEvent.click(screen.getByRole('button', { name: 'Ajuda: Contas' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Tour desta tela' }))
+    expect(tour()).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Pular tour', exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ajuda: Contas' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Voltar a mostrar o tour sozinho/ }))
+    await waitFor(() => expect(banco.guiasOcultos).toEqual([]))
+  })
+  it('não abre por cima das boas-vindas: espera fechar; sem tour de boas-vindas visto, não abre', async () => {
+    banco.tourVistoEm = null
+    render(<Tela />)
+    await semTour()
+    recarregar(); banco.tourVistoEm = '2026-11-01T10:00:00Z'
     definirTourAberto(true)
-    render(<AjudaTela pagina="accounts" />)
-    await waitFor(() => expect(fetch).toHaveBeenCalled())
-    await act(async () => {})
-    expect(guia()).toBeNull()
+    render(<Tela />)
+    await semTour()
     act(() => definirTourAberto(false))
-    expect(await screen.findByTestId('guia-tela')).toBeTruthy()
+    await esperarTour()
   })
   it('carga do banco falhou: não abre sozinho, mas o "?" funciona', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: 'x' }) })))
-    render(<AjudaTela pagina="accounts" />)
-    await waitFor(() => expect(fetch).toHaveBeenCalled())
-    await act(async () => {})
-    expect(guia()).toBeNull()
+    render(<Tela />)
+    await semTour()
     fireEvent.click(screen.getByRole('button', { name: 'Ajuda: Contas' }))
-    expect(guia()).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Tour desta tela' }))
+    expect(tour()).toBeTruthy()
+  })
+  it('"Ver todas as funções" abre a lista com selos nos botões presentes', async () => {
+    banco.guiasOcultos = ['accounts']
+    render(<Tela />)
+    await semTour()
+    fireEvent.click(screen.getByRole('button', { name: 'Ajuda: Contas' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Ver todas as funções desta tela' }))
+    expect(screen.getByTestId('guia-tela')).toBeTruthy()
+    await waitFor(() => expect(screen.getAllByTestId('selo-guia')).toHaveLength(2))
+  })
+  it('Configurações: na primeira visita o tour geral (abas) vem antes do tour da seção', async () => {
+    const Perfis = () => { useSubtelaGuia('settings:perfis'); return null }
+    render(<><Perfis /><AjudaTela pagina="settings" /><GuiaInterativo /></>)
+    await esperarTour()
+    expect(screen.getByTestId('balao-tour').textContent).toContain(AJUDA_TELAS.settings.descricao)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => expect(screen.getByTestId('balao-tour').textContent).toContain(AJUDA_TELAS['settings:perfis'].descricao), { timeout: 3000 })
   })
 })
 
-describe('selos numerados e destaque', () => {
-  it('cada botão listado e visível ganha o selo com o número do item; passar o mouse destaca', async () => {
-    const itens = AJUDA_TELAS.accounts.itens
-    const n = itens.findIndex(i => i.chave === 'nova') + 1
-    render(<><button data-guia="accounts.nova">Nova Conta</button><button data-guia="accounts.grupos" style={{ display: 'none' }}>Grupos</button><AjudaTela pagina="accounts" /></>)
-    const botao = screen.getByRole('button', { name: 'Nova Conta' })
-    botao.getBoundingClientRect = () => ({ top: 100, bottom: 130, left: 500, right: 600, width: 100, height: 30 })
-    await screen.findByTestId('guia-tela')
-    await waitFor(() => expect(screen.getAllByTestId('selo-guia').map(s => s.textContent)).toEqual([String(n)]))
-    const item = screen.getAllByRole('button').find(b => b.textContent.startsWith(`${n}Nova Conta`))
-    fireEvent.mouseEnter(item)
-    expect(botao.classList.contains('guia-destaque')).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Esconder' }))
-    expect(botao.classList.contains('guia-destaque')).toBe(false)
-    expect(screen.queryByTestId('selo-guia')).toBeNull()
+describe('partes puras', () => {
+  it('passos: intro + só os itens com elemento + fim; alvo ausente fica de fora', () => {
+    const guia = { itens: [{ chave: 'a' }, { chave: 'b' }, { chave: 'c' }] }
+    const passos = montarPassos(guia, 't', (tela, chave) => (chave === 'b' ? {} : null))
+    expect(passos.map(p => p.tipo + (p.item ? `:${p.item.chave}` : ''))).toEqual(['intro', 'item:b', 'fim'])
   })
-})
-
-describe('itens por módulo e subtelas', () => {
+  it('balão nunca sai da tela', () => {
+    const vw = 400, vh = 600, t = { largura: 340, altura: 200 }
+    const embaixo = posicaoBalao({ top: 50, bottom: 80, left: 350, width: 40, height: 30 }, t, { vw, vh })
+    expect(embaixo.left).toBeLessThanOrEqual(vw - 340 - 8)
+    expect(embaixo.top).toBeGreaterThan(80)
+    const emCima = posicaoBalao({ top: 500, bottom: 540, left: 10, width: 40, height: 30 }, t, { vw, vh })
+    expect(emCima.top + 200).toBeLessThanOrEqual(500)
+  })
   it('itens do controle gerencial somem com ele desligado', () => {
     const com = guiaDaTela('settings:categorias', montarContextoAjuda({ podeVer: () => true, pode: () => true, settings: { controleGerencial: true } }))
     const sem = guiaDaTela('settings:categorias', montarContextoAjuda({ podeVer: () => true, pode: () => true, settings: { controleGerencial: false } }))
     expect(com.itens.length).toBeGreaterThan(sem.itens.length)
-    expect(sem.itens.some(i => i.modulo === 'gerencial')).toBe(false)
     expect(itemVisivel({ modulo: 'pode:usuarios:ver' }, { pode: () => false })).toBe(false)
-  })
-  it('subtela aberta (ex.: Configurações › Perfis) usa o guia dela', async () => {
-    const Perfis = () => { useSubtelaGuia('settings:perfis'); return null }
-    render(<><Perfis /><AjudaTela pagina="settings" /></>)
-    expect((await screen.findByTestId('guia-tela')).textContent).toContain(AJUDA_TELAS['settings:perfis'].titulo)
-  })
-  it('tela sem guia: sem "?"', () => {
-    const { container } = render(<AjudaTela pagina="inexistente" />)
-    expect(container.innerHTML).toBe('')
   })
 })
 
-describe('Configurações › Guias das telas', () => {
-  it('Desativar todos e Reativar todos', async () => {
+describe('interruptor geral dos guias', () => {
+  it('desligado: sem "?" e sem tour sozinho; religado: tudo volta e as marcações de cada tela ficam', async () => {
+    banco.guiasLigados = false
+    banco.guiasOcultos = ['credit']
+    render(<><GuiasTelasPanel /><Tela /></>)
+    await screen.findByText('Desligados')
+    await semTour()
+    expect(screen.queryByRole('button', { name: 'Ajuda: Contas' })).toBeNull()
+    fireEvent.click(screen.getByRole('switch', { name: 'Guias do sistema' }))
+    await waitFor(() => expect(banco.guiasLigados).toBe(true))
+    expect(banco.guiasOcultos).toEqual(['credit'])
+    expect(await screen.findByRole('button', { name: 'Ajuda: Contas' })).toBeTruthy()
+    await esperarTour()
+  })
+  it('"Não quero guias — desligar todos" no primeiro balão, com confirmação', async () => {
+    render(<Tela />)
+    await esperarTour()
+    fireEvent.click(screen.getByRole('button', { name: /Não quero guias/ }))
+    expect(screen.getByRole('alert').textContent).toMatch(/religar em Configurações › Geral › Guias das telas/)
+    fireEvent.click(screen.getByRole('button', { name: 'Desligar os guias' }))
+    expect(tour()).toBeNull()
+    await waitFor(() => expect(banco.guiasLigados).toBe(false))
+    expect(banco.guiasOcultos).toEqual([]) // não marca a tela
+  })
+  it('lista de telas com o estado de cada uma; um botão por tela', async () => {
+    banco.guiasOcultos = ['accounts']
     render(<GuiasTelasPanel />)
-    await screen.findByText('Todos os guias estão ativos.')
+    await screen.findByText(`Telas (${TELAS_COM_GUIA.length - 1} de ${TELAS_COM_GUIA.length} mostram o tour sozinhas)`)
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar o tour de Contas' }))
+    await waitFor(() => expect(banco.guiasOcultos).toEqual([]))
     fireEvent.click(screen.getByRole('button', { name: /Desativar todos os guias/ }))
     await waitFor(() => expect(banco.guiasOcultos).toHaveLength(TELAS_COM_GUIA.length))
-    expect(await screen.findByText(`${TELAS_COM_GUIA.length} de ${TELAS_COM_GUIA.length} telas não abrem o guia sozinhas.`)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Reativar todos os guias/ }))
-    await waitFor(() => expect(banco.guiasOcultos).toEqual([]))
-    expect(fetch.mock.calls.some(([, o]) => o?.method === 'DELETE')).toBe(true)
   })
 })
 
 describe('API', () => {
-  it('tabela guia_telas_ocultas por usuário; só telas conhecidas', async () => {
-    expect(DDL_GUIAS).toMatch(/CREATE TABLE IF NOT EXISTS guia_telas_ocultas/)
+  it('guias_ligados e guia_telas_ocultas por usuário; só telas conhecidas', async () => {
+    expect(DDL_GUIAS_LIGADOS).toBe('ALTER TABLE boas_vindas_usuario ADD COLUMN IF NOT EXISTS guias_ligados BOOLEAN NOT NULL DEFAULT true')
     expect(DDL_GUIAS).toMatch(/UNIQUE \(user_id, tela_id\)/)
     const chamadas = []
-    const q = async (sql, p) => { chamadas.push({ sql, p }); return [] }
+    const q = async (sql, p) => { chamadas.push({ sql, p }); return [{ guias_ligados: false }] }
     expect(await ocultarGuias(q, 'u1', ['accounts', 'tela-que-nao-existe'])).toBe(1)
     expect(chamadas[0].p).toEqual(['u1', ['accounts']])
-    expect(await ocultarGuias(q, 'u1', ['nada'])).toBe(0)
+    expect((await gravarGuiasLigados(q, 'u1', false)).guiasLigados).toBe(false)
+    expect(chamadas[1].p).toEqual(['u1', false])
   })
 })

@@ -26,6 +26,7 @@
   --color-borda-campo: #6A7282;    /* SÓ borda de input/select/textarea/DateInput — 3,21:1 sobre surface */
   --color-input: #1E2939;          /* fundo de input/select (hoje .input bg-gray-800) */
   --color-overlay: rgb(0 0 0 / 0.6); /* fundo atrás de modal (hoje bg-black/60) */
+  --color-guia-escuro: rgb(0 0 0 / 0.55); /* tela levemente escurecida no tour da tela (spotlight) */
 
   /* Texto */
   --color-texto-1: #F3F4F6;        /* principal — títulos, valores (gray-100/200, white) */
@@ -84,6 +85,7 @@
   --color-borda-campo: #858F9E;    /* 3,27:1 sobre surface, 3,05 sobre surface-2 */
   --color-input: #FFFFFF;
   --color-overlay: rgb(15 23 42 / 0.45);
+  --color-guia-escuro: rgb(15 23 42 / 0.4);
 
   --color-texto-1: #111827;
   --color-texto-2: #374151;
@@ -226,8 +228,18 @@
   0%, 100% { outline-color: var(--color-primary-fg); outline-offset: 3px; }
   50% { outline-color: transparent; outline-offset: 6px; }
 }
+/* Tour da tela: recorte aceso no elemento da vez (o resto escurecido pela sombra) + contorno pulsante. */
+.guia-spotlight {
+  box-shadow: 0 0 0 200vmax var(--color-guia-escuro);
+  outline: 2px solid var(--color-primary-fg);
+  outline-offset: 2px;
+  transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
+  animation: guia-pulso 1.1s ease-in-out infinite;
+}
 @media (prefers-reduced-motion: reduce) {
   .guia-destaque { animation: none; }
+  /* Sem pulso: só o contorno fixo. */
+  .guia-spotlight { animation: none; transition: none; }
 }
 .skeleton {
   border-radius: 4px;

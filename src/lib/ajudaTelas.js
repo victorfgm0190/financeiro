@@ -354,6 +354,25 @@ export const AJUDA_TELAS = {
       'Itens que precisam de decisão ficam de fora até você escolher o que fazer com eles.',
     ],
   },
+  'import:conciliacao': {
+    titulo: 'Conciliar Fatura',
+    descricao: 'Compare o arquivo da fatura do banco com a fatura que já está no Finup e decida o que importar, excluir ou manter até a diferença zerar.',
+    itens: [
+      { chave: 'cabecalho', rotulo: 'Conciliação de Fatura', texto: 'Mostra o cartão, o mês e o arquivo que estão sendo comparados.' },
+      { chave: 'sair', rotulo: 'Sair', texto: 'Sai da conciliação sem gravar nada.' },
+      { chave: 'totais', rotulo: 'Totais e Diferença', texto: 'Total do arquivo, total no Finup depois das suas escolhas e a diferença entre eles.' },
+      { chave: 'fatura-encerrada', rotulo: 'Fatura encerrada', texto: 'Marque quando o fechamento já passou: parcelas que faltam vão para a fatura seguinte.' },
+      { chave: 'acoes', rotulo: 'Resumo e Confirmar Conciliação', texto: 'Quantos itens já batem, quantos serão importados e excluídos, e o botão para gravar.' },
+      { chave: 'cancelar', rotulo: 'Cancelar', texto: 'Desiste da conciliação sem gravar nada.' },
+      { chave: 'so-arquivo', rotulo: 'Só no arquivo — falta no Finup', texto: 'Compras que estão no arquivo do banco e não foram achadas no Finup.' },
+      { chave: 'importar-ignorar', rotulo: 'Importar / Ignorar', texto: 'Escolha se a compra entra no Finup ou fica de fora.' },
+      { chave: 'so-sistema', rotulo: 'Só no Finup — não está no arquivo', texto: 'Lançamentos da fatura no Finup que não aparecem no arquivo do banco.' },
+      { chave: 'manter-excluir', rotulo: 'Manter / Excluir', texto: 'Mantenha o lançamento ou marque para excluir ao confirmar.' },
+      { chave: 'conciliados', rotulo: 'Conciliados', texto: 'Compras que estão nos dois lados e já batem. Não precisam de ação.' },
+      { chave: 'editar', rotulo: 'Editar (lápis)', texto: 'Abre o lançamento do Finup para corrigir algum dado.' },
+    ],
+    dicas: [],
+  },
   'importar-lancamentos': {
     titulo: 'Importar lançamentos',
     descricao: 'Traga extratos e planilhas (Excel, CSV ou OFX) de qualquer banco para dentro do Finup.',
@@ -907,8 +926,10 @@ export const AJUDA_TELAS = {
     titulo: 'Guias das telas',
     descricao: 'Escolha se o guia de cada tela deve aparecer sozinho quando você entra nela. O botão "?" ao lado do título continua abrindo o guia quando quiser.',
     itens: [
+      { chave: 'interruptor', rotulo: 'Guias do sistema', texto: 'Liga ou desliga todos os guias de uma vez. Desligados, nenhum tour abre sozinho e o "?" some.' },
       { chave: 'reativar', rotulo: 'Reativar todos os guias', texto: 'Volta a mostrar o guia de todas as telas, inclusive as que você marcou "Não mostrar mais".' },
       { chave: 'desativar', rotulo: 'Desativar todos os guias', texto: 'Para de abrir o guia sozinho em todas as telas, de uma vez.' },
+      { chave: 'lista', rotulo: 'Lista de telas', texto: 'Mostra se o tour de cada tela abre sozinho e deixa mudar uma por uma.' },
     ],
     dicas: [
       'Vale para você, em qualquer aparelho. Os outros usuários escolhem por conta própria.',
