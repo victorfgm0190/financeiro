@@ -3,7 +3,7 @@
 //  1) SEM rateio: resultado idêntico, centavo por centavo, ao capturado ANTES da mudança
 //     (envelopesSaldos.antes.json, gerado com o código do commit d420dd4).
 //  2) COM rateio: os cálculos batem entre si e com a tela Envelopes.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { calcularSaldoPrincipalBreakdown } from './saldoPrincipal'
 import { computeFluxoCaixa } from './fluxoCaixa'
@@ -35,7 +35,15 @@ const restanteDaConta = (accountId, transactions, rateios = null) => {
   return total
 }
 
+// computeFluxoCaixa usa o "hoje" do relógio: lançamentos de [start, hoje] são desfeitos do saldo atual
+// (já estão no balance). O antes.json foi capturado em 31/10/2026, antes do início do período (01/11):
+// o relógio fica fixo nesse dia para o resultado não depender do dia em que a suíte roda.
+const HOJE_DA_CAPTURA = new Date(2026, 9, 31, 12, 0, 0)
+
 describe('envelope nos saldos', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(HOJE_DA_CAPTURA) })
+  afterEach(() => { vi.useRealTimers() })
+
   it('SEM rateio: os quatro cálculos e a tela Envelopes iguais ao de antes, centavo por centavo', () => {
     for (const seed of SEMENTES) {
       const agora = rodar(transacoes(seed))
