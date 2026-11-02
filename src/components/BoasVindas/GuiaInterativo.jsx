@@ -16,13 +16,16 @@ import { guiaDaTela } from '../../lib/ajudaTelas'
 import { ocultarGuia, definirGuiasLigados } from '../../lib/boasVindasApi'
 import { useContextoAjuda } from './contextoAjuda'
 import { elementoDoItem } from './guiaElementos'
-import { useTourAtivo, encerrarTour } from './tourEstado'
+import { useTourAtivo, encerrarTour, iniciarTarefa } from './tourEstado'
+import TarefaGuiada from './TarefaGuiada'
+import { tarefasDaTela } from '../../lib/tarefasGuiadas'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { MARGEM, LARGURA_BALAO, montarPassos, posicaoBalao } from './tourPassos'
 
 export default function GuiaInterativo() {
   const ativo = useTourAtivo()
   if (!ativo) return null
+  if (ativo.tipo === 'tarefa') return <TarefaGuiada key={ativo.id} tarefaId={ativo.tarefaId} />
   return <Tour key={ativo.id} tela={ativo.tela} chaveInicial={ativo.chave} />
 }
 
@@ -109,9 +112,11 @@ function Tour({ tela, chaveInicial }) {
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1024
   const vh = typeof window !== 'undefined' ? window.innerHeight : 768
   const pos = posicaoBalao(comAlvo ? rect : null, tamBalao, { vw, vh })
-  const titulo = passo.tipo === 'intro' ? guia.titulo : passo.tipo === 'fim' ? 'Pronto!' : passo.item.rotulo
+  // Fim do tour: as tarefas "Faça comigo" desta tela, para praticar.
+  const praticar = passo.tipo === 'fim' ? tarefasDaTela(tela, ctx, { celular: isMobile }) : []
+  const titulo = passo.tipo === 'intro' ? guia.titulo : passo.tipo === 'fim' ? (praticar.length ? 'Pronto! Quer praticar?' : 'Pronto!') : passo.item.rotulo
   const texto = passo.tipo === 'intro' ? guia.descricao
-    : passo.tipo === 'fim' ? 'Você conheceu esta tela. O "?" ao lado do título refaz o tour quando quiser.'
+    : passo.tipo === 'fim' ? (praticar.length ? 'Escolha uma tarefa e o Finup mostra cada passo enquanto você faz.' : 'Você conheceu esta tela. O "?" ao lado do título refaz o tour quando quiser.')
       : passo.item.texto
 
   return createPortal(
@@ -154,6 +159,16 @@ function Tour({ tela, chaveInicial }) {
           </button>
         ))}
 
+        {praticar.length > 0 && (
+          <ul className="mt-2 space-y-1" aria-label="Faça comigo">
+            {praticar.map(x => (
+              <li key={x.id}>
+                <button type="button" className="w-full text-left text-sm text-primary-fg hover:underline min-h-[36px]"
+                  onClick={() => { ocultarGuia(tela); iniciarTarefa(x.id) }}>{x.titulo}</button>
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="flex items-center gap-2 mt-3">
           {i > 0 && <button type="button" className="btn-secondary text-sm min-h-[40px]" onClick={voltar}>Voltar</button>}
           {passo.tipo !== 'fim' && <button type="button" className="btn-secondary text-sm min-h-[40px]" onClick={fecharMarcando}>Pular tour</button>}

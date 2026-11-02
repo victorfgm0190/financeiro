@@ -878,7 +878,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         )}
 
         {/* Movimentação */}
-        <div className="max-sm:-order-1 sm:col-span-2">
+        <div data-guia="agendamento-form.tipo" className="max-sm:-order-1 sm:col-span-2">
           <LabelTip tip={TIPS.transactionType}>Movimentação</LabelTip>
           <div className="flex rounded-lg overflow-hidden border border-borda-forte">
             {['expense', 'income', 'transfer'].map(t => (
@@ -901,7 +901,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         </div>
 
         {/* Descrição */}
-        <div className="max-sm:-order-1 sm:col-span-2">
+        <div data-guia="agendamento-form.descricao" className="max-sm:-order-1 sm:col-span-2">
           <LabelTip tip={TIPS.description} required confira={!!destaques?.includes('description')}>Descrição</LabelTip>
           <input
             className="input"
@@ -915,7 +915,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         </div>
 
         {/* Conta */}
-        <div>
+        <div data-guia="agendamento-form.conta">
           <LabelTip tip={TIPS.account} required confira={!!destaques?.includes('accountId')}>{form.transactionType === 'transfer' ? 'Conta Origem' : 'Conta'}</LabelTip>
           {trava
             ? <div className="input opacity-60 cursor-not-allowed" title={trava}>{selectedAccount?.apelido || selectedAccount?.name || '—'}</div>
@@ -932,7 +932,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         </div>
 
         {/* Valor */}
-        <div className="max-sm:-order-1">
+        <div data-guia="agendamento-form.valor" className="max-sm:-order-1">
           <LabelTip tip={TIPS.amount} required confira={!!destaques?.includes('amount')}>Valor (R$)</LabelTip>
           <InputMoeda
             className="input valor-destaque"
@@ -985,7 +985,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Conta Destino (apenas para transferências) */}
         {form.transactionType === 'transfer' && (
-          <div className="sm:col-span-2">
+          <div data-guia="agendamento-form.conta-destino" className="sm:col-span-2">
             <LabelTip tip="Conta que receberá a transferência" required confira={!!destaques?.includes('toAccountId')}>Conta Destino</LabelTip>
             <SearchableSelect
               options={destAccountOpts}
@@ -1094,7 +1094,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Categoria */}
         {form.transactionType !== 'transfer' && (
-          <div>
+          <div data-guia="agendamento-form.categoria">
             <LabelTip tip={TIPS.category} confira={!!destaques?.includes('categoryId')}>Categoria</LabelTip>
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
@@ -1123,7 +1123,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Favorecido — também na parcela de financiamento (transferência), onde é campo da série */}
         {(form.transactionType !== 'transfer' || ehFinanciamento) && (
-          <div>
+          <div data-guia="agendamento-form.favorecido">
             <LabelTip tip={TIPS.payee} confira={!!destaques?.includes('payee')}>Favorecido</LabelTip>
             <FavorecidoAutocomplete
               value={form.payee}
@@ -1158,14 +1158,14 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Frequência — parcela de contrato: do contrato, só leitura */}
         {ehParcelaContrato ? (
-          <div>
+          <div data-guia="agendamento-form.frequencia">
             <LabelTip tip={TIPS.frequency}>Frequência</LabelTip>
             <div className="input bg-surface-2/60 text-texto-2 cursor-not-allowed" title="Definida pelo contrato">
               {rotuloFrequencia(contratoPorId?.(initial.contratoId), initial.contratoPapel)}
             </div>
           </div>
         ) : (
-        <div>
+        <div data-guia="agendamento-form.frequencia">
           <LabelTip tip={TIPS.frequency}>Frequência</LabelTip>
           <SearchableSelect
             options={FREQ_OPTIONS}
@@ -1206,7 +1206,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             </div>
           </>
         ) : (
-        <div>
+        <div data-guia="agendamento-form.data">
           <LabelTip tip={TIPS.startDate} required confira={!!destaques?.includes('startDate')}>Data de Início</LabelTip>
           <DateInput
             className="input"
@@ -1242,7 +1242,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Até quando — Sem fim | Número de vezes | Até a data (só com frequência recorrente escolhida) */}
         {form.frequency !== 'once' && (
-          <div className={`sm:col-span-2 ${!form.frequency ? 'opacity-40 pointer-events-none' : ''}`}>
+          <div data-guia="agendamento-form.ate-quando" className={`sm:col-span-2 ${!form.frequency ? 'opacity-40 pointer-events-none' : ''}`}>
             <LabelTip tip={TIPS.occurrence}>Até quando</LabelTip>
             <FimRepeticao
               inicio={form.startDate}
@@ -1257,7 +1257,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         )}
 
         {/* Automações */}
-        <div className="sm:col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-3">
+        <div data-guia="agendamento-form.automacoes" className="sm:col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-3">
           <p className="text-[11px] font-medium text-texto-3 uppercase tracking-wider">Automações</p>
 
           {/* Texto à esquerda (quebra se precisar) e toggle sempre à direita. No celular o
@@ -1429,7 +1429,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         <div className="sm:col-span-2 flex gap-3 pt-1 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:bg-surface max-sm:border-t max-sm:border-borda max-sm:pt-3 acoes-safe-bottom">
           <button type="button" className="btn-secondary flex-1" onClick={() => { if (podeDescartar()) onClose() }}>Cancelar</button>
           {podeGravarForm
-            ? <button type="submit" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
+            ? <button type="submit" data-guia="agendamento-form.salvar" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
             : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
         </div>
       </form>

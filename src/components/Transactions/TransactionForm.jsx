@@ -1564,7 +1564,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           onClose={() => setShowRateio(false)}
         />
       )}
-      <div>
+      <div data-guia="lancamento-form.tipo">
         <label className="label">Tipo</label>
         <div className="flex rounded-lg overflow-hidden border border-borda-forte">
           {TYPE_OPTIONS.map(t => (
@@ -1588,7 +1588,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
+        <div data-guia="lancamento-form.conta">
           <label className="label">Conta {form.type === 'transfer' ? 'Origem' : ''} *{confira('accountId')}</label>
           {trava
             ? <div className="input opacity-60 cursor-not-allowed" title={trava}>{selectedAccount?.apelido || selectedAccount?.name || '—'}</div>
@@ -1603,7 +1603,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               />}
         </div>
         {form.type === 'transfer' ? (
-          <div>
+          <div data-guia="lancamento-form.conta-destino">
             <label className="label">Conta Destino *{confira('toAccountId')}</label>
             <SearchableSelect
               options={destAccountOpts}
@@ -1616,7 +1616,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             />
           </div>
         ) : (
-          <div>
+          <div data-guia="lancamento-form.valor">
             <label className="label">{isCredit && form.type === 'expense' && form.installments > 1 ? 'Total (R$) *' : 'Valor (R$) *'}{confira('amount')}</label>
             <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required disabled={!!trava} />
           </div>
@@ -1628,7 +1628,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {form.type === 'transfer' && (
         <>
-          <div>
+          <div data-guia="lancamento-form.valor">
             <label className="label">Valor (R$) *{confira('amount')}</label>
             <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required />
           </div>
@@ -1784,7 +1784,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         confira={!!destaques?.includes('tipoDocumentoId')}
       />
 
-      <div>
+      <div data-guia="lancamento-form.data">
         <label className="label">Data *{confira('date')}</label>
         <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required hoje disabled={!!trava} />
       </div>
@@ -1802,7 +1802,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {form.type !== 'transfer' && (
         <>
-          <div>
+          <div data-guia="lancamento-form.categoria">
             <label className="label">Categoria{confira('categoryId')}</label>
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
@@ -1821,14 +1821,14 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   {categoriaForaDoPerfil && <p className="text-[11px] text-aviso mt-0.5">⚠ Categoria de outro perfil</p>}
                 </div>
               )}
-              <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0" title="Dividir este lançamento em várias categorias">
+              <button type="button" data-guia="lancamento-form.dividir" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0" title="Dividir este lançamento em várias categorias">
                 <span className="hidden sm:inline">Dividir em categorias</span><span className="sm:hidden">Dividir</span>
               </button>
             </div>
             {erroRateio && <p className="text-[11px] text-aviso mt-1" role="alert">{erroRateio}</p>}
           </div>
 
-          <div>
+          <div data-guia="lancamento-form.favorecido">
             <div className="flex items-center justify-between gap-2">
               <label className="label">Favorecido{confira('payee')}</label>
               {initial?.id && (initial.payee || '').trim() && (
@@ -1867,7 +1867,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         </>
       )}
 
-      <div>
+      <div data-guia="lancamento-form.descricao">
         <label className="label">Descrição{confira('description')}</label>
         <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Digite a descrição do lançamento" />
       </div>
@@ -2054,7 +2054,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       )}
 
       {isCredit && form.type === 'expense' && !initial?.id && (
-        <div className="p-3 bg-surface-2/60 border border-borda-forte rounded-lg space-y-3">
+        <div className="p-3 bg-surface-2/60 border border-borda-forte rounded-lg space-y-3" data-guia="lancamento-form.parcelado">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <div className="relative shrink-0">
               <input
@@ -2072,6 +2072,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             <div className="flex items-center gap-3">
               <label className="text-xs text-texto-2 shrink-0">Parcelas:</label>
               <input
+                data-guia="lancamento-form.parcelas"
                 className="input w-20 text-center"
                 type="number"
                 min="2"
@@ -2093,7 +2094,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       )}
 
       {isCredit && form.type === 'expense' && (
-        <div>
+        <div data-guia="lancamento-form.fatura">
           <label className="label">Fatura de referência{confira('faturaMonthYear')}</label>
           <select
             className="input disabled:opacity-60"
@@ -2315,7 +2316,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       <div className="flex gap-3 pt-1">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
         {podeGravarForm ? (
-          <button type="submit" className="btn-primary flex-1" title={tituloGravar}>
+          <button type="submit" data-guia="lancamento-form.salvar" className="btn-primary flex-1" title={tituloGravar}>
             {rotuloGravar || (initial ? 'Salvar' : 'Registrar')}
             <ShortcutHint actionId="lancamento.gravar" habilitado={atalhosForm} className="ml-2" />
           </button>

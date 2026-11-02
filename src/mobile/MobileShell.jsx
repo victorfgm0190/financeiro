@@ -151,6 +151,7 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
             type="button"
             onClick={() => setAcoesAbertas(true)}
             aria-label="Novo"
+            data-guia="mobile.novo"
             className="w-14 h-14 -mt-5 rounded-full flex items-center justify-center bg-primary text-white shadow-lg"
             style={{ boxShadow: '0 6px 18px rgba(14,107,78,0.45)' }}
           >

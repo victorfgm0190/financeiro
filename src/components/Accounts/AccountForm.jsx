@@ -70,9 +70,9 @@ function Bloco({ titulo, children }) {
 }
 
 // Linha de toggle: nome em negrito, ajuda fixa abaixo, toggle à direita. A linha toda é o rótulo.
-function LinhaToggle({ nome, ajuda, selo, checked, onChange, disabled = false }) {
+function LinhaToggle({ nome, ajuda, selo, checked, onChange, disabled = false, guia }) {
   return (
-    <label className={`flex items-center gap-3 px-3 py-2.5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-primary ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-surface-hover/50'}`}>
+    <label data-guia={guia} className={`flex items-center gap-3 px-3 py-2.5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-primary ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-surface-hover/50'}`}>
       <div className="flex-1 min-w-0">
         <p className="flex items-center gap-1.5 text-sm font-semibold text-texto-1">
           {nome}
@@ -299,12 +299,13 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
+      <div data-guia="conta-form.tipo">
         <label className="label">Tipo de Conta</label>
         <div className="grid grid-cols-2 gap-2">
           {TYPES.map(t => (
             <label
               key={t.value}
+              data-guia={`conta-form.tipo-${t.value}`}
               className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
                 form.type === t.value
                   ? 'border-primary bg-primary/10 text-primary-fg'
@@ -326,7 +327,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <div className="col-span-2">
+        <div data-guia="conta-form.nome" className="col-span-2">
           <label className="label">Nome da Conta *</label>
           <input
             className="input disabled:opacity-60 disabled:cursor-not-allowed"
@@ -338,7 +339,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
           />
           {nomeTravado && <p className="text-xs text-texto-3 mt-0.5">Nome usado pelo controle gerencial — não pode ser alterado.</p>}
         </div>
-        <div>
+        <div data-guia="conta-form.apelido">
           <label className="label flex items-center gap-1">
             Apelido
             <Tooltip text="Nome curto usado no extrato gerencial (máx. 8 caracteres)" />
@@ -355,7 +356,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
+        <div data-guia="conta-form.banco">
           <label className="label">Banco / Instituição</label>
           <input
             className="input"
@@ -364,7 +365,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             placeholder="Digite o nome do banco"
           />
         </div>
-        <div>
+        <div data-guia="conta-form.grupo">
           <label className="label">Grupo</label>
           <select className="input" value={form.accountGroupId || ''} onChange={e => set('accountGroupId', e.target.value || null)}>
             <option value="">Sem grupo</option>
@@ -375,7 +376,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
         </div>
       </div>
 
-      <div>
+      <div data-guia="conta-form.vinculo">
         <label className="label" htmlFor="conta-vinculo">Vínculo (CPF / CNPJ)</label>
         {profiles.length > 0 ? (
           <>
@@ -405,7 +406,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
       </div>
 
       {!isCredit && !isPatrimonial && !initial && (
-        <div>
+        <div data-guia="conta-form.saldo-inicial">
           <label className="label">Saldo Inicial (R$)</label>
           <InputMoeda
             negativo
@@ -418,7 +419,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
       {!isCredit && !isPatrimonial && initial && (
         <div className="space-y-2">
-          <div>
+          <div data-guia="conta-form.saldo-inicial">
             <label className="label">Saldo Inicial (R$)</label>
             <InputMoeda
               negativo
@@ -452,7 +453,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
       {isPatrimonial && (
         <>
-          <div>
+          <div data-guia="conta-form.valor-atual">
             <label className="label">{form.type === 'asset' ? 'Valor Atual (R$)' : saldoDoFinanciamento ? 'Saldo devedor (principal)' : 'Saldo Devedor (R$)'}</label>
             {saldoDoFinanciamento ? (
               <>
@@ -469,7 +470,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div data-guia="conta-form.valor-aquisicao">
               <label className="label">Valor de Aquisição (R$)</label>
               <InputMoeda
                 negativo
@@ -478,7 +479,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
                 placeholder="0,00"
               />
             </div>
-            <div>
+            <div data-guia="conta-form.data-aquisicao">
               <label className="label">Data de Aquisição</label>
               <DateInput
                 className="input"
@@ -492,7 +493,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
       {isCredit && (
         <>
-          <div>
+          <div data-guia="conta-form.limite">
             <label className="label">Limite do Cartão (R$)</label>
             <InputMoeda
               negativo
@@ -508,7 +509,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             </p>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div data-guia="conta-form.fechamento">
               <label className="label">Dia de Fechamento *</label>
               <input
                 className="input"
@@ -520,7 +521,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
                 onChange={e => { set('closingDay', e.target.value); setDiasErro('') }}
               />
             </div>
-            <div>
+            <div data-guia="conta-form.vencimento">
               <label className="label">Dia de Vencimento *</label>
               <input
                 className="input"
@@ -534,7 +535,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             </div>
           </div>
           {diasErro && <p className="text-xs text-perigo">{diasErro}</p>}
-          <div>
+          <div data-guia="conta-form.finais">
             <label className="label">Finais do cartão</label>
             <input
               className="input"
@@ -563,7 +564,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             Compra em dólar pelo Assistente: R$ = US$ × PTAX × (1 + spread). O spread usado é a média das últimas 3 compras
             em dólar já conferidas pela fatura; sem elas, este (vazio = 2,5%).
           </p>
-          <div>
+          <div data-guia="conta-form.pagadora">
             <label className="label">Conta Pagadora</label>
             <select
               className="input"
@@ -592,6 +593,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             onChange={e => set('appPriority', e.target.checked)}
           />
           <LinhaToggle
+            guia="conta-form.favorita"
             nome="Conta favorita ★"
             ajuda="Marcada com ★ e listada primeiro em Lançamentos. Uma por perfil"
             checked={form.isMain}
@@ -615,6 +617,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
         <Bloco titulo="Saldos e cálculos">
           <LinhaToggle
+            guia="conta-form.fc"
             nome="Somar no Saldo Principal"
             selo={SELOS.FC}
             ajuda="Entra no Saldo Principal ('Como chegamos aqui'), no Fluxo de Caixa e nos relatórios por padrão"
@@ -634,6 +637,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
         {isChecking && (
           <Bloco titulo="Tipo da conta">
             <LinhaToggle
+              guia="conta-form.central"
               nome="Conta central"
               selo={SELOS.CC}
               ajuda="Paga faturas, movimenta o gerencial do cartão e recebe resgates de reserva. Só uma por vez"
@@ -665,7 +669,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
         {!isCredit && !isPatrimonial && (
           <>
-            <fieldset>
+            <fieldset data-guia="conta-form.vinculo-tipo">
               <legend className="text-xs text-texto-3 uppercase tracking-wide mb-1.5">Finalidade da conta</legend>
               <div role="radiogroup" aria-label="Finalidade da conta" className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {FINALIDADES.map(f => {
@@ -673,6 +677,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
                   return (
                     <label
                       key={f.value}
+                      data-guia={`conta-form.vinculo-tipo-${f.value}`}
                       className={`flex flex-col gap-0.5 p-3 rounded-lg border cursor-pointer transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${
                         sel ? 'border-primary bg-primary/10' : 'border-borda-forte bg-surface-2 hover:bg-surface-hover'
                       }`}
@@ -700,7 +705,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             </fieldset>
 
             {form.vinculoTipo === 'reserva' && (
-              <div className="ml-3 space-y-3 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
+              <div data-guia="conta-form.reserva" className="ml-3 space-y-3 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
                 <div>
                   <label className="label">Tipo de reserva</label>
                   <select
@@ -868,7 +873,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
           </div>
         )}
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        {podeSalvar && <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar Conta'}</button>}
+        {podeSalvar && <button type="submit" data-guia="conta-form.salvar" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar Conta'}</button>}
       </div>
       {!podeSalvar && <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
     </form>

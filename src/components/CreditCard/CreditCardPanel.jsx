@@ -909,7 +909,7 @@ export default function CreditCardPanel() {
             </>
           )}
         </div>
-        <div className="card">
+        <div data-guia="credit.limite" className="card">
           <div className="flex items-center gap-2 mb-2 text-texto-2">
             <DollarSign size={13} />
             <span className="text-xs uppercase tracking-wide">Limite Disponível</span>
@@ -919,7 +919,7 @@ export default function CreditCardPanel() {
           </p>
           <p className="text-xs text-texto-3 mt-1">de {fmt(selectedCard?.creditLimit || 0)}</p>
         </div>
-        <div className="card">
+        <div data-guia="credit.divida-total" className="card">
           <div className="flex items-center gap-2 mb-2 text-texto-2">
             <CreditCard size={13} />
             <span className="text-xs uppercase tracking-wide">Dívida Total</span>

@@ -2,6 +2,7 @@
 //   • "Tour desta tela" (sempre funciona, mesmo com "Não mostrar mais") — GuiaInterativo;
 //   • "Ver todas as funções desta tela" — painel com a lista numerada e um selo com o mesmo número em
 //     cima de cada botão (passar o mouse/tocar no item destaca o botão e rola até ele);
+//   • "Faça comigo" — as tarefas guiadas da tela (✓ nas já concluídas);
 //   • "Voltar a mostrar o tour sozinho nesta tela" — só se a tela estiver marcada "Não mostrar mais".
 // O tour abre SOZINHO na primeira visita (useGuiaTela). Com os guias desligados (Configurações ›
 // Geral › Guias das telas), o "?" não aparece. Botões achados por data-guia="<tela>.<chave>".
@@ -9,11 +10,13 @@
 // com guia próprio vale no lugar dela.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { HelpCircle, X, Play, ListOrdered, RotateCcw, LayoutGrid } from 'lucide-react'
+import { HelpCircle, X, Play, ListOrdered, RotateCcw, LayoutGrid, Hand, Check } from 'lucide-react'
 import { ajudaDaTela, guiaDaTela } from '../../lib/ajudaTelas'
 import { useSubtelaAtiva } from './subtelaGuia'
 import { useContextoAjuda } from './contextoAjuda'
-import { useGuiaTela } from './useGuiaTela'
+import { useGuiaTela, useEstadoBoasVindas } from './useGuiaTela'
+import { tarefasDaTela } from '../../lib/tarefasGuiadas'
+import { iniciarTarefa } from './tourEstado'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { elementoDoItem } from './guiaElementos'
 
@@ -54,6 +57,8 @@ export default function AjudaTela({ pagina, className = '' }) {
   const telaGeral = pagina === 'settings' && tela !== pagina && ajudaDaTela(pagina) ? pagina : null
   const { ligados, oculto, listaAberta: aberto, abrirTour, abrirLista, fecharLista: esconder, voltarAMostrar } = useGuiaTela(tela, { primeiraTela: telaGeral })
   const [menu, setMenu] = useState(false)
+  const estadoBv = useEstadoBoasVindas()
+  const feitas = estadoBv?.progresso?.tarefas || {}
   const menuRef = useRef(null)
   useEffect(() => {
     if (!menu) return
@@ -64,6 +69,7 @@ export default function AjudaTela({ pagina, className = '' }) {
     return () => { document.removeEventListener('mousedown', fora); window.removeEventListener('keydown', esc) }
   }, [menu])
   const isMobile = useIsMobile()
+  const tarefas = tarefasDaTela(tela, ctx, { celular: isMobile })
   const itens = guia?.itens || []
   const selos = useSelos(tela, itens, aberto)
   const destacado = useRef(null)
@@ -105,7 +111,7 @@ export default function AjudaTela({ pagina, className = '' }) {
         </button>
         {menu && (
           <div role="menu" aria-label="Ajuda desta tela" data-testid="menu-ajuda"
-            className="absolute left-0 top-full mt-1 z-[70] w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-borda-forte bg-surface shadow-2xl p-1.5">
+            className="absolute left-0 top-full mt-1 z-[70] w-72 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto rounded-xl border border-borda-forte bg-surface shadow-2xl p-1.5">
             <button type="button" role="menuitem" className={opcao} onClick={() => { setMenu(false); abrirTour(tela) }}>
               <Play size={15} className="text-primary-fg shrink-0" /> Tour desta tela
             </button>
@@ -114,6 +120,18 @@ export default function AjudaTela({ pagina, className = '' }) {
                 <LayoutGrid size={15} className="text-texto-2 shrink-0" /> Tour geral de Configurações
               </button>
             )}
+            {tarefas.length > 0 && (
+              <div className="px-3 pt-2 pb-1 text-[11px] font-semibold text-texto-2 uppercase tracking-wide flex items-center gap-1.5">
+                <Hand size={13} aria-hidden="true" /> Faça comigo
+              </div>
+            )}
+            {tarefas.map(x => (
+              <button key={x.id} type="button" role="menuitem" className={`${opcao} pl-7`} onClick={() => { setMenu(false); iniciarTarefa(x.id) }}>
+                <span className="flex-1 min-w-0">{x.titulo}</span>
+                {feitas[x.id] && <Check size={15} className="text-primary-fg shrink-0" aria-label="concluída" />}
+              </button>
+            ))}
+            {tarefas.length > 0 && <div className="my-1 border-t border-borda" />}
             <button type="button" role="menuitem" className={opcao} onClick={() => { setMenu(false); abrirLista() }}>
               <ListOrdered size={15} className="text-texto-2 shrink-0" /> Ver todas as funções desta tela
             </button>

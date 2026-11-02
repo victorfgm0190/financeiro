@@ -122,7 +122,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
                 className="rounded-xl border border-borda bg-surface-2/40 p-3 space-y-2 md:space-y-0 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:flex md:items-start md:gap-2">
                 {/* Categoria na largura toda (nome inteiro) + lixeira */}
                 <div className="flex items-start gap-2 md:flex-1 md:min-w-0">
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0" data-guia={i === 0 ? 'rateio-form.categoria' : undefined}>
                     <CategorySelect
                       categories={categories}
                       perfilId={perfilId}
@@ -141,7 +141,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
                   </button>
                 </div>
                 {/* Valor + "Usar restante" */}
-                <div className="flex items-center gap-2 md:shrink-0">
+                <div className="flex items-center gap-2 md:shrink-0" data-guia={i === 0 ? 'rateio-form.valor' : undefined}>
                   <InputMoeda
                     min="0"
                     value={r.valor}
@@ -186,7 +186,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
             )
           })}
 
-          <button type="button" onClick={addRow}
+          <button type="button" onClick={addRow} data-guia="rateio-form.adicionar"
             className="btn-secondary w-full md:w-auto min-h-[44px] md:min-h-0 text-sm md:text-xs flex items-center justify-center gap-1.5">
             <Plus size={14} /> Categoria
           </button>
@@ -198,7 +198,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
             <span className="text-texto-2">Total do lançamento</span>
             <span className="font-semibold text-texto-1">{fmt(total)}</span>
           </div>
-          <div className="flex items-center justify-between gap-3 text-sm">
+          <div className="flex items-center justify-between gap-3 text-sm" data-guia="rateio-form.restante">
             <span className="text-texto-2">Restante a distribuir</span>
             <span className={`font-semibold ${corRestante}`} data-testid="rateio-restante">{sitRestante.estado === 'ok' ? '✓ ' : ''}{fmt(naoAtribuido)}</span>
           </div>
@@ -206,7 +206,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
             <p role="status" className="text-sm text-aviso">{validacao.motivo}</p>
           )}
           <div className="flex justify-end">
-            <button type="button" onClick={handleSave} disabled={!podeGravar}
+            <button type="button" onClick={handleSave} disabled={!podeGravar} data-guia="rateio-form.gravar"
               className="btn-primary w-full md:w-auto min-h-[44px] md:min-h-0 text-sm disabled:opacity-50">
               Gravar
             </button>

@@ -10,6 +10,9 @@ import { checklistComStatus, progressoTexto, CHECKLIST_TITULO, CHECKLIST_SUBTITU
 import { assinarBoasVindas, carregarBoasVindas, estadoBoasVindas, ocultarChecklist, marcarEtapa } from '../../lib/boasVindasApi'
 import { useContextoAjuda } from './contextoAjuda'
 import { useAcoesPrimeirosPassos } from './AcoesPrimeirosPassos'
+import { TAREFA_DA_ETAPA, tarefaPorId, tarefaDisponivel } from '../../lib/tarefasGuiadas'
+import { iniciarTarefa } from './tourEstado'
+import { useIsMobile } from '../../hooks/useIsMobile'
 
 export default function PrimeirosPassos({ className = '' }) {
   const ctx = useContextoAjuda()
@@ -18,6 +21,13 @@ export default function PrimeirosPassos({ className = '' }) {
   const [verPuladas, setVerPuladas] = useState(false)
   const [confirmarPular, setConfirmarPular] = useState(null) // etapa com aviso antes de pular
   const { executar, modais } = useAcoesPrimeirosPassos()
+  const isMobile = useIsMobile()
+  // "Fazer agora": a tarefa guiada da etapa (navega até a tela e já começa); sem ela, o formulário.
+  const fazerAgora = (i) => {
+    const t = tarefaPorId(TAREFA_DA_ETAPA[i.id])
+    if (tarefaDisponivel(t, ctx, { celular: isMobile })) iniciarTarefa(t.id)
+    else executar(i.acao)
+  }
   useEffect(() => assinarBoasVindas(setEstado), [])
   useEffect(() => { if (dbStatus === 'connected') carregarBoasVindas() }, [dbStatus])
 
@@ -53,7 +63,7 @@ export default function PrimeirosPassos({ className = '' }) {
                 <span className={`flex-1 min-w-[12rem] ${i.feito ? 'text-texto-2 line-through' : 'text-texto-1'}`}>{i.texto}</span>
                 {!i.feito && (
                   <span className="flex flex-wrap gap-1.5 shrink-0">
-                    <button type="button" className="btn-primary text-xs py-1.5" onClick={() => executar(i.acao)}>{B.fazer}</button>
+                    <button type="button" className="btn-primary text-xs py-1.5" onClick={() => fazerAgora(i)}>{B.fazer}</button>
                     <button type="button" className="btn-secondary text-xs py-1.5" onClick={() => pular(i)}>{B.pular}</button>
                     {i.naoSeAplica && <button type="button" className="btn-secondary text-xs py-1.5" onClick={() => marcarEtapa(i.id, 'nao-se-aplica')}>{i.naoSeAplica}</button>}
                   </span>

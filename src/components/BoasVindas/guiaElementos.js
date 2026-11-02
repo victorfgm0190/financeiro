@@ -9,3 +9,14 @@ export function elementoDoItem(tela, chave, doc = globalThis.document) {
   }
   return null
 }
+
+// Elemento visível com data-guia="<alvo>" (alvo completo, ex.: 'agendamento-form.valor').
+export function elementoPorGuia(alvo, doc = globalThis.document) {
+  if (!doc || !alvo) return null
+  const seletor = `[data-guia="${String(alvo).replace(/"/g, '\\"')}"]`
+  for (const el of doc.querySelectorAll(seletor)) {
+    const r = el.getBoundingClientRect?.()
+    if (r && r.width > 0 && r.height > 0) return el
+  }
+  return null
+}

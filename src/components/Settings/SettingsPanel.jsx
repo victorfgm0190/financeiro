@@ -876,7 +876,7 @@ export default function SettingsPanel() {
             <p className="text-xs font-medium text-texto-2">{editingProfile ? 'Editar perfil' : 'Novo perfil'}</p>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div data-guia="perfil-form.tipo">
                 <label className="label">Tipo</label>
                 <div className="flex rounded-lg overflow-hidden border border-borda-forte">
                   {[['pf', 'Pessoa Física'], ['pj', 'Pessoa Jurídica']].map(([v, l]) => (
@@ -887,13 +887,13 @@ export default function SettingsPanel() {
                   ))}
                 </div>
               </div>
-              <div>
+              <div data-guia="perfil-form.nome">
                 <label className="label">Nome / Razão Social *</label>
                 <input className="input" value={profileForm.name} onChange={e => setProfileField('name', e.target.value)} placeholder="Digite o nome ou razão social" required />
               </div>
             </div>
 
-            <div>
+            <div data-guia="perfil-form.documento">
               <label className="label">{profileForm.type === 'pf' ? 'CPF' : 'CNPJ'}</label>
               <input
                 className="input"
@@ -904,7 +904,7 @@ export default function SettingsPanel() {
               />
             </div>
 
-            <div>
+            <div data-guia="perfil-form.cor">
               <label className="label">Cor de identificação</label>
               <div className="flex gap-2 flex-wrap">
                 {PROFILE_COLORS.map(c => (
@@ -917,7 +917,7 @@ export default function SettingsPanel() {
             </div>
 
             <label data-guia="settings:perfis.principal" className="flex items-center gap-2.5 cursor-pointer">
-              <div className="relative shrink-0">
+              <div data-guia="perfil-form.principal" className="relative shrink-0">
                 <input type="checkbox" checked={profileForm.isDefault} onChange={e => setProfileField('isDefault', e.target.checked)} className="sr-only peer" />
                 <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
@@ -927,7 +927,7 @@ export default function SettingsPanel() {
 
             <div className="flex gap-2 pt-1">
               <button type="button" className="btn-secondary flex-1 text-xs py-1.5" onClick={closeProfileForm}>Cancelar</button>
-              <button type="submit" className="btn-primary flex-1 text-xs py-1.5">{editingProfile ? 'Salvar' : 'Adicionar'}</button>
+              <button type="submit" data-guia="perfil-form.salvar" className="btn-primary flex-1 text-xs py-1.5">{editingProfile ? 'Salvar' : 'Adicionar'}</button>
             </div>
           </form>
         )}
@@ -1076,8 +1076,9 @@ export default function SettingsPanel() {
 
         {/* Criar categoria — Grupo obrigatório (escolher existente ou digitar novo) */}
         <form onSubmit={handleAddCategory} data-guia="settings:categorias.nova-categoria" className="grid grid-cols-2 gap-2 sm:grid-cols-6">
-          <input className="input col-span-2 sm:col-span-1" placeholder="Digite o nome da categoria" value={newCategory.name} onChange={e => setNewCategory(f => ({ ...f, name: e.target.value }))} />
+          <input data-guia="categoria-form.nome" className="input col-span-2 sm:col-span-1" placeholder="Digite o nome da categoria" value={newCategory.name} onChange={e => setNewCategory(f => ({ ...f, name: e.target.value }))} />
           <input
+            data-guia="categoria-form.grupo"
             className="input"
             list="category-groups-list"
             placeholder="Nome do grupo"
@@ -1088,19 +1089,19 @@ export default function SettingsPanel() {
           <datalist id="category-groups-list">
             {categoryGroups.map(g => <option key={g} value={g} />)}
           </datalist>
-          <select className="input" value={newCategory.type} onChange={e => setNewCategory(f => ({ ...f, type: e.target.value }))}>
+          <select data-guia="categoria-form.tipo" className="input" value={newCategory.type} onChange={e => setNewCategory(f => ({ ...f, type: e.target.value }))}>
             <option value="expense">Despesa</option>
             <option value="income">Receita</option>
             <option value="both">Ambos</option>
           </select>
-          <input className="input" placeholder="Emoji" value={newCategory.icon} onChange={e => setNewCategory(f => ({ ...f, icon: e.target.value }))} maxLength={2} />
+          <input data-guia="categoria-form.emoji" className="input" placeholder="Emoji" value={newCategory.icon} onChange={e => setNewCategory(f => ({ ...f, icon: e.target.value }))} maxLength={2} />
           <PerfisMultiSelect
             value={newCategory.perfilIds}
             onChange={ids => setNewCategory(f => ({ ...f, perfilIds: ids }))}
             profiles={profiles}
             className="!w-full !py-2 !text-sm"
           />
-          <button type="submit" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
+          <button type="submit" data-guia="categoria-form.salvar" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
         </form>
         <p className="text-[11px] text-texto-3 mt-1.5">O campo <span className="text-texto-2">Grupo</span> é obrigatório — selecione um existente ou digite um novo para criá-lo junto.</p>
       </div>
@@ -1444,6 +1445,7 @@ export default function SettingsPanel() {
         {/* Add new group */}
         <div data-guia="settings:grupos-contas.novo" className="flex gap-2 pt-2 border-t border-borda-forte">
           <select
+            data-guia="grupo-form.tipo"
             className="input w-36 text-sm"
             value={agNewType}
             onChange={e => setAgNewType(e.target.value)}
@@ -1452,6 +1454,7 @@ export default function SettingsPanel() {
             <option value="patrimonial">Patrimonial</option>
           </select>
           <input
+            data-guia="grupo-form.nome"
             className="input flex-1 text-sm"
             value={agNewName}
             onChange={e => setAgNewName(e.target.value)}
@@ -1464,6 +1467,7 @@ export default function SettingsPanel() {
             }}
           />
           <button
+            data-guia="grupo-form.salvar"
             className="btn-primary px-3"
             onClick={() => {
               if (!agNewName.trim()) return

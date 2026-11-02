@@ -204,7 +204,7 @@ export default function ProvisaoForm({ initial, onClose }) {
       )}
 
       {/* Descrição */}
-      <div>
+      <div data-guia="provisao-form.descricao">
         <label className="label">Descrição *</label>
         <input
           className="input"
@@ -217,7 +217,7 @@ export default function ProvisaoForm({ initial, onClose }) {
 
       <div className="grid grid-cols-2 gap-4">
         {/* Valor estimado */}
-        <div>
+        <div data-guia="provisao-form.valor">
           <label className="label">Valor estimado (R$) *</label>
           <InputMoeda
             min="0.01"
@@ -228,7 +228,7 @@ export default function ProvisaoForm({ initial, onClose }) {
         </div>
 
         {/* Data estimada (1ª ocorrência quando recorrente) */}
-        <div>
+        <div data-guia="provisao-form.data">
           <label className="label">{isRecorrente ? 'Data estimada (1ª ocorrência) *' : 'Data estimada *'}</label>
           <input
             className="input"
@@ -242,7 +242,7 @@ export default function ProvisaoForm({ initial, onClose }) {
 
       {/* Frequência + Ocorrência (mesmo padrão do agendamento normal) */}
       <div className="grid grid-cols-2 gap-4">
-        <div>
+        <div data-guia="provisao-form.frequencia">
           <label className="label">Frequência *</label>
           <SearchableSelect
             options={FREQ_OPTIONS}
@@ -313,7 +313,7 @@ export default function ProvisaoForm({ initial, onClose }) {
       )}
 
       {/* Conta (de onde o dinheiro sai) — padrão: Conta central do perfil */}
-      <div>
+      <div data-guia="provisao-form.conta">
         <label className="label">Conta (de onde o dinheiro sai) *</label>
         <SearchableSelect
           options={contaOpts}
@@ -337,7 +337,7 @@ export default function ProvisaoForm({ initial, onClose }) {
       </div>
 
       {/* Categoria (opcional) */}
-      <div>
+      <div data-guia="provisao-form.categoria">
         <label className="label">Categoria</label>
         <SearchableSelect
           options={expenseCatOpts}
@@ -351,7 +351,7 @@ export default function ProvisaoForm({ initial, onClose }) {
       </div>
 
       {/* Será pago com reserva */}
-      <div className="bg-surface-2/40 rounded-xl p-3.5 space-y-3">
+      <div data-guia="provisao-form.reserva" className="bg-surface-2/40 rounded-xl p-3.5 space-y-3">
         <label className="flex items-center gap-2.5 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -388,7 +388,7 @@ export default function ProvisaoForm({ initial, onClose }) {
       <div className="flex gap-3 pt-1">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
         {podeGravarForm
-          ? <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Lançar Provisão'}</button>
+          ? <button type="submit" data-guia="provisao-form.salvar" className="btn-primary flex-1">{initial ? 'Salvar' : 'Lançar Provisão'}</button>
           : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
       </div>
     </form>

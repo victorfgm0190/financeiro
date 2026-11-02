@@ -33,6 +33,7 @@ export default function ActionSheet({ open, onClose, modules, onToast, acaoDaTel
           return (
             <button
               key={m.id}
+              data-guia={`mobile.acao-${m.id}`}
               type="button"
               onClick={() => setAtiva(m)}
               className="flex flex-col items-start gap-3 p-4 min-h-[96px] rounded-2xl bg-surface-2/70 border border-borda-forte/60 active:bg-surface-2 text-left"
@@ -61,7 +62,7 @@ export default function ActionSheet({ open, onClose, modules, onToast, acaoDaTel
             const Icon = m.icon
             return (
               <li key={m.id}>
-                <button type="button" onClick={() => setAtiva(m)} className="w-full flex items-center gap-3 px-4 min-h-[52px] text-left text-sm text-texto-1">
+                <button type="button" data-guia={`mobile.acao-${m.id}`} onClick={() => setAtiva(m)} className="w-full flex items-center gap-3 px-4 min-h-[52px] text-left text-sm text-texto-1">
                   {Icon && <Icon size={18} className="text-texto-2" />}
                   <span className="flex-1">{m.label}</span>
                   <ChevronRight size={16} className="text-texto-3" />

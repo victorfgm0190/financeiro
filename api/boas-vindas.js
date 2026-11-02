@@ -3,6 +3,7 @@ import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { TELAS_COM_GUIA, ETAPAS_CHECKLIST } from '../src/lib/ajudaTelas.js'
+import { TODAS_AS_TAREFAS } from '../src/lib/tarefasGuiadas.js'
 
 // BOAS-VINDAS e GUIA DA TELA do usuário logado (preferências pessoais, no banco do ambiente — não no
 // navegador, para valerem em todos os aparelhos). O user_id vem SEMPRE da sessão, nunca do corpo.
@@ -12,6 +13,7 @@ import { TELAS_COM_GUIA, ETAPAS_CHECKLIST } from '../src/lib/ajudaTelas.js'
 //   POST { etapa: '<id>', estado }        → checklist "Primeiros passos": 'pulada' | 'nao-se-aplica' |
 //                                           'feita' (etapas sem dado próprio, ex.: usou o Assistente) |
 //                                           null (desfaz). Fica em progresso.etapas.<id> = { estado, em }.
+//   POST { tarefaConcluida: '<id>' }      → tarefa guiada "Faça comigo" concluída (progresso.tarefas.<id> = data)
 //   POST { tourVisto: true }              → marca o tour como visto (pular ou concluir)
 //   POST { checklistOculto: true|false }  → oculta (ou volta a mostrar) o checklist
 //   POST { guiaOculto: '<tela>' }         → "Não mostrar mais" o guia desta tela
@@ -53,6 +55,22 @@ const linhaParaJson = (r) => ({
   tourVistoEm: r?.tour_visto_em || null, checklistOcultoEm: r?.checklist_oculto_em || null, guiasLigados: r?.guias_ligados !== false,
   progresso: r?.progresso && typeof r.progresso === 'object' ? r.progresso : {},
 })
+
+// Tarefa guiada concluída (só ids conhecidos). Guarda a primeira data.
+export async function gravarTarefaConcluida(q, userId, tarefaId) {
+  if (!TODAS_AS_TAREFAS.some(t => t.id === tarefaId)) return null
+  const [r] = await q(
+    `INSERT INTO boas_vindas_usuario (user_id, progresso)
+       VALUES ($1, jsonb_build_object('tarefas', jsonb_build_object($2::text, to_jsonb(now()))))
+     ON CONFLICT (user_id) DO UPDATE SET progresso = CASE
+         WHEN boas_vindas_usuario.progresso->'tarefas' ? $2::text THEN boas_vindas_usuario.progresso
+         ELSE jsonb_set(jsonb_set(boas_vindas_usuario.progresso, '{tarefas}', COALESCE(boas_vindas_usuario.progresso->'tarefas', '{}'::jsonb)), ARRAY['tarefas', $2::text], to_jsonb(now()))
+       END, updated_at = now()
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, progresso`,
+    [userId, tarefaId],
+  )
+  return linhaParaJson(r)
+}
 
 // Estado de UMA etapa do checklist (null = volta a pendente). Etapa/estado desconhecidos → null.
 export async function gravarEtapa(q, userId, etapa, estado) {
@@ -140,6 +158,10 @@ async function handler(req, res) {
       if (body?.guiasTodos === true) { await ocultarGuias(query, userId, TELAS_COM_GUIA); fez = true }
       if (typeof body?.guiaReativar === 'string') { await reativarGuia(query, userId, body.guiaReativar); fez = true }
       if (typeof body?.guiasLigados === 'boolean') { await gravarGuiasLigados(query, userId, body.guiasLigados); fez = true }
+      if (typeof body?.tarefaConcluida === 'string') {
+        if (!(await gravarTarefaConcluida(query, userId, body.tarefaConcluida))) return res.status(400).json({ error: 'Tarefa desconhecida' })
+        fez = true
+      }
       if (typeof body?.etapa === 'string' && 'estado' in body) {
         if (!(await gravarEtapa(query, userId, body.etapa, body.estado ?? null))) return res.status(400).json({ error: 'Etapa ou estado desconhecido' })
         fez = true

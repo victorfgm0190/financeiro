@@ -61,6 +61,10 @@ async function gravar(metodo, corpo, otimista) {
 export const marcarTourVisto = () => gravar('POST', { tourVisto: true }, (e) => ({ tourVistoEm: e.tourVistoEm || new Date().toISOString() }))
 export const ocultarChecklist = () => gravar('POST', { checklistOculto: true }, () => ({ checklistOcultoEm: new Date().toISOString() }))
 export const mostrarChecklist = () => gravar('POST', { checklistOculto: false }, () => ({ checklistOcultoEm: null }))
+// Tarefa guiada "Faça comigo" concluída (✓ no menu do "?").
+export const marcarTarefaConcluida = (id) => gravar('POST', { tarefaConcluida: id }, (e) => ({
+  progresso: { ...(e.progresso || {}), tarefas: { ...(e.progresso?.tarefas || {}), [id]: e.progresso?.tarefas?.[id] || new Date().toISOString() } },
+}))
 // Primeiros passos: estado de uma etapa ('pulada' | 'nao-se-aplica' | 'feita' | null = desfazer).
 export const marcarEtapa = (etapa, estado) => gravar('POST', { etapa, estado: estado ?? null }, (e) => {
   const etapas = { ...(e.progresso?.etapas || {}) }

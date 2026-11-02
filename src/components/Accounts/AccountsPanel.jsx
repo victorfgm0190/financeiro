@@ -522,6 +522,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
           )}
           {isAsset && podeEditar && (
             <button
+              data-guia="accounts.atualizar-valor"
               onClick={(e) => { e.stopPropagation(); onUpdateValue(account) }}
               className={`mt-1.5 text-xs flex items-center gap-1 ${txtSec} hover:text-white transition-colors`}
             >

@@ -190,8 +190,9 @@ describe('primeiros passos: estados', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalled())
     expect(screen.queryByTestId('primeiros-passos')).toBeNull()
   })
-  it('"Fazer agora" ainda abre o formulário (perfil sem nenhum perfil: cadastro rápido)', async () => {
+  it('"Fazer agora" sem tarefa guiada disponível abre o formulário (perfil sem nenhum perfil: cadastro rápido)', async () => {
     const a = app()
+    a.pode = (m) => m !== 'configuracoes' // sem permissão na tarefa de perfil (Configurações)
     render(<PrimeirosPassos />)
     await screen.findByTestId('primeiros-passos')
     fireEvent.click(screen.getAllByRole('button', { name: 'Fazer agora' })[0])
