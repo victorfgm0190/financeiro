@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 
 const app = vi.hoisted(() => ({}))
@@ -33,7 +33,14 @@ const abrir = (s, texto = 'despesa de internet 120 na conta') =>
   render(<PreviaAssistente ferramenta="registrar_lancamento" sugestao={s} textoOriginal={texto} onClose={() => {}} onToast={() => {}} guardarAoFechar={false} />)
 const botao = (nome) => screen.getByRole('button', { name: new RegExp(nome) })
 
-afterEach(() => { cleanup(); vi.clearAllMocks() })
+// Relógio fixo em 01/11/2026 (quando estes casos foram escritos): a prévia compara as datas fixas dos
+// exemplos com "hoje" — o boleto do caso 15 vence em 10/12/2026 e precisa estar no FUTURO (a partir de
+// 10/12 deixaria de ser "Só agendamento"); a sugestão de categoria dos casos 29/29b vem das categorias
+// usadas RECENTEMENTE (despesa de 01/11/2026), que deixariam de ser recentes com o passar dos meses.
+// Sem isso, o resultado dependeria do dia em que a suíte roda.
+const HOJE_DOS_EXEMPLOS = new Date(2026, 10, 1, 12, 0, 0)
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(HOJE_DOS_EXEMPLOS) })
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.useRealTimers() })
 
 describe('Prévia do Assistente: Só despesa / Despesa + agendamento', () => {
   it('20/30) sem indícios: os dois botões, nenhum destacado; escolher agendar liga a repetição', () => {
