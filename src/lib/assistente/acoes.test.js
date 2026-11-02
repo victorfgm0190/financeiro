@@ -51,7 +51,9 @@ describe('carregamento por contexto', () => {
     expect(ids('lance despesa de 100 reais de combustível')).toEqual(NUCLEO)
   })
   it('domínio pelas palavras do pedido', () => {
-    expect(ids('Baixar o agendamento do Carlos no valor próximo de R$200')).toEqual([...NUCLEO, 'baixar_agendamento', 'consultar_vencimentos'])
+    expect(ids('Baixar o agendamento do Carlos no valor próximo de R$200')).toEqual([...NUCLEO, 'baixar_agendamento', 'consultar_vencimentos', 'consultar_agendamento'])
+    expect(ids('quantas parcelas faltam da TV?')).toContain('consultar_agendamento')
+    expect(ids('quanto falta pagar da dívida com o Fulano')).toContain('consultar_agendamento')
     expect(ids('o que vence essa semana?')).toContain('consultar_vencimentos')
     expect(ids('quanto está a fatura do Nubank?')).toContain('consultar_fatura')
     expect(ids('quanto gastei de mercado esse mês?')).toContain('consultar_gastos_categoria')
@@ -97,6 +99,9 @@ describe('validar das consultas', () => {
   it('busca e vencimentos', () => {
     expect(validarAcao('buscar_lancamentos', { valor: 87, texto: '' }, ctx)).toMatchObject({ valor: 87, texto: null, modo_valor: 'exato' })
     expect(validarAcao('consultar_vencimentos', { periodo: 'xx' }, ctx)).toEqual({ periodo: 'proximos_7', tipo: 'todos' })
+    expect(validarAcao('consultar_vencimentos', { periodo: 'mes', tipo: 'pagar', de: '2026-12-01', ate: '2026-12-31' }, ctx)).toEqual({ periodo: 'intervalo', tipo: 'pagar', de: '2026-12-01', ate: '2026-12-31' })
+    expect(validarAcao('consultar_vencimentos', { periodo: 'mes', de: '2026-12-31', ate: '2026-12-01' }, ctx)).toEqual({ periodo: 'mes', tipo: 'todos' })
+    expect(validarAcao('consultar_agendamento', { descricao: ' TV Sala ', favorecido: '' }, ctx)).toEqual({ descricao: 'TV Sala', favorecido: null })
   })
   it('abrir_tela: destino desconhecido cai em Lançamentos', () => {
     expect(validarAcao('abrir_tela', { destino: 'apagar_tudo', filtro: 'posto' }, ctx)).toMatchObject({ destino: 'tela_lancamentos', filtro: 'posto' })
@@ -109,6 +114,7 @@ describe('consultas (puras)', () => {
     expect(intervaloVencimento('semana', '2026-11-01')).toMatchObject({ ini: '2026-10-26', fim: '2026-11-01' })
     expect(intervaloVencimento('mes', '2026-02-10')).toMatchObject({ ini: '2026-02-01', fim: '2026-02-28' })
     expect(intervaloVencimento('atrasados', '2026-10-29')).toMatchObject({ fim: '2026-10-28' })
+    expect(intervaloVencimento('intervalo', '2026-10-29', { de: '2026-12-01', ate: '2026-12-31' })).toEqual({ ini: '2026-12-01', fim: '2026-12-31', rotulo: 'de 01/12 a 31/12/2026' })
   })
   it('pagar/receber e totais', () => {
     const itens = [{ data: '2026-10-30', amount: 250, grupo: 'receita' }, { data: '2026-10-30', amount: 1800, grupo: 'despesa' }, { data: '2026-10-29', amount: 50, grupo: 'transferencia' }]

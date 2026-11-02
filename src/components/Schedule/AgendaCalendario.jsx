@@ -180,7 +180,7 @@ export default function AgendaCalendario({
                 </button>
                 {aberto && (
                   <div className="bg-surface/40 border-t border-borda/60 overflow-x-auto">
-                    <table className="w-full text-sm"><tbody>{renderLinha(i, { mobile: true })}</tbody></table>
+                    <table className="w-full text-sm block"><tbody className="block">{renderLinha(i, { mobile: true })}</tbody></table>
                   </div>
                 )}
               </div>

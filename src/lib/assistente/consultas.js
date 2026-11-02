@@ -9,8 +9,12 @@ const somaDias = (ymd, n) => {
 const ddmm = (ymd) => `${ymd.slice(8, 10)}/${ymd.slice(5, 7)}`
 
 // Período de vencimentos → { ini, fim, rotulo } (YYYY-MM-DD). Semana = segunda a domingo.
-export function intervaloVencimento(periodo, hoje) {
+// 'intervalo': o período citado com datas ({ de, ate }, já validados no registro).
+export function intervaloVencimento(periodo, hoje, { de = null, ate = null } = {}) {
   switch (periodo) {
+    case 'intervalo':
+      if (de && ate) return { ini: de, fim: ate, rotulo: `de ${ddmm(de)}${de.slice(0, 4) !== ate.slice(0, 4) ? `/${de.slice(0, 4)}` : ''} a ${ddmm(ate)}/${ate.slice(0, 4)}` }
+      return intervaloVencimento('proximos_7', hoje)
     case 'atrasados': return { ini: '0000-01-01', fim: somaDias(hoje, -1), rotulo: 'em atraso' }
     case 'hoje': return { ini: hoje, fim: hoje, rotulo: 'hoje' }
     case 'amanha': { const d = somaDias(hoje, 1); return { ini: d, fim: d, rotulo: 'amanhã' } }

@@ -61,7 +61,8 @@ cache de prompt por grupo. Domínios atuais: `agenda`, `cartao`, `painel`.
 | `consultar_saldo` | ✅ etapa 1 | Contas, Início | `saldosDaConta` + `getAccountSaldos` | — | conta |
 | `consultar_saldo_principal` | ✅ fase 1 | Início/Painel | `getSaldoPrincipal` | SPB (só leitura) | perfil ativo |
 | `consultar_fatura` | ✅ fase 1 | Cartão | `creditBillKey` + `creditBillStatus` + `isFaturaFechada` | — | cartão, mês |
-| `consultar_vencimentos` | ✅ fase 1 | Agenda/Agendamentos | `buildScheduleGroups` + `agendaCalendario.ocorrenciasPendentes` | — | período, pagar/receber |
+| `consultar_vencimentos` | ✅ fase 1 (02/11: período com datas `de`/`ate`) | Agenda/Agendamentos | `buildScheduleGroups` + `agendaCalendario.ocorrenciasPendentes` | — | período (fixo ou de/até), pagar/receber |
+| `consultar_agendamento` | ✅ 02/11 | Editar Agendamento | `resumoRegistradas` ("x de N") + `computeOccurrences` + `occEfetiva` + `getNumeroParcela` + `historicoOcorrencias` (`lib/assistente/consultaAgendamento.js`) | — | descrição, favorecido (o app localiza, tolerante a erro de transcrição) |
 | `consultar_gastos_categoria` | ✅ fase 1 | Painel, Maiores despesas | `useDespesasPorCategoria` + `periodoDoFiltro` + `useModoDespesas` | — | categoria, período |
 | `buscar_lancamentos` | ✅ fase 1 | Busca global | `/api/search` (`searchEntries`) | — | texto, valor, período |
 | `consultar_fluxo` | fase 4 | Fluxo de Caixa | `getFluxoCaixaPrincipal` / `computeFluxoCaixa` | — | período, contas |
@@ -72,6 +73,8 @@ cache de prompt por grupo. Domínios atuais: `agenda`, `cartao`, `painel`.
 | `consultar_patrimonio` | fase 4 | Patrimônio | `getBem`, `getFinanciamento`, `getParcelas` | — | bem |
 | `consultar_contrato` | fase 4 | Contratos | `contratoPorId`, `listarEventosContratoApi` | — | contrato |
 | `consultar_pendencias` | fase 4 | Alertas › Integridade | `/api/integridade` | — | — |
+
+> 02/11/2026 — **Consulta de agendamento** (`consultar_agendamento`): "quantas parcelas faltam", "quando termina", "próxima parcela", "quanto falta pagar", "está quitado", "dívida com Fulano chamada X". **Prioridade** sobre `buscar_lancamentos`/`baixar_agendamento`: o backend troca a ferramenta quando o TEXTO é pergunta desse tipo (`ehPerguntaDeAgendamento`/`consultaDeAgendamento`), não pelo palpite do modelo; regra 24 do prompt. O app localiza em `profileSchedules` (perfil ativo; pontua descrição ×2 + favorecido, palavras com 1–2 letras trocadas ou prefixo; pergunta de parcelas desempata a favor do parcelado), empate → botões, nenhum → pede detalhe (busca local). Card: pagas/restantes/total, datas e valores efetivos, total restante, última parcela, última paga, "Abrir o agendamento" (handoff `ABRIR_AGENDAMENTO_KEY` → Editar). Somente leitura.
 
 ## 🟡 Criação
 

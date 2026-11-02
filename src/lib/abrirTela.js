@@ -3,6 +3,7 @@
 export const ABRIR_FATURA_KEY = 'finup:abrirFatura'    // { cardId, faturaMesAno } → CreditCardPanel
 export const ABRIR_EXTRATO_KEY = 'finup:abrirExtrato'  // { accountId } → AccountsPanel
 export const ABRIR_BEM_KEY = 'finup:abrirBem'          // { accountId } → PatrimonioPanel
+export const ABRIR_AGENDAMENTO_KEY = 'finup:abrirAgendamento' // { scheduleId } → SchedulePanel (Editar)
 
 export function deixarHandoff(key, valor) {
   try { sessionStorage.setItem(key, JSON.stringify(valor)) } catch { /* ignore */ }

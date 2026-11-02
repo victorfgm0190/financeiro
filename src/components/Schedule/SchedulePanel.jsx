@@ -1,6 +1,6 @@
 import { contaCentralParaId } from '../../lib/contaCentral'
 import { seloFluxoPrincipal } from '../../lib/fluxoPrincipal'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
@@ -28,6 +28,7 @@ import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
 import { rotuloParcela } from '../../lib/numeroParcela'
 import FilterBar from './FilterBar'
+import { lerHandoff, ABRIR_AGENDAMENTO_KEY, EVENTO_NAVEGAR } from '../../lib/abrirTela'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
@@ -1125,11 +1126,25 @@ function ScheduleRow({
     : daysLate > 0 ? 'bg-[color-mix(in_srgb,var(--color-perigo)_5%,var(--color-surface))]'
       : canConfirm && nextDate && schedule.confirmado ? 'bg-[color-mix(in_srgb,var(--color-primary)_3%,var(--color-surface))]'
         : 'bg-surface'
+  // Linha aberta no CELULAR (detalhe da Agenda): a tabela de 375 px não comporta data + doc + valor +
+  // ações na mesma linha — a descrição (w-full max-w-0) ficava com largura ~0 e as letras desciam na
+  // vertical. Ali a linha vira uma grade: data · doc · valor em cima; descrição e ações em linhas
+  // inteiras. O desktop segue a tabela de sempre.
+  const grade = detalheMobile
+    ? {
+      tr: 'grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-start',
+      data: 'col-start-1 row-start-1',
+      doc: 'col-start-2 row-start-1',
+      descricao: 'col-span-full row-start-2 min-w-0 pt-0',
+      valor: 'col-start-4 row-start-1',
+      acoes: 'col-span-full row-start-3 pt-0',
+    }
+    : { tr: '', data: '', doc: 'w-[70px] max-w-[70px]', descricao: 'w-full max-w-0 min-w-[200px]', valor: '', acoes: 'w-px' }
   const acoesFixas = detalheMobile ? '' : `sticky right-0 z-[1] ${fundoAcoes} group-hover:bg-[color-mix(in_srgb,var(--color-surface-hover)_20%,var(--color-surface))] shadow-[-8px_0_8px_-8px_var(--color-overlay)]`
 
   return (
     <>
-      <tr className={`border-b border-borda/50 hover:bg-surface-hover/20 transition-colors group ${daysLate > 0 ? 'bg-perigo/5' : ''} ${!nextDate || futura ? 'opacity-60' : ''} ${isSelected ? 'bg-primary/5' : ''} ${canConfirm && nextDate && schedule.confirmado ? 'border-l-2 border-l-primary bg-primary/[0.03]' : ''}`}>
+      <tr className={`border-b border-borda/50 hover:bg-surface-hover/20 transition-colors group ${grade.tr} ${daysLate > 0 ? 'bg-perigo/5' : ''} ${!nextDate || futura ? 'opacity-60' : ''} ${isSelected ? 'bg-primary/5' : ''} ${canConfirm && nextDate && schedule.confirmado ? 'border-l-2 border-l-primary bg-primary/[0.03]' : ''}`}>
         {/* Checkbox */}
         {selectionMode && (
           <td className="px-3 py-3 w-8">
@@ -1148,7 +1163,7 @@ function ScheduleRow({
         )}
 
         {/* Próxima Data */}
-        <td className="px-3 py-3 whitespace-nowrap">
+        <td className={`px-3 py-3 whitespace-nowrap ${grade.data}`}>
           {futura ? (
             <p className="text-xs text-texto-2 font-medium">{fmtDate(futura.data)}</p>
           ) : nextDate ? (
@@ -1170,13 +1185,13 @@ function ScheduleRow({
         </td>
 
         {/* Doc. — tipo de documento (gravado ou fallback CC/RES) */}
-        <td className="px-2 py-3 w-[70px] max-w-[70px] whitespace-nowrap">
+        <td className={`px-2 py-3 whitespace-nowrap ${grade.doc}`}>
           <TipoDocumentoBadge tipo={resolverTipoDocumento(schedule, tiposDocumento)} />
         </td>
 
         {/* Descrição — toda a célula expande/colapsa quando há ocorrências futuras ou histórico */}
         <td
-          className={`px-3 py-3 w-full max-w-0 ${detalheMobile ? '' : 'min-w-[200px]'} ${canExpand ? 'cursor-pointer' : ''}`}
+          className={`px-3 py-3 ${grade.descricao} ${canExpand ? 'cursor-pointer' : ''}`}
           onClick={canExpand ? toggleExpand : undefined}
         >
           <div className="flex items-start gap-1.5">
@@ -1331,7 +1346,7 @@ function ScheduleRow({
         </td>
 
         {/* Categoria */}
-        <td className="px-3 py-3 hidden md:table-cell max-w-[160px]">
+        <td className={`px-3 py-3 hidden ${detalheMobile ? '' : 'md:table-cell'} max-w-[160px]`}>
           {cat
             ? <span className="block truncate text-xs text-texto-2" title={`${cat.icon} ${cat.name}`}>{cat.icon} {cat.name}</span>
             : <span className="text-texto-3 text-xs">—</span>}
@@ -1343,7 +1358,7 @@ function ScheduleRow({
         </td>
 
         {/* Valor */}
-        <td className="px-3 py-3 whitespace-nowrap text-right">
+        <td className={`px-3 py-3 whitespace-nowrap text-right ${grade.valor}`}>
           <span className={`text-sm font-bold ${schedule.transactionType === 'income' ? 'text-receita' : isDepositoReserva ? 'text-reserva' : isResgateReserva ? 'text-despesa' : schedule.transactionType === 'transfer' ? 'text-transferencia' : 'text-despesa'}`}>
             {fmt(effAmount)}
           </span>
@@ -1355,8 +1370,8 @@ function ScheduleRow({
         </td>
 
         {/* Ações */}
-        <td className={`px-3 py-3 w-px whitespace-nowrap align-middle ${acoesFixas}`}>
-          <div className="flex flex-col items-end gap-1.5">
+        <td className={`px-3 py-3 whitespace-nowrap align-middle ${grade.acoes} ${acoesFixas}`}>
+          <div className={`flex flex-col gap-1.5 ${detalheMobile ? 'items-stretch' : 'items-end'}`}>
           {futura && (
             <span className="text-[11px] text-texto-3 whitespace-nowrap" title="As ações valem para a próxima ocorrência pendente">
               Antes, efetive a de {fmtDate(futura.antesDe).slice(0, 5)}
@@ -1403,7 +1418,7 @@ function ScheduleRow({
             )}
           </div>
           )}
-          <div className="flex items-center justify-end gap-1 flex-nowrap">
+          <div className={`flex items-center justify-end gap-1 ${detalheMobile ? 'flex-wrap' : 'flex-nowrap'}`}>
             {nextDate && podeEditar && !futura && (
               <>
                 <button
@@ -1453,8 +1468,8 @@ function ScheduleRow({
       {/* Painel inline: ocorrências futuras seguintes (faturas futuras com valor dinâmico,
           ou próximas ocorrências de recorrente com valor fixo). Somente visual. */}
       {expanded && canExpand && (
-        <tr className="bg-surface/40 border-b border-borda/50">
-          <td colSpan={cols} className="px-3 py-2">
+        <tr className={`bg-surface/40 border-b border-borda/50 ${detalheMobile ? 'block' : ''}`}>
+          <td colSpan={cols} className={`px-3 py-2 ${detalheMobile ? 'block' : ''}`}>
             <div className="pl-6 space-y-3">
               {hasFuture && (
                 <div>
@@ -2229,8 +2244,8 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
           onSelecionar={selectableRows.length > 0 && podeSelecionar ? () => setSelectionMode(true) : null}
           pagosLinhas={pagosLinhas}
           renderDetalhe={({ schedule, nextDate, futureItems, isSerie }) => (
-            <table className="w-full text-sm">
-              <tbody>
+            <table className="w-full text-sm block">
+              <tbody className="block">
                 <ScheduleRow schedule={schedule} nextDate={nextDate} futureItems={futureItems || []} isSerie={isSerie} {...rowProps} isSelected={false} detalheMobile />
               </tbody>
             </table>
@@ -2636,6 +2651,22 @@ export default function SchedulePanel() {
     if (s?.isProvisao) { setEditProvisao(s); setShowProvisaoForm(true) }
     else { setEditSchedule(s); setShowForm(true) }
   }
+
+  // "Abrir o agendamento" do Assistente (consulta de agendamento): abre o Editar dele. Lê o handoff
+  // ao montar e quando o App navega para cá já estando nesta tela.
+  useEffect(() => {
+    const abrirDoHandoff = () => {
+      const v = lerHandoff(ABRIR_AGENDAMENTO_KEY)
+      const s = v?.scheduleId ? allSchedules.find(x => x.id === v.scheduleId) : null
+      if (s) openEditSchedule(s)
+    }
+    abrirDoHandoff()
+    const aoNavegar = (e) => { if (e.detail?.page === 'schedule') setTimeout(abrirDoHandoff, 0) }
+    window.addEventListener(EVENTO_NAVEGAR, aoNavegar)
+    return () => window.removeEventListener(EVENTO_NAVEGAR, aoNavegar)
+    // Só a lista de agendamentos importa (o handoff é lido e apagado uma vez).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allSchedules])
 
 
   // Filtros avançados e datas De/Até: POR ABA (independentes), dentro de filtrosPorAba; os

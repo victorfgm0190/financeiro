@@ -483,7 +483,7 @@ export const ACOES = [
   {
     id: 'buscar_lancamentos', nivel: 'consulta', dominio: 'nucleo', permissao: ['lancamentos', 'ver'],
     ferramenta: {
-      description: 'Procura lançamentos e agendamentos por texto (descrição/favorecido), valor e período — a mesma Busca global do app. "acha um lançamento de 87 reais" → valor 87.',
+      description: 'Procura lançamentos e agendamentos por texto (descrição/favorecido), valor e período — a mesma Busca global do app. "acha um lançamento de 87 reais" → valor 87. NÃO use para perguntas sobre parcelas, vencimento, dívida ou valor restante de um agendamento (isso é consultar_agendamento).',
       input_schema: {
         type: 'object',
         properties: {
@@ -511,7 +511,7 @@ export const ACOES = [
     resolver: 'candidatosBaixa',
     palavras: ['baixa', 'baixar', 'pagou', 'paguei', 'recebi', 'quitei', 'quitar', 'parcela', 'agendamento'],
     ferramenta: {
-      description: 'Dar baixa (registrar o pagamento/recebimento) num agendamento pendente que JÁ EXISTE ("dá baixa", "o Carlos me pagou", "paguei o aluguel"). O app procura o agendamento e abre a prévia; não grava nada. Informe só o NOME citado ("Carlos") e o valor: um valor em valor_informado, ou faixa em valor_min/valor_max ("uns 200, 220" → 200 e 220). valor_exato = true SÓ quando o valor foi dito exato ("de 250"); com "uns", "próximo de", "mais ou menos", "algo assim" → false. Tipo só se o pedido deixar claro: "me pagou/recebi" = receita; "paguei" = despesa; senão null.',
+      description: 'Dar baixa (registrar o pagamento/recebimento) num agendamento pendente que JÁ EXISTE ("dá baixa", "o Carlos me pagou", "paguei o aluguel"). PERGUNTA sobre parcelas/situação ("quantas faltam?", "quando termina?") NÃO é baixa: use consultar_agendamento. O app procura o agendamento e abre a prévia; não grava nada. Informe só o NOME citado ("Carlos") e o valor: um valor em valor_informado, ou faixa em valor_min/valor_max ("uns 200, 220" → 200 e 220). valor_exato = true SÓ quando o valor foi dito exato ("de 250"); com "uns", "próximo de", "mais ou menos", "algo assim" → false. Tipo só se o pedido deixar claro: "me pagou/recebi" = receita; "paguei" = despesa; senão null.',
       input_schema: {
         type: 'object',
         properties: {
@@ -547,17 +547,46 @@ export const ACOES = [
     id: 'consultar_vencimentos', nivel: 'consulta', dominio: 'agenda', permissao: ['agendamentos', 'ver'],
     palavras: ['vence', 'vencem', 'vencimento', 'venciment', 'a pagar', 'a receber', 'atrasad', 'agenda', 'pendente', 'contas da semana', 'semana'],
     ferramenta: {
-      description: 'O que vence (agendamentos pendentes) num período: "o que vence essa semana?", "contas atrasadas". O app calcula pela tela de Agendamentos.',
+      description: 'O que vence (agendamentos pendentes) num período: "o que vence essa semana?", "contas atrasadas", "quais contas vencem em dezembro?" (de/ate). Para a situação de UM agendamento use consultar_agendamento. O app calcula pela tela de Agendamentos.',
       input_schema: {
         type: 'object',
         properties: {
           periodo: { type: 'string', enum: PERIODOS_VENCIMENTO, description: 'semana = segunda a domingo desta semana' },
           tipo: { type: 'string', enum: ['pagar', 'receber', 'todos'] },
+          de: { type: ['string', 'null'], description: 'Período citado com datas ("de 10 a 20/12", "em janeiro"): início YYYY-MM-DD; senão null' },
+          ate: { type: ['string', 'null'], description: 'Fim do período citado, YYYY-MM-DD; senão null' },
         },
         required: ['periodo', 'tipo'],
       },
     },
-    validar: (p) => ({ periodo: doEnum(PERIODOS_VENCIMENTO, p.periodo, 'proximos_7'), tipo: doEnum(['pagar', 'receber', 'todos'], p.tipo, 'todos') }),
+    validar: (p) => {
+      const out = { periodo: doEnum(PERIODOS_VENCIMENTO, p.periodo, 'proximos_7'), tipo: doEnum(['pagar', 'receber', 'todos'], p.tipo, 'todos') }
+      // Período citado com datas ("de 10 a 20 de dezembro", "em janeiro"): vale sobre o período fixo.
+      const de = DATA_ISO.test(String(p.de || '')) ? p.de : null
+      const ate = DATA_ISO.test(String(p.ate || '')) ? p.ate : null
+      if (de && ate && de <= ate) Object.assign(out, { periodo: 'intervalo', de, ate })
+      return out
+    },
+  },
+  {
+    // Situação de UM agendamento: o app localiza (descrição + favorecido, tolerante a erro de
+    // transcrição) e calcula com as funções do Editar Agendamento (lib/assistente/consultaAgendamento.js).
+    // Prioridade sobre a busca e a baixa: o backend troca a ferramenta quando a pergunta é sobre
+    // parcelas/vencimento/dívida/valor restante (ehPerguntaDeAgendamento).
+    id: 'consultar_agendamento', nivel: 'consulta', dominio: 'agenda', permissao: ['agendamentos', 'ver'],
+    palavras: ['faltam', 'falta pagar', 'falta receber', 'quanto falta', 'quantas parcelas', 'quantas faltam', 'restam', 'restante', 'divida', 'devo', 'termina', 'acaba', 'quitad', 'proxima parcela', 'ultima parcela', 'situacao', 'prestac'],
+    ferramenta: {
+      description: 'Situação de UM agendamento (parcelado, recorrente ou único): quantas parcelas faltam/já foram pagas, quando termina, próxima parcela, quanto falta pagar, se está quitado — "quantas parcelas faltam da TV?", "dívida com o Fulano, quanto falta?". Informe só a descrição e o favorecido COMO o usuário disse (pode ter erro de transcrição). Você não sabe parcelas, datas nem valores: o app localiza e calcula.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          descricao: { type: ['string', 'null'], description: 'Nome/descrição citada do agendamento ou da dívida (ex.: "TV da sala")' },
+          favorecido: { type: ['string', 'null'], description: 'Pessoa/empresa citada ("dívida com Fulano" → "Fulano")' },
+        },
+        required: ['descricao', 'favorecido'],
+      },
+    },
+    validar: (p) => ({ descricao: txt(p.descricao, 80), favorecido: txt(p.favorecido, 80) }),
   },
 
   // ── Cartão ──

@@ -183,7 +183,7 @@ export function SaldoPrincipalResposta({ onClose, onNovo }) {
 export function VencimentosResposta({ parametros, onClose, onNovo }) {
   const { profileSchedules, getNextOccurrences, accounts } = useApp()
   const hoje = hojeStr()
-  const { ini, fim, rotulo } = intervaloVencimento(parametros.periodo, hoje)
+  const { ini, fim, rotulo } = intervaloVencimento(parametros.periodo, hoje, { de: parametros.de, ate: parametros.ate })
   const rows = useMemo(() => buildScheduleGroups(profileSchedules || [], getNextOccurrences), [profileSchedules, getNextOccurrences])
   const itens = useMemo(() => filtrarVencimentos(ocorrenciasPendentes(rows, getNextOccurrences, { ini, fim, hoje, accounts }), parametros.tipo), [rows, getNextOccurrences, ini, fim, hoje, accounts, parametros.tipo])
   const atrasados = useMemo(() => (parametros.periodo === 'atrasados' ? [] : filtrarVencimentos(
