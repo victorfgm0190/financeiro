@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { lerHandoff, ABRIR_BUSCA_KEY } from '../../lib/abrirTela'
 import { rotuloCategoria } from '../../lib/rateio'
 import { Search, ArrowRight, Loader2 } from 'lucide-react'
 import Modal from './Modal'
@@ -46,12 +47,14 @@ export default function GlobalSearch({ open, onClose }) {
     categories, gerencialGroups = [], getNextOccurrences, activeProfileId, payees = [], rateiosByLancamento,
   } = useApp()
 
+  // Filtro vindo de fora (Assistente: "Ver todos"), lido uma vez na montagem.
+  const [pre] = useState(() => lerHandoff(ABRIR_BUSCA_KEY))
   const [value, setValue] = useState('')
   const [valueMode, setValueMode] = useState('exato')
-  const [description, setDescription] = useState('')
-  const [payee, setPayee] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [description, setDescription] = useState(pre?.description || '')
+  const [payee, setPayee] = useState(pre?.payee || '')
+  const [from, setFrom] = useState(pre?.from || '')
+  const [to, setTo] = useState(pre?.to || '')
   const [status, setStatus] = useState('todos')
   // Conjunto encontrado pela busca (null = ainda não buscou). O filtro de status é aplicado
   // na renderização, então Todos/Registrado/Pendente refiltram na hora, sem nova busca.
@@ -77,7 +80,7 @@ export default function GlobalSearch({ open, onClose }) {
   const catLabel = (id) => { const c = catById.get(id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : null }
 
   // Filtro client-side (fallback quando o endpoint /api/search não responde).
-  const clientFilter = () => {
+  const clientFilter = ({ value, valueMode, description, payee, from, to }) => {
     const faixa = faixaValorCentavos(parseValor(value), valueMode)
     const qd = description.trim().toLowerCase(), qp = payee.trim().toLowerCase()
     const matchValue = (amt) => valorNaFaixa(amt, faixa)
@@ -93,10 +96,12 @@ export default function GlobalSearch({ open, onClose }) {
     return { txItems, scItems }
   }
 
-  const runSearch = async (e) => {
+  // `pre` = filtros vindos de fora (Assistente: "Ver todos"); sem ele, os campos da tela.
+  const runSearch = async (e, pre = null) => {
     e?.preventDefault()
-    const v = parseValor(value)
-    if (v == null && !description.trim() && !payee.trim()) {
+    const q = pre || { value, valueMode, description, payee, from, to }
+    const v = parseValor(q.value)
+    if (v == null && !q.description.trim() && !q.payee.trim()) {
       setError('Informe um valor, uma descrição ou um favorecido para buscar.')
       setFound(null)
       return
@@ -106,7 +111,7 @@ export default function GlobalSearch({ open, onClose }) {
     let txItems, scItems
     try {
       const { transactions: txRows, schedules: scRows } = await searchEntries({
-        value: v, valueMode, description: description.trim(), payee: payee.trim(), from: from || null, to: to || null, profileId: activeProfileId || null,
+        value: v, valueMode: q.valueMode, description: q.description.trim(), payee: q.payee.trim(), from: q.from || null, to: q.to || null, profileId: activeProfileId || null,
       })
       // Usa os objetos vivos em memória (para edição consistente); o endpoint define o conjunto.
       const txIds = new Set((txRows || []).map(r => r.id))
@@ -115,11 +120,20 @@ export default function GlobalSearch({ open, onClose }) {
       scItems = schedules.filter(s => scIds.has(s.id))
     } catch {
       // Endpoint indisponível (ex.: ambiente sem deploy) → busca local em memória.
-      ({ txItems, scItems } = clientFilter())
+      ({ txItems, scItems } = clientFilter(q))
     }
     setFound({ txIds: txItems.map(t => t.id), scIds: scItems.map(s => s.id) })
     setLoading(false)
   }
+
+  // Aberta pelo Assistente ("Ver todos"): preenche os campos com o filtro e já busca.
+  // Aberta pelo Assistente ("Ver todos"): os campos já vêm preenchidos (initializers) e a busca roda
+  // uma vez ao montar (o App remonta a busca a cada pedido de fora).
+  useEffect(() => {
+    if (pre) queueMicrotask(() => runSearch(null, { value: '', valueMode: 'exato', description, payee, from, to }))
+    // Só na montagem.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const scheduleStatus = (s) => {
     // Próxima ocorrência pela data EFETIVA (override): a movida aparece no dia novo.

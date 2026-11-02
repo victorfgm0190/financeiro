@@ -589,6 +589,52 @@ export const ACOES = [
     validar: (p) => ({ descricao: txt(p.descricao, 80), favorecido: txt(p.favorecido, 80) }),
   },
 
+  {
+    // Consulta PROPOSITIVA (lib/assistente/consultaMovimentos.js): pagos / em aberto / vencidos de um
+    // favorecido, categoria, descrição ou conta. A IA só devolve o filtro; o app calcula com as funções
+    // do Painel e da Agenda, mostra o filtro usado, "Também encontrei" e botões de refinamento.
+    id: 'consultar_movimentos', nivel: 'consulta', dominio: 'consulta', permissao: ['lancamentos', 'ver'],
+    palavras: ['paguei', 'pagamos', 'pagos', 'pagamentos', 'recebi', 'recebimentos', 'em aberto', 'vencid', 'atrasad', 'devo', 'quanto falta', 'falta pagar', 'gastei', 'gasto', 'gastos', 'o que ja'],
+    ferramenta: {
+      description: 'Consulta de pagos, em aberto ou vencidos por favorecido, categoria, descrição ou conta: "o que já paguei ao Fulano?", "quanto falta pagar ao Fulano?", "o que está vencido da academia?", "quanto recebi do Fulano este ano?", "quanto gastei em Combustível?" (com categoria). Só o FILTRO: nunca valores. Situação de UM agendamento (parcelas, quando termina) é consultar_agendamento.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          assunto: { type: 'string', enum: ['agendamento', 'lancamento', 'favorecido', 'categoria'] },
+          status: { type: 'string', enum: ['pago', 'em_aberto', 'vencido', 'todos'], description: 'pago = já pago/recebido/gasto; em_aberto = falta pagar/a vencer; vencido = atrasado' },
+          tipo: { type: 'string', enum: ['despesa', 'receita', 'todos'], description: 'paguei/gastei/devo = despesa; recebi/me pagou = receita' },
+          favorecido: { type: ['string', 'null'], description: 'Pessoa/empresa citada, como o usuário disse' },
+          categoria_id: { type: ['string', 'null'], description: 'Categoria citada (id da lista); null se não citada ou se não tiver certeza' },
+          categoria: { type: ['string', 'null'], description: 'O termo de categoria citado, como dito (o app confere)' },
+          descricao: { type: ['string', 'null'], description: 'Descrição citada ("academia", "aluguel")' },
+          conta_id: { type: ['string', 'null'], description: 'Conta citada' },
+          periodo: { type: ['string', 'null'], enum: ['mes_atual', 'mes_passado', 'ultimos_3_meses', 'este_ano', 'historico', null], description: 'Só se citado; "desde sempre"/"tudo"/"no total" = historico' },
+          de: { type: ['string', 'null'], description: 'Início citado com data/mês, YYYY-MM-DD' },
+          ate: { type: ['string', 'null'], description: 'Fim citado, YYYY-MM-DD' },
+          faltando: { type: 'array', items: { type: 'string' }, description: 'Filtros que o pedido não disse (ex.: "periodo")' },
+          ambiguidades: { type: 'array', items: { type: 'string' }, description: 'Dúvidas reais (ex.: "dois favorecidos João")' },
+        },
+        required: ['assunto', 'status', 'tipo'],
+      },
+    },
+    validar: (p, ctx) => {
+      const cat = categoriaValida(ctx, p.categoria_id)
+      const de = DATA_ISO.test(String(p.de || '')) ? p.de : null
+      const ate = DATA_ISO.test(String(p.ate || '')) ? p.ate : null
+      const lista = (v) => (Array.isArray(v) ? v.map(x => txt(x, 80)).filter(Boolean).slice(0, 5) : [])
+      return {
+        assunto: doEnum(['agendamento', 'lancamento', 'favorecido', 'categoria'], p.assunto, 'lancamento'),
+        status: doEnum(['pago', 'em_aberto', 'vencido', 'todos'], p.status, 'pago'),
+        tipo: doEnum(['despesa', 'receita', 'todos'], p.tipo, 'despesa'),
+        favorecido: txt(p.favorecido, 80), categoria_id: cat, categoria: cat ? null : txt(p.categoria, 80),
+        descricao: txt(p.descricao, 80), conta_id: contaValida(ctx, p.conta_id),
+        periodo: doEnum(['mes_atual', 'mes_passado', 'ultimos_3_meses', 'este_ano', 'historico'], p.periodo, null),
+        ...(de && ate && de <= ate ? { de, ate } : {}),
+        faltando: lista(p.faltando), ambiguidades: lista(p.ambiguidades),
+      }
+    },
+  },
+
   // ── Cartão ──
   {
     id: 'consultar_fatura', nivel: 'consulta', dominio: 'cartao', permissao: ['cartao', 'ver'],

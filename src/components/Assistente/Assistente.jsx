@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Sparkles, Mic, Square, Camera, ImagePlus, X, Loader2, FileText } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { comprimirImagem, imagemDoClipboard, MAX_IMAGEM_ORIGINAL, ehPdf, lerPdf } from '../../lib/assistente'
@@ -9,6 +9,8 @@ import { Pergunta } from './respostas'
 import { useMicrofone, BARRAS, mensagemSemSuporte } from './useMicrofone'
 import AjudaTela from '../BoasVindas/AjudaTela'
 import { estadoBoasVindas, marcarEtapa } from '../../lib/boasVindasApi'
+import { continuacaoDoTexto, aplicarMudanca, rotuloDoAlvo } from '../../lib/assistente/consultaMovimentos'
+import { hojeStr } from '../../lib/saldos'
 
 // ASSISTENTE IA: texto, voz (pt-BR), imagem (câmera, galeria ou Ctrl+V de um print) ou PDF (boleto,
 // fatura, nota, comprovante, extrato) → /api/assistente. A imagem é reduzida no aparelho (lado maior
@@ -70,6 +72,13 @@ export default function Assistente({ onClose, onToast }) {
     const pedido = texto.trim()
     if (!pedido && !imagem) { setErro('Escreva, fale ou envie uma foto ou PDF.'); return }
     setErro('')
+    // Continuação da última consulta ("e no mês passado?", "e em aberto?", "e do Fulano?"): troca só
+    // o filtro citado e recalcula no app — sem chamar a IA.
+    const mudanca = contexto && !imagem && !extra.respostaPergunta ? continuacaoDoTexto(pedido, hojeStr()) : null
+    if (mudanca) {
+      setFase({ tipo: 'resultado', ferramenta: 'consultar_movimentos', parametros: { _filtro: aplicarMudanca(contexto.filtro, mudanca) }, extra: {} })
+      return
+    }
     setFase({ tipo: 'carregando' })
     try {
       const r = await interpretar({
@@ -130,6 +139,10 @@ export default function Assistente({ onClose, onToast }) {
   }
 
   const novoPedido = () => { setTexto(''); setImagem(null); setFase({ tipo: 'entrada' }) }
+  // Contexto da última consulta (filtro resolvido), para continuar por texto/voz. As consultas avisam
+  // a cada filtro aplicado (botões inclusive). "Nova consulta" esquece.
+  const [contexto, setContexto] = useState(null)
+  const aoContexto = useCallback((c) => setContexto(c), [])
 
   if (fase.tipo === 'resultado' && fase.ferramenta === 'lote') {
     return <LoteAssistente itens={fase.extra?.itens || []} faltantes={fase.extra?.faltantes || null} textoOriginal={texto.trim()} onClose={onClose} onToast={onToast} onNovo={novoPedido} />
@@ -139,7 +152,7 @@ export default function Assistente({ onClose, onToast }) {
     return (
       <Executor
         ferramenta={fase.ferramenta} parametros={fase.parametros} extra={fase.extra} textoOriginal={texto.trim()}
-        onClose={onClose} onToast={onToast} onNovo={novoPedido} onResponder={responder}
+        onClose={onClose} onToast={onToast} onNovo={novoPedido} onResponder={responder} onContexto={aoContexto}
         onTrocar={(ferramenta, parametros) => setFase({ tipo: 'resultado', ferramenta, parametros, extra: {} })}
       />
     )
@@ -161,6 +174,12 @@ export default function Assistente({ onClose, onToast }) {
           </p>
           <AjudaTela pagina="assistente" className="-mt-1.5" />
           </div>
+          {contexto && (
+            <div className="flex items-center gap-2 rounded-lg border border-borda bg-surface-2 px-3 py-2 text-xs text-texto-2">
+              <span className="flex-1 min-w-0 break-words">Continuando a consulta{rotuloDoAlvo(contexto.filtro) ? ` ${rotuloDoAlvo(contexto.filtro)}` : ''}: pode dizer “e no mês passado?”, “e em aberto?”…</span>
+              <button type="button" className="shrink-0 text-primary-fg underline" onClick={() => setContexto(null)}>Nova consulta</button>
+            </div>
+          )}
           <div className="relative">
             {mic.ouvindo ? (
               // Gravando: o campo mostra a transcrição ao vivo — final normal, provisória em cinza.

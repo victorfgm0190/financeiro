@@ -1,8 +1,9 @@
 import {
   Pergunta, PreviaCriacao, BaixaResposta, SaldoResposta, SaldoPrincipalResposta, VencimentosResposta, FaturaResposta,
-  GastosResposta, BuscaResposta, AbrirTelaResposta,
+  BuscaResposta, AbrirTelaResposta,
 } from './respostas'
 import ConsultaAgendamento from './ConsultaAgendamento'
+import ConsultaMovimentos, { GastosOuConsulta } from './ConsultaMovimentos'
 
 // EXECUTORES do Assistente IA: id da ação (src/lib/assistente/acoes.js) → componente.
 // Ação nova = entrada no registro + UMA linha aqui. 🟡 criação = PreviaCriacao (o formulário existente
@@ -19,6 +20,7 @@ export const EXECUTORES = {
   consultar_vencimentos: VencimentosResposta,
   consultar_agendamento: ConsultaAgendamento,
   consultar_fatura: FaturaResposta,
-  consultar_gastos_categoria: GastosResposta,
+  consultar_gastos_categoria: GastosOuConsulta,
+  consultar_movimentos: ConsultaMovimentos,
   consultar_saldo_principal: SaldoPrincipalResposta,
 }

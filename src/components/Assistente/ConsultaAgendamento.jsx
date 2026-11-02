@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Sparkles, ChevronRight, ExternalLink, Search } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { hojeStr } from '../../lib/saldos'
-import { navegarPara, ABRIR_AGENDAMENTO_KEY } from '../../lib/abrirTela'
+import { navegarPara, ABRIR_AGENDAMENTO_KEY, ABRIR_AGENDAMENTOS_FILTRO_KEY } from '../../lib/abrirTela'
+import { filtroInicial } from '../../lib/assistente/consultaMovimentos'
+import { normalizarTermo } from '../../lib/assistente/texto'
 import { procurarAgendamentos, resumoAgendamento, textoDoResumo, rotuloFrequencia } from '../../lib/assistente/consultaAgendamento'
 
 // consultar_agendamento 🟢 — situação de UM agendamento. SOMENTE LEITURA: nada aqui grava.
@@ -88,7 +90,7 @@ export function CardAgendamento({ resumo: r }) {
   )
 }
 
-export default function ConsultaAgendamento({ parametros, textoOriginal, onClose, onNovo }) {
+export default function ConsultaAgendamento({ parametros, textoOriginal, onClose, onNovo, onTrocar, onContexto }) {
   const { profileSchedules, transactions } = useApp()
   const hoje = hojeStr()
   const [detalhe, setDetalhe] = useState('')
@@ -97,6 +99,28 @@ export default function ConsultaAgendamento({ parametros, textoOriginal, onClose
   const [escolhidoId, setEscolhidoId] = useState(null)
   const escolhido = (escolhidoId && (profileSchedules || []).find(s => s.id === escolhidoId)) || busca.escolhido
   const resumo = useMemo(() => (escolhido ? resumoAgendamento(escolhido, { hoje, transactions }) : null), [escolhido, hoje, transactions])
+
+  // Contexto para continuar por texto/voz ("e os pagos?"): o mesmo agendamento (descrição + favorecido).
+  const filtroDoAgendamento = (mudanca = {}) => escolhido ? filtroInicial({
+    assunto: 'agendamento', status: 'em_aberto', tipo: escolhido.transactionType === 'income' ? 'receita' : 'despesa',
+    favorecido: escolhido.payee || null, descricao: escolhido.description || null, ...mudanca,
+  }) : null
+  useEffect(() => {
+    if (escolhido) onContexto?.({ ferramenta: 'consultar_movimentos', filtro: filtroDoAgendamento() })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [escolhido, onContexto])
+  // "Também encontrei": outros agendamentos EM ABERTO do MESMO favorecido (nome igual; nada de
+  // coincidência de palavra solta). Próxima pendente de cada um (data e valor efetivos).
+  const relacionados = useMemo(() => {
+    const fav = normalizarTermo(escolhido?.payee)
+    if (!fav) return []
+    return (profileSchedules || [])
+      .filter(s => s.id !== escolhido.id && !s.isProvisao && s.transactionType === escolhido.transactionType && normalizarTermo(s.payee) === fav)
+      .map(s => ({ s, r: resumoAgendamento(s, { hoje, transactions, recorrentesAMostrar: 1 }) }))
+      .filter(x => x.r.proximas.length)
+      .sort((a, b) => a.r.proximas[0].data.localeCompare(b.r.proximas[0].data))
+  }, [escolhido, profileSchedules, hoje, transactions])
+  const abrirDoFavorecido = () => { navegarPara('schedule', { handoff: { key: ABRIR_AGENDAMENTOS_FILTRO_KEY, valor: { status: 'apagar', payee: escolhido.payee } } }); onClose() }
 
   const abrir = () => { navegarPara('schedule', { handoff: { key: ABRIR_AGENDAMENTO_KEY, valor: { scheduleId: escolhido.id } } }); onClose() }
   const refinar = (e) => {
@@ -115,6 +139,43 @@ export default function ConsultaAgendamento({ parametros, textoOriginal, onClose
         <>
           <Titulo>{textoDoResumo(resumo)}</Titulo>
           <CardAgendamento resumo={resumo} />
+          {relacionados.length > 0 && (
+            <section className="rounded-xl border border-borda p-3 space-y-2" aria-label="Também encontrei">
+              <p className="text-[10px] uppercase tracking-wide text-texto-3">Também encontrei</p>
+              <p className="text-sm text-texto-2">
+                {relacionados.length} outro{relacionados.length > 1 ? 's' : ''} em aberto com {escolhido.payee}; próximo vencimento {fmtDate(relacionados[0].r.proximas[0].data)}.
+              </p>
+              <ul className="divide-y divide-borda rounded-lg border border-borda">
+                {relacionados.slice(0, 3).map(({ s, r }) => (
+                  <li key={s.id}>
+                    <button type="button" onClick={() => setEscolhidoId(s.id)} className="w-full flex items-center gap-2 px-3 py-2 min-h-[44px] text-left">
+                      <span className="shrink-0 w-12 text-xs text-texto-3">{fmtDate(r.proximas[0].data).slice(0, 5)}</span>
+                      <span className="flex-1 min-w-0 text-sm text-texto-1 break-words">{s.description || 'Sem descrição'}</span>
+                      <span className="shrink-0 text-sm font-medium text-texto-2">{fmt(r.proximas[0].valor)}</span>
+                      <ChevronRight size={14} className="shrink-0 text-texto-3" />
+                    </button>
+                  </li>
+                ))}
+                {relacionados.length > 3 && (
+                  <li><button type="button" className="w-full px-3 py-2 text-xs text-primary-fg text-left inline-flex items-center gap-1" onClick={abrirDoFavorecido}>
+                    <ExternalLink size={12} /> Ver todos ({relacionados.length})
+                  </button></li>
+                )}
+              </ul>
+            </section>
+          )}
+          {escolhido?.payee && onTrocar && (
+            <div className="flex flex-wrap gap-2" aria-label="Refinar">
+              <button type="button" className="btn-secondary text-xs min-h-[36px] px-3 py-1.5 h-auto"
+                onClick={() => onTrocar('consultar_movimentos', { _filtro: filtroDoAgendamento({ status: 'pago', descricao: null, periodo: 'historico' }) })}>
+                {escolhido.transactionType === 'income' ? 'Recebidos de' : 'Pagos a'} {escolhido.payee}
+              </button>
+              <button type="button" className="btn-secondary text-xs min-h-[36px] px-3 py-1.5 h-auto"
+                onClick={() => onTrocar('consultar_movimentos', { _filtro: filtroDoAgendamento({ descricao: null }) })}>
+                Tudo em aberto com {escolhido.payee}
+              </button>
+            </div>
+          )}
         </>
       ) : busca.candidatos.length ? (
         <>

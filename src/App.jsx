@@ -39,7 +39,7 @@ import SettingsPanel from './components/Settings/SettingsPanel'
 import { ehHashConfig } from './lib/configRota'
 import { ehHashAjuda } from './lib/ajudaRota'
 import CentralAjuda from './components/Ajuda/CentralAjuda'
-import { EVENTO_NAVEGAR } from './lib/abrirTela'
+import { EVENTO_NAVEGAR, EVENTO_ABRIR_BUSCA } from './lib/abrirTela'
 import BoasVindasTour from './components/BoasVindas/BoasVindasTour'
 import GuiaInterativo from './components/BoasVindas/GuiaInterativo'
 import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
@@ -85,6 +85,8 @@ function AppContent() {
   }, [])
   const [showPosicao, setShowPosicao] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  // Remonta a Busca global quando aberta de fora (lê o filtro do handoff na montagem).
+  const [buscaKey, setBuscaKey] = useState(0)
   const [showAssistente, setShowAssistente] = useState(false)
   const [backupToast, setBackupToast] = useState(false)
   const [genericToast, setGenericToast] = useState(null)
@@ -119,6 +121,12 @@ function AppContent() {
     window.addEventListener(EVENTO_NAVEGAR, ir)
     return () => window.removeEventListener(EVENTO_NAVEGAR, ir)
   }, [navigate])
+  // Busca global já preenchida (Assistente: "Ver todos" dos pagos) — o filtro vai por handoff.
+  useEffect(() => {
+    const abrir = () => { setBuscaKey(k => k + 1); setShowSearch(true) }
+    window.addEventListener(EVENTO_ABRIR_BUSCA, abrir)
+    return () => window.removeEventListener(EVENTO_ABRIR_BUSCA, abrir)
+  }, [])
   const irParaModulo = useCallback((id) => {
     const m = mobileModules.find(x => x.id === moduloMobile(mobileModules, id))
     if (m.page) navigate(m.page)
@@ -258,7 +266,7 @@ function AppContent() {
       <MonthStartModal />
       <ContratoFichaHost />
       <ContratoEfetivacaoHost />
-      <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
+      <GlobalSearch key={buscaKey} open={showSearch} onClose={() => setShowSearch(false)} />
       <Modal open={showAssistente} onClose={() => setShowAssistente(false)} title="✨ Assistente" size="lg">
         {showAssistente && <Assistente onClose={() => setShowAssistente(false)} onToast={setGenericToast} />}
       </Modal>

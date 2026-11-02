@@ -14,7 +14,7 @@ import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, ehPedidoDeEstorno, buscarCandida
 import { centralQuery } from './_central.js'
 import { validarAnexo, blocoDoAnexo, MIME_PDF } from './_anexoIa.js'
 import { limitesDoAmbiente, bloqueioDoLimite } from '../src/lib/assistente/limiteIa.js'
-import { consultaDeAgendamento } from '../src/lib/assistente/consultaAgendamento.js'
+import { rotearConsulta } from '../src/lib/assistente/roteamentoConsulta.js'
 
 // Limites do cliente (central). Sem as colunas (central não migrado) → o padrão.
 async function limitesDoCliente(ambienteId) {
@@ -165,8 +165,10 @@ async function handler(req, res) {
         parametros: { destino: 'tela_contas', filtro: null, cartao_id: null, mes: null, motivo: 'conta_gerencial', conta_id: null, mensagem: MENSAGEM_CONTA_GERENCIAL(null) },
       })
     }
-    const trocada = consultaDeAgendamento(ferramenta, bloco.input, `${texto} ${resposta}`, podeFn('agendamentos', 'ver'))
-    if (trocada) return res.json({ ferramenta: 'consultar_agendamento', parametros: validarParametros('consultar_agendamento', trocada, ctx, hoje) })
+    // Pergunta (pagos/em aberto/vencidos, parcelas de um agendamento) tem prioridade sobre busca e
+    // baixa — decidido pelo TEXTO (lib/assistente/roteamentoConsulta.js), não pelo palpite do modelo.
+    const trocada = rotearConsulta(ferramenta, bloco.input, `${texto} ${resposta}`, podeFn)
+    if (trocada) return res.json({ ferramenta: trocada.ferramenta, parametros: validarParametros(trocada.ferramenta, trocada.parametros, ctx, hoje) })
     const parametros = validarParametros(ferramenta, bloco.input, ctx, hoje)
     if (GRAVAM.has(ferramenta)) {
       const escolhida = [bloco.input?.conta_id, bloco.input?.conta_destino_id]

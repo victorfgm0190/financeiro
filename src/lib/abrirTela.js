@@ -4,6 +4,11 @@ export const ABRIR_FATURA_KEY = 'finup:abrirFatura'    // { cardId, faturaMesAno
 export const ABRIR_EXTRATO_KEY = 'finup:abrirExtrato'  // { accountId } → AccountsPanel
 export const ABRIR_BEM_KEY = 'finup:abrirBem'          // { accountId } → PatrimonioPanel
 export const ABRIR_AGENDAMENTO_KEY = 'finup:abrirAgendamento' // { scheduleId } → SchedulePanel (Editar)
+// { status: 'apagar'|'pagos', payee, desc, cat } → SchedulePanel (aba Conta, filtros avançados)
+export const ABRIR_AGENDAMENTOS_FILTRO_KEY = 'finup:abrirAgendamentosFiltro'
+// { payee, description, from, to } → Busca global já preenchida (e buscando)
+export const ABRIR_BUSCA_KEY = 'finup:abrirBusca'
+export const EVENTO_ABRIR_BUSCA = 'finup:abrir-busca'
 
 export function deixarHandoff(key, valor) {
   try { sessionStorage.setItem(key, JSON.stringify(valor)) } catch { /* ignore */ }
@@ -27,4 +32,10 @@ export function navegarPara(page, { handoff = null, hash = null } = {}) {
     if (hash) window.history.replaceState(null, '', window.location.pathname + window.location.search + hash)
     window.dispatchEvent(new CustomEvent(EVENTO_NAVEGAR, { detail: { page } }))
   } catch { /* sem window */ }
+}
+
+// Abre a Busca global já preenchida (Assistente: "Ver todos" dos pagos). O App escuta o evento.
+export function abrirBusca(filtros) {
+  deixarHandoff(ABRIR_BUSCA_KEY, filtros)
+  try { window.dispatchEvent(new CustomEvent(EVENTO_ABRIR_BUSCA)) } catch { /* sem window */ }
 }

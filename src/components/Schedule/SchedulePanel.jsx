@@ -28,7 +28,7 @@ import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
 import { rotuloParcela } from '../../lib/numeroParcela'
 import FilterBar from './FilterBar'
-import { lerHandoff, ABRIR_AGENDAMENTO_KEY, EVENTO_NAVEGAR } from '../../lib/abrirTela'
+import { lerHandoff, ABRIR_AGENDAMENTO_KEY, ABRIR_AGENDAMENTOS_FILTRO_KEY, EVENTO_NAVEGAR } from '../../lib/abrirTela'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
@@ -2654,18 +2654,35 @@ export default function SchedulePanel() {
 
   // "Abrir o agendamento" do Assistente (consulta de agendamento): abre o Editar dele. Lê o handoff
   // ao montar e quando o App navega para cá já estando nesta tela.
+  // "Ver todos" do Assistente (consulta de pagos/em aberto): aba Conta, status e filtros avançados
+  // (favorecido, descrição, categoria) já preenchidos — o resto do filtro da aba é zerado.
+  const aplicarFiltroDoAssistente = (v) => {
+    const status = v.status === 'pagos' ? 'pagos' : 'apagar'
+    setActiveTab('conta')
+    setFiltrosPorAba(prev => {
+      const novo = {
+        ...prev.conta, status,
+        periodos: { ...prev.conta.periodos, [status]: status === 'pagos' ? 'tudo' : 'futuros' },
+        avancados: { ...AVANCADOS_VAZIOS, payee: v.payee || '', desc: v.desc || '', cat: v.cat || '' },
+      }
+      salvarFiltrosAba('conta', novo)
+      return { ...prev, conta: novo }
+    })
+    setFiltrosAbertos(true)
+  }
   useEffect(() => {
     const abrirDoHandoff = () => {
       const v = lerHandoff(ABRIR_AGENDAMENTO_KEY)
       const s = v?.scheduleId ? allSchedules.find(x => x.id === v.scheduleId) : null
       if (s) openEditSchedule(s)
+      const filtro = lerHandoff(ABRIR_AGENDAMENTOS_FILTRO_KEY)
+      if (filtro) aplicarFiltroDoAssistente(filtro)
     }
     abrirDoHandoff()
     const aoNavegar = (e) => { if (e.detail?.page === 'schedule') setTimeout(abrirDoHandoff, 0) }
     window.addEventListener(EVENTO_NAVEGAR, aoNavegar)
     return () => window.removeEventListener(EVENTO_NAVEGAR, aoNavegar)
     // Só a lista de agendamentos importa (o handoff é lido e apagado uma vez).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allSchedules])
 
 
