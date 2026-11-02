@@ -2,10 +2,11 @@ import { Fragment, useState, useRef, useMemo, useEffect } from 'react'
 import {
   Upload, Check, AlertCircle, Wand2, Save,
   Link, X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, RotateCcw, Pencil, Info,
-  ChevronDown, ChevronRight, Split,
+  ChevronDown, ChevronRight, Split, CreditCard,
 } from 'lucide-react'
 import { parseFile, fuzzyMatchAccount, parseDindinCC, parseDindinCartao } from '../../lib/dindinParse'
 import { useApp } from '../../context/AppContext'
+import { tipoVisual, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import { noAmbientePrincipal, getSessao } from '../../lib/api'
 import { contarRevisaoFatura, abaInicial, linhasDaAba, agruparEstornosCentavos, conferenciaDaFatura, rotuloFatura } from '../../lib/contagemRevisaoFatura'
 import { fmt, fmtDate } from '../shared/utils'
@@ -336,6 +337,8 @@ const TYPE_ICON = {
   income: { icon: ArrowDownCircle, color: 'text-receita', label: 'Receita' },
   expense: { icon: ArrowUpCircle, color: 'text-despesa', label: 'Despesa' },
   transfer: { icon: ArrowLeftRight, color: 'text-transferencia', label: 'Transferência' },
+  // Transferência para o cartão = pagamento de fatura (src/lib/rotuloMovimento.js): só o rótulo.
+  pagamento_cartao: { icon: CreditCard, color: 'text-primary-fg', label: ROTULO_PAGAMENTO_CARTAO },
 }
 
 // ─── ABA 1: CONTA CORRENTE ────────────────────────────────────────────────────
@@ -592,7 +595,7 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
             </thead>
             <tbody>
               {resolvedRows.map(row => {
-                const tConf = TYPE_ICON[row.type] || TYPE_ICON.expense
+                const tConf = TYPE_ICON[tipoVisual(row, accounts)] || TYPE_ICON.expense
                 const TIcon = tConf.icon
                 const acc = accounts.find(a => a.id === row.accountId)
                 return (

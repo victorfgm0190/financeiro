@@ -9,6 +9,7 @@
 //     resgates ficam fora.
 // Janela: hoje − 30 dias até hoje + 12 meses.
 import { buildScheduleGroups } from './agendamentosGrupos.js'
+import { ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from './rotuloMovimento.js'
 import { filtrarPorStatusPeriodo } from './agendamentosFiltro.js'
 import { occEfetiva } from './fluxoCaixa.js'
 import { occCampos } from './camposSerie.js'
@@ -80,13 +81,14 @@ export function itensDoFeed({ schedules = [], payables = [], accounts = [], getN
 
 // Item → evento do .ics.
 export function eventoDoItem(it, { accounts = [], categories = [], mostrarValores = true, linkFinup = '' }) {
-  let uid, descricao, conta, categoria = '', favorecido = ''
+  let uid, descricao, conta, categoria = '', favorecido = '', cartao
   if (it.fatura) {
     const p = it.fatura
     const chave = chaveFatura(p)
     uid = chave ? uidFatura(chave) : `cap-${limpo(p.id)}@finup.app.br`
     conta = nomeConta(accounts, p.cartaoId)
     descricao = p.description || `Fatura ${conta}`.trim()
+    cartao = true
   } else {
     const s = it.schedule
     const c = it.original ? occCampos(s, it.original) : s
@@ -96,8 +98,11 @@ export function eventoDoItem(it, { accounts = [], categories = [], mostrarValore
     categoria = categories.find(x => x.id === c.categoryId)?.name || ''
     favorecido = s.payee || ''
     descricao = c.description || s.description || '(agendamento)'
+    cartao = ehPagamentoDeCartao(s, accounts)
   }
-  const titulo = `${it.atrasado ? '⚠ ' : ''}${descricao}${mostrarValores ? ` — ${valorBr(it.amount)}` : ''}`
+  // Pagamento de fatura: só o NOME no título (por dentro segue transferência — rotuloMovimento.js).
+  const nome = cartao ? `${ROTULO_PAGAMENTO_CARTAO}: ${descricao}` : descricao
+  const titulo = `${it.atrasado ? '⚠ ' : ''}${nome}${mostrarValores ? ` — ${valorBr(it.amount)}` : ''}`
   const linhas = [
     conta && `Conta: ${conta}`,
     categoria && `Categoria: ${categoria}`,

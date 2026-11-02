@@ -1,4 +1,5 @@
 import { BannerPerfisSemContaCentral } from '../shared/ContaCentralAvisos'
+import { ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import PrimeirosPassos from '../BoasVindas/PrimeirosPassos'
 import AvisoPreLancamentos from '../Assistente/AvisoPreLancamentos'
 import { useMemo, useState } from 'react'
@@ -604,10 +605,13 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
                     <div className="flex items-center gap-2 min-w-0">
                       {schedule.transactionType === 'income'
                         ? <ArrowDownCircle size={13} className="text-receita shrink-0" />
-                        : <ArrowUpCircle size={13} className="text-despesa shrink-0" />
+                        : ehPagamentoDeCartao(schedule, accounts)
+                          ? <CreditCard size={13} className="text-primary-fg shrink-0" aria-label={ROTULO_PAGAMENTO_CARTAO} />
+                          : <ArrowUpCircle size={13} className="text-despesa shrink-0" />
                       }
                       <div className="min-w-0">
                         <p className="text-xs text-texto-1 font-medium truncate">{schedule.description}</p>
+                        {ehPagamentoDeCartao(schedule, accounts) && <p className="text-[10px] text-primary-fg">{ROTULO_PAGAMENTO_CARTAO}</p>}
                         <p className={`text-xs ${isOverdue ? 'text-perigo' : 'text-texto-3'}`}>
                           {isOverdue
                             ? `⚠ ${Math.abs(daysLeft)}d em atraso`

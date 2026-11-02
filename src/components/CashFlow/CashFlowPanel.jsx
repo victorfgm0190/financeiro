@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { rotuloCategoriaFluxo } from '../../lib/rateio'
+import { ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
+import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts'
 import {
   ArrowDownCircle, ArrowUpCircle, Wallet, AlertTriangle, Calendar, Plus, Pencil, Trash2,
@@ -714,7 +716,7 @@ export default function CashFlowPanel({ setActivePage }) {
                 horizonte={horizonte}
                 qtdContas={contas.length}
                 corSaldo={corSaldo}
-                subtitulo={(r) => [rotuloCategoriaFluxo(r, rateiosByLancamento, categories) || catName(r.categoryId), accName(contaDaLinha(r, accountIds)), seloDaLinha(r)].filter(Boolean).join(' · ')}
+                subtitulo={(r) => [ehPagamentoDeCartao(r, accounts) ? `💳 ${ROTULO_PAGAMENTO_CARTAO}` : null, rotuloCategoriaFluxo(r, rateiosByLancamento, categories) || catName(r.categoryId), accName(contaDaLinha(r, accountIds)), seloDaLinha(r)].filter(Boolean).join(' · ')}
                 statusCelula={statusCelula}
                 docBadge={(r) => <TipoDocumentoBadge tipo={docDaLinha(r)} />}
                 docDaLinha={docDaLinha}
@@ -900,6 +902,7 @@ export default function CashFlowPanel({ setActivePage }) {
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-2 min-w-0">
                             <span className={`text-xs truncate max-w-xs ${r.ativa ? 'text-texto-1' : 'text-texto-3 line-through'}`} title={r.description}>{r.description}</span>
+                            {ehPagamentoDeCartao(r, accounts) && <SeloPagamentoCartao className="shrink-0 !text-[10px]" />}
                             <SeloParcela rotulo={seloDaLinha(r)} />
                             {contratoDaLinha(r) && <SeloContrato {...contratoDaLinha(r)} />}
                             <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${BADGE[tipo]}`}>{tipo}</span>

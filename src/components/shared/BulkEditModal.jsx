@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { X, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, AlertTriangle } from 'lucide-react'
+import { X, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, AlertTriangle, CreditCard } from 'lucide-react'
 import Modal from './Modal'
 import DateInput from './DateInput'
 import SearchableSelect from './SearchableSelect'
@@ -7,12 +7,15 @@ import { fmt, fmtDate } from './utils'
 import { useApp } from '../../context/AppContext'
 import { filtrarCategoriasPorPerfil } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
+import { tipoVisual, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 
 // Paleta acessível (sem verde/vermelho): receita=azul, despesa=laranja, transferência=cinza.
 const TYPE_META = {
   income:   { label: 'Receita',       Icon: ArrowDownCircle, color: 'text-receita',    bg: 'bg-receita/10' },
   expense:  { label: 'Despesa',       Icon: ArrowUpCircle,   color: 'text-despesa',    bg: 'bg-despesa/10' },
   transfer: { label: 'Transferência', Icon: ArrowLeftRight,  color: 'text-texto-2',   bg: 'bg-surface-hover/50' },
+  // Pagamento de fatura (src/lib/rotuloMovimento.js): só o rótulo/ícone; por dentro é transferência.
+  pagamento_cartao: { label: ROTULO_PAGAMENTO_CARTAO, Icon: CreditCard, color: 'text-primary-fg', bg: 'bg-primary/10' },
 }
 const metaOf = (t) => TYPE_META[t] || TYPE_META.expense
 
@@ -136,7 +139,7 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
           ) : (
             <div className="space-y-1 max-h-[45vh] overflow-y-auto overscroll-contain mb-4">
               {items.map(t => {
-                const m = metaOf(t.type)
+                const m = metaOf(tipoVisual(t, accounts))
                 return (
                   <div key={t.id} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-surface-hover/40">
                     <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${m.bg}`}>

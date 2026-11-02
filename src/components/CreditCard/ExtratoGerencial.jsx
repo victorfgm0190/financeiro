@@ -7,6 +7,7 @@ import DateInput from '../shared/DateInput'
 import ReconcileBadge from '../shared/ReconcileBadge'
 import { isoLocal } from '../../lib/hoje'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
+import { rotuloDoTipo } from '../../lib/rotuloMovimento'
 
 function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
@@ -124,8 +125,7 @@ export default function ExtratoGerencial({ initialCardId }) {
               {rowsWithBalance.map(tx => {
                 const movLabel = tx.type === 'expense' ? 'Compra'
                   : tx.type === 'income' ? 'Crédito'
-                  : tx.type === 'credit_payment' ? 'Pagamento'
-                  : 'Transferência'
+                  : rotuloDoTipo(tx, accounts)
                 return (
                   <tr
                     key={tx.id}

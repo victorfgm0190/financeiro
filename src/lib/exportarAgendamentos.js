@@ -4,7 +4,8 @@
 // tipo (lib/agendamentosTipo) define título, nome do arquivo, colunas e resumo.
 import { occEfetiva } from './fluxoCaixa.js'
 import { occCampos } from './camposSerie.js'
-import { tipoDoItem, TITULO_RELATORIO_TIPO, ARQUIVO_TIPO } from './agendamentosTipo.js'
+import { tipoDoItem, itemEhPagamentoCartao, TITULO_RELATORIO_TIPO, ARQUIVO_TIPO } from './agendamentosTipo.js'
+import { ROTULO_PAGAMENTO_CARTAO } from './rotuloMovimento.js'
 import { categoriaParaExportar } from './rateio.js'
 
 const nomeConta = (accounts, id) => {
@@ -52,7 +53,7 @@ export function linhasDosAgendamentos(rows, { accounts, categories, hoje, rateio
       valor: Number(r.nextDate ? occEfetiva(s, r.nextDate).amount : s.amount) || 0,
       conta,
       status: statusDe(tipo, situacao),
-      tipo: ROTULO_TIPO[tipo],
+      tipo: itemEhPagamentoCartao(s, accounts) ? ROTULO_PAGAMENTO_CARTAO : ROTULO_TIPO[tipo],
     }
   })
 }
@@ -71,7 +72,7 @@ export function linhasDosPagos(linhas, { accounts, categories, rateios = null })
       valor: Number(l.amount) || 0,
       conta: nomeConta(accounts, l.accountId),
       status: statusDe(tipo, 'feito'),
-      tipo: ROTULO_TIPO[tipo],
+      tipo: itemEhPagamentoCartao(l, accounts) ? ROTULO_PAGAMENTO_CARTAO : ROTULO_TIPO[tipo],
     }
   })
 }

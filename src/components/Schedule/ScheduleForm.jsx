@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext'
 import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import { rotuloParcela } from '../../lib/numeroParcela'
+import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { computeFaturaRef } from '../../lib/fatura'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import SearchableSelect from '../shared/SearchableSelect'
@@ -899,6 +900,12 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             ))}
           </div>
         </div>
+        {/* Transferência para o cartão = pagamento de fatura: só o NOME muda (src/lib/rotuloMovimento.js). */}
+        {(schToAcc?.type === 'credit' || initial?.tipo === 'pagamento_fatura') && (
+          <p className="sm:col-span-2 flex flex-wrap items-center gap-1.5 text-[11px] text-texto-3 -mt-1">
+            <SeloPagamentoCartao /> Não conta como despesa: as compras já contaram quando entraram no cartão.
+          </p>
+        )}
 
         {/* Descrição */}
         <div data-guia="agendamento-form.descricao" className="max-sm:-order-1 sm:col-span-2">

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp,
   ChevronLeft, ChevronRight, X, Undo2, Edit2, Plus, Trash2, Check, Circle, CheckSquare, Zap,
-  ListChecks, PencilLine, Download,
+  ListChecks, PencilLine, Download, CreditCard,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useScrollScope } from '../../hooks/useScrollRestoration'
@@ -13,6 +13,8 @@ import EstornoLancamentoDialog from '../Contratos/EstornoLancamentoDialog'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
+import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
+import { rotuloDoTipo, tipoVisual, ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import { exportarExcel } from '../../lib/exportExcel'
 import SeloVinculo from '../shared/SeloVinculo'
@@ -227,7 +229,8 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
   } else {
     deId = accountId; paraLabel = tx.payee || 'Despesa'
   }
-  const historico = tx.description || (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')
+  const historico = tx.description || rotuloDoTipo(tx, accounts)
+  const cartao = ehPagamentoDeCartao(tx, accounts)
   const deText = deId ? accountLabel(deId, accounts) : deLabel
   const paraText = paraId ? accountLabel(paraId, accounts) : paraLabel
 
@@ -270,13 +273,16 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
       <td className="px-3 py-1.5 text-xs text-texto-2 truncate" title={fmtDate(tx.date) || undefined}>{fmtDate(tx.date)}</td>
       <td className="px-3 py-1.5 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-          {isTransfer
-            ? <ArrowLeftRight size={12} className="text-texto-3 shrink-0" />
-            : isIn
-              ? <ArrowDownCircle size={12} className="text-receita shrink-0" />
-              : <ArrowUpCircle size={12} className="text-despesa shrink-0" />
+          {cartao
+            ? <CreditCard size={12} className="text-primary-fg shrink-0" aria-label={ROTULO_PAGAMENTO_CARTAO} />
+            : isTransfer
+              ? <ArrowLeftRight size={12} className="text-texto-3 shrink-0" />
+              : isIn
+                ? <ArrowDownCircle size={12} className="text-receita shrink-0" />
+                : <ArrowUpCircle size={12} className="text-despesa shrink-0" />
           }
           <span className="text-xs text-texto-1 truncate" title={historico}>{historico}</span>
+          {cartao && tx.description && <SeloPagamentoCartao className="shrink-0 !text-[10px]" />}
           <SeloParcela rotulo={seloParcela} />
           <SeloCambio tx={tx} />
           <SeloVinculo tx={tx} className="shrink-0" />
@@ -444,8 +450,8 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
           <tr key={tx.id} className="border-b border-borda/30 bg-transferencia/5">
             {selectMode && <td className="px-2 py-1.5" />}
             <td className="px-3 py-1.5 pl-8 text-xs text-texto-3 truncate" title={fmtDate(tx.date) || undefined}>{fmtDate(tx.date)}</td>
-            <td className="px-3 py-1.5 pl-2 text-xs text-texto-3 italic truncate" title={tx.description || 'Transferência'}>
-              {tx.description || 'Transferência'}
+            <td className="px-3 py-1.5 pl-2 text-xs text-texto-3 italic truncate" title={tx.description || rotuloDoTipo(tx, accounts)}>
+              {tx.description || rotuloDoTipo(tx, accounts)}
             </td>
             <td />
             <td className="px-3 py-1.5 text-xs text-texto-3 truncate" title={fromAcc ? fromName : undefined}>
@@ -1422,13 +1428,12 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             ? `${fromAcc ? (fromAcc.apelido || fromAcc.name) : '—'} → ${toAcc ? (toAcc.apelido || toAcc.name) : '—'}`
             : (tx.payee && tx.description && tx.description !== tx.payee ? tx.description : null)
           const selo = seloDe(tx)
-          const title = tx.payee || tx.description ||
-            (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')
+          const title = tx.payee || tx.description || rotuloDoTipo(tx, accounts)
           const isSelected = selectedIds.has(tx.id)
           return (
             <TxMobileItem
               key={i}
-              type={tx.type}
+              type={tipoVisual(tx, accounts)}
               title={title}
               subtitle={selo ? [subtitle, selo].filter(Boolean).join(' · ') : subtitle}
               dateLabel={fmtDate(tx.date)}

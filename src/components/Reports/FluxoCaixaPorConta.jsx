@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react'
+import { ehPagamentoDeCartao } from '../../lib/rotuloMovimento'
+import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { rotuloCategoriaFluxo } from '../../lib/rateio'
 import { novoLoteId, historicoDataAgendamento } from '../../lib/historico'
 import { serieKeyDe } from '../../lib/camposSerie'
@@ -786,7 +788,10 @@ export default function FluxoCaixaPorConta() {
                         <span className="text-texto-2">{fmtDate(r.date)}</span>
                       )}
                     </td>
-                    <td className={`px-3 py-2.5 text-xs max-w-xs truncate ${r.ativa ? 'text-texto-1' : 'text-texto-3 line-through'}`} title={r.description}>{r.description}</td>
+                    <td className={`px-3 py-2.5 text-xs max-w-xs truncate ${r.ativa ? 'text-texto-1' : 'text-texto-3 line-through'}`} title={r.description}>
+                      {r.description}
+                      {ehPagamentoDeCartao(r, accounts) && <SeloPagamentoCartao className="ml-1.5 !text-[10px] align-middle" />}
+                    </td>
                     <td className="px-3 py-2.5 text-xs text-texto-2 whitespace-nowrap">{movimentacao(r)}</td>
                     <td className="px-3 py-2.5 text-right text-xs font-semibold text-despesa whitespace-nowrap">{r.saida > 0 ? fmt(r.saida) : ''}</td>
                     <td className="px-3 py-2.5 text-right text-xs font-semibold text-receita whitespace-nowrap">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>

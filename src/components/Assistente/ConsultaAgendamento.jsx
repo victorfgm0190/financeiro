@@ -6,6 +6,8 @@ import { hojeStr } from '../../lib/saldos'
 import { navegarPara, ABRIR_AGENDAMENTO_KEY, ABRIR_AGENDAMENTOS_FILTRO_KEY } from '../../lib/abrirTela'
 import { filtroInicial } from '../../lib/assistente/consultaMovimentos'
 import { normalizarTermo } from '../../lib/assistente/texto'
+import { ehPagamentoDeCartao } from '../../lib/rotuloMovimento'
+import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { procurarAgendamentos, resumoAgendamento, textoDoResumo, rotuloFrequencia } from '../../lib/assistente/consultaAgendamento'
 
 // consultar_agendamento 🟢 — situação de UM agendamento. SOMENTE LEITURA: nada aqui grava.
@@ -35,7 +37,7 @@ function Numero({ rotulo, children, destaque = false }) {
   )
 }
 
-export function CardAgendamento({ resumo: r }) {
+export function CardAgendamento({ resumo: r, cartao = false }) {
   const finito = r.tipo !== 'recorrente'
   const proximas = r.proximas.slice(0, MAX_LISTA)
   return (
@@ -46,6 +48,7 @@ export function CardAgendamento({ resumo: r }) {
           {r.favorecido || 'Sem favorecido'} · {r.tipo === 'parcelado' ? 'Parcelado' : r.tipo === 'unico' ? 'Único' : `Recorrente (${rotuloFrequencia(r.frequencia)})`}
           {r.receita ? ' · a receber' : ' · a pagar'}
         </p>
+        {cartao && <SeloPagamentoCartao className="mt-1" />}
       </div>
 
       {r.tipo === 'parcelado' && (
@@ -91,7 +94,7 @@ export function CardAgendamento({ resumo: r }) {
 }
 
 export default function ConsultaAgendamento({ parametros, textoOriginal, onClose, onNovo, onTrocar, onContexto }) {
-  const { profileSchedules, transactions } = useApp()
+  const { profileSchedules, transactions, accounts } = useApp()
   const hoje = hojeStr()
   const [detalhe, setDetalhe] = useState('')
   const [criterio, setCriterio] = useState({ descricao: parametros.descricao, favorecido: parametros.favorecido, texto: textoOriginal || '' })
@@ -138,7 +141,7 @@ export default function ConsultaAgendamento({ parametros, textoOriginal, onClose
       {resumo ? (
         <>
           <Titulo>{textoDoResumo(resumo)}</Titulo>
-          <CardAgendamento resumo={resumo} />
+          <CardAgendamento resumo={resumo} cartao={ehPagamentoDeCartao(escolhido, accounts)} />
           {relacionados.length > 0 && (
             <section className="rounded-xl border border-borda p-3 space-y-2" aria-label="Também encontrei">
               <p className="text-[10px] uppercase tracking-wide text-texto-3">Também encontrei</p>

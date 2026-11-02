@@ -1,5 +1,6 @@
-import { ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, CheckCircle2, ChevronRight } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, CreditCard, ChevronRight } from 'lucide-react'
 import { fmt } from './utils'
+import { ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 
 // Metadados de exibição por tipo de movimentação. Paleta acessível do app:
 // receita = azul, despesa = laranja, transferência = cinza, pagamento = esmeralda.
@@ -8,7 +9,10 @@ const TYPE_META = {
   income:         { label: 'Receita',       Icon: ArrowDownCircle, color: 'text-receita',     bg: 'bg-receita/10' },
   expense:        { label: 'Despesa',        Icon: ArrowUpCircle,   color: 'text-despesa',     bg: 'bg-despesa/10' },
   transfer:       { label: 'Transferência',  Icon: ArrowLeftRight,  color: 'text-transferencia', bg: 'bg-transferencia/10' },
-  credit_payment: { label: 'Pagamento',      Icon: CheckCircle2,    color: 'text-primary-fg',  bg: 'bg-primary/10' },
+  // Pagamento de fatura (credit_payment antigo ou transferência para o cartão — tipoVisual de
+  // src/lib/rotuloMovimento.js): só o rótulo/ícone; por dentro continua transferência.
+  credit_payment: { label: ROTULO_PAGAMENTO_CARTAO, Icon: CreditCard, color: 'text-primary-fg', bg: 'bg-primary/10' },
+  pagamento_cartao: { label: ROTULO_PAGAMENTO_CARTAO, Icon: CreditCard, color: 'text-primary-fg', bg: 'bg-primary/10' },
 }
 
 // Card de lançamento estilo app bancário — usado apenas no mobile (< md).

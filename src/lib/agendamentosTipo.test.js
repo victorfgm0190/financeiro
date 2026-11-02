@@ -27,12 +27,12 @@ describe('filtro por tipo de agendamento', () => {
   it('recorta e conta; Todos não recorta', () => {
     expect(filtrarPorTipo(lista, 'todos')).toHaveLength(4)
     expect(filtrarPorTipo(lista, 'entradas').map(s => s.id)).toEqual(['sal', 'alug'])
-    expect(contarPorTipo(lista)).toEqual({ todos: 4, entradas: 2, saidas: 1, transferencias: 1 })
+    expect(contarPorTipo(lista)).toEqual({ todos: 4, entradas: 2, saidas: 1, transferencias: 1, pagamentos_cartao: 0 })
   })
 
   it('soma com os outros filtros: contagem sobre o período já aplicado', () => {
     const novembro = filtrarAgendamentos(lista, { from: '2026-11-01', to: '2026-11-30' }, next, HOJE)
-    expect(contarPorTipo(novembro)).toEqual({ todos: 3, entradas: 1, saidas: 1, transferencias: 1 })
+    expect(contarPorTipo(novembro)).toEqual({ todos: 3, entradas: 1, saidas: 1, transferencias: 1, pagamentos_cartao: 0 })
     expect(filtrarPorTipo(novembro, 'entradas').map(s => s.id)).toEqual(['sal'])
   })
 

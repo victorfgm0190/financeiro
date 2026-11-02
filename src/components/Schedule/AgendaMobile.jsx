@@ -5,6 +5,7 @@ import { occEfetiva } from '../../lib/fluxoCaixa'
 import { occCampos } from '../../lib/camposSerie'
 import { ehSintetico } from '../../lib/tiposDocumento'
 import { agruparPorSemana, particionarAgenda, totalAPagarNoMes } from '../../lib/agendaMobile'
+import { ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 
 // Agenda no celular. O status (A pagar / Provisões / Pagos) e o período vêm da barra de filtros
 // do topo (FilterBar) — aqui não há mais abas próprias:
@@ -21,6 +22,8 @@ const PILL = {
   semlanc:    { label: 'Sem lançamento', cls: 'bg-surface-2 text-texto-3' },
   concluido:  { label: 'Concluído',  cls: 'bg-surface-hover/60 text-texto-2' },
   confirmado: { label: 'Confirmado', cls: 'bg-primary/15 text-primary-fg' },
+  // Pagamento de fatura (src/lib/rotuloMovimento.js): só o rótulo; por dentro é transferência.
+  cartao:     { label: `💳 ${ROTULO_PAGAMENTO_CARTAO}`, cls: 'bg-primary/15 text-primary-fg' },
 }
 
 // Mesma regra do canConfirm de Agendamentos: automação pura não tem confirmação.
@@ -59,7 +62,8 @@ function Item({ id, aberto, onToggle, descricao, data, valor, schedule, pills, d
   )
 }
 
-export default function AgendaMobile({ rows, schedules, getNextOccurrences, today, renderDetalhe, onSelecionar, pagosLinhas = null }) {
+export default function AgendaMobile({ rows, schedules, getNextOccurrences, today, renderDetalhe, onSelecionar, pagosLinhas = null, contas = [] }) {
+  const comCartao = (s, pills) => (ehPagamentoDeCartao(s, contas) ? [...pills, 'cartao'] : pills)
   const [aberto, setAberto] = useState(null)
   const toggle = (id) => setAberto(a => (a === id ? null : id))
 
@@ -83,7 +87,7 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
         key={s.id} id={s.id} aberto={aberto === s.id} onToggle={toggle}
         descricao={oc.description || s.description || '(agendamento)'}
         data={r.displayDate} valor={Number(occEfetiva(s, r.nextDate).amount) || 0}
-        schedule={s} pills={pills} detalhe={aberto === s.id ? renderDetalhe(r) : null}
+        schedule={s} pills={comCartao(s, pills)} detalhe={aberto === s.id ? renderDetalhe(r) : null}
       />
     )
   }
@@ -108,7 +112,7 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
               key={id} id={id} aberto={aberto === id} onToggle={toggle}
               descricao={l.description || l.schedule.description || '(agendamento)'}
               data={l.dataPagamento} valor={Number(l.amount) || 0} schedule={l.schedule}
-              pills={l.semLancamento ? ['semlanc'] : ['pago']}
+              pills={comCartao(l.schedule, l.semLancamento ? ['semlanc'] : ['pago'])}
               detalhe={aberto === id ? renderDetalhe(rowDe(l.schedule)) : null}
             />
           )
@@ -137,7 +141,7 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
                 <Item
                   key={id} id={id} aberto={aberto === id} onToggle={toggle}
                   descricao={r.schedule.description || '(agendamento)'}
-                  data={null} valor={Number(r.schedule.amount) || 0} schedule={r.schedule} pills={['concluido']}
+                  data={null} valor={Number(r.schedule.amount) || 0} schedule={r.schedule} pills={comCartao(r.schedule, ['concluido'])}
                   detalhe={aberto === id ? renderDetalhe(r) : null}
                 />
               )

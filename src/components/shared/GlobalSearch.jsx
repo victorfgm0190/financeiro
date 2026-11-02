@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { lerHandoff, ABRIR_BUSCA_KEY } from '../../lib/abrirTela'
+import { ehPagamentoDeCartao } from '../../lib/rotuloMovimento'
+import SeloPagamentoCartao from './SeloPagamentoCartao'
 import { rotuloCategoria } from '../../lib/rateio'
 import { Search, ArrowRight, Loader2 } from 'lucide-react'
 import Modal from './Modal'
@@ -219,6 +221,7 @@ export default function GlobalSearch({ open, onClose }) {
             {r.kind === 'tx' ? 'Lançamento' : 'Agendamento'}
           </span>
           <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.statusCls}`}>{r.statusLabel}</span>
+          {ehPagamentoDeCartao(r.obj, accById) && <SeloPagamentoCartao className="!text-[10px]" />}
           {(r.selos || []).map(selo => (
             <span key={selo} className="text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-reserva">{selo}</span>
           ))}

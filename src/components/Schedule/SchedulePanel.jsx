@@ -28,6 +28,8 @@ import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
 import { rotuloParcela } from '../../lib/numeroParcela'
 import FilterBar from './FilterBar'
+import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
+import { ehPagamentoDeCartao } from '../../lib/rotuloMovimento'
 import { lerHandoff, ABRIR_AGENDAMENTO_KEY, ABRIR_AGENDAMENTOS_FILTRO_KEY, EVENTO_NAVEGAR } from '../../lib/abrirTela'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -1291,6 +1293,8 @@ function ScheduleRow({
               <span className="inline-flex items-center gap-1 text-xs bg-despesa/15 text-despesa px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
                 <ArrowUpCircle size={10} /> Resgate Reserva
               </span>
+            ) : ehPagamentoDeCartao(schedule, accounts) ? (
+              <SeloPagamentoCartao />
             ) : schedule.transactionType === 'transfer' ? (
               <span className="inline-flex items-center gap-1 text-xs bg-transferencia/15 text-transferencia px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
                 <ArrowLeftRight size={10} /> Transferência
@@ -2243,6 +2247,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
           today={today}
           onSelecionar={selectableRows.length > 0 && podeSelecionar ? () => setSelectionMode(true) : null}
           pagosLinhas={pagosLinhas}
+          contas={accounts}
           renderDetalhe={({ schedule, nextDate, futureItems, isSerie }) => (
             <table className="w-full text-sm block">
               <tbody className="block">
@@ -2981,7 +2986,7 @@ export default function SchedulePanel() {
     () => filtrarPorTipoDocumento(filtrarPagamentos(pagosBuscados, { valores: selValores }), selTipos, tiposDocumento),
     [pagosBuscados, selValores, selTipos, tiposDocumento]
   )
-  const pagosVisiveis = useMemo(() => filtrarPorTipo(pagosAntesDoTipo, tipoMov), [pagosAntesDoTipo, tipoMov])
+  const pagosVisiveis = useMemo(() => filtrarPorTipo(pagosAntesDoTipo, tipoMov, undefined, allAccounts), [pagosAntesDoTipo, tipoMov, allAccounts])
 
   // Valores reais (distintos) dos itens visíveis (já filtrados por data/etc.), maior → menor.
   const valorOptions = useMemo(() => {
@@ -3016,7 +3021,7 @@ export default function SchedulePanel() {
     () => (filtroContasAtivo ? filtrarPorContas(finalSchedules, selContas) : finalSchedules),
     [filtroContasAtivo, finalSchedules, selContas]
   )
-  const visibleSchedules = useMemo(() => filtrarPorTipo(visiveisAntesDoTipo, tipoMov), [visiveisAntesDoTipo, tipoMov])
+  const visibleSchedules = useMemo(() => filtrarPorTipo(visiveisAntesDoTipo, tipoMov, undefined, allAccounts), [visiveisAntesDoTipo, tipoMov, allAccounts])
 
   // Aba Cartão: contas a pagar de fatura (cards) seguem o período (vencimento) e os filtros de
   // data/descrição/valor que se aplicam a elas.
@@ -3032,12 +3037,12 @@ export default function SchedulePanel() {
       (min === null || Number(p.amount) >= min) && (max === null || Number(p.amount) <= max))
   }, [viewInvoice, periodoAtual, hojeStr, dataDe, dataAte, fltDesc, fltMin, fltMax])
   // Fatura a pagar é sempre saída.
-  const invoiceVisiveis = useMemo(() => filtrarPorTipo(invoiceAntesDoTipo, tipoMov), [invoiceAntesDoTipo, tipoMov])
+  const invoiceVisiveis = useMemo(() => filtrarPorTipo(invoiceAntesDoTipo, tipoMov, undefined, allAccounts), [invoiceAntesDoTipo, tipoMov, allAccounts])
 
   // Contadores do segmentado: total de cada status na aba (sem período nem filtros).
   // Contadores do segmentado: respeitam o tipo escolhido (Entradas/Saídas/Transferências).
-  const nT = (lista) => filtrarPorTipo(lista, tipoMov).length
-  const nPagos = totaisPagamentos(filtrarPorTipo(pagosLinhas, tipoMov)).nPagos
+  const nT = (lista) => filtrarPorTipo(lista, tipoMov, undefined, allAccounts).length
+  const nPagos = totaisPagamentos(filtrarPorTipo(pagosLinhas, tipoMov, undefined, allAccounts)).nPagos
   const contagemStatus = {
     conta: { apagar: nT(allPending), provisoes: nT(allPending.filter(s => s.isProvisao)), pagos: nPagos },
     cartao: {
@@ -3087,7 +3092,7 @@ export default function SchedulePanel() {
     const porTipo = filtrarPorTipoDocumento(porValor, selTipos, tiposDocumento)
     return filtroContasAtivo ? filtrarPorContas(porTipo, selContas) : porTipo
   }, [emCalendario, statusCal, displaySchedules, getNextOccurrences, hojeStr, fltDesc, fltPayee, fltCat, fltMin, fltMax, fltAgenda, selValores, selTipos, tiposDocumento, filtroContasAtivo, selContas])
-  const calSchedulesTipo = useMemo(() => filtrarPorTipo(calSchedules, tipoMov), [calSchedules, tipoMov])
+  const calSchedulesTipo = useMemo(() => filtrarPorTipo(calSchedules, tipoMov, undefined, allAccounts), [calSchedules, tipoMov, allAccounts])
   const calPagos = useMemo(() => {
     if (!emCalendario || (statusCal !== 'pagos' && statusCal !== 'todos')) return []
     const buscados = filtrarPagamentos(pagosLinhas, {
@@ -3097,7 +3102,7 @@ export default function SchedulePanel() {
     })
     return filtrarPorTipoDocumento(filtrarPagamentos(buscados, { valores: selValores }), selTipos, tiposDocumento)
   }, [emCalendario, statusCal, pagosLinhas, fltDesc, fltPayee, fltCat, fltMin, fltMax, selValores, selTipos, tiposDocumento])
-  const calPagosTipo = useMemo(() => filtrarPorTipo(calPagos, tipoMov), [calPagos, tipoMov])
+  const calPagosTipo = useMemo(() => filtrarPorTipo(calPagos, tipoMov, undefined, allAccounts), [calPagos, tipoMov, allAccounts])
   // Faturas do contas_a_pagar (aba Cartão), pelo vencimento — menos as que já têm o agendamento
   // pagamento_fatura da mesma fatura (senão a fatura apareceria duas vezes no dia).
   const calFaturas = useMemo(() => {
@@ -3108,8 +3113,8 @@ export default function SchedulePanel() {
     const filtradas = viewInvoice.filter(p =>
       (!d || (p.description || '').toLowerCase().includes(d)) &&
       (min === null || Number(p.amount) >= min) && (max === null || Number(p.amount) <= max))
-    return filtrarPorTipo(faturasSemAgendamento(filtradas, faturaPaymentSchedules), tipoMov)
-  }, [tipoMov, emCalendario, activeTab, statusCal, viewInvoice, faturaPaymentSchedules, fltDesc, fltMin, fltMax])
+    return filtrarPorTipo(faturasSemAgendamento(filtradas, faturaPaymentSchedules), tipoMov, undefined, allAccounts)
+  }, [tipoMov, allAccounts, emCalendario, activeTab, statusCal, viewInvoice, faturaPaymentSchedules, fltDesc, fltMin, fltMax])
 
   // Opções extras do filtro: o que só existe como fallback (CC sem cadastro, RES).
   const extrasTipoFiltro = useMemo(() => [
@@ -3121,7 +3126,8 @@ export default function SchedulePanel() {
   const contagemTipo = contarPorTipo(
     emCalendario ? [...calSchedules, ...calPagos, ...calFaturas]
       : abaPagos ? pagosAntesDoTipo
-        : [...(activeTab === 'cartao' ? invoiceAntesDoTipo : []), ...visiveisAntesDoTipo]
+        : [...(activeTab === 'cartao' ? invoiceAntesDoTipo : []), ...visiveisAntesDoTipo],
+    undefined, allAccounts,
   )
 
   // Exportar Excel: o que a lista mostra agora (aba, status, período, filtros e ordem da tabela).
@@ -3429,9 +3435,11 @@ export default function SchedulePanel() {
         {TIPOS_AGENDAMENTO.map(t => {
           const ativo = tipoMov === t.id
           const cor = t.id === 'entradas' ? 'bg-receita text-page' : t.id === 'saidas' ? 'bg-despesa text-page' : t.id === 'transferencias' ? 'bg-transferencia text-page' : 'bg-primary text-white'
+          const Icone = t.id === 'pagamentos_cartao' ? CreditCard : null
           return (
             <button key={t.id} type="button" role="radio" aria-checked={ativo} onClick={() => escolherTipo(t.id)}
               className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${ativo ? cor : 'bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'}`}>
+              {Icone && <Icone size={12} aria-hidden />}
               {t.label}
               <span className="opacity-75">{contagemTipo[t.id]}</span>
             </button>

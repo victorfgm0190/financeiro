@@ -10,6 +10,7 @@ import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBi
 import { useIsMobile } from '../../hooks/useIsMobile'
 import InputMoeda from '../shared/InputMoeda'
 import { computeFaturaRef } from '../../lib/fatura'
+import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment } from '../../lib/installments'
 import { buildSeries, clampDateToFatura, newSerieId, valoresDasParcelas } from '../../lib/parcelas'
@@ -1586,6 +1587,12 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           ))}
         </div>
       </div>
+      {/* Transferência para o cartão = pagamento de fatura: só o NOME muda (src/lib/rotuloMovimento.js). */}
+      {transferToAcc?.type === 'credit' && (
+        <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-texto-3 -mt-1">
+          <SeloPagamentoCartao /> Não conta como despesa: as compras já contaram quando entraram no cartão.
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div data-guia="lancamento-form.conta">

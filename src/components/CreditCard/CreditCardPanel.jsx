@@ -21,6 +21,8 @@ import { dueDateInMonth, faturaDoCartao } from '../../lib/fatura'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
+import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
+import { ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import ReconcileBadge from '../shared/ReconcileBadge'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import GerencialTotalizer from '../shared/GerencialTotalizer'
@@ -1085,8 +1087,8 @@ export default function CreditCardPanel() {
               {billPayments.map(p => (
                 <TxMobileItem
                   key={p.id}
-                  type="credit_payment"
-                  title="Pagamento de Fatura"
+                  type="pagamento_cartao"
+                  title={p.description || ROTULO_PAGAMENTO_CARTAO}
                   dateLabel={fmtDate(p.date)}
                   amount={p.amount}
                 />
@@ -1159,9 +1161,8 @@ export default function CreditCardPanel() {
                       <td className="px-4 py-3 text-texto-2 text-xs whitespace-nowrap">{fmtDate(p.date)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <CheckCircle2 size={13} className="text-primary-fg shrink-0" />
-                          <span className="text-primary-fg text-sm font-medium">Pagamento de Fatura</span>
-                          <span className="text-[10px] font-bold bg-primary/15 text-primary-fg px-1.5 py-0.5 rounded">PAGAMENTO</span>
+                          <span className="text-primary-fg text-sm font-medium truncate">{p.description || ROTULO_PAGAMENTO_CARTAO}</span>
+                          <SeloPagamentoCartao className="!text-[10px]" />
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell" />

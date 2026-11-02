@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import { Bell, CreditCard, Calendar, AlertTriangle, CheckCircle, Zap, ShieldCheck } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -207,7 +208,7 @@ function VencimentosPanel({ setActivePage }) {
                     <p className="text-xs text-texto-3 mt-1">
                       {alert.kind === 'schedule' ? (
                         <>
-                          {alert.schedule.transactionType === 'income' ? 'Receita' : 'Despesa'}
+                          {alert.schedule.transactionType === 'income' ? 'Receita' : ehPagamentoDeCartao(alert.schedule, accounts) ? ROTULO_PAGAMENTO_CARTAO : alert.schedule.transactionType === 'transfer' ? 'Transferência' : 'Despesa'}
                           {': '}
                           <span className="text-texto-2 font-medium">{fmt(alert.amount)}</span>
                           {' · '}Próximo: {format(alert.dueDate, 'dd/MM/yyyy')}

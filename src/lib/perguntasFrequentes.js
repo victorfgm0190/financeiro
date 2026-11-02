@@ -31,7 +31,7 @@ export const PERGUNTAS_FREQUENTES = [
   {
     id: 'fatura-cartao',
     pergunta: 'Como funciona a fatura do cartão?',
-    resposta: 'Cada compra cai na fatura pelo dia de fechamento do cartão: comprou antes do fechamento, entra na fatura que vence neste mês; depois, na do mês seguinte. Na tela Cartão de Crédito você vê cada fatura e registra o pagamento.',
+    resposta: 'Cada compra cai na fatura pelo dia de fechamento do cartão: comprou antes do fechamento, entra na fatura que vence neste mês; depois, na do mês seguinte. Na tela Cartão de Crédito você vê cada fatura e registra o pagamento. Ele aparece como “Pagamento de cartão” e não conta como despesa, porque as compras já contaram quando entraram no cartão.',
     tela: 'credit',
   },
   {

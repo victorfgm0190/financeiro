@@ -1,6 +1,7 @@
 // Assistente IA — lote de lançamentos (src/lib/assistente/lote.js), parte do APP: o que impede a
 // gravação direta de um item ("Salvar selecionados") e o lançamento gravado direto. PURO.
 import { camposParaConferir, ROTULO_CAMPO } from '../assistente'
+import { contaEhCartao, ROTULO_PAGAMENTO_CARTAO } from '../rotuloMovimento.js'
 import { parecidosNaCriacao } from '../casamentoFatura'
 import { agendamentosDoLancamento, agendamentosParecidos, favorecidosParecidos } from './agendamentoDoLancamento'
 
@@ -92,5 +93,10 @@ export function lancamentoDireto(sugestao, { accounts = [], gerencialGroups = []
   }
 }
 
-// Linha da lista: rótulo curto do tipo.
-export const rotuloTipo = (p, ferramenta) => (ferramenta === 'criar_agendamento' ? 'Agendamento' : { despesa: 'Despesa', receita: 'Receita', transferencia: 'Transferência' }[p.tipo] || 'Lançamento')
+// Linha da lista: rótulo curto do tipo. Transferência para um cartão = "Pagamento de cartão" (só o
+// nome — src/lib/rotuloMovimento.js; por dentro continua transferência).
+export const rotuloTipo = (p, ferramenta, contas = []) => {
+  if (ferramenta === 'criar_agendamento') return 'Agendamento'
+  if (p.tipo === 'transferencia' && contaEhCartao(contas, p.conta_destino_id)) return ROTULO_PAGAMENTO_CARTAO
+  return { despesa: 'Despesa', receita: 'Receita', transferencia: 'Transferência' }[p.tipo] || 'Lançamento'
+}

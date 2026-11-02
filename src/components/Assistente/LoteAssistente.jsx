@@ -175,7 +175,7 @@ export default function LoteAssistente({ itens: itensIniciais, faltantes = null,
                   checked={l.sel && !fechado} disabled={fechado} onChange={e => mudar(l.i, { sel: e.target.checked })} />
                 <div className="flex-1 min-w-0 space-y-0.5">
                   <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-texto-1">
-                    <span className={p.tipo === 'receita' ? 'text-receita' : p.tipo === 'transferencia' ? 'text-transferencia' : 'text-despesa'}>{rotuloTipo(p, l.ferramenta)}</span>
+                    <span className={p.tipo === 'receita' ? 'text-receita' : p.tipo === 'transferencia' ? 'text-transferencia' : 'text-despesa'}>{rotuloTipo(p, l.ferramenta, accounts)}</span>
                     <span className="font-semibold tabular-nums">{valor}</span>
                     <span className="truncate">{p.descricao || p.favorecido_novo || nomeCat(p.categoria_id) || ''}</span>
                   </p>

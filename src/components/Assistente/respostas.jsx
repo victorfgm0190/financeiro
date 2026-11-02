@@ -15,6 +15,8 @@ import { candidatosValidos, sugestaoLancamentoDaBaixa } from '../../lib/assisten
 import { DESTINOS } from '../../lib/assistente/acoes'
 import { intervaloVencimento, filtrarVencimentos, totaisVencimentos, ladoDoGrupo, gastoDaCategoria } from '../../lib/assistente/consultas'
 import PreviaBaixa from './PreviaBaixa'
+import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
+import { ehPagamentoDeCartao, rotuloDoTipo } from '../../lib/rotuloMovimento'
 import PreviaAssistente from './PreviaAssistente'
 
 // Respostas do Assistente IA por ferramenta (mapeadas em executores.jsx). Props comuns:
@@ -204,7 +206,7 @@ export function VencimentosResposta({ parametros, onClose, onNovo }) {
             {itens.slice(0, 30).map(i => (
               <li key={i.key} className="flex items-center gap-2 px-3 py-2 text-sm">
                 <span className={`shrink-0 w-12 text-xs ${i.atrasado ? 'text-aviso' : 'text-texto-3'}`}>{fmtDate(i.data).slice(0, 5)}</span>
-                <span className="flex-1 min-w-0 break-words text-texto-1">{i.schedule?.description}</span>
+                <span className="flex-1 min-w-0 break-words text-texto-1">{i.schedule?.description}{ehPagamentoDeCartao(i.schedule, accounts) && <SeloPagamentoCartao className="ml-1.5 !text-[10px] align-middle" />}</span>
                 <span className={`shrink-0 font-medium ${ladoDoGrupo(i.grupo) === 'receber' ? 'text-receita' : 'text-despesa'}`}>{fmt(i.amount)}</span>
               </li>
             ))}
@@ -295,7 +297,7 @@ export function GastosResposta({ parametros, onClose, onNovo }) {
 
 // ─── buscar_lancamentos: /api/search (a mesma Busca global) ─────────────────────────────────────
 export function BuscaResposta({ parametros, onClose, onNovo }) {
-  const { transactions, schedules, activeProfileId } = useApp()
+  const { transactions, schedules, activeProfileId, accounts } = useApp()
   const [estado, setEstado] = useState({ carregando: true })
   useEffect(() => {
     let vivo = true
@@ -328,7 +330,7 @@ export function BuscaResposta({ parametros, onClose, onNovo }) {
               {estado.txs.slice(0, 15).map(t => (
                 <li key={t.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                   <span className="shrink-0 w-12 text-xs text-texto-3">{fmtDate(t.date).slice(0, 5)}</span>
-                  <span className="flex-1 min-w-0 break-words text-texto-1">{t.description || t.payee || 'Sem descrição'}</span>
+                  <span className="flex-1 min-w-0 break-words text-texto-1">{t.description || t.payee || rotuloDoTipo(t, accounts)}{ehPagamentoDeCartao(t, accounts) && <SeloPagamentoCartao className="ml-1.5 !text-[10px] align-middle" />}</span>
                   <span className={`shrink-0 font-medium ${t.type === 'income' ? 'text-receita' : 'text-despesa'}`}>{fmt(t.amount)}</span>
                 </li>
               ))}
