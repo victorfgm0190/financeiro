@@ -6,7 +6,9 @@
 //   'nenhuma'   → só explica (Próximo).
 // Salvou antes da hora (em qualquer passo)? Vai direto para "Pronto!". Elemento que não aparece em
 // alguns segundos (aba fechada, outro aparelho) → balão no centro com Próximo, sem travar.
-// "Sair do guia" (Esc) encerra sem deixar nada na tela. O guia NUNCA preenche nem salva nada.
+// Passo "clique" não tem Próximo: só avança clicando no elemento aceso (que pulsa). Uma saída só: o X
+// ("Sair do guia", Esc). O balão fica ao lado do elemento, sem cobri-lo nem cobrir o elemento do
+// próximo passo quando ele já está na tela. O guia NUNCA preenche nem salva nada.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Hand, X, CheckCircle2 } from 'lucide-react'
@@ -132,13 +134,20 @@ export default function TarefaGuiada({ tarefaId }) {
   const comAlvo = !terminou && !naoAchou && el && rect
   const vw = window.innerWidth
   const vh = window.innerHeight
-  const pos = posicaoBalao(comAlvo ? rect : null, tamBalao, { vw, vh })
+  // Elemento do próximo passo (se já na tela): o balão evita cobri-lo.
+  const prox = !terminou && passos[i + 1] ? elementoPorGuia(passos[i + 1].alvo) : null
+  const rProx = prox?.getBoundingClientRect()
+  const pos = posicaoBalao(comAlvo ? rect : null, tamBalao, { vw, vh }, {
+    ordem: ['direita', 'esquerda', 'abaixo', 'acima'],
+    evitar: rProx && rProx.width > 0 ? [{ top: rProx.top, left: rProx.left, right: rProx.right, bottom: rProx.bottom }] : [],
+  })
+  const esperaClique = passo?.espera === 'clique' && !naoAchou
   const demais = terminou ? tarefasDaTela(t.tela, ctx, { celular: isMobile }).filter(x => x.id !== t.id) : []
 
   return createPortal(
     <div className="fixed inset-0 z-[100] pointer-events-none" data-testid="tarefa-guiada">
       {comAlvo && (
-        <div aria-hidden="true" className="guia-spotlight absolute rounded-lg"
+        <div aria-hidden="true" className={`guia-spotlight absolute rounded-lg ${esperaClique ? 'guia-clique' : ''}`}
           style={{ top: rect.top - MARGEM, left: rect.left - MARGEM, width: rect.width + MARGEM * 2, height: rect.height + MARGEM * 2 }} />
       )}
       <div ref={balao} role="dialog" aria-modal="false" aria-label={`Faça comigo: ${t.titulo}`} tabIndex={-1} data-testid="balao-tarefa"
@@ -155,7 +164,7 @@ export default function TarefaGuiada({ tarefaId }) {
               {terminou ? t.final : naoAchou ? `Não achei este passo na tela agora. ${passo.texto} Quando terminar, toque em Próximo.` : passo.texto}
             </p>
           </div>
-          <button type="button" onClick={encerrarTour} aria-label="Fechar guia" title="Sair do guia (Esc)"
+          <button type="button" onClick={encerrarTour} aria-label="Sair do guia" title="Sair do guia (Esc)"
             className="w-9 h-9 -mr-2 -mt-2 flex items-center justify-center text-texto-2 hover:text-texto-1 shrink-0"><X size={16} /></button>
         </div>
         {terminou ? (
@@ -175,8 +184,9 @@ export default function TarefaGuiada({ tarefaId }) {
         ) : (
           <div className="flex items-center gap-2 mt-3">
             {i > 0 && <button type="button" className="btn-secondary text-sm min-h-[40px]" onClick={() => setI(v => Math.max(0, v - 1))}>Voltar</button>}
-            <button type="button" className="btn-secondary text-sm min-h-[40px]" onClick={encerrarTour}>Sair do guia</button>
-            <button type="button" className="btn-primary text-sm min-h-[40px] ml-auto" onClick={avancar}>Próximo</button>
+            {esperaClique
+              ? <p className="ml-auto text-xs text-texto-2" data-testid="espera-clique">{isMobile ? "Toque" : "Clique"} no destaque para continuar</p>
+              : <button type="button" className="btn-primary text-sm min-h-[40px] ml-auto" onClick={avancar}>Próximo</button>}
           </div>
         )}
       </div>

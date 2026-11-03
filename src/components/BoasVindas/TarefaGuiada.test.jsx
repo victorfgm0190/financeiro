@@ -138,6 +138,24 @@ describe('tarefa na tela', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(balao()).toBeNull()
   })
+  it('passo "clique em X": sem Próximo, só avança clicando no elemento aceso (que pulsa); X é a única saída', async () => {
+    render(<TelaAgenda />)
+    act(() => iniciarTarefa('schedule.conta-pagar'))
+    await waitFor(() => expect(texto()).toBe(conta.passos[0].texto))
+    expect(screen.queryByRole('button', { name: 'Próximo' })).toBeNull()
+    expect(screen.getByTestId('espera-clique')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('.guia-spotlight.guia-clique')).toBeTruthy())
+    expect(screen.getAllByRole('button', { name: 'Sair do guia' })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Sair do guia' }).getAttribute('title')).toBe('Sair do guia (Esc)')
+    fireEvent.click(screen.getByRole('button', { name: '+ Novo agendamento' }))
+    await waitFor(() => expect(texto()).toBe(conta.passos[1].texto))
+    expect(screen.getByRole('button', { name: 'Próximo' })).toBeTruthy() // passo só informativo
+  })
+  it('"Criar uma conta corrente": passos óbvios do mesmo formulário juntos; o 1º espera o clique em Nova Conta', () => {
+    const t = tarefaPorId('accounts.conta-corrente')
+    expect(t.passos.length).toBeLessThanOrEqual(6)
+    expect(t.passos[0]).toMatchObject({ alvo: 'accounts.nova', espera: 'clique' })
+  })
   it('passo que não aparece: depois de alguns segundos, balão no centro com Próximo (não trava)', async () => {
     vi.useFakeTimers()
     render(<GuiaInterativo />)
@@ -152,8 +170,13 @@ describe('tarefa na tela', () => {
     app({ addSchedule })
     render(<TelaAgenda />)
     act(() => iniciarTarefa('schedule.conta-pagar'))
-    await waitFor(() => expect(balao()).toBeTruthy())
-    for (let k = 0; k < conta.passos.length; k++) fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    await waitFor(() => expect(texto()).toBe(conta.passos[0].texto))
+    fireEvent.click(screen.getByRole('button', { name: '+ Novo agendamento' }))
+    await waitFor(() => expect(texto()).toBe(conta.passos[1].texto))
+    for (let k = 1; k < conta.passos.length; k++) {
+      const prox = screen.queryByRole('button', { name: 'Próximo' })
+      if (prox) fireEvent.click(prox)
+    }
     expect(addSchedule).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Descrição').value).toBe('')
   })

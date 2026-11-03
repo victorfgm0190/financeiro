@@ -236,8 +236,20 @@
   transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
   animation: guia-pulso 1.1s ease-in-out infinite;
 }
+/* "Ver todas as funções" aberto no desktop: o conteúdo abre espaço para o painel do guia (22rem +
+   margem de 1rem à direita + folga) e os grids se reorganizam — nada fica escondido atrás dele. */
+@media (min-width: 1024px) {
+  html[data-guia-painel] main { padding-right: 24.5rem; transition: padding-right 0.2s ease; }
+}
+/* Faça comigo: o elemento que espera o clique pulsa mais forte. */
+.guia-spotlight.guia-clique { animation: guia-pulso-forte 0.9s ease-in-out infinite; }
+@keyframes guia-pulso-forte {
+  0%, 100% { outline-color: var(--color-primary-fg); outline-offset: 2px; outline-width: 2px; }
+  50% { outline-color: var(--color-primary-fg); outline-offset: 7px; outline-width: 4px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .guia-destaque { animation: none; }
+  .guia-spotlight.guia-clique { animation: none; outline-width: 3px; }
   /* Sem pulso: só o contorno fixo. */
   .guia-spotlight { animation: none; transition: none; }
 }
