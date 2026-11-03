@@ -236,9 +236,12 @@ export async function enviarFila(entradas) {
 //   'recusa'   — o servidor ou o banco recusou a alteração (validação, permissão, regra do banco):
 //                repetir não adianta, a entrada fica marcada com erro até o usuário corrigir ou descartar;
 //   'servidor' — erro 5xx sem motivo do banco: pode ser passageiro, tenta mais algumas vezes.
+// Erro SEM resposta HTTP que não é de rede (ex.: um TypeError ao montar a linha de um item) é
+// 'recusa': repetir não resolve e, tratado como rede, prendia o app em "Sem internet" com a internet
+// funcionando. Assim o item fica marcado com o erro real e os outros seguem.
 export function tipoDeFalha(err) {
-  if (ehErroDeRede(err) || err.status === 401 || err.status === 408 || err.status === 429) return 'rede'
-  if (err.status >= 500 && !err.dados?.codigoBanco) return 'servidor'
+  if (ehErroDeRede(err) || err?.status === 401 || err?.status === 408 || err?.status === 429) return 'rede'
+  if (err?.status >= 500 && !err.dados?.codigoBanco) return 'servidor'
   return 'recusa'
 }
 
@@ -301,11 +304,19 @@ export function motivoDaRecusa(err) {
   if (err?.status === 413) return 'a alteração é grande demais para enviar de uma vez'
   if (err?.status >= 500) return `o servidor não conseguiu gravar (erro ${err.status})`
   if (d.error) return String(d.error)
+  if (!err?.status) return `erro no aplicativo ao preparar o envio${err?.message ? `: ${err.message}` : ''}`
   return `o servidor recusou a alteração${err?.status ? ` (erro ${err.status})` : ''}`
 }
 
-// Erro de rede (sem conexão / servidor fora) × erro de resposta (o servidor respondeu com falha).
-export const ehErroDeRede = (err) => !err?.status
+// Erro de rede (a requisição não chegou a ter resposta: sem conexão, servidor fora, tempo esgotado)
+// × erro de resposta (o servidor respondeu com falha) × erro do próprio app (sem status e sem ser de
+// rede). Os fetch de src/lib/db.js marcam `semResposta`; o TypeError do fetch também é reconhecido.
+export const ehErroDeRede = (err) => {
+  if (!err || err.status) return false
+  if (err.semResposta || err.semConexao) return true
+  return (err.name === 'TypeError' && /fetch|network|load failed/i.test(String(err.message || '')))
+    || err.name === 'AbortError' || err.name === 'TimeoutError'
+}
 
 // Texto do painel de pendências: "Lançamento · Mercado" etc.
 const NOMES_EXTRA = { configuracoes: 'configurações', schedule_reserva_funcoes: 'detalhamento de fatura', lancamento_rateios: 'rateios' }

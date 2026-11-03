@@ -37,10 +37,12 @@ const STATUS_CONFIG = {
   connecting: { icon: Loader,    color: 'text-texto-3',    label: 'Conectando...',  spin: true  },
   connected:  { icon: Cloud,     color: 'text-primary-fg', label: 'Nuvem',          spin: false },
   local:      { icon: AlertTriangle, color: 'text-aviso',   label: 'Local',          spin: false },
+  // Há rede, mas a API não respondeu (lib/conexao.js): o app tenta de novo sozinho.
+  servidor:   { icon: Loader,    color: 'text-aviso',      label: 'Reconectando',   spin: true  },
 }
 
 function DbStatusBadge({ status }) {
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.error
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.connecting
   const Icon = cfg.icon
   return (
     <div className={`flex items-center gap-1.5 ${cfg.color}`} title={`Banco de dados: ${cfg.label}`}>

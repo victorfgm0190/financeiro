@@ -1,15 +1,19 @@
 import { useMemo, useState } from 'react'
-import { Send, Download, CloudOff, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Send, Download, CloudOff, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { useApp } from '../../context/AppContext'
 import { rotuloDaEntrada } from '../../lib/filaOffline'
 import { LIMITE_AVISO_FILA, ehIphoneSemInstalar } from '../../lib/offlineUi'
+import { MSG_SERVIDOR } from '../../lib/conexao'
 
 // Painel do indicador de sincronização: o que está esperando envio, "Enviar agora" e uma cópia de
 // segurança das pendências em arquivo. Avisa quando o armazenamento não é persistente.
 export default function PainelPendencias({ open, onClose }) {
-  const { filaPendentes, filaErros = [], tentarDeNovoErroFila, descartarErroFila, enviarPendentes, dbStatus, syncing, erroArmazenamento, armazenamentoPersistente } = useApp()
+  const { filaPendentes, filaErros = [], tentarDeNovoErroFila, descartarErroFila, enviarAgora, dbStatus, syncing, erroArmazenamento, armazenamentoPersistente } = useApp()
   const [enviando, setEnviando] = useState(false)
+  const [erroEnviar, setErroEnviar] = useState(null)
+  const semRede = dbStatus === 'local'
+  const servidor = dbStatus === 'servidor'
   const [confirmarDescarte, setConfirmarDescarte] = useState(null)
   const online = dbStatus === 'connected'
   // Alterações recusadas pelo servidor (AppContext marcarErroFila): à parte, com o motivo.
@@ -26,9 +30,16 @@ export default function PainelPendencias({ open, onClose }) {
     return [...m]
   }, [filaPendentes, errosPorChave])
 
+  // Reconecta se preciso (AppContext.enviarAgora) e mostra o erro real quando não dá.
   const enviar = async () => {
     setEnviando(true)
-    try { await enviarPendentes() } finally { setEnviando(false) }
+    setErroEnviar(null)
+    try {
+      const r = await enviarAgora()
+      if (!r?.ok) setErroEnviar(r?.erro || 'Não foi possível enviar')
+    } catch (err) {
+      setErroEnviar(err?.message || String(err))
+    } finally { setEnviando(false) }
   }
 
   const baixar = () => {
@@ -47,9 +58,10 @@ export default function PainelPendencias({ open, onClose }) {
     <Modal open={open} onClose={onClose} title="Sincronização">
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-sm">
-          {!online ? <CloudOff size={16} className="text-aviso" /> : filaPendentes.length - comErro.length ? <Send size={16} className="text-aviso" /> : comErro.length ? <AlertTriangle size={16} className="text-perigo" /> : <CheckCircle2 size={16} className="text-receita" />}
+          {semRede ? <CloudOff size={16} className="text-aviso" /> : servidor ? <RefreshCw size={16} className="text-aviso" /> : filaPendentes.length - comErro.length ? <Send size={16} className="text-aviso" /> : comErro.length ? <AlertTriangle size={16} className="text-perigo" /> : <CheckCircle2 size={16} className="text-receita" />}
           <span className="text-texto-1">
-            {!online ? 'Sem internet — as alterações ficam guardadas no aparelho.'
+            {semRede ? 'Sem internet — as alterações ficam guardadas no aparelho.'
+              : servidor ? `${MSG_SERVIDOR}. As alterações ficam guardadas no aparelho.`
               : filaPendentes.length - comErro.length ? `${filaPendentes.length - comErro.length} alteração(ões) aguardando envio.`
                 : comErro.length ? 'Nenhuma outra alteração aguardando envio.' : 'Tudo sincronizado.'}
           </span>
@@ -117,6 +129,8 @@ export default function PainelPendencias({ open, onClose }) {
           </div>
         )}
 
+        {erroEnviar && <Aviso perigo>Não foi possível enviar: {erroEnviar}</Aviso>}
+
         <div className="flex flex-wrap gap-2 justify-end">
           {filaPendentes.length > 0 && (
             <button type="button" onClick={baixar} className="btn-secondary flex items-center gap-1.5 text-sm">
@@ -124,7 +138,7 @@ export default function PainelPendencias({ open, onClose }) {
             </button>
           )}
           {filaPendentes.length > 0 && (
-            <button type="button" onClick={enviar} disabled={!online || enviando || syncing} className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-40" title={online ? '' : 'Sem internet'}>
+            <button type="button" onClick={enviar} disabled={enviando || syncing} className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-40">
               <Send size={14} /> {enviando || syncing ? 'Enviando…' : 'Enviar agora'}
             </button>
           )}

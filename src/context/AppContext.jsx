@@ -35,7 +35,7 @@ import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa'
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
 import { ocorrenciasVencidas, tocaCartao, buscarPossivelDuplicado, mapaPossiveisDuplicados } from '../lib/autoRegistro'
-import { tentarReconectar } from '../lib/syncSeguro'
+import { statusSemBanco, tentarSairDoModoSemBanco } from '../lib/conexao'
 import { podeRecarregar, criarJanela, textoNovidades } from '../lib/recargaRemota'
 import { publicarAgendaJa } from '../lib/agendaFeedApi'
 import { espelhoNoPerfil } from '../lib/espelhoReserva'
@@ -798,6 +798,13 @@ export function AppProvider({ children }) {
   const envioTimerRef = useRef(null)
   const estadoTimerRef = useRef(null)
   const dbStatusRef = useRef('connecting')
+  // Muda o status já atualizando a ref: quem envia logo depois (enviarAgora) lê a ref na hora.
+  const mudarDbStatus = (s) => { dbStatusRef.current = s; setDbStatus(s) }
+  // Último erro REAL de envio/conexão (mensagem da API ou da rede), mostrado na barra lateral e no
+  // painel quando o "Enviar agora" falha. Ref para quem precisa ler logo depois de enviar.
+  const [erroEnvio, setErroEnvioState] = useState(null)
+  const erroEnvioRef = useRef(null)
+  const setErroEnvio = (m) => { erroEnvioRef.current = m || null; setErroEnvioState(m || null) }
   const [filaPendentes, setFilaPendentes] = useState([])
   // Alterações recusadas pelo servidor (ver marcarErroFila): [{ chave, versao, motivo, em }].
   const [filaErros, setFilaErros] = useState([])
@@ -1041,6 +1048,7 @@ export function AppProvider({ children }) {
       enviadas = r.enviadas
       if (r.falhas.length) marcarErroFila(r.falhas)
       else setSyncError(prev => (prev ? null : prev))
+      setErroEnvio(r.falhas.length ? motivoDaRecusa(r.falhas[0].err) : null)
     } catch (err) {
       enviadas = err?.enviadas || []
       if (err?.falhas?.length) marcarErroFila(err.falhas)
@@ -1054,9 +1062,12 @@ export function AppProvider({ children }) {
         window.location.reload()
         return
       }
-      // Só falha de REDE chega aqui (a recusa do servidor é separada em enviarFilaIsolando).
+      // Só falha de REDE / sessão / servidor indisponível chega aqui (a recusa do servidor e o erro do
+      // próprio app são separados em enviarFilaIsolando). "Sem internet" só se o aparelho estiver
+      // sem rede; com rede é o servidor que não respondeu — a reconexão tenta de novo sozinha.
       console.error('[sync] falha ao enviar pendências:', err?.message || err)
-      setDbStatus('local')
+      setErroEnvio(err?.message || String(err))
+      mudarDbStatus(statusSemBanco())
     } finally {
       const removidas = removerEnviadas(filaRef.current, enviadas)
       if (removidas.length) armazenamento.removerEntradas(removidas)
@@ -1147,7 +1158,8 @@ export function AppProvider({ children }) {
       carregouDoBancoRef.current = true
       assinaturaRef.current = result.assinatura ?? null
       setUltimaCarga(Date.now())
-      setDbStatus('connected')
+      setErroEnvio(null)
+      mudarDbStatus('connected')
       setData(() => {
         prevDataRef.current = doBanco
         return dados
@@ -1160,7 +1172,8 @@ export function AppProvider({ children }) {
       carregouDoBancoRef.current = true
       assinaturaRef.current = result.assinatura ?? null
       setUltimaCarga(Date.now())
-      setDbStatus('connected')
+      setErroEnvio(null)
+      mudarDbStatus('connected')
       if (noAmbientePrincipal()) {
         try { await seedDefaults(defaultData) } catch {}
         enfileirar(mudancasEntre(EMPTY_PREV, dataRef.current))
@@ -1204,10 +1217,12 @@ export function AppProvider({ children }) {
       const result = await loadFromDb(defaultData)
       if (cancelado) return
       if (await aplicarCargaDoBanco(result)) return
-      // Banco indisponível (sem internet, schema ausente ou erro): modo Local. Nada é enviado; as
-      // alterações vão para a fila e, na reconexão, o app recarrega antes (efeito de retry).
-      console.warn('[finup] Sem conexão com o banco — modo Local:', result.status, result.error || '')
-      setDbStatus('local')
+      // Banco indisponível: nada é enviado; as alterações vão para a fila e, na reconexão, o app
+      // recarrega antes (efeito de retry). Sem rede no aparelho → 'local' ("Sem internet"); com rede
+      // (erro da API, tempo esgotado) → 'servidor' ("Não foi possível falar com o servidor").
+      console.warn('[finup] Banco não respondeu ao abrir:', result.status, result.error || '')
+      setErroEnvio(result.error || null)
+      mudarDbStatus(statusSemBanco())
     })()
 
     // Armazenamento persistente: sem ele o navegador pode apagar o IndexedDB se faltar espaço.
@@ -1252,40 +1267,78 @@ export function AppProvider({ children }) {
     definirSemConexao(dbStatus === 'local')
   }, [dbStatus])
 
-  // ── Reconexão: a cada 30 s em modo Local, ao voltar a internet e ao voltar a ficar visível ──
-  // Quem já carregou do banco nesta sessão volta a 'connected' e envia a fila. Quem nunca carregou
-  // RECARREGA antes de enviar qualquer coisa (aplicarCargaDoBanco reaplica a fila sobre o banco).
-  useEffect(() => {
-    if (dbStatus !== 'local') {
-      if (retryTimerRef.current) { clearInterval(retryTimerRef.current); retryTimerRef.current = null }
-      return
-    }
-    let tentando = false
-    const tentar = async () => {
-      if (tentando) return
-      tentando = true
+  // ── Reconexão: sem banco ('local' = sem rede, 'servidor' = API falhando) ──────────────────────
+  // Tenta a cada 30 s ('local') ou 15 s ('servidor'), ao voltar a rede (evento online), ao focar a
+  // janela e ao voltar a ficar visível. Quem já carregou do banco nesta sessão volta a 'connected' e
+  // envia a fila; quem nunca carregou RECARREGA antes (aplicarCargaDoBanco reaplica a fila).
+  const reconectandoRef = useRef(null)
+  const reconectar = () => {
+    if (reconectandoRef.current) return reconectandoRef.current
+    const p = (async () => {
       try {
-        const r = await tentarReconectar({
+        const r = await tentarSairDoModoSemBanco({
           carregouDoBanco: carregouDoBancoRef.current,
           ping: pingDb,
           carregar: () => loadFromDb(defaultData),
         })
-        if (r.acao === 'enviar-pendentes') setDbStatus('connected')
-        else if (r.acao === 'recarregado') await aplicarCargaDoBanco(r.result)
+        if (r.acao === 'enviar-pendentes') { setErroEnvio(null); mudarDbStatus('connected'); return true }
+        if (r.acao === 'recarregado') return await aplicarCargaDoBanco(r.result)
+        setErroEnvio(r.erro || null)
+        if (dbStatusRef.current !== 'connecting') mudarDbStatus(r.status)
+        return false
+      } catch (err) {
+        setErroEnvio(err?.message || String(err))
+        return false
       } finally {
-        tentando = false
+        reconectandoRef.current = null
       }
+    })()
+    reconectandoRef.current = p
+    return p
+  }
+  const reconectarRef = useRef(reconectar)
+  useEffect(() => { reconectarRef.current = reconectar })
+
+  useEffect(() => {
+    if (dbStatus !== 'local' && dbStatus !== 'servidor') {
+      if (retryTimerRef.current) { clearInterval(retryTimerRef.current); retryTimerRef.current = null }
+      return
     }
+    const tentar = () => { reconectarRef.current() }
     const aoVoltar = () => { if (document.visibilityState !== 'hidden') tentar() }
-    retryTimerRef.current = setInterval(tentar, 30000)
+    retryTimerRef.current = setInterval(tentar, dbStatus === 'servidor' ? 15000 : 30000)
     window.addEventListener('online', tentar)
+    window.addEventListener('focus', tentar)
     document.addEventListener('visibilitychange', aoVoltar)
     return () => {
       if (retryTimerRef.current) { clearInterval(retryTimerRef.current); retryTimerRef.current = null }
       window.removeEventListener('online', tentar)
+      window.removeEventListener('focus', tentar)
       document.removeEventListener('visibilitychange', aoVoltar)
     }
-  }, [dbStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dbStatus])
+
+  // A rede caiu com o app conectado: passa já a 'local' (as alterações vão para a fila sem tentar
+  // enviar); o evento `online` acima traz de volta.
+  useEffect(() => {
+    const aoCair = () => { if (dbStatusRef.current === 'connected' || dbStatusRef.current === 'servidor') mudarDbStatus('local') }
+    window.addEventListener('offline', aoCair)
+    return () => window.removeEventListener('offline', aoCair)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Enviar agora" (barra lateral / painel): reconecta se preciso, envia a fila e devolve o erro
+  // REAL quando não deu: { ok: true } | { ok: false, erro }.
+  const enviarAgora = async () => {
+    if (dbStatusRef.current !== 'connected') {
+      const ok = await reconectarRef.current()
+      if (!ok) return { ok: false, erro: erroEnvioRef.current || 'O servidor não respondeu' }
+    }
+    const fim = Date.now() + 15000
+    while (enviandoRef.current && Date.now() < fim) await new Promise(ok => setTimeout(ok, 100))
+    await enviarPendentes()
+    if (!pendentesParaEnviar().length) return { ok: true }
+    return { ok: false, erro: erroEnvioRef.current || 'Ainda há alterações aguardando envio' }
+  }
 
   // ── Recarga do banco sem sair do app ────────────────────────────────────────
   // Mesmo caminho da abertura: primeiro envia a fila, depois loadFromDb + aplicarCargaDoBanco (que
@@ -1389,8 +1442,8 @@ export function AppProvider({ children }) {
 
   // Conectado: ao voltar a ficar visível/focado, envia o pendente (no iPhone não há envio em segundo
   // plano) e confere se o banco mudou — recarregarDoBanco faz as duas coisas, nessa ordem. focus e
-  // visibilitychange chegam juntos: um disparo a cada 2 s. Entra em modo Local assim que o navegador
-  // avisa que a internet caiu.
+  // visibilitychange chegam juntos: um disparo a cada 2 s. (A queda da rede — evento offline — é
+  // tratada no efeito da reconexão.)
   useEffect(() => {
     if (dbStatus !== 'connected') return
     const janela = criarJanela(2000)
@@ -1398,14 +1451,11 @@ export function AppProvider({ children }) {
       if (document.visibilityState === 'hidden' || !janela()) return
       recarregarRef.current()
     }
-    const caiu = () => setDbStatus('local')
     document.addEventListener('visibilitychange', aoVoltar)
     window.addEventListener('focus', aoVoltar)
-    window.addEventListener('offline', caiu)
     return () => {
       document.removeEventListener('visibilitychange', aoVoltar)
       window.removeEventListener('focus', aoVoltar)
-      window.removeEventListener('offline', caiu)
     }
   }, [dbStatus])
 
@@ -6198,7 +6248,7 @@ export function AppProvider({ children }) {
       // Modo sem internet: fila de pendências, envio manual e dados do aparelho.
       filaPendentes,
       filaErros, tentarDeNovoErroFila, descartarErroFila,
-      enviarPendentes,
+      enviarPendentes, enviarAgora, erroEnvio,
       apagarDadosDoAparelho,
       sincronizarAntesDeSair,
       erroArmazenamento,

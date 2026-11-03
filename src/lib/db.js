@@ -14,8 +14,22 @@ function onUnauthorized() {
 // à última gravação. O efeito é exatamente o bug "salvei, o servidor confirmou, e no F5 voltou
 // ao original": o POST nunca é cacheado (a escrita acontece mesmo), mas o GET do reload traz a
 // foto velha — e o app ainda regrava essa foto velha por cima do localStorage.
-async function apiGet(path) {
-  const res = await fetch(path, { cache: 'no-store', headers: { ...authHeaders() } })
+// fetch que marca a falha SEM resposta (rede, servidor fora, tempo esgotado) com `semResposta`:
+// é o que separa "sem internet / servidor não respondeu" de erro do próprio app (filaOffline.js).
+async function buscar(path, init) {
+  try {
+    return await fetch(path, init)
+  } catch (err) {
+    const e = err instanceof Error ? err : new Error(String(err))
+    try { e.semResposta = true } catch { /* objeto congelado */ }
+    throw e
+  }
+}
+const comPrazo = (ms) => (ms && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+  ? { signal: AbortSignal.timeout(ms) } : {})
+
+async function apiGet(path, { timeoutMs } = {}) {
+  const res = await buscar(path, { cache: 'no-store', headers: { ...authHeaders() }, ...comPrazo(timeoutMs) })
   if (res.status === 401) { onUnauthorized() }
   if (!res.ok) {
     const err = new Error(`GET ${path} → ${res.status}`)
@@ -33,7 +47,7 @@ const SEM_PERMISSAO = Object.freeze({ ok: true, skipped: true, semPermissao: tru
 async function apiPost(path, body) {
   if (!gravacaoPermitida(path, 'POST', body)) return SEM_PERMISSAO
   exigirConexao(path, 'POST')
-  const res = await fetch(path, {
+  const res = await buscar(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
@@ -99,7 +113,7 @@ export async function bulkUpdateTransactionsApi(ids, { date = null, categoryId, 
 async function apiPut(path, body) {
   if (!gravacaoPermitida(path, 'PUT', body)) return SEM_PERMISSAO
   exigirConexao(path, 'PUT')
-  const res = await fetch(path, {
+  const res = await buscar(path, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
@@ -116,7 +130,7 @@ async function apiPut(path, body) {
 async function apiDelete(path) {
   if (!gravacaoPermitida(path, 'DELETE')) return SEM_PERMISSAO
   exigirConexao(path, 'DELETE')
-  const res = await fetch(path, { method: 'DELETE', headers: { ...authHeaders() } })
+  const res = await buscar(path, { method: 'DELETE', headers: { ...authHeaders() } })
   if (res.status === 401) { onUnauthorized() }
   if (!res.ok) {
     const err = new Error(`DELETE ${path} → ${res.status}`)
@@ -1238,9 +1252,10 @@ export async function fetchUltimaAlteracao() {
   }
 }
 
+// Prazo do ping: servidor que não responde em 10 s conta como fora (o app tenta de novo depois).
 export async function pingDb() {
   try {
-    const result = await apiGet('/api/ping')
+    const result = await apiGet('/api/ping', { timeoutMs: 10000 })
     return result.ok === true
   } catch {
     return false

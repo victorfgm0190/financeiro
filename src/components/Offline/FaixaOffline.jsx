@@ -1,22 +1,29 @@
 import { useState } from 'react'
-import { CloudOff, Smartphone, AlertTriangle, X } from 'lucide-react'
+import { CloudOff, Smartphone, AlertTriangle, RefreshCw, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { ehIphoneSemInstalar } from '../../lib/offlineUi'
+import { MSG_SERVIDOR } from '../../lib/conexao'
 
-// Faixas do topo: sem internet, falha ao guardar no aparelho e iPhone no Safari sem o app instalado.
+// Faixas do topo: sem internet (aparelho sem rede), servidor sem resposta (há rede, a API falhou),
+// falha ao guardar no aparelho e iPhone no Safari sem o app instalado.
 export default function FaixaOffline() {
   const { dbStatus, erroArmazenamento } = useApp()
   const [safariFechado, setSafariFechado] = useState(() => {
     try { return sessionStorage.getItem('finup_aviso_safari') === '1' } catch { return false }
   })
   const safari = ehIphoneSemInstalar() && !safariFechado
-  if (dbStatus !== 'local' && !erroArmazenamento && !safari) return null
+  if (dbStatus !== 'local' && dbStatus !== 'servidor' && !erroArmazenamento && !safari) return null
 
   return (
     <div className="space-y-2 mb-3">
       {dbStatus === 'local' && (
         <Faixa icone={CloudOff}>
           Sem internet — suas alterações ficam no aparelho e serão enviadas quando a conexão voltar.
+        </Faixa>
+      )}
+      {dbStatus === 'servidor' && (
+        <Faixa icone={RefreshCw}>
+          {MSG_SERVIDOR}. Suas alterações ficam no aparelho e serão enviadas assim que ele responder.
         </Faixa>
       )}
       {erroArmazenamento && (

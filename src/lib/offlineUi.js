@@ -15,9 +15,13 @@ export function ehIphoneSemInstalar(nav = globalThis.navigator, win = globalThis
 }
 
 // Texto curto do indicador. Alteração recusada pelo servidor tem prioridade: precisa do usuário.
-export function textoIndicador({ online, pendentes, erros = 0 }) {
+// `online` false = aparelho SEM REDE (dbStatus 'local'); `servidor` = há rede, mas a API não respondeu
+// (dbStatus 'servidor') — nunca "Sem internet" nesse caso.
+export const textoAguardando = (n) => `${n} ${n === 1 ? 'alteração aguardando' : 'alterações aguardando'} envio`
+export function textoIndicador({ online, pendentes, erros = 0, servidor = false }) {
   if (erros) return `${erros} ${erros === 1 ? 'alteração com erro' : 'alterações com erro'} — ver detalhes`
-  if (!online) return pendentes ? `Sem internet · ${pendentes} aguardando envio` : 'Sem internet · gravando no aparelho'
-  if (pendentes) return `${pendentes} ${pendentes === 1 ? 'alteração aguardando' : 'alterações aguardando'} envio`
+  if (!online) return pendentes ? `Sem internet · ${textoAguardando(pendentes)}` : 'Sem internet · gravando no aparelho'
+  if (servidor) return pendentes ? `Servidor sem resposta · ${textoAguardando(pendentes)}` : 'Servidor sem resposta · tentando de novo'
+  if (pendentes) return textoAguardando(pendentes)
   return 'Tudo sincronizado'
 }
