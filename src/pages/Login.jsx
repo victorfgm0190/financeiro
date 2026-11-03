@@ -3,6 +3,7 @@ import { Lock, User, LogIn, UserPlus, Building2, Mail, ArrowLeft } from 'lucide-
 import { AUTH_TOKEN_KEY, getSessao } from '../lib/api'
 import { garantirCacheDoUsuario } from '../lib/armazenamentoLocal'
 import { ambienteDoHost } from '../lib/ambienteHost'
+import MarcaDagua from '../components/MarcaDagua'
 
 // Último ambiente digitado no www (só conveniência deste navegador).
 const ULTIMO_AMBIENTE_KEY = 'finup_ultimo_ambiente'
@@ -136,7 +137,8 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-page px-4">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
+        <div className="text-center mb-5 md:mb-8">
+          <MarcaDagua variant="login" className="mx-auto mb-1 md:mb-3" />
           <h1 className="text-2xl font-bold text-texto-1">Finup</h1>
           <p className="text-sm text-texto-3 mt-1">Acesso restrito</p>
         </div>

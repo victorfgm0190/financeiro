@@ -2,6 +2,7 @@ import { BannerPerfisSemContaCentral } from '../components/shared/ContaCentralAv
 import { ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../lib/rotuloMovimento'
 import PrimeirosPassos from '../components/BoasVindas/PrimeirosPassos'
 import AjudaTela from '../components/BoasVindas/AjudaTela'
+import MarcaDagua from '../components/MarcaDagua'
 import AvisoPreLancamentos from '../components/Assistente/AvisoPreLancamentos'
 import { useMemo, useState } from 'react'
 import { format, addDays, parseISO } from 'date-fns'
@@ -67,12 +68,20 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpen
       <BannerPerfisSemContaCentral />
       <PrimeirosPassos />
       <AvisoPreLancamentos onToast={onToast} />
-      <header className="flex items-start justify-between gap-3 pt-1">
+      <header className="flex items-start justify-between pt-1">
         <div>
           <p className="text-xs text-texto-3">{mes}</p>
           <div className="flex items-center gap-1">
             <h1 className="text-xl font-bold text-texto-1">{nome ? `Olá, ${nome}` : 'Olá'}</h1>
             <AjudaTela pagina="inicio" />
+          </div>
+        </div>
+        {/* Marca-d'água (MarcaDagua) no espaço livre entre a saudação e o olho: absoluta e centrada na
+            altura do bloco; só aparece se a sobra tiver ≥84px (container query) — nunca aperta nada. O ml-3
+            faz o papel do antigo gap-3: com a marca escondida, o espaço é igual ao de antes. */}
+        <div className="flex-1 min-w-0 ml-3 self-stretch relative @container pointer-events-none print:hidden">
+          <div className="absolute inset-y-0 inset-x-0 flex items-center justify-center">
+            <MarcaDagua variant="mobile" className="hidden @min-[84px]:block shrink-0" />
           </div>
         </div>
         <button
@@ -81,7 +90,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpen
           data-guia="inicio.ocultar"
           aria-label={ocultar ? 'Mostrar valores' : 'Ocultar valores'}
           aria-pressed={ocultar}
-          className="w-11 h-11 rounded-full flex items-center justify-center text-texto-2 bg-surface border border-borda"
+          className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center text-texto-2 bg-surface border border-borda"
         >
           {ocultar ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>

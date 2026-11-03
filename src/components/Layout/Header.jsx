@@ -41,7 +41,7 @@ function EspacoMarca({ className = '', classeMarca = '', comMarca = true }) {
     <div className={`flex-1 min-w-0 self-stretch relative @container ${className}`}>
       {comMarca && (
         <div className={`hidden lg:flex absolute inset-y-0 left-0 items-center justify-center pointer-events-none print:hidden ${classeMarca}`}>
-          <MarcaDagua className="hidden @min-[72px]:block h-[52px] w-auto shrink-0" />
+          <MarcaDagua variant="header" className="hidden @min-[72px]:block shrink-0" />
         </div>
       )}
     </div>

@@ -14,7 +14,7 @@ vi.mock('./Offline/AvisoSairModal', () => ({ default: () => null }))
 vi.mock('./Offline/useSair', () => ({ useSair: () => ({ sair: () => {}, saindo: false, aviso: {} }) }))
 
 afterEach(() => { cleanup(); vi.clearAllMocks() })
-const marcas = (c) => c.querySelectorAll('svg[viewBox="-10 0 120 118"]')
+const marcas = (c) => c.querySelectorAll('svg[data-marca-dagua]')
 
 describe("marca-d'água", () => {
   it('frase exata e só decoração', () => {
@@ -24,7 +24,26 @@ describe("marca-d'água", () => {
     expect(svg.getAttribute('aria-hidden')).toBe('true')
     expect(svg.getAttribute('class')).toContain('pointer-events-none')
     expect(svg.getAttribute('class')).toContain('print:hidden')
+    expect(svg.getAttribute('class')).toContain('select-none')
     expect(svg.closest('[data-guia]')).toBeNull()
+  })
+  it('opacidades separadas: símbolo 8%/10%, frase 22%/28%, nada no <svg>', () => {
+    const { container } = render(<MarcaDagua />)
+    const svg = marcas(container)[0]
+    expect(svg.getAttribute('class')).not.toMatch(/opacity/)
+    const g = svg.querySelector('g').getAttribute('class')
+    expect(g).toContain('opacity-[0.08]')
+    expect(g).toContain('[[data-theme=dark]_&]:opacity-[0.10]')
+    const t = svg.querySelector('text').getAttribute('class')
+    expect(t).toContain('opacity-[0.22]')
+    expect(t).toContain('[[data-theme=dark]_&]:opacity-[0.28]')
+  })
+  it.each([['header', 'h-[52px]'], ['mobile', 'h-[64px]'], ['login', 'h-[90px]']])('variante %s', (variant, altura) => {
+    const { container } = render(<MarcaDagua variant={variant} />)
+    const svg = marcas(container)[0]
+    expect(svg.getAttribute('data-marca-dagua')).toBe(variant)
+    expect(svg.getAttribute('class')).toContain(altura)
+    expect(svg.textContent).toBe('TOTUS TUUS, MARIA')
   })
   it.each([
     ['com chips de perfil', [{ id: 'p1', name: 'Perfil Exemplo', type: 'pf', color: '#10b981' }]],
