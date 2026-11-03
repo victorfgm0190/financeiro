@@ -7,14 +7,16 @@ import {
 } from '../lib/contratosApi'
 import {
   gerarPlanoParcelas, planejarSincronizacao, confirmadosDe, cobertasDoContrato, inicioDasParcelas,
-  ehParcelaGerada, parcelaPaga, planoConfirmacaoReajuste, proximoReajuste, parcelasDoPapel, r2, rotuloContrato,
-  planoManutencao,
+  ehParcelaGerada, parcelaPaga, planoConfirmacaoReajuste, proximoReajuste, r2, rotuloContrato,
+  planoManutencao, idParcela, parcelaDeVinculo, ehParcelaDeVinculo,
 } from '../lib/contratos/parcelas'
 import { planoVinculo, planoDesvinculo } from '../lib/contratos/vinculo'
+import { mapaVinculos } from '../lib/vinculo'
 import { analisarEstorno, cancelarOcorrencia } from '../lib/contratos/estorno'
 import { composicaoCondominio, composicaoEstimada, creditoDaComposicao } from '../lib/contratos/composicao'
-import { planoCreditosAluguel, adiarCredito } from '../lib/contratos/creditos'
-import { planejarPosEfetivacao, planejarReversao } from '../lib/contratos/efetivacao'
+import { planoCreditosAluguel, adiarCredito, liberarAdiamento, marcarValorManual } from '../lib/contratos/creditos'
+import { planejarPosEfetivacao, planejarReversao, planejarJustificativa } from '../lib/contratos/efetivacao'
+import { ultimoCondominioPago, planoPrevisaoCondominio } from '../lib/contratos/condominio'
 import { hojeStr, ymDe } from '../lib/contratos/datas'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { ESCOPO } from '../lib/camposSerie'
@@ -42,15 +44,9 @@ const aplicarMudancas = (schedules, { criar = [], atualizar = [], remover = [] }
   ]
 }
 
-// Último valor pago de condomínio (lançamento da parcela; sem ele, o valor da parcela).
-function valorCondominioPago(contrato, schedules, transactions) {
-  const pagas = parcelasDoPapel(contrato, schedules, 'condominio').filter(parcelaPaga)
-  const ultima = pagas.at(-1)
-  if (!ultima) return null
-  const meta = Object.values(ultima.registeredMeta || {})[0]
-  const tx = meta?.lancamento_id ? transactions.find(t => t.id === meta.lancamento_id) : transactions.find(t => t.scheduleId === ultima.id)
-  return r2(tx ? tx.amount : ultima.amount)
-}
+// Último valor pago de condomínio (parcela gerada ou série vinculada, pela data do pagamento), ou null.
+const valorCondominioPago = (contrato, schedules, transactions) =>
+  ultimoCondominioPago(contrato, schedules, transactions)?.valor ?? null
 
 // Tabela da Entrega 2 ainda não criada no banco do ambiente (rota responde erro): segue sem créditos.
 const semTabela = (err) => /contrato_(creditos|regras_itens)|does not exist|não existe/i.test(String(err?.message || ''))
@@ -65,6 +61,9 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   const [creditos, setCreditosState] = useState([])
   const [pendencias, setPendencias] = useState([])
   const contratosRef = useRef([])
+  // Definidos mais abaixo e usados por ações declaradas antes deles.
+  const notificarEfetivacaoRef = useRef(null)
+  const reverterEfetivacaoRef = useRef(null)
   const creditosRef = useRef([])
   useEffect(() => { contratosRef.current = contratos }, [contratos])
   // A ref muda NA HORA (não no render): o recálculo dos aluguéis que vem logo depois (dentro de um
@@ -190,6 +189,17 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     }
   }, [update, registrarEdicao, comCreditos])
 
+  // D5: condomínios pendentes (não manuais) seguem o último pago — por pagamento, composição ou
+  // estorno (excluirTx). Mudança de valor vai para o histórico de alterações.
+  const atualizarPrevisaoCondominio = useCallback(async (contrato, estado, { excluirTx = null } = {}) => {
+    if (!contrato?.tem_condominio) return
+    const { valor, atualizar } = planoPrevisaoCondominio(contrato, estado.schedules, estado.transactions, { excluirTx })
+    if (!atualizar.length) return
+    await aplicarParcelas({ atualizar }, {
+      motivo: `Contrato ${rotuloContrato(contrato)}: condomínio previsto = último pago (${String(valor).replace('.', ',')})`,
+    })
+  }, [aplicarParcelas])
+
   const criarContrato = useCallback(async (dadosContrato, itens = []) => {
     const r = await criarContratoApi({ ...dadosContrato, proximo_reajuste: proximoReajuste(dadosContrato, hojeStr()) }, itens)
     trocarNaLista(r.contrato)
@@ -202,6 +212,9 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     const junto = { ...atual, ...campos }
     const r = await atualizarContratoApi(id, { ...campos, proximo_reajuste: proximoReajuste(junto, hojeStr()) }, evento)
     trocarNaLista(r.contrato)
+    // A ref muda na hora: a redistribuição dos créditos logo depois (aditivo da regra de
+    // abatimento) já usa o contrato novo.
+    contratosRef.current = contratosRef.current.map(c => (c.id === id ? { ...c, ...r.contrato } : c))
     return { ...atual, ...r.contrato }
   }, [contratos])
 
@@ -322,6 +335,8 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
 
   // Composição do boleto do condomínio confirmada (tela) ou estimada (sem tela): lançamento único
   // com a composição (P2) e crédito 'aberto' com os itens do proprietário.
+  // O VALOR do lançamento não muda aqui (só contratoId e composição): "Informar composição" de um
+  // pagamento já feito nunca mexe no saldo.
   const gravarComposicaoCondominio = useCallback(async ({ contrato, parcela, tx, composicao }) => {
     updateTransaction(tx.id, { contratoId: contrato.id, composicao })
     const ok = await substituirCreditoGerado(contrato, tx, parcela, composicao)
@@ -358,13 +373,172 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // "Não abater neste mês": o crédito vai para o próximo aluguel pendente.
-  const adiarCreditoNaParcela = useCallback((parcelaId, creditoId) => {
+  // "Não abater neste mês": o crédito vai para a próxima parcela pendente. Destino escolhido à mão
+  // nesta parcela deixa de valer (senão ele voltaria para ela).
+  const adiarCreditoNaParcela = useCallback(async (parcelaId, creditoId) => {
+    const cr = creditosRef.current.find(c => c.id === creditoId)
+    if (cr?.destino_agendamento_id === parcelaId) {
+      trocarCredito(await atualizarCreditoApi({ id: creditoId, destino_agendamento_id: null }))
+    }
     update(d => {
       const s = d.schedules.map(x => (x.id === parcelaId ? { ...x, ...adiarCredito(x, creditoId) } : x))
       return { ...d, schedules: comCreditos(s) }
     })
+  }, [update, comCreditos]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Trocar parcela de destino" (D3): o destino escolhido vence a regra; o adiamento deste crédito
+  // na parcela nova sai. parcelaId null = volta para a regra do contrato.
+  const trocarDestinoCredito = useCallback(async (contrato, creditoId, parcelaId) => {
+    const row = await atualizarCreditoApi({ id: creditoId, destino_agendamento_id: parcelaId || null })
+    trocarCredito(row)
+    update(d => {
+      const s = parcelaId ? d.schedules.map(x => (x.id === parcelaId ? { ...x, ...liberarAdiamento(x, creditoId) } : x)) : d.schedules
+      return { ...d, schedules: comCreditos(s) }
+    })
+    await registrarEvento(contrato.id, {
+      tipo: 'edicao_parcela', valor_novo: r2(row.valor),
+      detalhes: { acao: 'credito_destino', credito_id: creditoId, descricao: row.descricao, parcela_id: parcelaId || null },
+    }).catch(err => console.warn('[contratos] evento do destino não gravado:', err.message))
+    return row
+  }, [update, comCreditos, registrarEvento]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Novo crédito manual" (qualquer modalidade): aberto, abatido pela regra ou no destino escolhido.
+  const criarCreditoManual = useCallback(async (contrato, { descricao, valor, data, destinoId = null }) => {
+    const v = r2(valor)
+    if (!(v > 0)) throw new Error('Informe um valor maior que zero.')
+    const row = await criarCreditoApi({
+      contrato_id: contrato.id, descricao: descricao || 'Crédito manual', valor: v, data_origem: data || hojeStr(),
+      itens: [{ desc: descricao || 'Crédito manual', valor: v }], status: 'aberto', destino_agendamento_id: destinoId || null,
+    })
+    trocarCredito(row)
+    update(d => {
+      const s = destinoId ? d.schedules.map(x => (x.id === destinoId ? { ...x, ...liberarAdiamento(x, row.id) } : x)) : d.schedules
+      return { ...d, schedules: comCreditos(s) }
+    })
+    await registrarEvento(contrato.id, {
+      tipo: 'edicao_parcela', valor_novo: v,
+      detalhes: { acao: 'credito_manual', credito_id: row.id, descricao: row.descricao, parcela_id: destinoId || null },
+    }).catch(err => console.warn('[contratos] evento do crédito não gravado:', err.message))
+    return row
+  }, [update, comCreditos, registrarEvento]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Destino com valor digitado à mão: passa a ser manual (o valor digitado vira a base) e o crédito entra.
+  const aplicarCreditosEmValorManual = useCallback((parcelaId) => {
+    update(d => ({ ...d, schedules: comCreditos(d.schedules.map(x => (x.id === parcelaId ? { ...x, ...marcarValorManual(x) } : x))) }))
   }, [update, comCreditos])
+
+  // "Justificar diferença" (D4) de parcela paga a menor: créditos abertos ligados + crédito manual
+  // criado já compensado. Só a composição do lançamento muda — o valor pago nunca.
+  const justificarDiferenca = useCallback(async (contrato, tx, { ligar = [], manual = null, esperado = null, parcelaId = null }) => {
+    const abertos = creditosRef.current.filter(c => c.contrato_id === contrato.id && c.status === 'aberto' && ligar.includes(c.id))
+    const vManual = r2(manual?.valor)
+    const provisorio = vManual > 0 ? [{ id: 'novo', valor: vManual, descricao: manual.descricao }] : []
+    const teste = planejarJustificativa({ tx, esperado, ligados: [...abertos, ...provisorio] })
+    if (!teste.ok) throw new Error(teste.erro)
+    const ligados = [...abertos]
+    if (vManual > 0) {
+      const novo = await criarCreditoApi({
+        contrato_id: contrato.id, descricao: manual.descricao || 'Desconto praticado', valor: vManual, data_origem: tx.date,
+        itens: [{ desc: manual.descricao || 'Desconto praticado', valor: vManual }], status: 'compensado',
+        compensado_em_lancamento_id: tx.id, compensado_em_agendamento_id: parcelaId, data_compensacao: tx.date,
+      })
+      trocarCredito(novo)
+      ligados.push(novo)
+    }
+    const r = planejarJustificativa({ tx, esperado, ligados })
+    if (!r.ok) throw new Error(r.erro)
+    updateTransaction(tx.id, { contratoId: contrato.id, composicao: r.composicao })
+    await compensarCreditos(abertos.map(c => c.id), tx, parcelaId ? { id: parcelaId } : null)
+    redistribuirCreditos()
+    await registrarEvento(contrato.id, {
+      tipo: 'edicao_parcela', valor_anterior: r.diferenca, valor_novo: r.justificado,
+      detalhes: { acao: 'justificativa', lancamento_id: tx.id, parcela_id: parcelaId, creditos: ligados.map(c => c.id), restante: r.restante },
+    }).catch(err => console.warn('[contratos] evento da justificativa não gravado:', err.message))
+    return r
+  }, [updateTransaction, compensarCreditos, redistribuirCreditos, registrarEvento]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Informar composição" (D1) de condomínio já pago: grava contratoId + composição (valor do
+  // lançamento intocado). Série vinculada = parcela de origem do crédito ("serie@data").
+  const informarComposicao = useCallback(async (contrato, linha, { itens, lembrar = [] }) => {
+    const tx = linha.tx
+    if (!tx) throw new Error('Pagamento não encontrado.')
+    const parcela = linha.vinculada ? { id: `${linha.schedule.id}@${linha.ocorrencia}` } : linha.schedule
+    for (const l of lembrar) {
+      await criarRegra({ contrato_id: contrato.id, padrao: l.padrao, tipo_match: 'comeca_com', responsavel: l.responsavel })
+        .catch(err => console.warn('[contratos] regra não gravada:', err.message))
+    }
+    const ok = await gravarComposicaoCondominio({ contrato, parcela, tx, composicao: composicaoCondominio(itens) })
+    await atualizarPrevisaoCondominio(contrato, dataRef.current).catch(err => console.warn('[contratos] previsão do condomínio:', err.message))
+    return ok
+  }, [criarRegra, gravarComposicaoCondominio, atualizarPrevisaoCondominio, dataRef])
+
+  // ── Vínculo de lançamento a uma linha do contrato (C2) ────────────────────────────────────────
+  // Linha pendente: `vincular` = vincularLancamento do AppContext (mesma baixa da tela de
+  // Agendamentos; a pós-efetivação grava contratoId e a "Diferença no pagamento"). Linha sem
+  // parcela: cria a parcela da competência (id determinístico) já paga com o lançamento.
+  const vincularLancamentoNaLinha = useCallback(async (contrato, linha, tx, { vincular }) => {
+    const d0 = dataRef.current
+    // Lançamento já deste contrato mas sem parcela ("Associar a uma parcela") pode; de outro, não.
+    if (tx.contratoId && tx.contratoId !== contrato.id) throw new Error('Este lançamento já está ligado a outro contrato.')
+    if (mapaVinculos(d0.schedules).has(tx.id)) throw new Error('Este lançamento já baixou outra parcela ou agendamento.')
+    let parcelaId
+    if (linha.semParcela) {
+      parcelaId = idParcela(contrato.id, linha.papel, linha.competencia)
+      if (d0.schedules.some(s => s.id === parcelaId)) throw new Error('Esta competência já tem parcela: atualize a ficha.')
+      const item = {
+        id: parcelaId, papel: linha.papel, numero: linha.numero, total: linha.total, competencia: linha.competencia,
+        vencimento: linha.vencimento, valor: r2(linha.valor), valorStatus: 'confirmado',
+        composicao: linha.composicao || { itens: [{ tipo: 'previsto', desc: 'Valor previsto', valor: r2(linha.valor) }], total: r2(linha.valor), numero: linha.numero, total_parcelas: linha.total },
+      }
+      const nova = parcelaDeVinculo(contrato, item, tx)
+      update(d => ({
+        ...d,
+        schedules: d.schedules.some(s => s.id === nova.id) ? d.schedules : [...d.schedules, nova],
+        transactions: d.transactions.map(t => (t.id === tx.id ? { ...t, dataOcorrencia: linha.vencimento } : t)),
+      }))
+      notificarEfetivacaoRef.current?.([{ scheduleId: nova.id, occurrenceDate: linha.vencimento, lancamentoId: tx.id }])
+    } else {
+      if (!linha.schedule || linha.paga) throw new Error('Esta parcela já tem pagamento.')
+      const r = vincular({ txId: tx.id, scheduleId: linha.schedule.id, data: linha.ocorrencia, manter: 'agendamento' })
+      if (!r?.ok) throw new Error(r?.motivo || 'Não foi possível vincular.')
+      parcelaId = linha.schedule.id
+    }
+    await registrarEvento(contrato.id, {
+      tipo: 'vinculo', valor_novo: r2(tx.amount),
+      detalhes: {
+        acao: 'lancamento', lancamento_id: tx.id, parcela_id: parcelaId, papel: linha.papel, competencia: linha.competencia,
+        numero: linha.numero, total: linha.total, data_pagamento: tx.date, criada: !!linha.semParcela, descricao: tx.description,
+      },
+    }).catch(err => console.warn('[contratos] evento de vínculo não gravado:', err.message))
+  }, [dataRef, update, registrarEvento])
+
+  // "Desfazer vínculo": a parcela volta a como estava (pendente, ou some se foi criada só para o
+  // vínculo), o lançamento fica — sem contrato e sem composição; créditos compensados nele reabrem.
+  //   desvincular = desvincularLancamento do AppContext (linha pendente vinculada à mão).
+  const desfazerVinculoLancamento = useCallback(async (contrato, linha, { desvincular }) => {
+    const tx = linha.tx
+    const s = linha.schedule
+    if (!tx || !s) throw new Error('Vínculo não encontrado.')
+    if (ehParcelaDeVinculo(s)) {
+      update(d => ({
+        ...d,
+        schedules: comCreditos(d.schedules.filter(x => x.id !== s.id)),
+        transactions: d.transactions.map(t => (t.id === tx.id ? { ...t, dataOcorrencia: null } : t)),
+      }))
+      await reverterEfetivacaoRef.current?.(tx)
+    } else {
+      const r = desvincular({ scheduleId: s.id, data: linha.ocorrencia })
+      if (!r?.ok) throw new Error(r?.motivo || 'Não foi possível desfazer.')
+    }
+    updateTransaction(tx.id, { contratoId: null, composicao: null })
+    await registrarEvento(contrato.id, {
+      tipo: 'desvinculo', valor_anterior: r2(tx.amount),
+      detalhes: {
+        acao: 'lancamento', lancamento_id: tx.id, parcela_id: s.id, papel: linha.papel, competencia: linha.competencia,
+        numero: linha.numero, total: linha.total, data_pagamento: tx.date, removida: ehParcelaDeVinculo(s), descricao: tx.description,
+      },
+    }).catch(err => console.warn('[contratos] evento de desvínculo não gravado:', err.message))
+  }, [update, comCreditos, updateTransaction, registrarEvento])
 
   // Composição de um lançamento PAGO editada na tela: novo total (o saldo acompanha) e créditos
   // recalculados. Aluguel: crédito tirado da composição volta a aberto. → { ok, aviso }
@@ -379,6 +553,10 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
       }
       updateTransaction(tx.id, { amount: r2(composicao.total), composicao })
       await substituirCreditoGerado(contrato, { ...tx, amount: composicao.total }, parcela, composicao)
+      const est = dataRef.current
+      await atualizarPrevisaoCondominio(contrato, {
+        schedules: est.schedules, transactions: est.transactions.map(t => (t.id === tx.id ? { ...t, amount: r2(composicao.total) } : t)),
+      }).catch(err => console.warn('[contratos] previsão do condomínio:', err.message))
     } else {
       const antes = new Set((tx.composicao?.itens || []).filter(i => i.credito_id).map(i => i.credito_id))
       const depois = new Set((composicao.itens || []).filter(i => i.credito_id).map(i => i.credito_id))
@@ -392,7 +570,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     }
     redistribuirCreditos()
     return { ok: true }
-  }, [dataRef, updateTransaction, substituirCreditoGerado, redistribuirCreditos]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dataRef, updateTransaction, substituirCreditoGerado, redistribuirCreditos, atualizarPrevisaoCondominio]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Pendências para a tela (ContratoEfetivacaoHost) ───────────────────────────────────────────
   const adicionarPendencia = useCallback((p) => {
@@ -401,8 +579,13 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   const resolverPendencia = useCallback((chave) => setPendencias(prev => prev.filter(p => p.chave !== chave)), [])
 
   // posEfetivacaoContrato(agendamento, lançamento): o que acontece depois que uma parcela é paga.
-  const posEfetivacao = useCallback(async ({ contrato, parcela, tx, auto }) => {
+  const posEfetivacao = useCallback(async ({ contrato, parcela, tx, auto, estado = null }) => {
     const plano = planejarPosEfetivacao({ contrato, parcela, tx, auto })
+    // Condomínio pago (pelo agendamento ou pelo contrato): as pendentes passam ao valor pago.
+    if ((parcela.contratoPapel || 'aluguel') === 'condominio') {
+      await atualizarPrevisaoCondominio(contrato, estado || dataRef.current)
+        .catch(err => console.warn('[contratos] previsão do condomínio:', err.message))
+    }
     if (plano.lancamento) updateTransaction(tx.id, plano.lancamento)
     if (plano.compensar.length) {
       await compensarCreditos(plano.compensar, tx, parcela)
@@ -413,7 +596,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     }
     if (plano.pedirComposicao) adicionarPendencia({ chave: `composicao:${tx.id}`, tipo: 'composicao', contratoId: contrato.id, parcelaId: parcela.id, txId: tx.id })
     if (plano.estimar) await estimarComposicao({ contrato, parcela, tx })
-  }, [updateTransaction, compensarCreditos, redistribuirCreditos, adicionarPendencia, estimarComposicao])
+  }, [updateTransaction, compensarCreditos, redistribuirCreditos, adicionarPendencia, estimarComposicao, atualizarPrevisaoCondominio, dataRef])
 
   // Fila do gancho: { scheduleId, occurrenceDate, lancamentoId, auto }. Processada quando o estado
   // já tem o agendamento e o lançamento (o update() do ponto de efetivação é assíncrono).
@@ -440,7 +623,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
       if (!parcela.contratoId) continue
       const contrato = contratosRef.current.find(c => c.id === parcela.contratoId)
       if (!contrato) continue
-      posEfetivacao({ contrato, parcela, tx, auto: !!n.auto })
+      posEfetivacao({ contrato, parcela, tx, auto: !!n.auto, estado: { schedules: dados.schedules, transactions: dados.transactions } })
         .catch(err => console.warn('[contratos] pós-efetivação falhou:', err.message))
     }
   }, [tickFila, dados.schedules, dados.transactions, carregados, posEfetivacao])
@@ -449,6 +632,14 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   // abertos, o gerado por ele (condomínio) sai, e o evento fica na linha do tempo.
   const reverterEfetivacao = useCallback(async (tx) => {
     if (!tx || !habilitado) return
+    // Estorno de condomínio: a previsão volta ao último pago ANTERIOR (sem nenhum, ao do contrato).
+    const est = dataRef.current
+    const daBaixa = est.schedules.find(s => s.contratoId && Object.values(s.registeredMeta || {}).some(m => m?.lancamento_id === tx.id))
+      || est.schedules.find(s => s.contratoId && s.id === tx.scheduleId)
+    if (daBaixa?.contratoPapel === 'condominio') {
+      const ctr = contratosRef.current.find(c => c.id === daBaixa.contratoId)
+      if (ctr) await atualizarPrevisaoCondominio(ctr, est, { excluirTx: tx.id }).catch(err => console.warn('[contratos] previsão do condomínio:', err.message))
+    }
     const r = planejarReversao({ tx, creditos: creditosRef.current })
     if (!r.reabrir.length && !r.remover.length && !r.manter.length) return
     for (const id of r.reabrir) {
@@ -470,7 +661,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
         detalhes: { acao: 'reversao_creditos', lancamento_id: tx.id, creditos_reabertos: r.reabrir, creditos_removidos: r.remover, creditos_mantidos: r.manter },
       }).catch(err => console.warn('[contratos] evento de reversão não gravado:', err.message))
     }
-  }, [habilitado, setCreditos, redistribuirCreditos, registrarEvento]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [habilitado, setCreditos, redistribuirCreditos, registrarEvento, atualizarPrevisaoCondominio, dataRef]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Uma vez por sessão, depois do load do banco, para cada contrato ativo:
   //   • sem data de fim: estende as parcelas até 12 meses à frente (ids determinísticos: outro
@@ -527,6 +718,11 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     return a
   }, [dataRef, contratos, reverseTransaction, update, registrarEvento])
 
+  useEffect(() => {
+    notificarEfetivacaoRef.current = notificarEfetivacao
+    reverterEfetivacaoRef.current = reverterEfetivacao
+  }, [notificarEfetivacao, reverterEfetivacao])
+
   const abrirFichaContrato = useCallback((id, acao = null) => setFichaAberta(id ? { id, acao } : null), [])
   const fecharFichaContrato = useCallback(() => setFichaAberta(null), [])
   const contratoPorId = useCallback((id) => contratos.find(c => c.id === id) || null, [contratos])
@@ -541,6 +737,8 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     fichaContratoAberta: fichaAberta, abrirFichaContrato, fecharFichaContrato,
     regrasContratos: regras, criarRegraContrato: criarRegra, atualizarRegraContrato: atualizarRegra, excluirRegraContrato: excluirRegra,
     creditosContratos: creditos, adiarCreditoNaParcela, editarComposicaoLancamento,
+    trocarDestinoCredito, criarCreditoManual, aplicarCreditosEmValorManual, justificarDiferenca, informarComposicao,
+    vincularLancamentoNaLinha, desfazerVinculoLancamento,
     pendenciasContrato: pendencias, resolverPendenciaContrato: resolverPendencia,
     confirmarComposicaoContrato: confirmarComposicao, estimarComposicaoContrato: estimarComposicao,
     notificarEfetivacao, reverterEfetivacaoContrato: reverterEfetivacao,

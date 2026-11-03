@@ -3,12 +3,13 @@
 // contratoPapel, id determinístico ctr_<contrato>_<papel>_<AAAAMM> (dois aparelhos gerando a mesma
 // parcela gravam a mesma linha). Contrato = linha da tabela `contratos` (snake_case, como vem da API).
 // Parcela paga (registered) nunca muda; reajuste/aditivo/renovação só mexem nas pendentes.
-import { ymDe, addMeses, diaNoMes, diaDe } from './datas.js'
+import { ymDe, addMeses, diaNoMes, diaDe, hojeStr } from './datas.js'
 import { computeOccurrences } from '../occurrences.js'
 import { occEfetiva } from '../fluxoCaixa.js'
+import { PAPEIS, rotuloPapel, rotulosContrato } from './rotulos.js'
 
+export { PAPEIS }
 export const STATUS_CONTRATO = { ativo: 'Ativo', encerrado: 'Encerrado', rescindido: 'Rescindido', suspenso: 'Suspenso' }
-export const PAPEIS = { aluguel: 'Aluguel', condominio: 'Condomínio', iptu: 'IPTU', seguro: 'Seguro', multa: 'Multa' }
 export const PASSO_MESES = { mensal: 1, trimestral: 3, semestral: 6, anual: 12, unica: 0 }
 export const PERIODICIDADES = { mensal: 'mensal', trimestral: 'trimestral', semestral: 'semestral', anual: 'anual', unica: 'única' }
 
@@ -44,9 +45,22 @@ export function primeiroVencimento(dataInicio, dia) {
   return v >= dataInicio ? v : diaNoMes(addMeses(ym, 1), dia)
 }
 
+// Meses sem cobrança do contrato (competências 'AAAA-MM'). Valem para a cobrança principal; o
+// condomínio é um boleto à parte e continua todo mês.
+export const mesesSemCobranca = (contrato) =>
+  new Set((Array.isArray(contrato?.meses_sem_cobranca) ? contrato.meses_sem_cobranca : []).map(String))
+
+// Competência da parcela gerada pelo id (ctr_<contrato>_<papel>_<AAAAMM>) → 'AAAA-MM' ou null.
+export function competenciaDoId(id) {
+  const m = /_(\d{4})(\d{2})$/.exec(String(id || ''))
+  return m ? `${m[1]}-${m[2]}` : null
+}
+
 // Vencimentos de um papel: { numero, vencimento, competencia }. Com data_fim, a vigência inteira;
 // sem ela, até HORIZONTE_MESES depois do mês de `hoje`. Condomínio é sempre mensal.
-export function vencimentos(contrato, papel, { hoje } = {}) {
+// Mês sem cobrança é pulado SEM consumir número (total e numeração contam só as cobradas); com
+// `comPulados` ele volta na lista como { numero: null, semCobranca: true } (a ficha mostra).
+export function vencimentos(contrato, papel, { hoje, comPulados = false } = {}) {
   const diaBase = papel === 'condominio'
     ? (contrato.dia_vencimento_condominio || contrato.dia_vencimento)
     : contrato.dia_vencimento
@@ -54,12 +68,20 @@ export function vencimentos(contrato, papel, { hoje } = {}) {
   const passo = papel === 'condominio' ? 1 : (PASSO_MESES[contrato.periodicidade] ?? 1)
   const v0 = primeiroVencimento(contrato.data_inicio, dia)
   const limite = contrato.data_fim ? null : addMeses(ymDe(hoje), HORIZONTE_MESES)
+  const pular = papel === 'condominio' ? new Set() : mesesSemCobranca(contrato)
   const out = []
+  let numero = 0
   for (let n = 0; n < 1200; n++) {
     const venc = diaNoMes(addMeses(ymDe(v0), n * passo), dia)
     if (contrato.data_fim && venc > contrato.data_fim) break
     if (limite && ymDe(venc) > limite) break
-    out.push({ numero: n + 1, vencimento: venc, competencia: ymDe(venc) })
+    const competencia = ymDe(venc)
+    if (pular.has(competencia)) {
+      if (comPulados) out.push({ numero: null, vencimento: venc, competencia, semCobranca: true })
+    } else {
+      numero += 1
+      out.push({ numero, vencimento: venc, competencia })
+    }
     if (!passo) break
   }
   return out
@@ -164,6 +186,7 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
   const bonifValor = r2(contrato.bonificacao_valor)
   const bonifMeses = Number(contrato.bonificacao_meses) || 0
   const projecao = refProjecao(contrato, indices)
+  const rot = rotulosContrato(contrato)
 
   const mantida = (papel, ym, comp) => {
     const v = valoresMantidos?.[papel]?.[ym]
@@ -175,8 +198,9 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
     if (apartirDe && v.competencia < apartirDe) continue
     const ciclo = cicloDaCompetencia(contrato, v.competencia)
     const { base, status } = bases[ciclo]
-    const itens = [{ tipo: 'base', desc: 'Aluguel contratual', valor: base }]
-    if (bonifValor > 0 && v.numero <= bonifMeses) itens.push({ tipo: 'bonificacao', desc: 'Bonificação', valor: -bonifValor })
+    const itens = [{ tipo: 'base', desc: rot.itemBase, valor: base }]
+    // Desconto nas `bonifMeses` primeiras parcelas COBRADAS (o número não conta mês sem cobrança).
+    if (bonifValor > 0 && v.numero <= bonifMeses) itens.push({ tipo: 'bonificacao', desc: rot.desconto, valor: -bonifValor })
     const composicao = mantida('aluguel', v.competencia, {
       ciclo, base, itens, total: somaItens(itens), numero: v.numero, total_parcelas: totalAluguel,
       ...(status === 'projetado' ? { projecao } : {}),
@@ -212,7 +236,7 @@ export function agendamentoDaParcela(contrato, p) {
   const condominio = p.papel === 'condominio'
   return {
     id: p.id,
-    description: `${PAPEIS[p.papel] || p.papel} · ${rotuloDoPapel(contrato, p.papel)}`,
+    description: `${rotuloPapel(contrato, p.papel)} · ${rotuloDoPapel(contrato, p.papel)}`,
     transactionType: contrato.tipo === 'receber' ? 'income' : 'expense',
     accountId: contrato.conta_id || null,
     toAccountId: null,
@@ -314,9 +338,13 @@ export function planejarSincronizacao(contrato, schedules, plano, { excluidas = 
   return { criar, atualizar, remover }
 }
 
+// Parcela criada só para receber um pagamento já feito ("Vincular pagamento" numa competência sem
+// parcela): não marca o começo da geração — senão a regeneração criaria os meses do meio.
+export const ehParcelaDeVinculo = (s) => s?.composicao?.origem === 'vinculo_lancamento'
+
 // Primeira competência das parcelas geradas do contrato (onde a geração começou), ou null.
 export function inicioDasParcelas(contrato, schedules) {
-  const yms = (schedules || []).filter(s => ehParcelaGerada(s, contrato.id)).map(s => ymDe(s.startDate)).sort()
+  const yms = (schedules || []).filter(s => ehParcelaGerada(s, contrato.id) && !ehParcelaDeVinculo(s)).map(s => ymDe(s.startDate)).sort()
   return yms[0] || null
 }
 
@@ -348,15 +376,37 @@ export function proximaParcela(contrato, schedules) {
   return melhor
 }
 
-// Linhas da ficha: parcelas geradas + séries vinculadas (cada ocorrência paga vira uma linha, só
-// leitura). Paga mostra o lançamento (data e valor pagos). Ordenadas por vencimento.
-export function linhasDoContrato(contrato, schedules, transactions = []) {
+// Linhas da ficha: parcelas geradas + séries vinculadas (cada ocorrência paga vira uma linha) +
+// competências cobráveis da vigência sem parcela nenhuma ("Sem pagamento vinculado") + meses sem
+// cobrança. Nº e total vêm do calendário do contrato (vencimentos) pela competência — inclusive na
+// linha de série vinculada e na paga antes de um aditivo (renumeração só na exibição).
+// Competência sem parcela só aparece até a última competência que já tem parcela/pagamento do papel
+// (rescisão e fim não viram buracos) e nunca para parcela excluída à mão. Essas linhas não são
+// agendamentos: não entram em saldo, Fluxo, Agendamentos nem na contagem de pendentes.
+//   plano: gerarPlanoParcelas do contrato (valor esperado da competência sem parcela).
+// Cada linha: { key, schedule, papel, vinculada, paga, competencia, ocorrencia, vencimento, valor,
+//   projetado, numero, total, composicao, tx, meta, semParcela, semCobranca }.
+export function linhasDoContrato(contrato, schedules, transactions = [], { hoje = null, plano = null } = {}) {
   const txPorId = new Map(transactions.map(t => [t.id, t]))
   const lancamentoDe = (s, d) => {
     const id = s.registeredMeta?.[d]?.lancamento_id
     return (id && txPorId.get(id)) || transactions.find(t => t.scheduleId === s.id && (t.dataOcorrencia || t.date) === d) || null
   }
+  const dia = hoje || hojeStr()
+  const numeracao = {}
+  const numerar = (papel) => {
+    if (!numeracao[papel]) {
+      const lista = vencimentos(contrato, papel, { hoje: dia, comPulados: true })
+      const cobradas = lista.filter(v => !v.semCobranca)
+      numeracao[papel] = {
+        lista, por: new Map(cobradas.map(v => [v.competencia, v.numero])),
+        total: contrato.data_fim ? cobradas.length : null,
+      }
+    }
+    return numeracao[papel]
+  }
   const out = []
+  const cobertas = {}
   for (const s of schedules || []) {
     if (s.contratoId !== contrato.id) continue
     const vinculada = !ehParcelaGerada(s, contrato.id)
@@ -365,11 +415,15 @@ export function linhasDoContrato(contrato, schedules, transactions = []) {
     const linha = (d, paga) => {
       const eff = occEfetiva(s, d)
       const tx = paga ? lancamentoDe(s, d) : null
+      const competencia = ymDe(d)
+      const num = numerar(papel)
+      ;(cobertas[papel] || (cobertas[papel] = new Set())).add(competencia)
       return {
-        key: unica ? s.id : `${s.id}@${d}`, schedule: s, papel, vinculada, paga,
+        key: unica ? s.id : `${s.id}@${d}`, schedule: s, papel, vinculada, paga, competencia, ocorrencia: d,
         vencimento: tx?.date || eff.date, valor: r2(tx ? tx.amount : eff.amount),
         projetado: !paga && s.valorStatus === 'projetado',
-        numero: s.composicao?.numero ?? null, total: s.composicao?.total_parcelas ?? null, composicao: s.composicao || null,
+        numero: num.por.get(competencia) ?? null, total: num.total, composicao: s.composicao || null,
+        tx, meta: paga ? s.registeredMeta?.[d] || null : null, semParcela: false, semCobranca: false,
       }
     }
     if (unica) {
@@ -379,7 +433,60 @@ export function linhasDoContrato(contrato, schedules, transactions = []) {
     for (const d of s.registered || []) out.push(linha(d, true))
     for (const d of computeOccurrences(s, 24)) out.push(linha(d, false))
   }
+
+  const papelDoId = (id) => (String(id).includes('_condominio_') ? 'condominio' : 'aluguel')
+  const excluidas = new Set((contrato.excluidas || []).map(id => `${papelDoId(id)}|${competenciaDoId(id)}`))
+  const doPlano = new Map((plano || []).map(p => [`${p.papel}|${p.competencia}`, p]))
+  for (const papel of ['aluguel', ...(contrato.tem_condominio ? ['condominio'] : [])]) {
+    const set = cobertas[papel]
+    if (!set?.size) continue
+    const ultima = [...set].sort().at(-1)
+    const num = numerar(papel)
+    for (const v of num.lista) {
+      if (v.competencia > ultima) break
+      if (set.has(v.competencia)) continue
+      const base = {
+        schedule: null, papel, vinculada: false, paga: false, competencia: v.competencia, ocorrencia: v.vencimento,
+        vencimento: v.vencimento, projetado: false, total: num.total, tx: null, meta: null,
+      }
+      if (v.semCobranca) {
+        out.push({ ...base, key: `semcobranca:${papel}:${v.competencia}`, valor: 0, numero: null, composicao: null, semParcela: false, semCobranca: true })
+        continue
+      }
+      if (excluidas.has(`${papel}|${v.competencia}`)) continue
+      const p = doPlano.get(`${papel}|${v.competencia}`)
+      const previsto = papel === 'condominio' ? contrato.valor_condominio_previsto : contrato.valor_base
+      out.push({
+        ...base, key: `falta:${papel}:${v.competencia}`, valor: r2(p ? p.valor : previsto), numero: v.numero,
+        composicao: p?.composicao || null, semParcela: true, semCobranca: false,
+      })
+    }
+  }
   return out.sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)) || a.papel.localeCompare(b.papel))
+}
+
+// Linha que é parcela de verdade (pendente/paga): fora "sem parcela" e "sem cobrança".
+export const linhaReal = (l) => !l.semParcela && !l.semCobranca
+
+// Parcela gerada para receber um pagamento já feito numa competência sem parcela (C2): id
+// determinístico da competência (regenerar não duplica: paga nunca é recriada nem removida), já
+// baixada com o lançamento. A composição marca a origem para o "Desfazer vínculo" tirá-la junto.
+export function parcelaDeVinculo(contrato, planoItem, tx) {
+  const ag = agendamentoDaParcela(contrato, planoItem)
+  const venc = planoItem.vencimento
+  return {
+    ...ag,
+    registered: [venc],
+    registeredMeta: {
+      [venc]: {
+        tipo: 'pago', lancamento_id: tx.id, import_id: null, vinculo: 'manual',
+        valor_previsto: r2(planoItem.valor), valor_realizado: r2(tx.amount), override_anterior: null,
+      },
+    },
+    valorStatus: 'confirmado',
+    composicao: { ...(planoItem.composicao || {}), origem: 'vinculo_lancamento' },
+    confirmado: true,
+  }
 }
 
 // "Confirmar reajuste" numa parcela projetada (ou paga com outro valor): novoBase vira a base do
@@ -397,7 +504,7 @@ export function planoConfirmacaoReajuste(contrato, schedules, parcelaId, novoBas
   const base = r2(novoBase)
   const recompor = (s, b, status) => {
     const outros = (s.composicao?.itens || []).filter(i => i.tipo !== 'base')
-    const itens = [{ tipo: 'base', desc: 'Aluguel contratual', valor: b }, ...outros]
+    const itens = [{ tipo: 'base', desc: rotulosContrato(contrato).itemBase, valor: b }, ...outros]
     const total = somaItens(itens)
     return { amount: total, valorStatus: status, composicao: { ...s.composicao, base: b, itens, total } }
   }

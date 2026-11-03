@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
-import { Plus, Trash2, ClipboardPaste, Camera, ListPlus } from 'lucide-react'
+import { Plus, Trash2, ClipboardPaste, Camera, ListPlus, Split } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
 import {
-  parsearTextoBoleto, classificarItens, resumoItens, itemDiferenca, RESP, composicaoCondominio,
+  parsearTextoBoleto, classificarItens, resumoItens, itemDiferenca, RESP, composicaoCondominio, dividirItem,
 } from '../../lib/contratos/composicao'
+import { regraAbatimento } from '../../lib/contratos/creditos'
 import { LEITURA_DE_IMAGEM_DISPONIVEL } from '../../lib/contratos/imagemBoleto'
 import { rotuloContrato } from '../../lib/contratos/parcelas'
 import CampoValor from './CampoValor'
@@ -16,8 +17,11 @@ const comoLinha = (i) => ({ ...i, valorTexto: valorBRFormatado(i.valor) })
 
 // "Composição do boleto" do condomínio: digitar itens, colar o texto do app do condomínio ou (em
 // breve) foto. Cada item recebe o responsável pelas regras (mostra a que casou); item sem regra é
-// destacado e pergunta "De quem é?" com "Lembrar para os próximos". Soma dos itens = valor pago.
+// destacado e pergunta "De quem é?" com "Lembrar para os próximos" (sem marcar, não vira regra).
+// Item pode ser DIVIDIDO entre inquilino e proprietário e marcado "Só neste boleto" (gera crédito,
+// mas não se repete na estimativa dos próximos). Soma dos itens = valor pago.
 //   modo 'pagamento': logo depois de pagar — "Pular" usa a estimativa (última composição).
+//   modo 'informar': pagamento já feito sem composição — soma = valor pago; o lançamento NÃO muda.
 //   modo 'edicao': lançamento já pago — o total pode mudar (o valor do lançamento acompanha).
 export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial = null, modo = 'pagamento', onConfirmar, onPular, onClose }) {
   const { regrasContratos } = useApp()
@@ -27,14 +31,16 @@ export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial 
   const [lembrar, setLembrar] = useState({})
   const [aviso, setAviso] = useState('')
   const [salvando, setSalvando] = useState(false)
-  const valorPago = modo === 'pagamento' ? Number(tx.amount) : null
+  const [dividindo, setDividindo] = useState({})
+  const somaFixa = modo === 'pagamento' || modo === 'informar'
+  const valorPago = somaFixa ? Number(tx.amount) : null
 
   const itens = useMemo(() => classificarItens(
     linhas.map(l => ({ ...l, valor: parseValorBR(l.valorTexto) || 0 })),
     regrasContratos, contrato.id,
   ), [linhas, regrasContratos, contrato.id])
   const res = resumoItens(itens, valorPago)
-  const fechaSoma = modo === 'edicao' || Math.abs(res.diferenca) < 0.005
+  const fechaSoma = !somaFixa || Math.abs(res.diferenca) < 0.005
   const pronto = itens.length > 0 && res.semDono === 0 && fechaSoma
 
   const setLinha = (i, campos) => setLinhas(prev => prev.map((l, j) => (j === i ? { ...l, ...campos } : l)))
@@ -51,7 +57,10 @@ export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial 
   const confirmar = async () => {
     setSalvando(true)
     try {
-      const lista = itens.map(i => ({ desc: i.desc, valor: i.valor, responsavel: i.responsavel, regra: i.regra || undefined }))
+      const lista = itens.map(i => ({
+        desc: i.desc, valor: i.valor, responsavel: i.responsavel, regra: i.regra || undefined,
+        ...(i.so_neste_boleto && i.responsavel === RESP.PROPRIETARIO ? { so_neste_boleto: true } : {}),
+      }))
       const regrasNovas = itens.filter((i, j) => !i.regra_id && lembrar[j]).map(i => ({ padrao: i.desc, responsavel: i.responsavel }))
       await onConfirmar({ itens: lista, lembrar: regrasNovas, composicao: composicaoCondominio(lista) })
     } catch (err) {
@@ -73,7 +82,8 @@ export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial 
         <p className="text-texto-2">
           {rotuloContrato(contrato)} · pagamento de {fmtDate(tx.date)}
           {valorPago != null && <> · valor pago <strong className="text-texto-1">{fmt(valorPago)}</strong></>}.
-          Itens do proprietário viram crédito a abater no próximo aluguel.
+          Itens do proprietário viram crédito a abater {regraAbatimento(contrato) === 'mes_seguinte' ? 'no aluguel do mês seguinte' : 'no próximo aluguel pendente'}.
+          {modo === 'informar' && ' O valor do lançamento não muda.'}
         </p>
         <div className="flex flex-wrap gap-1">
           {tab('digitar', 'Digitar itens', ListPlus)}
@@ -112,6 +122,28 @@ export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial 
                       Lembrar para os próximos
                     </label>
                   )}
+                  {it.responsavel === RESP.PROPRIETARIO && (
+                    <label className="flex items-center gap-1.5 text-[11px] text-texto-2 mt-1" title="Gera crédito normalmente, mas não se repete na estimativa dos próximos boletos">
+                      <input type="checkbox" className="accent-primary" checked={!!linhas[i].so_neste_boleto} onChange={e => setLinha(i, { so_neste_boleto: e.target.checked })} />
+                      Só neste boleto
+                    </label>
+                  )}
+                  {dividindo[i] != null ? (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <CampoValor className="input py-1 text-xs" value={dividindo[i]} onChange={v => setDividindo(p => ({ ...p, [i]: v }))} placeholder="Parte do proprietário" />
+                      <button type="button" className="btn-secondary text-[11px] py-1" onClick={() => {
+                        const partes = dividirItem({ desc: linhas[i].desc, valor: it.valor }, parseValorBR(dividindo[i]) || 0).map(comoLinha)
+                        setLinhas(p => [...p.slice(0, i), ...partes, ...p.slice(i + 1)])
+                        setDividindo({})
+                        setLembrar({})
+                      }}>OK</button>
+                    </div>
+                  ) : (
+                    <button type="button" className="text-[11px] text-primary-fg hover:underline mt-1 inline-flex items-center gap-1"
+                      title="Separar a parte do proprietário e a do inquilino neste item" onClick={() => setDividindo(p => ({ ...p, [i]: '' }))}>
+                      <Split size={11} /> Dividir entre inquilino e proprietário
+                    </button>
+                  )}
                 </div>
                 <button type="button" className="p-1 text-texto-3 hover:text-perigo" title="Remover item"
                   onClick={() => { setLinhas(p => p.filter((_, j) => j !== i)); setLembrar({}) }}><Trash2 size={14} /></button>
@@ -135,11 +167,11 @@ export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial 
           <div><p className="text-texto-3">Meu (inquilino)</p><p className="text-texto-1">{fmt(res.inquilino)}</p></div>
           <div><p className="text-texto-3">Do proprietário (crédito)</p><p className="text-texto-1">{fmt(res.proprietario)}</p></div>
           <div>
-            <p className="text-texto-3">{modo === 'pagamento' ? 'Diferença p/ o pago' : 'Novo valor do lançamento'}</p>
-            <p className={modo === 'pagamento' && !fechaSoma ? 'text-aviso font-semibold' : 'text-texto-1'}>{modo === 'pagamento' ? fmt(res.diferenca) : fmt(res.total)}</p>
+            <p className="text-texto-3">{somaFixa ? 'Diferença p/ o pago' : 'Novo valor do lançamento'}</p>
+            <p className={somaFixa && !fechaSoma ? 'text-aviso font-semibold' : 'text-texto-1'}>{somaFixa ? fmt(res.diferenca) : fmt(res.total)}</p>
           </div>
         </div>
-        {modo === 'pagamento' && !fechaSoma && itens.length > 0 && (
+        {somaFixa && !fechaSoma && itens.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-aviso">
             ⚠ A soma dos itens precisa ser igual ao valor pago.
             <button type="button" className="btn-secondary text-xs py-1" onClick={() => setLinhas(p => [...p, comoLinha(itemDiferenca(res.diferenca))])}>

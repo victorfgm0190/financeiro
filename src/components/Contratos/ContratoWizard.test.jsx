@@ -25,6 +25,7 @@ const { default: ContratoWizard } = await import('./ContratoWizard.jsx')
 const campo = (rotulo) => screen.getByText(rotulo, { selector: 'label' }).parentElement
 const gatilho = (rotulo) => within(campo(rotulo)).getByRole('button', { expanded: false })
 const avancar = () => fireEvent.click(screen.getByRole('button', { name: /Avançar/ }))
+const modalidade = (m) => fireEvent.change(campo('Modalidade').querySelector('select'), { target: { value: m } })
 const preencher = (rotulo, valor) => fireEvent.change(within(campo(rotulo)).getAllByRole('textbox')[0] || campo(rotulo).querySelector('input'), { target: { value: valor } })
 
 // Limpa no "×" e escolhe outra categoria clicando na lista (o gatilho mostra o rótulo escolhido).
@@ -45,6 +46,7 @@ afterEach(() => { cleanup(); criarContrato.mockClear() })
 describe('ContratoWizard — categorias', () => {
   it('aluguel e condomínio: limpar, abrir a lista e clicar grava o id escolhido', async () => {
     render(<ContratoWizard onClose={() => {}} onSalvo={() => {}} />)
+    modalidade('aluguel')
     fireEvent.change(screen.getByPlaceholderText('Digite o nome do favorecido'), { target: { value: 'Imob Silva' } })
     fireEvent.change(campo('Fim da vigência').querySelector('input'), { target: { value: '2028-06-30' } })
     avancar()
@@ -70,9 +72,49 @@ describe('ContratoWizard — categorias', () => {
 
   it('sugere "Moradia" nas duas categorias', () => {
     render(<ContratoWizard onClose={() => {}} onSalvo={() => {}} />)
+    modalidade('aluguel')
     fireEvent.change(screen.getByPlaceholderText('Digite o nome do favorecido'), { target: { value: 'Imob Silva' } })
     fireEvent.click(screen.getByLabelText(/Sem data de fim/))
     avancar()
     expect(gatilho('Categoria do aluguel').textContent).toContain('Moradia')
+  })
+})
+
+describe('ContratoWizard — contrato que não é aluguel', () => {
+  it('prestação de serviço: sem etapa de imóvel, sem categoria sugerida, sem reajuste, rótulos de "parcela"', async () => {
+    render(<ContratoWizard onClose={() => {}} onSalvo={() => {}} />)
+    // Sem modalidade não avança.
+    avancar()
+    expect(screen.getByText('Escolha a modalidade do contrato.')).toBeTruthy()
+    modalidade('servico')
+    expect(screen.queryByText(/Imóvel e condomínio/)).toBeNull()
+    expect(screen.getAllByRole('listitem').map(li => li.textContent)).toEqual(['1. Dados', '2. Valores', '3. Reajuste', '4. Prévia'])
+    expect(within(campo('Tipo')).getAllByRole('option').map(o => o.textContent)).toEqual(['A pagar', 'A receber'])
+    fireEvent.change(screen.getByPlaceholderText('Digite o nome do favorecido'), { target: { value: 'Oficina Bom Motor' } })
+    fireEvent.click(screen.getByLabelText(/Sem data de fim/))
+    avancar()
+
+    expect(gatilho('Categoria').textContent).toContain('Sem categoria')
+    fireEvent.change(campo('Conta de pagamento').querySelector('select'), { target: { value: 'cc1' } })
+    preencher('Valor da parcela', '800,00')
+    fireEvent.change(campo('Dia de vencimento').querySelector('input'), { target: { value: '5' } })
+    fireEvent.click(gatilho('Categoria'))
+    const opcao = screen.getAllByRole('button').find(b => b.hasAttribute('data-item') && b.textContent === 'Aluguel')
+    fireEvent.mouseDown(opcao)
+    fireEvent.click(opcao)
+    expect(screen.getByText('Desconto temporário por mês (desconto)')).toBeTruthy()
+    avancar()
+    expect(campo('Índice de reajuste').querySelector('select').value).toBe('NENHUM')
+    avancar()
+    expect(screen.getByRole('button', { name: /Confirmar/ })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar/ }))
+    await vi.waitFor(() => expect(criarContrato).toHaveBeenCalled())
+    const [dados, itens] = criarContrato.mock.calls[0]
+    expect(dados).toMatchObject({
+      modalidade: 'servico', tipo_imovel: null, tem_condominio: false, valor_condominio_previsto: null, favorecido_condominio: null,
+      indice_reajuste: 'NENHUM', meses_sem_cobranca: [], credito_abatimento: 'mes_seguinte', categoria_id: 'cat-alug',
+    })
+    expect(itens).toEqual([])
   })
 })

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { FileSignature, Link2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import VinculoModal from '../Contratos/VinculoModal'
-import { PAPEIS } from '../../lib/contratos/parcelas'
+import { rotuloPapel } from '../../lib/contratos/rotulos'
 import { contratoPorNumero } from '../../lib/contratos/numero'
 import { computeOccurrences } from '../../lib/occurrences'
 import { mostrarNumeroContrato } from '../../lib/tiposDocumento'
@@ -74,7 +74,9 @@ export default function ContratoDoAgendamento({ numero, onNumero, schedule = nul
               {opcoes.map(c => <option key={c.id} value={c.id}>{rotulo(c)}</option>)}
             </select>
             <select className="input" aria-label="Papel no contrato" value={papel} onChange={e => setPapel(e.target.value)}>
-              {Object.entries(PAPEIS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {['aluguel', ...(opcoes.find(c => c.id === alvoId)?.tem_condominio ? ['condominio'] : [])].map(v => (
+                <option key={v} value={v}>{rotuloPapel(opcoes.find(c => c.id === alvoId), v)}</option>
+              ))}
             </select>
             <button type="button" className="btn-secondary flex items-center justify-center gap-1.5 min-h-[40px]" disabled={!alvoId} onClick={abrir}>
               <Link2 size={14} /> Vincular ao contrato

@@ -78,17 +78,32 @@ export function resumoItens(itens, valorPago = null) {
 export const itemDiferenca = (diferenca) =>
   ({ desc: 'Diferença/arredondamento', valor: r2(diferenca), responsavel: RESP.INQUILINO, manual: true })
 
-// Composição gravada no lançamento do condomínio.
+// Composição gravada no lançamento do condomínio. Item "Só neste boleto" (so_neste_boleto) gera
+// crédito normalmente, mas não se repete na estimativa dos próximos.
 export function composicaoCondominio(itens, { estimada = false } = {}) {
-  const limpos = (itens || []).map(({ desc, valor, responsavel, regra }) => ({ desc, valor: r2(valor), responsavel, ...(regra ? { regra } : {}) }))
+  const limpos = (itens || []).map(({ desc, valor, responsavel, regra, so_neste_boleto: unico }) =>
+    ({ desc, valor: r2(valor), responsavel, ...(regra ? { regra } : {}), ...(unico ? { so_neste_boleto: true } : {}) }))
   const res = resumoItens(limpos)
   return { tipo: 'condominio', itens: limpos, total: res.total, proprietario: res.proprietario, inquilino: res.inquilino, ...(estimada ? { estimada: true } : {}) }
 }
 
+// Divide um item entre inquilino e proprietário: `valorProprietario` vai para o dono (mesmo texto,
+// marcado à mão) e o resto fica com o inquilino. → [itemInquilino, itemProprietario] (sem o de 0).
+export function dividirItem(item, valorProprietario) {
+  const total = r2(item.valor)
+  const dono = r2(Math.min(Math.max(Number(valorProprietario) || 0, 0), total))
+  const meu = r2(total - dono)
+  return [
+    ...(meu ? [{ ...item, valor: meu, responsavel: RESP.INQUILINO, manual: true }] : []),
+    ...(dono ? [{ ...item, valor: dono, responsavel: RESP.PROPRIETARIO, manual: true }] : []),
+  ]
+}
+
 // Pagamento sem a composição informada (pulou o passo ou auto-registro): os itens do proprietário
 // repetem a última composição conhecida e a diferença fica com o inquilino — "estimada, revisar".
+// Item marcado "Só neste boleto" não se repete.
 export function composicaoEstimada(valorPago, ultima) {
-  const dono = (ultima?.itens || []).filter(i => i.responsavel === RESP.PROPRIETARIO)
+  const dono = (ultima?.itens || []).filter(i => i.responsavel === RESP.PROPRIETARIO && !i.so_neste_boleto)
   const somaDono = r2(dono.reduce((a, i) => a + Number(i.valor), 0))
   const usar = somaDono <= Number(valorPago) ? dono : []
   const resto = r2(Number(valorPago) - (usar.length ? somaDono : 0))
@@ -98,7 +113,8 @@ export function composicaoEstimada(valorPago, ultima) {
   ], { estimada: true })
 }
 
-// Itens do proprietário → dados do crédito (contrato_creditos).
+// Itens do proprietário → dados do crédito (contrato_creditos). `parcela.id` pode ser o id da
+// parcela gerada ou "serie@data" (pagamento de série vinculada: a série é a parcela de origem).
 export function creditoDaComposicao(composicao, { contratoId, tx, parcela }) {
   const itens = (composicao?.itens || []).filter(i => i.responsavel === RESP.PROPRIETARIO && Number(i.valor) > 0)
   const valor = r2(itens.reduce((a, i) => a + Number(i.valor), 0))

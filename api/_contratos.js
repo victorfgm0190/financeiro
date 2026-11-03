@@ -29,6 +29,14 @@ const numero = ({ min = 0, max = 1e12, padrao = null } = {}) => (v) => {
   return Number.isFinite(n) && n >= min && n <= max ? { v: n } : { erro: 'valor inválido' }
 }
 const booleano = (padrao = false) => (v) => ({ v: v == null ? padrao : v === true || v === 'true' })
+// Lista de competências 'AAAA-MM' (meses sem cobrança): sem repetição, em ordem, no máximo 600.
+const competencias = (v) => {
+  if (v == null || v === '') return { v: [] }
+  if (!Array.isArray(v)) return { erro: 'deve ser uma lista de meses AAAA-MM' }
+  if (v.length > 600) return { erro: 'no máximo 600 meses' }
+  const out = [...new Set(v.map(String))].sort()
+  return out.every(m => /^\d{4}-(0[1-9]|1[0-2])$/.test(m)) ? { v: out } : { erro: 'mês inválido (AAAA-MM)' }
+}
 // Link do anexo vira href na ficha: só http(s), nunca javascript: e afins.
 const link = (v) => {
   if (v == null || v === '') return { v: null }
@@ -39,7 +47,7 @@ const link = (v) => {
 export const CAMPOS_CONTRATO = {
   perfil_id: texto(80),
   tipo: umDe(['pagar', 'receber'], { obrigatorio: true }),
-  modalidade: umDe(['aluguel', 'servico', 'outro'], { obrigatorio: true }),
+  modalidade: umDe(['aluguel', 'servico', 'assinatura', 'seguro', 'outro'], { obrigatorio: true }),
   numero: texto(60),
   objeto: texto(200),
   favorecido: texto(200),
@@ -69,8 +77,21 @@ export const CAMPOS_CONTRATO = {
   link_anexo: link,
   status: umDe(['ativo', 'encerrado', 'rescindido', 'suspenso'], { obrigatorio: true }),
   observacao: texto(2000),
+  meses_sem_cobranca: competencias,
+  credito_abatimento: umDe(['mes_seguinte', 'proximo_pendente'], { obrigatorio: true }),
 }
-const PADROES = { modalidade: 'aluguel', periodicidade: 'mensal', indice_reajuste: 'IPCA', status: 'ativo' }
+const PADROES = { modalidade: 'aluguel', periodicidade: 'mensal', indice_reajuste: 'IPCA', status: 'ativo', credito_abatimento: 'mes_seguinte' }
+
+// Colunas JSONB: o pg mandaria a lista como array do Postgres; vai como texto JSON.
+const JSONB = new Set(['meses_sem_cobranca', 'itens'])
+export const valorColuna = (k, v) => (JSONB.has(k) && v != null ? JSON.stringify(v) : v)
+
+// Colunas que o banco do ambiente já tem (as da migração 2026-11-03 só existem depois de aplicada):
+// INSERT/UPDATE gravam só essas — o deploy não quebra o cadastro antes do SQL rodar.
+export async function colunasDe(q, tabela) {
+  const rows = await q('SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1', [tabela])
+  return new Set(rows.map(r => r.column_name))
+}
 
 // Body → { erro } | { dados }. parcial = só os campos presentes (PUT).
 export function normalizarContrato(body, { parcial = false } = {}) {
@@ -223,6 +244,7 @@ export function normalizarCredito(b, { parcial = false } = {}) {
     origem_lancamento_id: texto(120), origem_agendamento_id: texto(160), descricao: texto(200),
     valor: numero({ min: 0 }), data_origem: data(), status: umDe(['aberto', 'compensado']),
     compensado_em_lancamento_id: texto(120), compensado_em_agendamento_id: texto(160), data_compensacao: data(),
+    destino_agendamento_id: texto(160),
   }
   for (const [k, validar] of Object.entries(campos)) {
     if (parcial && !(k in (b || {}))) continue

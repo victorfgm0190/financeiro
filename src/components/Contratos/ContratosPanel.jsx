@@ -4,24 +4,27 @@ import Modal from '../shared/Modal'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { valorAtual, proximaParcela, rotuloContrato, STATUS_CONTRATO } from '../../lib/contratos/parcelas'
+import { MODALIDADES, rotuloModalidade, rotuloTipo } from '../../lib/contratos/rotulos'
 import ContratoWizard from './ContratoWizard'
 import RegrasItensPanel from './RegrasItensPanel'
 
-// Lista de contratos (filtros perfil / tipo / status) + "Novo contrato". Clique abre a ficha.
+// Lista de contratos (filtros perfil / modalidade / tipo / status) + "Novo contrato". Clique abre a ficha.
 export default function ContratosPanel() {
   const { contratos, contratosCarregados, schedules, profiles, activeProfileId, pode, abrirFichaContrato, recarregarContratos, creditosContratos } = useApp()
   const [perfil, setPerfil] = useState(activeProfileId || '')
   const [tipo, setTipo] = useState('')
+  const [modalidade, setModalidade] = useState('')
   const [status, setStatus] = useState('ativo')
   const [novo, setNovo] = useState(false)
   const [erro, setErro] = useState('')
   const [aba, setAba] = useState('contratos')
 
   const linhas = useMemo(() => contratos
-    .filter(c => (!perfil || c.perfil_id === perfil) && (!tipo || c.tipo === tipo) && (!status || c.status === status))
+    .filter(c => (!perfil || c.perfil_id === perfil) && (!tipo || c.tipo === tipo) && (!status || c.status === status)
+      && (!modalidade || (c.modalidade || 'aluguel') === modalidade))
     .map(c => ({ c, valor: valorAtual(c, schedules), prox: proximaParcela(c, schedules) }))
     .sort((a, b) => String(a.prox?.startDate || '9999').localeCompare(String(b.prox?.startDate || '9999'))),
-  [contratos, schedules, perfil, tipo, status])
+  [contratos, schedules, perfil, tipo, status, modalidade])
 
   const abertos = useMemo(() => {
     const m = new Map()
@@ -48,6 +51,13 @@ export default function ContratosPanel() {
           <select className="input py-1.5 text-sm" data-guia="contratos.perfil" value={perfil} onChange={e => setPerfil(e.target.value)}>
             <option value="">Todos</option>
             {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label text-xs">Modalidade</label>
+          <select className="input py-1.5 text-sm" data-guia="contratos.modalidade" value={modalidade} onChange={e => setModalidade(e.target.value)}>
+            <option value="">Todas</option>
+            {Object.entries(MODALIDADES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </div>
         <div>
@@ -104,7 +114,7 @@ export default function ContratosPanel() {
                       <p className="text-texto-1 font-medium">{rotuloContrato(c)}</p>
                       <p className="text-xs text-texto-3">{c.favorecido || '—'}</p>
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-texto-2">{c.tipo === 'receber' ? 'A receber' : 'A pagar'}</td>
+                    <td className="px-3 py-2.5 text-xs text-texto-2">{rotuloTipo(c)}<span className="block text-texto-3">{rotuloModalidade(c)}</span></td>
                     <td className="px-3 py-2.5 text-right text-texto-1 font-medium whitespace-nowrap">{fmt(valor)}</td>
                     <td className="px-3 py-2.5 text-xs text-texto-2 whitespace-nowrap">{vigencia(c)}</td>
                     <td className="px-3 py-2.5 text-xs text-texto-2 whitespace-nowrap">{prox ? `${fmtDate(prox.startDate)} · ${fmt(prox.amount)}` : '—'}</td>
@@ -123,7 +133,7 @@ export default function ContratosPanel() {
                   <p className="text-sm text-texto-1 font-medium truncate">{rotuloContrato(c)}</p>
                   <p className="text-sm text-texto-1 font-semibold whitespace-nowrap">{fmt(valor)}</p>
                 </div>
-                <p className="text-xs text-texto-3">{c.favorecido || '—'} · {STATUS_CONTRATO[c.status]}</p>
+                <p className="text-xs text-texto-3">{rotuloModalidade(c)} · {c.favorecido || '—'} · {STATUS_CONTRATO[c.status]}</p>
                 <p className="text-xs text-texto-2">Próx.: {prox ? `${fmtDate(prox.startDate)} · ${fmt(prox.amount)}` : '—'}{c.proximo_reajuste ? ` · reajuste ${fmtDate(c.proximo_reajuste)}` : ''}</p>
               </button>
             ))}

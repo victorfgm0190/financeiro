@@ -2,17 +2,24 @@ import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { queryParam } from './_plataforma.js'
-import { normalizarCredito, exigirModulo, contratoVisivel, perfisDoUsuario, comNumeros } from './_contratos.js'
+import { normalizarCredito, exigirModulo, contratoVisivel, perfisDoUsuario, comNumeros, colunasDe, valorColuna } from './_contratos.js'
 
-// CRÉDITOS DO PROPRIETÁRIO: itens do boleto do condomínio que são do dono e serão abatidos no
-// aluguel. Só controle — nunca gera lançamento (o abatimento aparece na composição do aluguel).
+// CRÉDITOS A ABATER ("do proprietário" no aluguel): itens do boleto do condomínio que são do dono,
+// ou créditos manuais, abatidos na cobrança principal. Só controle — nunca gera lançamento (o
+// abatimento aparece na composição da parcela). destino_agendamento_id: parcela escolhida à mão.
 //   GET [?contrato_id=x]       → { creditos } (dos contratos visíveis)
 //   POST { contrato_id, ... }  → cria (status 'aberto')
 //   PUT  { id, ... }           → altera os campos enviados (compensar / reabrir / corrigir)
 //   DELETE ?id=x               → exclui (estorno do pagamento que o gerou)
 
 const COLS = ['origem_lancamento_id', 'origem_agendamento_id', 'itens', 'descricao', 'valor', 'data_origem', 'status',
-  'compensado_em_lancamento_id', 'compensado_em_agendamento_id', 'data_compensacao']
+  'compensado_em_lancamento_id', 'compensado_em_agendamento_id', 'data_compensacao', 'destino_agendamento_id']
+
+// Só as colunas que o banco já tem (destino_agendamento_id chega com a migração 2026-11-03).
+const colunasGravaveis = async (dados) => {
+  const existem = await colunasDe(query, 'contrato_creditos')
+  return COLS.filter(k => k in dados && existem.has(k))
+}
 
 async function creditoVisivel(id, user) {
   const [c] = await query('SELECT * FROM contrato_creditos WHERE id = $1', [String(id || '')])
@@ -44,10 +51,10 @@ async function handler(req, res) {
       if (!(await contratoVisivel(query, body?.contrato_id, req.user))) return res.status(404).json({ error: 'Contrato não encontrado' })
       const { erro, dados } = normalizarCredito(body)
       if (erro) return res.status(400).json({ error: erro })
-      const cols = COLS.filter(k => k in dados)
+      const cols = await colunasGravaveis(dados)
       const [row] = await query(
         `INSERT INTO contrato_creditos (contrato_id, ${cols.join(', ')}) VALUES ($1, ${cols.map((_, i) => `$${i + 2}`).join(', ')}) RETURNING *`,
-        [body.contrato_id, ...cols.map(k => (k === 'itens' ? JSON.stringify(dados[k]) : dados[k]))],
+        [body.contrato_id, ...cols.map(k => valorColuna(k, dados[k]))],
       )
       return res.json({ ok: true, credito: comNumeros(row) })
     }
@@ -56,11 +63,11 @@ async function handler(req, res) {
       if (!(await creditoVisivel(body?.id, req.user))) return res.status(404).json({ error: 'Crédito não encontrado' })
       const { erro, dados } = normalizarCredito(body, { parcial: true })
       if (erro) return res.status(400).json({ error: erro })
-      const cols = COLS.filter(k => k in dados)
+      const cols = await colunasGravaveis(dados)
       if (!cols.length) return res.status(400).json({ error: 'Nada para alterar' })
       const [row] = await query(
         `UPDATE contrato_creditos SET ${cols.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE id = $1 RETURNING *`,
-        [body.id, ...cols.map(k => (k === 'itens' ? JSON.stringify(dados[k]) : dados[k]))],
+        [body.id, ...cols.map(k => valorColuna(k, dados[k]))],
       )
       return res.json({ ok: true, credito: comNumeros(row) })
     }

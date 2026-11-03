@@ -5,7 +5,7 @@ import { queryParam } from './_plataforma.js'
 import { contasPermitidas } from './_permissoesApi.js'
 import {
   normalizarContrato, normalizarItem, normalizarEvento, exigirModulo, perfisDoUsuario, contratoVisivel,
-  inserirEvento, substituirItens, hojeIso, comNumeros, CAMPOS_CONTRATO,
+  inserirEvento, substituirItens, hojeIso, comNumeros, CAMPOS_CONTRATO, colunasDe, valorColuna,
 } from './_contratos.js'
 
 // CONTRATOS (módulo opcional do plano). As parcelas são agendamentos com contrato_id — gravados pelo
@@ -73,11 +73,12 @@ async function handler(req, res) {
       }
       const erroConta = await conferirConta(query, dados.conta_id, perfis)
       if (erroConta) return res.status(400).json({ error: erroConta })
-      const cols = Object.keys(dados)
+      const existem = await colunasDe(query, 'contratos')
+      const cols = Object.keys(dados).filter(k => existem.has(k))
       const r = await withTransaction(async (q) => {
         const [c] = await q(
           `INSERT INTO contratos (${cols.join(', ')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING *`,
-          cols.map(k => dados[k]),
+          cols.map(k => valorColuna(k, dados[k])),
         )
         const its = await substituirItens(q, c.id, itens)
         const ev = await inserirEvento(q, c.id, {
@@ -110,12 +111,13 @@ async function handler(req, res) {
         evento = r.evento
       }
       // Colunas = chaves de CAMPOS_CONTRATO (lista fixa do código, nunca do body).
-      const cols = Object.keys(dados).filter(k => k in CAMPOS_CONTRATO)
+      const existem = await colunasDe(query, 'contratos')
+      const cols = Object.keys(dados).filter(k => k in CAMPOS_CONTRATO && existem.has(k))
       const r = await withTransaction(async (q) => {
         const [c] = cols.length
           ? await q(
             `UPDATE contratos SET ${cols.map((k, i) => `${k} = $${i + 2}`).join(', ')}, updated_at = now() WHERE id = $1 RETURNING *`,
-            [atual.id, ...cols.map(k => dados[k])],
+            [atual.id, ...cols.map(k => valorColuna(k, dados[k]))],
           )
           : [atual]
         const ev = evento ? await inserirEvento(q, atual.id, evento) : null

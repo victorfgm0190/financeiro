@@ -65,7 +65,9 @@ describe('4. pagas das séries vinculadas aparecem na ficha', () => {
     const linhas = linhasDoContrato(C, [serie, ...gerar(C, {}).slice(0, 2)], [{ id: 'tx1', date: '2026-09-14', amount: 3812.5 }])
     const paga = linhas.find(l => l.paga)
     expect(paga).toMatchObject({ key: 'sch_v@2026-09-15', vencimento: '2026-09-14', valor: 3812.5, vinculada: true })
-    expect(linhas.filter(l => !l.paga)).toHaveLength(2)
+    expect(linhas.filter(l => !l.paga && !l.semParcela)).toHaveLength(2)
+    // Meses da vigência sem parcela nem pagamento ligado aparecem como "Sem pagamento vinculado".
+    expect(linhas.some(l => l.semParcela)).toBe(true)
   })
 })
 

@@ -2,6 +2,7 @@
 // Quem aplica é o useContratos; aqui só "o que fazer" com a parcela que acabou de ser paga (ou
 // estornada), para os 5 pontos de efetivação do app usarem a MESMA regra.
 import { r2 } from './parcelas.js'
+import { itensDoCredito } from './creditos.js'
 
 const soma = (itens, f = () => true) => r2((itens || []).filter(f).reduce((a, i) => a + (Number(i.valor) || 0), 0))
 
@@ -34,6 +35,38 @@ export function planejarPosEfetivacao({ contrato, parcela, tx, auto = false }) {
     perguntarReajuste = { parcelaId: parcela.id, base, baseProjetada: r2(c.base ?? previsto), ciclo: c.ciclo ?? null }
   }
   return { ...nada, lancamento: { contratoId: contrato.id, composicao }, compensar, perguntarReajuste }
+}
+
+// Pagamento a menor (D4): previsto = itens da composição sem o ajuste ("Diferença no pagamento");
+// sem composição, o valor esperado da parcela. → { previsto, pago, diferenca } (> 0 = pagou menos).
+export function diferencaDoPagamento(tx, esperado = null) {
+  const c = tx?.composicao
+  const pago = r2(tx?.amount)
+  const temItens = c?.itens?.length && c.tipo !== 'condominio'
+  const previsto = temItens ? soma(c.itens, i => i.tipo !== 'ajuste') : r2(esperado ?? pago)
+  return { previsto, pago, diferenca: r2(previsto - pago) }
+}
+
+// "Justificar diferença": créditos ligados (abertos escolhidos + o manual criado já compensado)
+// explicam quanto se pagou a menos. A soma não passa da diferença; o que sobra continua como
+// "Diferença no pagamento". O VALOR do lançamento não muda — só a composição.
+//   ligados: [{ id, valor, descricao, itens, origem_lancamento_id }]
+// → { ok, erro?, composicao, diferenca, justificado, restante }
+export function planejarJustificativa({ tx, esperado = null, ligados = [] }) {
+  const { previsto, pago, diferenca } = diferencaDoPagamento(tx, esperado)
+  if (!(diferenca > 0.005)) return { ok: false, erro: 'Este pagamento não ficou abaixo do esperado.' }
+  const justificado = r2(ligados.reduce((a, c) => a + (Number(c.valor) || 0), 0))
+  if (!(justificado > 0)) return { ok: false, erro: 'Escolha um crédito ou informe um crédito manual.' }
+  if (justificado > diferenca + 0.005) return { ok: false, erro: 'A soma dos créditos passa da diferença do pagamento.' }
+  const c = tx.composicao?.itens?.length && tx.composicao.tipo !== 'condominio' ? tx.composicao : null
+  const base = c ? c.itens.filter(i => i.tipo !== 'ajuste') : [{ tipo: 'base', desc: 'Valor esperado', valor: previsto }]
+  const itens = [...base, ...ligados.flatMap(itensDoCredito)]
+  const restante = r2(pago - soma(itens))
+  if (Math.abs(restante) > 0.005) itens.push({ tipo: 'ajuste', desc: 'Diferença no pagamento', valor: restante })
+  return {
+    ok: true, diferenca, justificado, restante: r2(-restante),
+    composicao: { ...(c || { tipo: 'aluguel' }), tipo: c?.tipo || 'aluguel', itens, total: pago },
+  }
 }
 
 // Estorno/exclusão do lançamento → { reabrir, remover, manter }: créditos compensados NESTE

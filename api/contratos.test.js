@@ -229,3 +229,43 @@ describe('/api/contrato-regras e /api/contrato-creditos (Entrega 2)', () => {
     expect((await chamar(creditos, 'GET', { url: '/api/contrato-creditos', user: restrito })).body.creditos).toEqual([])
   })
 })
+
+describe('migração 2026-11-03: contrato genérico, meses sem cobrança e destino do crédito', () => {
+  const MIGRACAO_GEN = readFileSync(new URL('../supabase/migrations/2026-11-03_contratos_generico.sql', import.meta.url), 'utf-8')
+
+  it('antes da migração o cadastro continua funcionando (campos novos ficam de fora)', async () => {
+    const r = await chamar(contratos, 'POST', { body: { contrato: { ...CONTRATO, meses_sem_cobranca: ['2026-09'] } } })
+    expect(r.statusCode).toBe(200)
+    expect(r.body.contrato.meses_sem_cobranca).toBeUndefined()
+  })
+
+  it('contrato que já existia fica na regra antiga; os novos nascem com "mês seguinte"; idempotente', async () => {
+    const antigo = (await chamar(contratos, 'POST', { body: { contrato: CONTRATO } })).body.contrato
+    await estado.db.exec(MIGRACAO_GEN)
+    await estado.db.exec(MIGRACAO_GEN)
+    const [{ credito_abatimento: regraAntigo, meses_sem_cobranca: mesesAntigo }] = (await estado.db.query('SELECT * FROM contratos WHERE id = $1', [antigo.id])).rows
+    expect(regraAntigo).toBe('proximo_pendente')
+    expect(mesesAntigo).toEqual([])
+
+    const novo = await chamar(contratos, 'POST', { body: { contrato: {
+      ...CONTRATO, modalidade: 'assinatura', meses_sem_cobranca: ['2026-09', '2026-01', '2026-09'],
+    } } })
+    expect(novo.statusCode).toBe(200)
+    expect(novo.body.contrato).toMatchObject({ modalidade: 'assinatura', meses_sem_cobranca: ['2026-01', '2026-09'], credito_abatimento: 'mes_seguinte' })
+
+    const id = novo.body.contrato.id
+    const put = await chamar(contratos, 'PUT', { body: { id, contrato: { credito_abatimento: 'proximo_pendente', meses_sem_cobranca: [] } } })
+    expect(put.body.contrato).toMatchObject({ credito_abatimento: 'proximo_pendente', meses_sem_cobranca: [] })
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { meses_sem_cobranca: ['2026-13'] } } })).statusCode).toBe(400)
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { credito_abatimento: 'qualquer' } } })).statusCode).toBe(400)
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { modalidade: 'seguro' } } })).body.contrato.modalidade).toBe('seguro')
+
+    const c = await chamar(creditos, 'POST', { url: '/api/contrato-creditos', body: {
+      contrato_id: id, descricao: 'Reembolso', valor: 50, data_origem: '2026-11-03', itens: [{ desc: 'Reembolso', valor: 50 }],
+      destino_agendamento_id: `ctr_${id}_aluguel_202612`,
+    } })
+    expect(c.body.credito).toMatchObject({ destino_agendamento_id: `ctr_${id}_aluguel_202612`, status: 'aberto' })
+    const troca = await chamar(creditos, 'PUT', { url: '/api/contrato-creditos', body: { id: c.body.credito.id, destino_agendamento_id: null } })
+    expect(troca.body.credito.destino_agendamento_id).toBeNull()
+  })
+})

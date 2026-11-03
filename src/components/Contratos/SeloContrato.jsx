@@ -1,6 +1,16 @@
 import { FileSignature } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { parcelaPaga, rotuloContrato } from '../../lib/contratos/parcelas'
+import { parcelaPaga, rotuloContrato, vencimentos } from '../../lib/contratos/parcelas'
+import { ymDe } from '../../lib/contratos/datas'
+
+// Nº/total pelo calendário do contrato (competência da parcela): depois de um aditivo de mês sem
+// cobrança, a parcela paga mostra a numeração nova (só na tela). Sem contrato carregado: o gravado.
+function numeracao(c, s) {
+  if (!c || !s?.startDate || (s.frequency || 'once') !== 'once') return { n: s?.composicao?.numero, t: s?.composicao?.total_parcelas }
+  const lista = vencimentos(c, s.contratoPapel || 'aluguel', { hoje: s.startDate })
+  const v = lista.find(x => x.competencia === ymDe(s.startDate))
+  return { n: v?.numero ?? null, t: c.data_fim ? lista.length : null }
+}
 
 // Selos "Contrato n/N" e "Projetado" de uma parcela/agendamento/lançamento de contrato (Fluxo,
 // Agendamentos, Lançamentos). Clique abre a ficha do contrato. Sem contrato ou módulo desligado: nada.
@@ -9,8 +19,7 @@ export default function SeloContrato({ schedule = null, contratoId = null, comPr
   const id = contratoId || schedule?.contratoId
   if (!id || !contratosHabilitado) return null
   const c = contratoPorId(id)
-  const n = schedule?.composicao?.numero
-  const t = schedule?.composicao?.total_parcelas
+  const { n, t } = numeracao(c, schedule)
   const rotulo = n ? `Contrato ${n}${t ? `/${t}` : ''}` : 'Contrato'
   const abrir = (e) => { e.stopPropagation(); abrirFichaContrato(id) }
   const projetado = comProjetado && schedule?.valorStatus === 'projetado' && !parcelaPaga(schedule)

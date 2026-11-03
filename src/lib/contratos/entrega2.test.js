@@ -81,7 +81,8 @@ const credito = (o) => ({ id: 'cr1', contrato_id: 'c1', status: 'aberto', data_o
 describe('crédito do proprietário no aluguel (regra de 21/10)', () => {
   it('exemplo do pedido: aluguel seguinte = 3.900 − 200 − 104,85 = 3.595,15, item a item com a origem', () => {
     const s = parcelas()
-    const plano = planoCreditosAluguel(C, s, [credito()])
+    // Crédito vindo de um boleto (tem o lançamento de origem): o item leva "cond. dd/mm".
+    const plano = planoCreditosAluguel(C, s, [credito({ origem_lancamento_id: 'tx_cond' })])
     expect(plano).toHaveLength(1)
     expect(plano[0].id).toBe('ctr_c1_aluguel_202610')
     expect(plano[0].changes.amount).toBe(3595.15)

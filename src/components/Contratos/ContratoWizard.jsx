@@ -7,20 +7,34 @@ import { fmt, fmtDate } from '../shared/utils'
 import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
 import CampoValor from './CampoValor'
 import { buscarContratoApi } from '../../lib/contratosApi'
-import { gerarPlanoParcelas, proximoReajuste, PAPEIS, r2, rotuloContrato, textoProjecao } from '../../lib/contratos/parcelas'
+import { gerarPlanoParcelas, proximoReajuste, r2, rotuloContrato, textoProjecao, ehParcelaGerada, parcelaPaga } from '../../lib/contratos/parcelas'
 import { validarEtapa, sugerirCategoria } from '../../lib/contratos/validacao'
 import { candidatosVinculo } from '../../lib/contratos/vinculo'
+import { MODALIDADES, ehAluguel, rotuloPapel, rotulosContrato } from '../../lib/contratos/rotulos'
+import { REGRAS_ABATIMENTO } from '../../lib/contratos/creditos'
 import { hojeStr, ymDe, fmtYm } from '../../lib/contratos/datas'
 import VinculoModal from './VinculoModal'
 
-const ETAPAS = ['Dados', 'Valores e bonificação', 'Reajuste', 'Imóvel e condomínio', 'Prévia']
+// Etapas com índice fixo (validarEtapa); a 3 (imóvel e condomínio) só existe no Aluguel — nas
+// demais modalidades ela não aparece e a numeração na tela não tem buraco.
+const ETAPAS = [
+  { i: 0, nome: () => 'Dados' },
+  { i: 1, nome: (f) => (ehAluguel(f) ? 'Valores e bonificação' : 'Valores') },
+  { i: 2, nome: () => 'Reajuste' },
+  { i: 3, nome: () => 'Imóvel e condomínio', soAluguel: true },
+  { i: 4, nome: () => 'Prévia' },
+]
+const ULTIMA = 4
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const TIPOS_IMOVEL = { casa: 'Casa', apartamento: 'Apartamento', sala: 'Sala comercial', galpao: 'Galpão', outro: 'Outro' }
 const GRUPOS_ITEM = { iptu: 'IPTU', seguro: 'Seguro', condominio: 'Condomínio', outro: 'Outro' }
 const MAX_LINHAS_PREVIA = 36
 // Campos que mexem nas parcelas: mudou algum → evento 'aditivo' e regeneração das pendentes.
 const FINANCEIROS = ['valor_base', 'periodicidade', 'dia_vencimento', 'bonificacao_valor', 'bonificacao_meses', 'indice_reajuste',
-  'percentual_fixo', 'mes_base_reajuste', 'data_inicio', 'data_fim', 'tem_condominio', 'valor_condominio_previsto', 'dia_vencimento_condominio']
+  'percentual_fixo', 'mes_base_reajuste', 'data_inicio', 'data_fim', 'tem_condominio', 'valor_condominio_previsto', 'dia_vencimento_condominio',
+  'meses_sem_cobranca', 'credito_abatimento', 'modalidade']
+// Valor "de antes" dos campos novos em contrato gravado antes da migração (a coluna ainda não veio).
+const ANTES_PADRAO = { meses_sem_cobranca: [], credito_abatimento: 'proximo_pendente' }
 
 const txt = (v) => (v == null ? '' : String(v))
 const num = (v) => { const n = parseValorBR(v); return Number.isFinite(n) ? n : null }
@@ -34,26 +48,65 @@ function formDoContrato(c, padrao) {
     valor_base: valorBRFormatado(c.valor_base), bonificacao_valor: c.bonificacao_valor ? valorBRFormatado(c.bonificacao_valor) : '',
     valor_condominio_previsto: valorBRFormatado(c.valor_condominio_previsto ?? ''),
     percentual_fixo: c.percentual_fixo == null ? '' : String(c.percentual_fixo).replace('.', ','),
+    meses_sem_cobranca: Array.isArray(c.meses_sem_cobranca) ? c.meses_sem_cobranca : [],
+    credito_abatimento: c.credito_abatimento || 'proximo_pendente',
   }
 }
 
-// Formulário → linha da tabela contratos (o que a API valida).
+// Formulário → linha da tabela contratos (o que a API valida). Fora do Aluguel, imóvel e
+// condomínio ficam nulos (não há etapa para eles).
 function paraContrato(f) {
+  const aluguel = ehAluguel(f)
+  const cond = aluguel && !!f.tem_condominio
   return {
-    perfil_id: f.perfil_id || null, tipo: f.tipo, modalidade: f.modalidade, numero: f.numero || null, objeto: f.objeto || null,
-    favorecido: f.favorecido || null, favorecido_condominio: f.tem_condominio ? f.favorecido_condominio || null : null,
+    perfil_id: f.perfil_id || null, tipo: f.tipo, modalidade: f.modalidade || null, numero: f.numero || null, objeto: f.objeto || null,
+    favorecido: f.favorecido || null, favorecido_condominio: cond ? f.favorecido_condominio || null : null,
     data_inicio: f.data_inicio, data_fim: f.sem_fim ? null : f.data_fim || null,
     renovacao_automatica: !!f.renovacao_automatica, aviso_previo_dias: int(f.aviso_previo_dias) ?? 30,
     valor_base: num(f.valor_base) ?? 0, periodicidade: f.periodicidade, dia_vencimento: int(f.dia_vencimento),
-    dia_vencimento_condominio: f.tem_condominio ? int(f.dia_vencimento_condominio) : null,
-    categoria_id: f.categoria_id || null, categoria_condominio_id: f.tem_condominio ? f.categoria_condominio_id || null : null,
+    dia_vencimento_condominio: cond ? int(f.dia_vencimento_condominio) : null,
+    categoria_id: f.categoria_id || null, categoria_condominio_id: cond ? f.categoria_condominio_id || null : null,
     conta_id: f.conta_id || null, centro_custo: f.centro_custo || null, tipo_documento_id: f.tipo_documento_id || null,
-    indice_reajuste: f.indice_reajuste, percentual_fixo: f.indice_reajuste === 'FIXO' ? num(f.percentual_fixo) : null,
+    indice_reajuste: f.indice_reajuste || 'NENHUM', percentual_fixo: f.indice_reajuste === 'FIXO' ? num(f.percentual_fixo) : null,
     mes_base_reajuste: int(f.mes_base_reajuste), bonificacao_valor: num(f.bonificacao_valor) ?? 0,
-    bonificacao_meses: int(f.bonificacao_meses) ?? 0, tipo_imovel: f.tipo_imovel || null, tem_condominio: !!f.tem_condominio,
-    valor_condominio_previsto: f.tem_condominio ? num(f.valor_condominio_previsto) : null,
+    bonificacao_meses: int(f.bonificacao_meses) ?? 0, tipo_imovel: aluguel ? f.tipo_imovel || null : null, tem_condominio: cond,
+    valor_condominio_previsto: cond ? num(f.valor_condominio_previsto) : null,
     link_anexo: f.link_anexo || null, status: f.status || 'ativo', observacao: f.observacao || null,
+    meses_sem_cobranca: [...new Set(f.meses_sem_cobranca || [])].sort(),
+    credito_abatimento: f.credito_abatimento || 'mes_seguinte',
   }
+}
+
+// "Meses sem cobrança": competências da vigência em que a cobrança principal não acontece.
+function MesesSemCobranca({ valor = [], onChange, inicio, fim }) {
+  const [mes, setMes] = useState('')
+  const min = ymDe(inicio) || undefined
+  const max = fim ? ymDe(fim) : undefined
+  const ok = mes && (!min || mes >= min) && (!max || mes <= max) && !valor.includes(mes)
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="month" className="input w-auto" value={mes} min={min} max={max} onChange={e => setMes(e.target.value)} aria-label="Mês sem cobrança" />
+        <button type="button" className="btn-secondary text-xs py-1.5 flex items-center gap-1" disabled={!ok}
+          onClick={() => { onChange([...valor, mes].sort()); setMes('') }}>
+          <Plus size={12} /> Adicionar mês
+        </button>
+      </div>
+      {valor.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {valor.map(m => (
+            <span key={m} className="inline-flex items-center gap-1 text-xs bg-surface-2 text-texto-1 rounded-full px-2 py-0.5">
+              {fmtYm(m)}
+              <button type="button" className="text-texto-3 hover:text-perigo" title={`Voltar a cobrar em ${fmtYm(m)}`} onClick={() => onChange(valor.filter(x => x !== m))}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <p className="text-[11px] text-texto-3">
+        O mês escolhido não gera parcela e não conta na numeração nem no desconto temporário. O reajuste segue o calendário do contrato.
+      </p>
+    </div>
+  )
 }
 
 const Campo = ({ label, children, className = '' }) => (
@@ -70,16 +123,42 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   const edicao = !!contrato
   const hoje = hojeStr()
   const tipoCtr = tiposDocumento.find(t => t.sigla === 'CTR' && t.ativo !== false)
-  const moradia = sugerirCategoria(categories, 'expense')
+  // Contrato novo nasce sem modalidade: ela é o primeiro campo e decide categoria sugerida, índice
+  // padrão e se há etapa de imóvel/condomínio.
   const [f, setF] = useState(() => formDoContrato(contrato, {
-    tipo: 'pagar', modalidade: 'aluguel', perfil_id: activeProfileId || profiles[0]?.id || '', objeto: '', numero: '',
+    tipo: 'pagar', modalidade: '', perfil_id: activeProfileId || profiles[0]?.id || '', objeto: '', numero: '',
     favorecido: '', favorecido_condominio: '', data_inicio: hoje, data_fim: '', sem_fim: false, renovacao_automatica: false,
     aviso_previo_dias: '30', valor_base: '', periodicidade: 'mensal', dia_vencimento: '', bonificacao_valor: '',
-    bonificacao_meses: '', conta_id: '', categoria_id: moradia, centro_custo: '', tipo_documento_id: tipoCtr?.id || '',
-    indice_reajuste: 'IPCA', percentual_fixo: '', mes_base_reajuste: '', tipo_imovel: 'apartamento', tem_condominio: false,
-    valor_condominio_previsto: '', dia_vencimento_condominio: '', categoria_condominio_id: moradia, link_anexo: '',
-    observacao: '', status: 'ativo',
+    bonificacao_meses: '', conta_id: '', categoria_id: '', centro_custo: '', tipo_documento_id: tipoCtr?.id || '',
+    indice_reajuste: 'NENHUM', percentual_fixo: '', mes_base_reajuste: '', tipo_imovel: '', tem_condominio: false,
+    valor_condominio_previsto: '', dia_vencimento_condominio: '', categoria_condominio_id: '', link_anexo: '',
+    observacao: '', status: 'ativo', meses_sem_cobranca: [], credito_abatimento: 'mes_seguinte',
   }))
+  const aluguel = f.modalidade === 'aluguel'
+  // Antes de escolher a modalidade, textos neutros (nada de inquilino/aluguel).
+  const rot = rotulosContrato({ ...f, modalidade: f.modalidade || 'outro' })
+  // Etapa seguinte/anterior pulando a de imóvel fora do Aluguel.
+  const visivel = (i) => !ETAPAS[i].soAluguel || aluguel
+  const proxima = (i) => { let n = i + 1; while (n < ULTIMA && !visivel(n)) n += 1; return Math.min(n, ULTIMA) }
+  const anterior = (i) => { let n = i - 1; while (n > 0 && !visivel(n)) n -= 1; return Math.max(n, 0) }
+  const etapasVisiveis = ETAPAS.filter(e => visivel(e.i))
+
+  // Modalidade (contrato novo): Aluguel sugere "Moradia" e IPCA; as demais, sem categoria e sem reajuste.
+  const trocarModalidade = (m) => {
+    setErro('')
+    setF(p => {
+      if (edicao) return { ...p, modalidade: m }
+      const ehAlug = m === 'aluguel'
+      const sug = ehAlug ? sugerirCategoria(categories, p.tipo === 'receber' ? 'income' : 'expense') : ''
+      return {
+        ...p, modalidade: m, indice_reajuste: ehAlug ? 'IPCA' : 'NENHUM',
+        categoria_id: ehAlug ? p.categoria_id || sug : p.categoria_id,
+        categoria_condominio_id: ehAlug ? p.categoria_condominio_id || sug : '',
+        tipo_imovel: ehAlug ? p.tipo_imovel || 'apartamento' : '',
+        tem_condominio: ehAlug ? p.tem_condominio : false,
+      }
+    })
+  }
   const [itens, setItens] = useState([])
   const [etapa, setEtapa] = useState(0)
   const [erro, setErro] = useState('')
@@ -106,23 +185,31 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   const indice = indicesContratos[f.indice_reajuste]
   const tipoCat = f.tipo === 'receber' ? 'income' : 'expense'
 
-  const planoNovo = useMemo(() => (etapa === 4 && !edicao
+  const planoNovo = useMemo(() => (etapa === ULTIMA && !edicao
     ? gerarPlanoParcelas({ ...dados, id: 'novo' }, { hoje, indices: indicesContratos, apartirDe })
     : []), [etapa, edicao, dados, hoje, indicesContratos, apartirDe])
 
   useEffect(() => {
-    if (etapa !== 4 || !edicao) return
+    if (etapa !== ULTIMA || !edicao) return
     let vivo = true
     planejarParcelasContrato({ ...contrato, ...dados }).then(p => { if (vivo) setPlanoEdicao(p) }).catch(e => setErro(e.message))
     return () => { vivo = false }
   }, [etapa, edicao, contrato, dados, planejarParcelasContrato])
 
+  // Aditivo com mês sem cobrança que já tem pagamento: a parcela paga não sai (só avisa).
+  const pagasSemCobranca = useMemo(() => {
+    if (!edicao) return []
+    const meses = new Set(dados.meses_sem_cobranca)
+    return (schedules || []).filter(s => s.contratoId === contrato.id && (s.contratoPapel || 'aluguel') === 'aluguel'
+      && (ehParcelaGerada(s, contrato.id) ? parcelaPaga(s) && meses.has(ymDe(s.startDate)) : (s.registered || []).some(d => meses.has(ymDe(d)))))
+  }, [edicao, dados.meses_sem_cobranca, schedules, contrato])
+
   const avancar = () => {
     const e = validarEtapa(etapa, f)
     if (e) return setErro(e)
-    setEtapa(x => Math.min(x + 1, ETAPAS.length - 1))
+    setEtapa(x => proxima(x))
   }
-  const itensPayload = () => itens.filter(i => txt(i.descricao).trim()).map(i => ({
+  const itensPayload = () => (aluguel ? itens : []).filter(i => txt(i.descricao).trim()).map(i => ({
     descricao: i.descricao.trim(), grupo: i.grupo || 'outro', responsavel: i.responsavel || 'inquilino',
     valor_previsto: num(i.valor_previsto), categoria_id: i.categoria_id || null, ativo: i.ativo !== false,
   }))
@@ -145,7 +232,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       }
       const mudou = {}
       for (const [k, v] of Object.entries(dados)) {
-        const antes = contrato[k] ?? null
+        const antes = contrato[k] ?? ANTES_PADRAO[k] ?? null
         if (JSON.stringify(antes) !== JSON.stringify(v)) mudou[k] = { de: antes, para: v }
       }
       const financeiro = Object.keys(mudou).some(k => FINANCEIROS.includes(k))
@@ -179,11 +266,11 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   return (
     <div className="space-y-4">
       <ol data-guia="contrato-form.etapas" className="flex flex-wrap gap-1.5 text-[11px]">
-        {ETAPAS.map((e, i) => (
-          <li key={e}>
-            <button type="button" onClick={() => (i < etapa ? setEtapa(i) : null)}
-              className={`px-2 py-1 rounded-full border ${i === etapa ? 'border-primary bg-primary/15 text-primary-fg font-semibold' : i < etapa ? 'border-borda-forte text-texto-2 hover:bg-surface-hover' : 'border-borda text-texto-3 cursor-default'}`}>
-              {i + 1}. {e}
+        {etapasVisiveis.map((e, pos) => (
+          <li key={e.i}>
+            <button type="button" onClick={() => (e.i < etapa ? setEtapa(e.i) : null)}
+              className={`px-2 py-1 rounded-full border ${e.i === etapa ? 'border-primary bg-primary/15 text-primary-fg font-semibold' : e.i < etapa ? 'border-borda-forte text-texto-2 hover:bg-surface-hover' : 'border-borda text-texto-3 cursor-default'}`}>
+              {pos + 1}. {e.nome(f)}
             </button>
           </li>
         ))}
@@ -191,20 +278,24 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
       {etapa === 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Campo label="Modalidade">
+            <select data-guia="contrato-form.modalidade" className="input" value={f.modalidade} onChange={e => trocarModalidade(e.target.value)}>
+              <option value="">Escolha a finalidade do contrato…</option>
+              {Object.entries(MODALIDADES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </Campo>
           <Campo label="Tipo">
             <select data-guia="contrato-form.tipo" className="input" value={f.tipo} disabled={edicao} onChange={e => {
               const t = e.target.value
-              const sug = sugerirCategoria(categories, t === 'receber' ? 'income' : 'expense')
               setErro('')
-              setF(p => ({ ...p, tipo: t, categoria_id: sug, categoria_condominio_id: sug }))
+              setF(p => {
+                if (!ehAluguel(p) || !p.modalidade) return { ...p, tipo: t }
+                const sug = sugerirCategoria(categories, t === 'receber' ? 'income' : 'expense')
+                return { ...p, tipo: t, categoria_id: sug, categoria_condominio_id: sug }
+              })
             }}>
-              <option value="pagar">A pagar (sou o inquilino)</option>
-              <option value="receber">A receber (sou o proprietário)</option>
-            </select>
-          </Campo>
-          <Campo label="Modalidade">
-            <select data-guia="contrato-form.modalidade" className="input" value={f.modalidade} onChange={e => set('modalidade', e.target.value)}>
-              <option value="aluguel">Aluguel</option><option value="servico">Serviço</option><option value="outro">Outro</option>
+              <option value="pagar">{rot.tipoPagar}</option>
+              <option value="receber">{rot.tipoReceber}</option>
             </select>
           </Campo>
           <Campo label="Perfil">
@@ -216,10 +307,11 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           <Campo label="Número do contrato (opcional)">
             <input autoComplete="off" className="input" value={f.numero} onChange={e => set('numero', e.target.value)} maxLength={60} />
           </Campo>
-          <Campo label="Objeto (ex.: Apto 302 — Ed. Sol)" className="sm:col-span-2">
-            <input data-guia="contrato-form.objeto" autoComplete="off" className="input" value={f.objeto} onChange={e => set('objeto', e.target.value)} maxLength={200} />
+          <Campo label="Objeto do contrato" className="sm:col-span-2">
+            <input data-guia="contrato-form.objeto" autoComplete="off" className="input" value={f.objeto} onChange={e => set('objeto', e.target.value)} maxLength={200}
+              placeholder={aluguel ? 'Imóvel do contrato (ex.: Apto 302 — Ed. Sol)' : 'O que o contrato cobre (ex.: manutenção mensal, plano anual)'} />
           </Campo>
-          <Campo label={f.tipo === 'receber' ? 'Inquilino (favorecido)' : 'Favorecido do aluguel (imobiliária / proprietário)'} className="sm:col-span-2">
+          <Campo label={rot.favorecido} className="sm:col-span-2">
             <FavorecidoAutocomplete value={f.favorecido} onChange={v => set('favorecido', v)} suggestions={payees || []} />
           </Campo>
           <Campo label="Início da vigência">
@@ -259,10 +351,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </select>
             <p className="text-[11px] text-texto-3 mt-1">Cartão de crédito não é aceito nesta versão.</p>
           </Campo>
-          <Campo label="Categoria do aluguel">
+          <Campo label={rot.categoria}>
             <CategorySelect categories={categories} value={f.categoria_id} onChange={e => set('categoria_id', e.target.value)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
           </Campo>
-          <Campo label="Valor do aluguel (contratual)">
+          <Campo label={rot.valorPrincipal}>
             <CampoValor data-guia="contrato-form.valor" value={f.valor_base} onChange={v => set('valor_base', v)} placeholder="0,00" />
           </Campo>
           <Campo label="Periodicidade">
@@ -287,17 +379,22 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </select>
           </Campo>
           <div />
-          <Campo label="Bonificação por mês (desconto)">
-            <CampoValor value={f.bonificacao_valor} onChange={v => set('bonificacao_valor', v)} placeholder="0,00 (opcional)" />
+          <Campo label={`${rot.desconto} por mês (desconto)`}>
+            <CampoValor value={f.bonificacao_valor} onChange={v => set('bonificacao_valor', v)} placeholder="Desconto em cada parcela (opcional)" />
           </Campo>
-          <Campo label="Bonificação nos primeiros (meses)">
-            <input autoComplete="off" type="number" min="0" className="input" value={f.bonificacao_meses} onChange={e => set('bonificacao_meses', e.target.value)} />
+          <Campo label={`${rot.desconto} nas primeiras (parcelas cobradas)`}>
+            <input autoComplete="off" type="number" min="0" className="input" value={f.bonificacao_meses} onChange={e => set('bonificacao_meses', e.target.value)} placeholder="Quantas parcelas têm o desconto" />
           </Campo>
           {num(f.bonificacao_valor) > 0 && num(f.valor_base) > 0 && (
             <p className="sm:col-span-2 text-xs text-texto-2">
               Parcelas 1 a {int(f.bonificacao_meses) || 0}: {fmt(num(f.valor_base))} − {fmt(num(f.bonificacao_valor))} = <strong className="text-texto-1">{fmt(r2(num(f.valor_base) - num(f.bonificacao_valor)))}</strong>
             </p>
           )}
+          <Campo label="Meses sem cobrança" className="sm:col-span-2">
+            <div data-guia="contrato-form.meses-sem-cobranca">
+              <MesesSemCobranca valor={f.meses_sem_cobranca || []} onChange={v => set('meses_sem_cobranca', v)} inicio={f.data_inicio} fim={f.sem_fim ? null : f.data_fim} />
+            </div>
+          </Campo>
         </div>
       )}
 
@@ -370,6 +467,16 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
                 <Campo label="Categoria do condomínio" className="sm:col-span-2">
                   <CategorySelect categories={categories} value={f.categoria_condominio_id} onChange={e => set('categoria_condominio_id', e.target.value)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
                 </Campo>
+                <Campo label="Créditos do proprietário: abater" className="sm:col-span-2">
+                  <select data-guia="contrato-form.credito-abatimento" className="input" value={f.credito_abatimento} onChange={e => set('credito_abatimento', e.target.value)}>
+                    {Object.entries(REGRAS_ABATIMENTO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                  <p className="text-[11px] text-texto-3 mt-1">
+                    {f.credito_abatimento === 'proximo_pendente'
+                      ? 'O crédito do boleto entra no primeiro aluguel ainda pendente com vencimento a partir da data do pagamento.'
+                      : 'O crédito do boleto entra no aluguel do mês seguinte ao do boleto (ex.: boleto de dezembro abate no aluguel de janeiro).'}
+                  </p>
+                </Campo>
               </>
             )}
           </div>
@@ -402,7 +509,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
         </div>
       )}
 
-      {etapa === 4 && !edicao && (
+      {etapa === ULTIMA && !edicao && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-end gap-3">
             <Campo label="Gerar parcelas a partir de">
@@ -410,14 +517,24 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </Campo>
             <p className="text-xs text-texto-3 pb-2">
               {planoNovo.length} parcela(s){f.sem_fim ? ' — sem data de fim: 12 meses à frente, estendidas sozinhas' : ''}. Antes de gerar, procuro agendamentos parecidos para vincular.
+              {' '}Meses anteriores ficam na ficha como "Sem pagamento vinculado", para você ligar o pagamento que já fez.
             </p>
           </div>
-          <PreviaTabela linhas={planoNovo} />
+          {(f.meses_sem_cobranca || []).length > 0 && (
+            <p className="text-xs text-texto-2">Sem cobrança: {f.meses_sem_cobranca.map(fmtYm).join(', ')}.</p>
+          )}
+          <PreviaTabela linhas={planoNovo} contrato={dados} />
         </div>
       )}
 
-      {etapa === 4 && edicao && (
+      {etapa === ULTIMA && edicao && (
         <div className="space-y-2">
+          {pagasSemCobranca.length > 0 && (
+            <p className="text-xs text-aviso bg-surface-2/60 rounded-lg px-3 py-2">
+              ⚠ Mês marcado sem cobrança que já tem pagamento: {[...new Set(pagasSemCobranca.flatMap(s => (ehParcelaGerada(s, contrato.id) ? [s.startDate] : s.registered || []).map(ymDe)))].filter(m => dados.meses_sem_cobranca.includes(m)).map(fmtYm).join(', ')}.
+              {' '}A parcela paga não é removida nem muda de valor; só fica sem número.
+            </p>
+          )}
           {!planoEdicao ? <p className="text-xs text-texto-3">Calculando…</p> : (
             <>
               <p className="text-xs text-texto-2">
@@ -425,7 +542,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
                 <strong className="text-texto-1">{planoEdicao.criar.length}</strong> nova(s),{' '}
                 <strong className="text-texto-1">{planoEdicao.remover.length}</strong> removida(s). Pagas não mudam.
               </p>
-              <MudancasTabela plano={planoEdicao} />
+              <MudancasTabela plano={planoEdicao} contrato={dados} />
             </>
           )}
         </div>
@@ -433,10 +550,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
       {erro && <p className="text-xs text-perigo">{erro}</p>}
       <div className="flex justify-between gap-2 pt-2 border-t border-borda">
-        <button type="button" className="btn-secondary flex items-center gap-1" onClick={() => (etapa === 0 ? onClose() : setEtapa(x => x - 1))}>
+        <button type="button" className="btn-secondary flex items-center gap-1" onClick={() => (etapa === 0 ? onClose() : setEtapa(x => anterior(x)))}>
           <ChevronLeft size={14} /> {etapa === 0 ? 'Cancelar' : 'Voltar'}
         </button>
-        {etapa < ETAPAS.length - 1 ? (
+        {etapa < ULTIMA ? (
           <button type="button" data-guia="contrato-form.avancar" className="btn-primary flex items-center gap-1" onClick={avancar}>Avançar <ChevronRight size={14} /></button>
         ) : (
           <button type="button" data-guia="contrato-form.salvar" className="btn-primary flex items-center gap-1" disabled={salvando} onClick={confirmar}>
@@ -452,7 +569,7 @@ function Composicao({ c }) {
   return [...(c?.itens || []).map(i => `${i.desc} ${fmt(i.valor)}`), c?.projecao ? textoProjecao(c.projecao) : ''].filter(Boolean).join(' · ')
 }
 
-function PreviaTabela({ linhas }) {
+function PreviaTabela({ linhas, contrato }) {
   const vis = [...linhas].sort((a, b) => a.vencimento.localeCompare(b.vencimento)).slice(0, MAX_LINHAS_PREVIA)
   return (
     <div className="overflow-x-auto max-h-[45vh] overflow-y-auto">
@@ -468,7 +585,7 @@ function PreviaTabela({ linhas }) {
           {vis.map(p => (
             <tr key={p.id} className="border-b border-borda/50">
               <td className="px-2 py-1.5 text-texto-2">{p.numero}{p.total ? `/${p.total}` : ''}</td>
-              <td className="px-2 py-1.5 text-texto-2">{PAPEIS[p.papel]}</td>
+              <td className="px-2 py-1.5 text-texto-2">{rotuloPapel(contrato, p.papel)}</td>
               <td className="px-2 py-1.5 text-texto-2 whitespace-nowrap">{fmtDate(p.vencimento)}</td>
               <td className="px-2 py-1.5 text-texto-3"><Composicao c={p.composicao} /></td>
               <td className="px-2 py-1.5 text-right whitespace-nowrap">
@@ -484,7 +601,7 @@ function PreviaTabela({ linhas }) {
   )
 }
 
-function MudancasTabela({ plano }) {
+function MudancasTabela({ plano, contrato }) {
   const linhas = [
     ...plano.atualizar.map(m => ({ id: m.id, tipo: 'Alterada', venc: m.changes.startDate || m.antes.startDate, de: m.antes.amount, para: m.changes.amount ?? m.antes.amount, papel: m.antes.contratoPapel })),
     ...plano.criar.map(s => ({ id: s.id, tipo: 'Nova', venc: s.startDate, de: null, para: s.amount, papel: s.contratoPapel })),
@@ -504,7 +621,7 @@ function MudancasTabela({ plano }) {
           {linhas.map(l => (
             <tr key={`${l.tipo}-${l.id}`} className="border-b border-borda/50">
               <td className="px-2 py-1.5 text-texto-2 whitespace-nowrap">{fmtDate(l.venc)}</td>
-              <td className="px-2 py-1.5 text-texto-2">{PAPEIS[l.papel] || l.papel}</td>
+              <td className="px-2 py-1.5 text-texto-2">{rotuloPapel(contrato, l.papel)}</td>
               <td className="px-2 py-1.5 text-texto-2">{l.tipo}</td>
               <td className="px-2 py-1.5 text-right text-texto-3">{l.de == null ? '—' : fmt(l.de)}</td>
               <td className="px-2 py-1.5 text-right text-texto-1 font-medium">{l.para == null ? '—' : fmt(l.para)}</td>
