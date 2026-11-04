@@ -1,5 +1,5 @@
 import { rotuloFrequencia } from '../../lib/contratos/parcelas'
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { Info, X, History, AlertTriangle } from 'lucide-react'
 import { publicarAgendaJa } from '../../lib/agendaFeedApi'
 import { useApp } from '../../context/AppContext'
@@ -31,6 +31,7 @@ import ResumoRateio from '../shared/ResumoRateio'
 import { validarRateio, normalizarRateio, categoriaPrincipal, rateioDaOcorrencia } from '../../lib/rateio'
 import FimRepeticao from '../shared/FimRepeticao'
 import ContratoDoAgendamento from './ContratoDoAgendamento'
+import { mesmoFormulario, camposQueMudaram, juntarEdicao } from '../../lib/formularioVivo'
 import DateInput from '../shared/DateInput'
 import { controleGerencialAtivo, grupoComChaveDesligada, travaGerencial } from '../../lib/controleGerencial'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
@@ -313,42 +314,103 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   const [chipPendente, setChipPendente] = useState(null) // { occDate, mudancas, nProximas, nPendentes, conflitos }
   const [verHistorico, setVerHistorico] = useState(false)
 
-  const [form, setForm] = useState(() => ({
-    description: (occInicial ? occInicial.description : initial?.description) || '',
-    transactionType: initial?.transactionType || 'expense',
-    accountId: (occInicial ? occInicial.accountId : initial?.accountId) || accounts[0]?.id || '',
-    toAccountId: initial?.toAccountId || '',
-    reservaExpenseCategoryId: initial?.reservaExpenseCategoryId || '',
-    reservaFuncaoId: initial?.reservaFuncaoId || '',
-    amount: (occInicial ? occInicial.amount : initial?.amount) ?? '',
-    categoryId: (occInicial ? occInicial.categoryId : initial?.categoryId) || '',
+  // Valores do formulário para o agendamento `ini`, com a ocorrência da âncora de `base` (recorrente).
+  // Na abertura: formDe(initial, serieBase). Para conferir mudança feita FORA do formulário
+  // (composição do boleto, crédito, pagamento, outro aparelho): formDe(atual, atual).
+  const formDe = (ini, base) => {
+    const anc = ancoraDe(base)
+    const exib = (anc && base) ? occEfetiva(base, anc).date : anc
+    const occ = ehRecorrente && anc ? occCampos(base, anc) : null
+    return formDeValores(ini, occ, exib)
+  }
+  const formDeValores = (ini, occInicial, ancoraExibida) => ({
+    description: (occInicial ? occInicial.description : ini?.description) || '',
+    transactionType: ini?.transactionType || 'expense',
+    accountId: (occInicial ? occInicial.accountId : ini?.accountId) || accounts[0]?.id || '',
+    toAccountId: ini?.toAccountId || '',
+    reservaExpenseCategoryId: ini?.reservaExpenseCategoryId || '',
+    reservaFuncaoId: ini?.reservaFuncaoId || '',
+    amount: (occInicial ? occInicial.amount : ini?.amount) ?? '',
+    categoryId: (occInicial ? occInicial.categoryId : ini?.categoryId) || '',
     // Transferência entre perfis: categoria na visão do CNPJ e na do CPF (campos da parcela).
-    categoriaCnpjId: (occInicial ? occInicial.categoriaCnpjId : initial?.categoriaCnpjId) || '',
-    categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : initial?.categoriaCpfId) || '',
-    payee: initial?.payee || '',
-    costCenter: (occInicial ? occInicial.costCenter : initial?.costCenter) || '',
-    frequency: initial?.frequency || '',
-    startDate: initial?.startDate || today(),
+    categoriaCnpjId: (occInicial ? occInicial.categoriaCnpjId : ini?.categoriaCnpjId) || '',
+    categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : ini?.categoriaCpfId) || '',
+    payee: ini?.payee || '',
+    costCenter: (occInicial ? occInicial.costCenter : ini?.costCenter) || '',
+    frequency: ini?.frequency || '',
+    startDate: ini?.startDate || today(),
     // Data de Vencimento Atual: re-ancora a série. O campo EXIBE a data efetiva (com a exceção
     // aplicada, quando existe) — ver `ancoraExibida`. A âncora realmente salva é `ancoraSalva`,
     // e só substitui a atual se este campo for editado à mão.
     nextOccurrence: ancoraExibida,
-    occurrenceType: initial?.occurrenceType || 'continuous',
-    installments: initial?.installments ?? 0,
-    remindDaysBefore: initial?.remindDaysBefore ?? 3,
-    autoRegister: initial?.autoRegister ?? true,
-    sincronizarAgenda: initial?.sincronizarAgenda !== false,
+    occurrenceType: ini?.occurrenceType || 'continuous',
+    installments: ini?.installments ?? 0,
+    remindDaysBefore: ini?.remindDaysBefore ?? 3,
+    autoRegister: ini?.autoRegister ?? true,
+    sincronizarAgenda: ini?.sincronizarAgenda !== false,
     // "Considerar no Fluxo de Caixa principal?" — null = padrão da regra de hoje (pela conta FC).
-    considerarFluxoPrincipal: typeof initial?.considerarFluxoPrincipal === 'boolean' ? initial.considerarFluxoPrincipal : null,
-    grupoGerencial: (occInicial ? occInicial.grupoGerencial : initial?.grupoGerencial) || null,
-    skipped: initial?.skipped || [],
-    overrides: initial?.overrides || {},
-    tipoDocumentoId: initial?.tipoDocumentoId || '',
-    numeroContrato: initial?.numeroContrato || '',
-  }))
+    considerarFluxoPrincipal: typeof ini?.considerarFluxoPrincipal === 'boolean' ? ini.considerarFluxoPrincipal : null,
+    grupoGerencial: (occInicial ? occInicial.grupoGerencial : ini?.grupoGerencial) || null,
+    skipped: ini?.skipped || [],
+    overrides: ini?.overrides || {},
+    tipoDocumentoId: ini?.tipoDocumentoId || '',
+    numeroContrato: ini?.numeroContrato || '',
+  })
+  const [form, setForm] = useState(() => formDe(initial, serieBase))
+  // Agendamento mudou FORA deste formulário enquanto ele está aberto? `origem` = o que o formulário
+  // mostrava (form) e a versão viva (vivo) na última sincronização. Sem edição do usuário, o
+  // formulário passa ao valor novo; com edição, pergunta (Recarregar × Manter a minha edição) e o
+  // Salvar fica bloqueado até a escolha — nunca grava por cima sem querer.
+  const [origem0] = useState(() => ({ form, vivo: initial?.id ? formDe(atual, atual) : null }))
+  const origemRef = useRef(origem0)
+  const salvandoRef = useRef(false)
+  const [mudouFora, setMudouFora] = useState(null) // { campos, novo }
+  const [atualizadoFora, setAtualizadoFora] = useState(null) // campos atualizados sozinhos
   // Tipo de documento: obrigatório só ao CRIAR despesa/receita; na edição pode ficar vazio.
   const [erroTipoDoc, setErroTipoDoc] = useState('')
   const tipoDocObrigatorio = tipoDocumentoObrigatorio({ criando: !initial?.id, tipoMov: form.transactionType })
+
+  // Conferência a cada versão nova do agendamento no app (o próprio Salvar não conta).
+  useEffect(() => {
+    if (!initial?.id || salvandoRef.current || !atual) return
+    const vivo = formDe(atual, atual)
+    const o = origemRef.current
+    if (mesmoFormulario(vivo, o.vivo)) return
+    const campos = camposQueMudaram(o.vivo, vivo)
+    const rateioMexido = JSON.stringify(normalizarRateio(rateioRows)) !== JSON.stringify(normalizarRateio(rateioInicial))
+    const intocado = mesmoFormulario(form, o.form) && !serieLocal && edicoesChip.length === 0 && !ancoraTocada && !vencTocado && !rateioMexido
+    if (intocado) {
+      origemRef.current = { form: vivo, vivo }
+      setForm(vivo)
+      setRateioRows(rateioInicial)
+      setAtualizadoFora(campos)
+      setMudouFora(null)
+    } else {
+      setMudouFora({ campos, vivo })
+    }
+  }, [atual]) // eslint-disable-line react-hooks/exhaustive-deps
+  const recarregarDeFora = () => {
+    const vivo = mudouFora?.vivo || formDe(atual, atual)
+    origemRef.current = { form: vivo, vivo }
+    setForm(vivo)
+    setSerieLocal(null)
+    setEdicoesChip([])
+    setAncoraTocada(false)
+    setVencTocado(false)
+    setRateioRows(rateioInicial)
+    setAtualizadoFora(mudouFora?.campos || null)
+    setMudouFora(null)
+  }
+  // Manter a minha edição: os campos que o usuário mexeu ficam como ele deixou; os que ele NÃO mexeu
+  // recebem o valor novo (nunca voltam ao antigo). O diff do Salvar compara com a versão viva.
+  const manterMinhaEdicao = () => {
+    const { form: base } = origemRef.current
+    const vivo = mudouFora.vivo
+    const novo = juntarEdicao(form, base, vivo)
+    origemRef.current = { form: vivo, vivo }
+    setForm(novo)
+    setMudouFora(null)
+  }
 
   const [editingOcc, setEditingOcc] = useState(null)
   // Edição de ocorrência pendente (não salva) → Cancelar/X perguntam antes de descartar.
@@ -695,6 +757,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   const handleSubmit = async (e, decisao = null) => {
     if (!podeGravarForm) { e?.preventDefault?.(); return }
     e?.preventDefault?.()
+    // Mudou fora enquanto o usuário editava: só grava depois da escolha (Recarregar × Manter).
+    if (mudouFora) return
     if (!form.description || !form.amount || !form.accountId || !form.frequency) return
     if (form.frequency !== 'once' && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
     if (form.transactionType === 'transfer' && !form.toAccountId) return
@@ -775,8 +839,9 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       // Parcela de financiamento: o favorecido vale para o financiamento e as parcelas PENDENTES —
       // o endpoint vai ANTES do updateSchedule (falha não deixa o estado com um favorecido que o
       // banco não tem).
+      salvandoRef.current = true
       const ok = await salvarEdicao(data, mudancas, ctx, decisao)
-      if (!ok) return
+      if (!ok) { salvandoRef.current = false; return }
       // Parcela de contrato editada à mão: evento na linha do tempo do contrato (antes/depois).
       if (ehParcelaContrato && mudancas.length) {
         registrarEventoContrato?.(initial.contratoId, {
@@ -853,6 +918,24 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
               <History size={13} /> Histórico
               {temHistorico('agendamento', initial.id) && <span className="w-1.5 h-1.5 rounded-full bg-primary-fg" />}
             </button>
+          </div>
+        )}
+        {mudouFora && (
+          <div role="alert" data-testid="agendamento-mudou-fora" className="max-sm:-order-1 sm:col-span-2 text-xs text-aviso bg-aviso/10 border border-aviso/30 rounded-lg px-3 py-2 space-y-2">
+            <p className="flex items-start gap-2">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              <span>Este agendamento foi alterado enquanto você editava{mudouFora.campos.length ? ` (${mudouFora.campos.map(c => c.texto).join('; ')})` : ''}. Escolha antes de salvar.</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn-secondary text-xs py-1.5" onClick={recarregarDeFora}>Recarregar com os dados novos</button>
+              <button type="button" className="btn-ghost text-xs py-1.5" onClick={manterMinhaEdicao}>Manter a minha edição</button>
+            </div>
+          </div>
+        )}
+        {!mudouFora && atualizadoFora && (
+          <div data-testid="agendamento-atualizado-fora" className="max-sm:-order-1 sm:col-span-2 flex items-start gap-2 text-xs text-texto-2 bg-surface-2/60 rounded-lg px-3 py-2">
+            <Info size={13} className="mt-0.5 shrink-0" />
+            <span>Atualizado com a alteração feita agora{atualizadoFora.length ? ` (${atualizadoFora.map(c => c.texto).join('; ')})` : ''}.</span>
           </div>
         )}
         {avisoMotor && (
@@ -1436,7 +1519,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         <div className="sm:col-span-2 flex gap-3 pt-1 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:bg-surface max-sm:border-t max-sm:border-borda max-sm:pt-3 acoes-safe-bottom">
           <button type="button" className="btn-secondary flex-1" onClick={() => { if (podeDescartar()) onClose() }}>Cancelar</button>
           {podeGravarForm
-            ? <button type="submit" data-guia="agendamento-form.salvar" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
+            ? <button type="submit" disabled={!!mudouFora} data-guia="agendamento-form.salvar" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
             : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
         </div>
       </form>

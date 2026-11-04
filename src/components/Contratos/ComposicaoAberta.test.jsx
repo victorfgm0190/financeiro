@@ -86,6 +86,27 @@ describe('Composição do boleto — parcela aberta', () => {
     expect(onConfirmar.mock.calls[0][0].composicao.total).toBe(1300)
   })
 
+  it('"Lembrar para os próximos" grava o nome do item, sem datas, quantidades e sinais (texto real de boleto)', async () => {
+    base()
+    ia.resposta = { leitura: { vencimento: '2026-11-10', total: 576.22, itens: [
+      { desc: 'Espaço Gourmet (20/09/2026- Espaço Gourmet Sex Sab Dom - 1) (+)', valor: 291.78 },
+      { desc: 'Churrasqueira (18/10/2026- Churrasqueira Sex Sab Dom - 10) (+)', valor: 194.52 },
+      { desc: 'Fundo de reserva (+)', valor: 89.92 },
+    ] } }
+    const onConfirmar = abrirModal()
+    enviarArquivo('foto-arquivo', new File(['x'], 'b.png', { type: 'image/png' }))
+    await vi.waitFor(() => expect(screen.getByTestId('leitura-boleto')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Itens sem regra são do inquilino' }))
+    expect(screen.getAllByTestId('padrao-regra').map(e => e.textContent)).toEqual(['Espaço Gourmet', 'Churrasqueira'])
+    for (const caixa of screen.getAllByRole('checkbox', { name: /Lembrar para os próximos/ })) fireEvent.click(caixa)
+    fireEvent.click(confirmar())
+    await vi.waitFor(() => expect(onConfirmar).toHaveBeenCalled())
+    expect(onConfirmar.mock.calls[0][0].lembrar).toEqual([
+      { padrao: 'Espaço Gourmet', responsavel: 'inquilino' },
+      { padrao: 'Churrasqueira', responsavel: 'inquilino' },
+    ])
+  })
+
   it('leitura que não acha itens: avisa e nada é preenchido nem gravado', async () => {
     base()
     ia.resposta = { leitura: { vencimento: null, total: null, itens: [] } }

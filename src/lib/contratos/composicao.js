@@ -41,6 +41,23 @@ export function parsearTextoBoleto(texto) {
   return { itens, total, ignoradas }
 }
 
+// ── Padrão estável para "Lembrar para os próximos" ────────────────────────────────────────────────
+// O texto lido do boleto traz datas, quantidades e sinais que mudam todo mês ("Espaço Gourmet
+// (20/09/2026- Espaço Gourmet Sex Sab Dom - 1) (+)"). A regra grava só o NOME do item ("Espaço
+// Gourmet"), que casa ("começa com") no boleto seguinte: sem parênteses, o que vem depois de ":",
+// datas, números e sinais. Sem nada que sobre, fica o texto original sem os sinais.
+export function padraoDaRegra(desc) {
+  const original = String(desc || '')
+  let s = original.replace(/\([^)]*\)/g, ' ').replace(/\(.*$/, ' ')
+  s = s.split(':')[0]
+  s = s.replace(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g, ' ')
+  s = s.replace(/\d+(?:[.,]\d+)*/g, ' ')
+  s = s.replace(/[+\-–—=*;,./|]+/g, ' ')
+  s = s.replace(/\s+/g, ' ').trim()
+  if (s) return s
+  return original.replace(/[()+\-–—]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
 // ── Regras: quem paga cada item ────────────────────────────────────────────────────────────────
 // Do contrato antes das globais; "começa com" antes de "contém"; padrão mais longo desempata.
 export function regraDoItem(desc, regras, contratoId) {

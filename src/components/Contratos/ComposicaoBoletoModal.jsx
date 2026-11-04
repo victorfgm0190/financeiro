@@ -5,7 +5,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
 import {
-  parsearTextoBoleto, classificarItens, resumoItens, itemDiferenca, RESP, composicaoCondominio, dividirItem,
+  parsearTextoBoleto, classificarItens, resumoItens, itemDiferenca, RESP, composicaoCondominio, dividirItem, padraoDaRegra,
 } from '../../lib/contratos/composicao'
 import { regraAbatimento } from '../../lib/contratos/creditos'
 import { LEITURA_DE_IMAGEM_DISPONIVEL, extrairItensDeImagem } from '../../lib/contratos/imagemBoleto'
@@ -121,7 +121,12 @@ export default function ComposicaoBoletoModal({
         desc: i.desc, valor: i.valor, responsavel: i.responsavel, regra: i.regra || undefined,
         ...(i.so_neste_boleto ? { so_neste_boleto: true } : {}),
       }))
-      const regrasNovas = itens.filter((i, j) => !i.regra_id && lembrar[j]).map(i => ({ padrao: i.desc, responsavel: i.responsavel }))
+      // Padrão estável (nome do item, sem datas/quantidades/sinais): casa no boleto do mês seguinte.
+      // Dois itens com o mesmo nome viram uma regra só.
+      const vistos = new Set()
+      const regrasNovas = itens.filter((i, j) => !i.regra_id && lembrar[j])
+        .map(i => ({ padrao: padraoDaRegra(i.desc), responsavel: i.responsavel }))
+        .filter(r => r.padrao && !vistos.has(r.padrao.toLowerCase()) && vistos.add(r.padrao.toLowerCase()))
       await onConfirmar({ itens: lista, lembrar: regrasNovas, composicao: composicaoCondominio(lista) })
     } catch (err) {
       setAviso(err?.message || 'Falha ao salvar.')
@@ -226,7 +231,7 @@ export default function ComposicaoBoletoModal({
                   {!it.regra_id && it.responsavel && (
                     <label className="flex items-center gap-1.5 text-[11px] text-texto-2 mt-1">
                       <input type="checkbox" className="accent-primary" checked={!!lembrar[i]} onChange={e => setLembrar(p => ({ ...p, [i]: e.target.checked }))} />
-                      Lembrar para os próximos
+                      <span className="min-w-0 truncate">Lembrar para os próximos{padraoDaRegra(it.desc) ? <> (itens que começam com "<span data-testid="padrao-regra">{padraoDaRegra(it.desc)}</span>")</> : null}</span>
                     </label>
                   )}
                   <label className="flex items-center gap-1.5 text-[11px] text-texto-2 mt-1" title="Item eventual: fica fora da previsão dos próximos condomínios. Não muda o crédito nem o valor do lançamento">
