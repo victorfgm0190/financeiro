@@ -5,7 +5,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import { parseValorBR } from '../../lib/valorBR'
 import { r2 } from '../../lib/contratos/parcelas'
 import { aluguelPendentes, REGRAS_ABATIMENTO, regraAbatimento } from '../../lib/contratos/creditos'
-import { diferencaDoPagamento } from '../../lib/contratos/efetivacao'
+import { diferencaDoPagamento, esperadoDoPagamento } from '../../lib/contratos/efetivacao'
 import { rotuloPapel, rotulosContrato } from '../../lib/contratos/rotulos'
 import { hojeStr } from '../../lib/contratos/datas'
 import CampoValor from './CampoValor'
@@ -96,10 +96,11 @@ export function TrocarDestinoModal({ contrato, credito, onClose, onConcluido }) 
 // "Justificar diferença" de parcela paga a menor (D4): ligar créditos abertos e/ou criar um crédito
 // manual já compensado. Soma ≤ diferença; o resto continua "Diferença no pagamento". O valor do
 // lançamento não muda.
-export function JustificarDiferencaModal({ contrato, linha, onClose, onConcluido }) {
+// `esperado`: o mesmo valor que decidiu mostrar o botão na ficha (esperadoDoPagamento com o plano).
+export function JustificarDiferencaModal({ contrato, linha, esperado: esperadoDado, onClose, onConcluido }) {
   const { creditosContratos, justificarDiferenca } = useApp()
   const tx = linha.tx
-  const esperado = linha.meta?.valor_previsto ?? (linha.schedule ? r2(linha.schedule.composicao?.total ?? linha.schedule.amount) : null)
+  const esperado = esperadoDado !== undefined ? esperadoDado : esperadoDoPagamento(linha)
   const { previsto, diferenca } = diferencaDoPagamento(tx, esperado)
   const abertos = (creditosContratos || []).filter(c => c.contrato_id === contrato.id && c.status === 'aberto')
   const [ligar, setLigar] = useState([])

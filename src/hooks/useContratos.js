@@ -337,12 +337,19 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   // com a composição (P2) e crédito 'aberto' com os itens do proprietário.
   // O VALOR do lançamento não muda aqui (só contratoId e composição): "Informar composição" de um
   // pagamento já feito nunca mexe no saldo.
+  // A previsão das pendentes é recalculada já com a composição nova (itens "Só neste boleto" saem
+  // dela); o estado do app ainda não tem a gravação, por isso o lançamento vai sobreposto.
   const gravarComposicaoCondominio = useCallback(async ({ contrato, parcela, tx, composicao }) => {
     updateTransaction(tx.id, { contratoId: contrato.id, composicao })
     const ok = await substituirCreditoGerado(contrato, tx, parcela, composicao)
     redistribuirCreditos()
+    const est = dataRef.current
+    await atualizarPrevisaoCondominio(contrato, {
+      schedules: est.schedules,
+      transactions: est.transactions.map(t => (t.id === tx.id ? { ...t, contratoId: contrato.id, composicao } : t)),
+    }).catch(err => console.warn('[contratos] previsão do condomínio:', err.message))
     return ok
-  }, [updateTransaction, substituirCreditoGerado, redistribuirCreditos])
+  }, [updateTransaction, substituirCreditoGerado, redistribuirCreditos, atualizarPrevisaoCondominio, dataRef])
 
   const confirmarComposicao = useCallback(async ({ contrato, parcela, tx, itens, lembrar = [] }) => {
     for (const l of lembrar) {
@@ -467,10 +474,8 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
       await criarRegra({ contrato_id: contrato.id, padrao: l.padrao, tipo_match: 'comeca_com', responsavel: l.responsavel })
         .catch(err => console.warn('[contratos] regra não gravada:', err.message))
     }
-    const ok = await gravarComposicaoCondominio({ contrato, parcela, tx, composicao: composicaoCondominio(itens) })
-    await atualizarPrevisaoCondominio(contrato, dataRef.current).catch(err => console.warn('[contratos] previsão do condomínio:', err.message))
-    return ok
-  }, [criarRegra, gravarComposicaoCondominio, atualizarPrevisaoCondominio, dataRef])
+    return gravarComposicaoCondominio({ contrato, parcela, tx, composicao: composicaoCondominio(itens) })
+  }, [criarRegra, gravarComposicaoCondominio])
 
   // ── Vínculo de lançamento a uma linha do contrato (C2) ────────────────────────────────────────
   // Linha pendente: `vincular` = vincularLancamento do AppContext (mesma baixa da tela de
@@ -555,7 +560,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
       await substituirCreditoGerado(contrato, { ...tx, amount: composicao.total }, parcela, composicao)
       const est = dataRef.current
       await atualizarPrevisaoCondominio(contrato, {
-        schedules: est.schedules, transactions: est.transactions.map(t => (t.id === tx.id ? { ...t, amount: r2(composicao.total) } : t)),
+        schedules: est.schedules, transactions: est.transactions.map(t => (t.id === tx.id ? { ...t, amount: r2(composicao.total), composicao } : t)),
       }).catch(err => console.warn('[contratos] previsão do condomínio:', err.message))
     } else {
       const antes = new Set((tx.composicao?.itens || []).filter(i => i.credito_id).map(i => i.credito_id))

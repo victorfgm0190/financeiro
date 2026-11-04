@@ -47,6 +47,20 @@ export function diferencaDoPagamento(tx, esperado = null) {
   return { previsto, pago, diferenca: r2(previsto - pago) }
 }
 
+// Valor esperado de uma linha PAGA da ficha (decide o botão "Justificar diferença" e alimenta o modal):
+//   série vinculada de aluguel: o plano do contrato para a competência (base e desconto temporário) —
+//     a série pode ter guardado o valor já descontado e esconderia a diferença;
+//   parcela gerada (e série sem plano na competência): o previsto da baixa; sem ele, o da parcela —
+//     ali o previsto pode já incluir créditos, e o plano criaria diferença falsa.
+//   plano: gerarPlanoParcelas do contrato.
+export function esperadoDoPagamento(linha, plano = null) {
+  if (linha.vinculada && linha.papel === 'aluguel') {
+    const p = (plano || []).find(x => x.papel === 'aluguel' && x.competencia === linha.competencia)
+    if (p) return r2(p.valor)
+  }
+  return linha.meta?.valor_previsto ?? (linha.schedule ? r2(linha.schedule.composicao?.total ?? linha.schedule.amount) : null)
+}
+
 // "Justificar diferença": créditos ligados (abertos escolhidos + o manual criado já compensado)
 // explicam quanto se pagou a menos. A soma não passa da diferença; o que sobra continua como
 // "Diferença no pagamento". O VALOR do lançamento não muda — só a composição.

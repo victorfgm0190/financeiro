@@ -12,7 +12,7 @@ import {
 import { candidatosVinculo, lancamentosCandidatosContrato } from '../../lib/contratos/vinculo'
 import { pendentesForaDaVigencia } from '../../lib/contratos/estorno'
 import { destinosCreditos, REGRAS_ABATIMENTO, regraAbatimento } from '../../lib/contratos/creditos'
-import { diferencaDoPagamento } from '../../lib/contratos/efetivacao'
+import { diferencaDoPagamento, esperadoDoPagamento } from '../../lib/contratos/efetivacao'
 import { rotuloPapel, rotulosContrato, rotuloModalidade, rotuloTipo, ehAluguel } from '../../lib/contratos/rotulos'
 import ComposicaoBoletoModal from './ComposicaoBoletoModal'
 import { hojeStr, addMesesData, fmtYm } from '../../lib/contratos/datas'
@@ -62,10 +62,6 @@ const Info = ({ rotulo, children }) => (
   <div className="min-w-0"><p className="text-[11px] text-texto-3">{rotulo}</p><p className="text-sm text-texto-1 break-words">{children}</p></div>
 )
 const acao = 'text-primary-fg hover:underline text-left'
-
-// Valor esperado de uma linha paga (para "Justificar diferença"): o previsto da baixa; sem ele, o
-// da parcela.
-const esperadoDaLinha = (l) => l.meta?.valor_previsto ?? (l.schedule ? r2(l.schedule.composicao?.total ?? l.schedule.amount) : null)
 
 // Ficha do contrato: dados, parcelas (pagas/pendentes/projetadas/sem pagamento), séries vinculadas,
 // pagamentos, créditos a abater, linha do tempo e as ações (Confirmar reajuste, Aditivo, Renovar,
@@ -195,7 +191,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
     if (l.tx && l.papel === 'condominio' && !l.tx.composicao?.itens?.length) {
       out.push(<button key="comp" className={acao} onClick={() => setInformar(l)}>Informar composição</button>)
     }
-    if (l.tx && l.papel === 'aluguel' && diferencaDoPagamento(l.tx, esperadoDaLinha(l)).diferenca > 0.005) {
+    if (l.tx && l.papel === 'aluguel' && diferencaDoPagamento(l.tx, esperadoDoPagamento(l, plano)).diferenca > 0.005) {
       out.push(<button key="just" className={acao} onClick={() => setJustificar(l)}>Justificar diferença</button>)
     }
     return out
@@ -493,7 +489,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
       )}
       {vincularLinha && <VincularPagamentoModal contrato={contrato} linha={vincularLinha} onClose={() => setVincularLinha(null)} onConcluido={concluido} />}
       {associarTx && <VincularPagamentoModal contrato={contrato} tx={associarTx} linhasAbertas={linhasAbertas} onClose={() => setAssociarTx(null)} onConcluido={concluido} />}
-      {justificar && <JustificarDiferencaModal contrato={contrato} linha={justificar} onClose={() => setJustificar(null)} onConcluido={concluido} />}
+      {justificar && <JustificarDiferencaModal contrato={contrato} linha={justificar} esperado={esperadoDoPagamento(justificar, plano)} onClose={() => setJustificar(null)} onConcluido={concluido} />}
       {trocarDestino && <TrocarDestinoModal contrato={contrato} credito={trocarDestino} onClose={() => setTrocarDestino(null)} onConcluido={concluido} />}
     </div>
   )

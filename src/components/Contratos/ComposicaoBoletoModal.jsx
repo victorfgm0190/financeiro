@@ -10,6 +10,7 @@ import {
 import { regraAbatimento } from '../../lib/contratos/creditos'
 import { LEITURA_DE_IMAGEM_DISPONIVEL } from '../../lib/contratos/imagemBoleto'
 import { rotuloContrato } from '../../lib/contratos/parcelas'
+import { previsaoComComposicao, somaItensEventuais } from '../../lib/contratos/condominio'
 import CampoValor from './CampoValor'
 
 const RESPONSAVEIS = [['inquilino', 'Inquilino (meu)'], ['proprietario', 'Proprietário (dono)']]
@@ -18,13 +19,15 @@ const comoLinha = (i) => ({ ...i, valorTexto: valorBRFormatado(i.valor) })
 // "Composição do boleto" do condomínio: digitar itens, colar o texto do app do condomínio ou (em
 // breve) foto. Cada item recebe o responsável pelas regras (mostra a que casou); item sem regra é
 // destacado e pergunta "De quem é?" com "Lembrar para os próximos" (sem marcar, não vira regra).
-// Item pode ser DIVIDIDO entre inquilino e proprietário e marcado "Só neste boleto" (gera crédito,
-// mas não se repete na estimativa dos próximos). Soma dos itens = valor pago.
+// Item pode ser DIVIDIDO entre inquilino e proprietário. Qualquer item (de inquilino ou de
+// proprietário) pode ser marcado "Só neste boleto": sai da previsão dos próximos condomínios e da
+// estimativa, sem mudar o crédito gerado nem o valor do lançamento. Soma dos itens = valor pago.
+// A tela mostra a previsão resultante antes de confirmar.
 //   modo 'pagamento': logo depois de pagar — "Pular" usa a estimativa (última composição).
 //   modo 'informar': pagamento já feito sem composição — soma = valor pago; o lançamento NÃO muda.
 //   modo 'edicao': lançamento já pago — o total pode mudar (o valor do lançamento acompanha).
 export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial = null, modo = 'pagamento', onConfirmar, onPular, onClose }) {
-  const { regrasContratos } = useApp()
+  const { regrasContratos, schedules, transactions } = useApp()
   const [linhas, setLinhas] = useState(() => (composicaoInicial?.itens || []).map(i => comoLinha({ ...i, manual: true })))
   const [entrada, setEntrada] = useState(linhas.length ? 'digitar' : 'colar')
   const [texto, setTexto] = useState('')
@@ -42,6 +45,10 @@ export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial 
   const res = resumoItens(itens, valorPago)
   const fechaSoma = !somaFixa || Math.abs(res.diferenca) < 0.005
   const pronto = itens.length > 0 && res.semDono === 0 && fechaSoma
+  const eventuais = somaItensEventuais({ itens })
+  const previsao = itens.length
+    ? previsaoComComposicao(contrato, schedules || [], transactions || [], tx, { composicao: { tipo: 'condominio', itens }, valor: somaFixa ? valorPago : res.total })
+    : null
 
   const setLinha = (i, campos) => setLinhas(prev => prev.map((l, j) => (j === i ? { ...l, ...campos } : l)))
   const lerTexto = () => {
@@ -59,7 +66,7 @@ export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial 
     try {
       const lista = itens.map(i => ({
         desc: i.desc, valor: i.valor, responsavel: i.responsavel, regra: i.regra || undefined,
-        ...(i.so_neste_boleto && i.responsavel === RESP.PROPRIETARIO ? { so_neste_boleto: true } : {}),
+        ...(i.so_neste_boleto ? { so_neste_boleto: true } : {}),
       }))
       const regrasNovas = itens.filter((i, j) => !i.regra_id && lembrar[j]).map(i => ({ padrao: i.desc, responsavel: i.responsavel }))
       await onConfirmar({ itens: lista, lembrar: regrasNovas, composicao: composicaoCondominio(lista) })
@@ -122,12 +129,10 @@ export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial 
                       Lembrar para os próximos
                     </label>
                   )}
-                  {it.responsavel === RESP.PROPRIETARIO && (
-                    <label className="flex items-center gap-1.5 text-[11px] text-texto-2 mt-1" title="Gera crédito normalmente, mas não se repete na estimativa dos próximos boletos">
-                      <input type="checkbox" className="accent-primary" checked={!!linhas[i].so_neste_boleto} onChange={e => setLinha(i, { so_neste_boleto: e.target.checked })} />
-                      Só neste boleto
-                    </label>
-                  )}
+                  <label className="flex items-center gap-1.5 text-[11px] text-texto-2 mt-1" title="Item eventual: fica fora da previsão dos próximos condomínios. Não muda o crédito nem o valor do lançamento">
+                    <input type="checkbox" className="accent-primary" checked={!!linhas[i].so_neste_boleto} onChange={e => setLinha(i, { so_neste_boleto: e.target.checked })} />
+                    Só neste boleto
+                  </label>
                   {dividindo[i] != null ? (
                     <div className="flex items-center gap-1.5 mt-1">
                       <CampoValor className="input py-1 text-xs" value={dividindo[i]} onChange={v => setDividindo(p => ({ ...p, [i]: v }))} placeholder="Parte do proprietário" />
@@ -178,6 +183,15 @@ export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial 
               Criar item "Diferença/arredondamento" ({fmt(res.diferenca)})
             </button>
           </div>
+        )}
+        {previsao && (
+          <p className="text-xs text-texto-2" data-testid="previsao-condominio">
+            {previsao.ultimo
+              ? <>Previsão dos próximos condomínios pendentes: <strong className="text-texto-1">{fmt(previsao.valor)}</strong>
+                {eventuais > 0 ? ` (${fmt(somaFixa ? valorPago : res.total)} menos ${fmt(eventuais)} de itens "Só neste boleto")` : ' (o valor deste boleto)'}.
+                {' '}Parcelas com valor digitado à mão não mudam.</>
+              : <>Há um condomínio pago mais recente: a previsão continua em <strong className="text-texto-1">{fmt(previsao.valor)}</strong>.</>}
+          </p>
         )}
         {aviso && <p className="text-xs text-aviso">{aviso}</p>}
 

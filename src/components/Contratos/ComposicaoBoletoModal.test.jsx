@@ -60,4 +60,24 @@ describe('ComposicaoBoletoModal', () => {
     await vi.waitFor(() => expect(onConfirmar).toHaveBeenCalled())
     expect(onConfirmar.mock.calls[0][0].composicao.total).toBe(100.05)
   })
+
+  it('"Só neste boleto" em item de inquilino: previsão sem os eventuais; lançamento continua no valor pago', async () => {
+    Object.assign(app, { regrasContratos: [], schedules: [], transactions: [] })
+    const onConfirmar = vi.fn(async () => {})
+    render(<ComposicaoBoletoModal contrato={{ id: 'c1', tem_condominio: true }} tx={{ id: 't', date: '2026-10-08', amount: 1424.67 }}
+      modo="pagamento" onConfirmar={onConfirmar} onPular={() => {}} onClose={() => {}} />)
+    fireEvent.change(screen.getByPlaceholderText(/Cole aqui o texto/), { target: { value: BOLETO } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ler texto' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Itens sem regra são do inquilino' }))
+    const marcas = screen.getAllByLabelText('Só neste boleto')
+    expect(marcas).toHaveLength(8) // em qualquer item, de inquilino ou proprietário
+    fireEvent.click(marcas[1]) // Espaço Gourmet 243,15
+    fireEvent.click(marcas[2]) // Taxa de Mudança 162,10
+    expect(screen.getByTestId('previsao-condominio').textContent).toMatch(/1\.019,42/)
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar composição' }))
+    await vi.waitFor(() => expect(onConfirmar).toHaveBeenCalled())
+    const { composicao, itens } = onConfirmar.mock.calls[0][0]
+    expect(itens.filter(i => i.so_neste_boleto).map(i => i.valor)).toEqual([243.15, 162.1])
+    expect(composicao.total).toBe(1424.67)
+  })
 })
