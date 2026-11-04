@@ -119,6 +119,48 @@ export function planoCreditosAluguel(contrato, schedules, creditos) {
   return out
 }
 
+// Plano de sincronização das parcelas (aditivo, reajuste, geração) com o valor FINAL de cada parcela:
+// aplica o plano do contrato, mantém os "Não abater neste mês" (creditos_adiados) e redistribui os
+// créditos a abater (aberto e previsto) pela regra do contrato — a mesma planoCreditosAluguel da
+// ficha. Devolve { criar, atualizar, remover } só com o que muda de verdade: a Prévia mostra o valor
+// real e a gravação (inclusive o histórico, que vai direto ao banco) nunca tira os créditos.
+// Parcelas pagas não entram (o plano e os créditos só mexem em pendentes).
+const estavelJson = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x)
+  ? Object.fromEntries(Object.keys(x).sort().map(c => [c, x[c]])) : x))
+const mesmoCampo = (c, a, b) => (c === 'amount' ? r2(a) === r2(b) : estavelJson(a ?? null) === estavelJson(b ?? null))
+export function planoComCreditos(contrato, schedules, plano, creditos) {
+  const { criar = [], atualizar = [], remover = [] } = plano || {}
+  const antes = new Map((schedules || []).map(s => [s.id, s]))
+  const rem = new Set(remover.map(s => s.id))
+  const mud = new Map()
+  for (const m of atualizar) mud.set(m.id, { ...(mud.get(m.id) || {}), ...m.changes })
+  let lista = (schedules || []).filter(s => !rem.has(s.id)).map(s => {
+    const ch = mud.get(s.id)
+    if (!ch) return s
+    const n = { ...s, ...ch }
+    const adiados = s.composicao?.creditos_adiados
+    if (ch.composicao && adiados?.length) n.composicao = { ...ch.composicao, creditos_adiados: adiados }
+    return n
+  })
+  const existentes = new Set(lista.map(s => s.id))
+  lista = [...lista, ...criar.filter(s => !existentes.has(s.id))]
+  const pc = planoCreditosAluguel(contrato, lista, creditos)
+  if (pc.length) {
+    const m2 = new Map(pc.map(p => [p.id, p.changes]))
+    lista = lista.map(s => (m2.has(s.id) ? { ...s, ...m2.get(s.id) } : s))
+  }
+  const final = new Map(lista.map(s => [s.id, s]))
+  const novoAtualizar = []
+  for (const [id, fin] of final) {
+    const a = antes.get(id)
+    if (!a || fin === a) continue
+    const changes = {}
+    for (const c of Object.keys(fin)) if (!mesmoCampo(c, a[c], fin[c])) changes[c] = fin[c]
+    if (Object.keys(changes).length) novoAtualizar.push({ id, antes: a, changes })
+  }
+  return { ...plano, criar: criar.map(s => final.get(s.id) || s), atualizar: novoAtualizar, remover }
+}
+
 // "Não abater neste mês": o crédito vai para a próxima parcela pendente.
 export function adiarCredito(parcela, creditoId) {
   const adiados = [...new Set([...(parcela.composicao?.creditos_adiados || []), creditoId])]

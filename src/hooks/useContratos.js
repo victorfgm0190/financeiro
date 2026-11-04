@@ -15,7 +15,7 @@ import { planoVinculo, planoDesvinculo } from '../lib/contratos/vinculo'
 import { mapaVinculos } from '../lib/vinculo'
 import { analisarEstorno, cancelarOcorrencia } from '../lib/contratos/estorno'
 import { composicaoCondominio, composicaoEstimada, creditoDaComposicao } from '../lib/contratos/composicao'
-import { planoCreditosAluguel, adiarCredito, liberarAdiamento, marcarValorManual, statusAoReabrir } from '../lib/contratos/creditos'
+import { planoCreditosAluguel, adiarCredito, liberarAdiamento, marcarValorManual, statusAoReabrir, planoComCreditos } from '../lib/contratos/creditos'
 import {
   ehCondominioAberto, temComposicaoInformada, composicaoDaParcela, planoInformarParcela, planoRemoverComposicao,
   creditoPrevistoDaParcela, creditoDaParcela, planoCreditoDaParcela, composicaoNoPagamento, vencimentoParcela,
@@ -187,9 +187,13 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
       hoje, indices: idx, confirmados: confirmadosDe(contrato, lista), apartirDe: inicio, valoresMantidos,
       valorCondominio: valorCondominioPago(contrato, lista, dataRef.current.transactions),
     })
-    return planejarSincronizacao(contrato, lista, plano, {
+    const sinc = planejarSincronizacao(contrato, lista, plano, {
       excluidas: contrato.excluidas || [], cobertas: cobertasDoContrato(contrato, lista), apartirDe: inicio,
     })
+    // Valor FINAL de cada parcela: com os créditos a abater (aberto e previsto) pela regra deste
+    // contrato (a do aditivo, se mudou) e os "Não abater" mantidos — a Prévia mostra o real e a
+    // gravação (histórico incluso) nunca tira os créditos. Mesma função da ficha (planoCreditosAluguel).
+    return planoComCreditos(contrato, lista, sinc, creditosRef.current)
   }, [dataRef, indicesPara])
 
   // Aplica criar/atualizar/remover num único update(). `motivo` → grava as mudanças de valor das
