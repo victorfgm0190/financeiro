@@ -20,6 +20,7 @@ import { ultimoCondominioPago, planoPrevisaoCondominio } from '../lib/contratos/
 import { hojeStr, ymDe } from '../lib/contratos/datas'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { ESCOPO } from '../lib/camposSerie'
+import { gravarVinculoNaLinha, vinculoRepetido } from '../lib/contratos/gravarVinculo'
 
 // ESTADO E AÇÕES DO MÓDULO DE CONTRATOS (usado dentro do AppProvider). Ficha, regras de itens e
 // créditos do proprietário vivem fora de `data`: CRUD direto nas rotas api/contrato*.js. As
@@ -48,10 +49,19 @@ const aplicarMudancas = (schedules, { criar = [], atualizar = [], remover = [] }
 const valorCondominioPago = (contrato, schedules, transactions) =>
   ultimoCondominioPago(contrato, schedules, transactions)?.valor ?? null
 
+// Evento "vínculo" da linha do tempo (gravado só depois da parcela).
+const eventoDoVinculo = (linha, tx, parcelaId) => ({
+  tipo: 'vinculo', valor_novo: r2(tx.amount),
+  detalhes: {
+    acao: 'lancamento', lancamento_id: tx.id, parcela_id: parcelaId, papel: linha.papel, competencia: linha.competencia,
+    numero: linha.numero, total: linha.total, data_pagamento: tx.date, criada: !!linha.semParcela, descricao: tx.description,
+  },
+})
+
 // Tabela da Entrega 2 ainda não criada no banco do ambiente (rota responde erro): segue sem créditos.
 const semTabela = (err) => /contrato_(creditos|regras_itens)|does not exist|não existe/i.test(String(err?.message || ''))
 
-export function useContratos({ habilitado, update, dataRef, dados, dbConectado, registrarEdicao, reverseTransaction, updateTransaction }) {
+export function useContratos({ habilitado, update, dataRef, dados, dbConectado, registrarEdicao, reverseTransaction, updateTransaction, persistirAgora }) {
   const [contratos, setContratos] = useState([])
   const [carregados, setCarregados] = useState(false)
   const [indices, setIndices] = useState({})
@@ -63,6 +73,10 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   const contratosRef = useRef([])
   // Definidos mais abaixo e usados por ações declaradas antes deles.
   const notificarEfetivacaoRef = useRef(null)
+  // persistirAgora do AppContext (função nova a cada render): lida na hora pela ref.
+  const persistirRef = useRef(persistirAgora)
+  useEffect(() => { persistirRef.current = persistirAgora })
+  const vinculosEmAndamento = useRef(new Set())
   const reverterEfetivacaoRef = useRef(null)
   const creditosRef = useRef([])
   useEffect(() => { contratosRef.current = contratos }, [contratos])
@@ -478,43 +492,78 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   }, [criarRegra, gravarComposicaoCondominio])
 
   // ── Vínculo de lançamento a uma linha do contrato (C2) ────────────────────────────────────────
-  // Linha pendente: `vincular` = vincularLancamento do AppContext (mesma baixa da tela de
-  // Agendamentos; a pós-efetivação grava contratoId e a "Diferença no pagamento"). Linha sem
-  // parcela: cria a parcela da competência (id determinístico) já paga com o lançamento.
-  const vincularLancamentoNaLinha = useCallback(async (contrato, linha, tx, { vincular }) => {
+  // Tudo ou nada (lib/contratos/gravarVinculo): parcela + baixa + vínculo no lançamento vão ao banco
+  // e SÓ DEPOIS o evento da linha do tempo; falhou qualquer parte, o estado volta e o erro aparece no
+  // modal. Linha pendente: `vincular` = vincularLancamento do AppContext (mesma baixa da tela de
+  // Agendamentos); para desfazer, `desvincular` = desvincularLancamento. Linha sem parcela: cria a
+  // parcela da competência (id determinístico) já paga com o lançamento, que recebe na mesma
+  // gravação o contrato e a composição. Repetir a mesma competência com o mesmo lançamento não grava
+  // nada de novo.
+  const vincularLancamentoNaLinha = useCallback(async (contrato, linha, tx, { vincular, desvincular }) => {
     const d0 = dataRef.current
     // Lançamento já deste contrato mas sem parcela ("Associar a uma parcela") pode; de outro, não.
     if (tx.contratoId && tx.contratoId !== contrato.id) throw new Error('Este lançamento já está ligado a outro contrato.')
-    if (mapaVinculos(d0.schedules).has(tx.id)) throw new Error('Este lançamento já baixou outra parcela ou agendamento.')
-    let parcelaId
+    const parcelaId = linha.semParcela ? idParcela(contrato.id, linha.papel, linha.competencia) : linha.schedule?.id
     if (linha.semParcela) {
-      parcelaId = idParcela(contrato.id, linha.papel, linha.competencia)
-      if (d0.schedules.some(s => s.id === parcelaId)) throw new Error('Esta competência já tem parcela: atualize a ficha.')
-      const item = {
-        id: parcelaId, papel: linha.papel, numero: linha.numero, total: linha.total, competencia: linha.competencia,
-        vencimento: linha.vencimento, valor: r2(linha.valor), valorStatus: 'confirmado',
-        composicao: linha.composicao || { itens: [{ tipo: 'previsto', desc: 'Valor previsto', valor: r2(linha.valor) }], total: r2(linha.valor), numero: linha.numero, total_parcelas: linha.total },
-      }
-      const nova = parcelaDeVinculo(contrato, item, tx)
-      update(d => ({
-        ...d,
-        schedules: d.schedules.some(s => s.id === nova.id) ? d.schedules : [...d.schedules, nova],
-        transactions: d.transactions.map(t => (t.id === tx.id ? { ...t, dataOcorrencia: linha.vencimento } : t)),
-      }))
-      notificarEfetivacaoRef.current?.([{ scheduleId: nova.id, occurrenceDate: linha.vencimento, lancamentoId: tx.id }])
-    } else {
-      if (!linha.schedule || linha.paga) throw new Error('Esta parcela já tem pagamento.')
-      const r = vincular({ txId: tx.id, scheduleId: linha.schedule.id, data: linha.ocorrencia, manter: 'agendamento' })
-      if (!r?.ok) throw new Error(r?.motivo || 'Não foi possível vincular.')
-      parcelaId = linha.schedule.id
+      const repetido = vinculoRepetido(d0.schedules, { parcelaId, txId: tx.id })
+      if (repetido) throw new Error(repetido)
     }
-    await registrarEvento(contrato.id, {
-      tipo: 'vinculo', valor_novo: r2(tx.amount),
-      detalhes: {
-        acao: 'lancamento', lancamento_id: tx.id, parcela_id: parcelaId, papel: linha.papel, competencia: linha.competencia,
-        numero: linha.numero, total: linha.total, data_pagamento: tx.date, criada: !!linha.semParcela, descricao: tx.description,
-      },
-    }).catch(err => console.warn('[contratos] evento de vínculo não gravado:', err.message))
+    if (mapaVinculos(d0.schedules).has(tx.id)) throw new Error('Este lançamento já baixou outra parcela ou agendamento.')
+    if (!linha.semParcela && (!linha.schedule || linha.paga)) throw new Error('Esta parcela já tem pagamento.')
+    // Dois cliques / duas abas: a mesma parcela ou o mesmo lançamento não entram duas vezes.
+    const travas = [`p:${parcelaId}`, `t:${tx.id}`]
+    if (travas.some(k => vinculosEmAndamento.current.has(k))) throw new Error('Este vínculo já está sendo gravado.')
+    travas.forEach(k => vinculosEmAndamento.current.add(k))
+    const persistir = persistirRef.current
+    const chaves = [`agendamentos:${parcelaId}`, `lancamentos:${tx.id}`]
+    const baixadaCom = (est, id) => est.schedules.some(s => s.id === parcelaId
+      && Object.values(s.registeredMeta || {}).some(m => m?.lancamento_id === id))
+    try {
+      if (linha.semParcela) {
+        const item = {
+          id: parcelaId, papel: linha.papel, numero: linha.numero, total: linha.total, competencia: linha.competencia,
+          vencimento: linha.vencimento, valor: r2(linha.valor), valorStatus: 'confirmado',
+          composicao: linha.composicao || { itens: [{ tipo: 'previsto', desc: 'Valor previsto', valor: r2(linha.valor) }], total: r2(linha.valor), numero: linha.numero, total_parcelas: linha.total },
+        }
+        const nova = parcelaDeVinculo(contrato, item, tx)
+        const noLancamento = { dataOcorrencia: linha.vencimento, ...(planejarPosEfetivacao({ contrato, parcela: nova, tx }).lancamento || {}) }
+        const antes = { dataOcorrencia: tx.dataOcorrencia ?? null, contratoId: tx.contratoId ?? null, composicao: tx.composicao ?? null }
+        await gravarVinculoNaLinha({
+          aplicar: () => update(d => ({
+            ...d,
+            schedules: d.schedules.some(s => s.id === nova.id) ? d.schedules : [...d.schedules, nova],
+            transactions: d.transactions.map(t => (t.id === tx.id ? { ...t, ...noLancamento } : t)),
+          })),
+          persistir: () => persistir({ pronto: est => baixadaCom(est, tx.id), chaves }),
+          desfazer: () => {
+            update(d => ({
+              ...d,
+              schedules: d.schedules.filter(s => s.id !== nova.id),
+              transactions: d.transactions.map(t => (t.id === tx.id ? { ...t, ...antes } : t)),
+            }))
+            return persistir({ pronto: est => !est.schedules.some(s => s.id === nova.id), chaves })
+          },
+          registrarEvento: () => registrarEvento(contrato.id, eventoDoVinculo(linha, tx, parcelaId)),
+          depois: () => notificarEfetivacaoRef.current?.([{ scheduleId: nova.id, occurrenceDate: linha.vencimento, lancamentoId: tx.id }]),
+        })
+      } else {
+        await gravarVinculoNaLinha({
+          aplicar: () => {
+            const r = vincular({ txId: tx.id, scheduleId: parcelaId, data: linha.ocorrencia, manter: 'agendamento' })
+            if (!r?.ok) throw new Error(r?.motivo || 'Não foi possível vincular.')
+          },
+          persistir: () => persistir({ pronto: est => baixadaCom(est, tx.id), chaves }),
+          desfazer: () => {
+            const r = desvincular?.({ scheduleId: parcelaId, data: linha.ocorrencia })
+            if (!r?.ok) throw new Error(r?.motivo || 'desvínculo recusado')
+            return persistir({ pronto: est => !baixadaCom(est, tx.id), chaves })
+          },
+          registrarEvento: () => registrarEvento(contrato.id, eventoDoVinculo(linha, tx, parcelaId)),
+        })
+      }
+    } finally {
+      travas.forEach(k => vinculosEmAndamento.current.delete(k))
+    }
   }, [dataRef, update, registrarEvento])
 
   // "Desfazer vínculo": a parcela volta a como estava (pendente, ou some se foi criada só para o

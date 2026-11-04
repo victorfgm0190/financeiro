@@ -18,13 +18,16 @@ const rotuloLinha = (contrato, l) =>
 //   tx + linhasAbertas: "Associar a uma parcela" de um pagamento que está no contrato sem linha.
 // Prévia antes de gravar: o que vai ser ligado e a diferença para o valor esperado.
 export default function VincularPagamentoModal({ contrato, linha = null, tx = null, linhasAbertas = [], onClose, onConcluido }) {
-  const { transactions, schedules, accounts, vincularLancamento, vincularLancamentoNaLinha } = useApp()
+  const { transactions, schedules, accounts, vincularLancamento, desvincularLancamento, vincularLancamentoNaLinha } = useApp()
   const [texto, setTexto] = useState('')
   const [de, setDe] = useState(() => (linha ? addMesesData(linha.vencimento, -2) : ''))
   const [ate, setAte] = useState(() => (linha ? addMesesData(linha.vencimento, 2) : ''))
   const [txId, setTxId] = useState(tx?.id || '')
   const [linhaKey, setLinhaKey] = useState(linha?.key || '')
-  const [revisar, setRevisar] = useState(false)
+  // Conferência: lançamento e parcela ficam GUARDADOS ao clicar em Revisar. Ao gravar, o lançamento
+  // sai da lista de candidatos (já está vinculado) — sem a cópia, a tela de conferência ficava sem
+  // ele e quebrava o app inteiro (tela branca).
+  const [revisar, setRevisar] = useState(null)
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
 
@@ -34,15 +37,16 @@ export default function VincularPagamentoModal({ contrato, linha = null, tx = nu
     ? candidatosLancamento(contrato, transactions, schedules, linha, { contasDoPerfil, filtro: { texto, de, ate } }).slice(0, MAX_LISTA)
     : []), [linha, contrato, transactions, schedules, contasDoPerfil, texto, de, ate])
 
-  const txEscolhido = tx || candidatos.find(c => c.tx.id === txId)?.tx || null
-  const linhaEscolhida = linha || linhasAbertas.find(l => l.key === linhaKey) || null
+  const txEscolhido = revisar?.tx || tx || candidatos.find(c => c.tx.id === txId)?.tx || null
+  const linhaEscolhida = revisar?.linha || linha || linhasAbertas.find(l => l.key === linhaKey) || null
   const diferenca = txEscolhido && linhaEscolhida ? r2(Number(txEscolhido.amount) - Number(linhaEscolhida.valor)) : 0
 
   const gravar = async () => {
+    if (!txEscolhido || !linhaEscolhida) return
     setSalvando(true)
     setErro('')
     try {
-      await vincularLancamentoNaLinha(contrato, linhaEscolhida, txEscolhido, { vincular: vincularLancamento })
+      await vincularLancamentoNaLinha(contrato, linhaEscolhida, txEscolhido, { vincular: vincularLancamento, desvincular: desvincularLancamento })
       onConcluido?.(`Pagamento de ${fmtDate(txEscolhido.date)} ligado a ${rotuloLinha(contrato, linhaEscolhida)}.`)
     } catch (err) {
       setErro(err?.message || 'Falha ao vincular.')
@@ -53,7 +57,7 @@ export default function VincularPagamentoModal({ contrato, linha = null, tx = nu
   return (
     <Modal open onClose={salvando ? () => {} : onClose} title={linha ? 'Vincular pagamento' : 'Associar a uma parcela'} size="lg">
       <div className="space-y-3 text-sm">
-        {revisar ? (
+        {revisar && txEscolhido && linhaEscolhida ? (
           <div className="space-y-2">
             <p className="text-texto-2">Confira antes de gravar:</p>
             <div className="rounded-lg bg-surface-2/60 p-3 text-xs space-y-1">
@@ -116,11 +120,11 @@ export default function VincularPagamentoModal({ contrato, linha = null, tx = nu
 
         {erro && <p className="text-xs text-perigo">{erro}</p>}
         <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-borda">
-          <button type="button" className="btn-secondary" disabled={salvando} onClick={revisar ? () => setRevisar(false) : onClose}>{revisar ? 'Voltar' : 'Cancelar'}</button>
+          <button type="button" className="btn-secondary" disabled={salvando} onClick={revisar ? () => setRevisar(null) : onClose}>{revisar ? 'Voltar' : 'Cancelar'}</button>
           {revisar ? (
             <button type="button" className="btn-primary flex items-center gap-1.5" disabled={salvando} onClick={gravar}><Link2 size={14} /> Gravar vínculo</button>
           ) : (
-            <button type="button" className="btn-primary" disabled={!txEscolhido || !linhaEscolhida} onClick={() => setRevisar(true)}>Revisar</button>
+            <button type="button" className="btn-primary" disabled={!txEscolhido || !linhaEscolhida} onClick={() => setRevisar({ tx: txEscolhido, linha: linhaEscolhida })}>Revisar</button>
           )}
         </div>
       </div>

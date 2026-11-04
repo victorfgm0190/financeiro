@@ -1340,6 +1340,31 @@ export function AppProvider({ children }) {
     return { ok: false, erro: erroEnvioRef.current || 'Ainda há alterações aguardando envio' }
   }
 
+  // Gravação que precisa estar NO BANCO antes do passo seguinte (ex.: vínculo de contrato: o evento
+  // da linha do tempo só vai depois da parcela). Espera o estado com a mudança passar pelo efeito que
+  // enfileira (prevDataRef = último estado enfileirado; `pronto(estado)` diz se a mudança está nele)
+  // e envia até as `chaves` da fila ('agendamentos:<id>', 'lancamentos:<id>') saírem dela.
+  // → { ok: true } | { ok: false, erro }. Sem conexão não grava: quem chama desfaz.
+  const persistirAgora = async ({ pronto, chaves = [] }, limite = 20000) => {
+    const fim = Date.now() + limite
+    const esperar = () => new Promise(ok => setTimeout(ok, 30))
+    while (!(prevDataRef.current && pronto(prevDataRef.current)) && Date.now() < fim) await esperar()
+    if (!(prevDataRef.current && pronto(prevDataRef.current))) return { ok: false, erro: 'A alteração não foi registrada.' }
+    if (!carregouDoBancoRef.current) return { ok: false, erro: 'Os dados ainda não foram carregados do servidor.' }
+    if (dbStatusRef.current !== 'connected' && !(await reconectarRef.current())) {
+      return { ok: false, erro: 'Sem conexão com o servidor.' }
+    }
+    const naFila = () => chaves.filter(k => filaRef.current.has(k))
+    while (naFila().length && Date.now() < fim) {
+      const recusada = naFila().find(k => errosFilaRef.current.get(k)?.versao === filaRef.current.get(k)?.versao)
+      if (recusada) return { ok: false, erro: errosFilaRef.current.get(recusada)?.motivo || 'O servidor recusou a gravação.' }
+      if (dbStatusRef.current !== 'connected') return { ok: false, erro: erroEnvioRef.current || 'Sem conexão com o servidor.' }
+      if (enviandoRef.current) { await esperar(); continue }
+      await enviarPendentes()
+    }
+    return naFila().length ? { ok: false, erro: erroEnvioRef.current || 'O servidor não confirmou a gravação.' } : { ok: true }
+  }
+
   // ── Recarga do banco sem sair do app ────────────────────────────────────────
   // Mesmo caminho da abertura: primeiro envia a fila, depois loadFromDb + aplicarCargaDoBanco (que
   // reaplica o que ainda estiver na fila). Os saldos saem do recálculo do frontend (cargaSeq).
@@ -2924,6 +2949,7 @@ export function AppProvider({ children }) {
   const contratosCtx = useContratos({
     habilitado: podeNivel(usuario, 'contratos', 'ver'), update, dataRef,
     dbConectado: dbStatus === 'connected', registrarEdicao, reverseTransaction, updateTransaction, dados: data,
+    persistirAgora,
   })
   useEffect(() => {
     posEfetivacaoRef.current = contratosCtx.notificarEfetivacao

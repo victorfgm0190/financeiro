@@ -21,7 +21,7 @@ const FREQ_LABELS = {
 //   lancamentos: busca ampliada (C3) — lançamentos avulsos que parecem do contrato, cada um com a
 //   parcela mais provável. Nunca vêm marcados; prévia antes de gravar.
 export default function VinculoModal({ contrato, candidatos, lancamentos = [], apartirDe = null, geracao = false, onClose, onConcluido }) {
-  const { vincularEGerarContrato, indicesContratos, vincularLancamentoNaLinha, vincularLancamento } = useApp()
+  const { vincularEGerarContrato, indicesContratos, vincularLancamentoNaLinha, vincularLancamento, desvincularLancamento } = useApp()
   const [selTx, setSelTx] = useState({})
   const [revisarTx, setRevisarTx] = useState(false)
   const [sel, setSel] = useState(() => Object.fromEntries(candidatos.map(c => [c.schedule.id, { on: c.score >= SCORE_FORTE, papel: c.papel }])))
@@ -71,7 +71,7 @@ export default function VinculoModal({ contrato, candidatos, lancamentos = [], a
     let feitos = 0
     try {
       for (const c of txEscolhidos) {
-        await vincularLancamentoNaLinha(contrato, c.linha, c.tx, { vincular: vincularLancamento })
+        await vincularLancamentoNaLinha(contrato, c.linha, c.tx, { vincular: vincularLancamento, desvincular: desvincularLancamento })
         feitos += 1
       }
       onConcluido?.({ vinculados: 0, mensagem: `${feitos} lançamento(s) ligado(s) às parcelas.` })
