@@ -242,7 +242,7 @@ export function normalizarCredito(b, { parcial = false } = {}) {
   const dados = {}
   const campos = {
     origem_lancamento_id: texto(120), origem_agendamento_id: texto(160), descricao: texto(200),
-    valor: numero({ min: 0 }), data_origem: data(), status: umDe(['aberto', 'compensado']),
+    valor: numero({ min: 0 }), data_origem: data(), status: umDe(['previsto', 'aberto', 'compensado']),
     compensado_em_lancamento_id: texto(120), compensado_em_agendamento_id: texto(160), data_compensacao: data(),
     destino_agendamento_id: texto(160),
   }

@@ -15,6 +15,7 @@ import { centralQuery } from './_central.js'
 import { validarAnexo, blocoDoAnexo, MIME_PDF } from './_anexoIa.js'
 import { limitesDoAmbiente, bloqueioDoLimite } from '../src/lib/assistente/limiteIa.js'
 import { rotearConsulta } from '../src/lib/assistente/roteamentoConsulta.js'
+import { DEFINICAO_LEITURA, FERRAMENTA_LEITURA, INSTRUCOES_LEITURA, normalizarSaidaLeitura } from './_leituraBoleto.js'
 
 // Limites do cliente (central). Sem as colunas (central não migrado) → o padrão.
 async function limitesDoCliente(ambienteId) {
@@ -80,6 +81,31 @@ async function handler(req, res) {
     const ehPdf = mime === MIME_PDF
     const recusa = validarAnexo(imagem, mime)
     if (recusa) return res.status(recusa.status).json({ error: recusa.erro })
+
+    // Leitura do boleto do condomínio (Contratos → Composição do boleto): só extrai o que está escrito
+    // (vencimento, total, itens); o app classifica pelas regras do contrato e mostra a prévia.
+    if (body?.leitura === 'boleto_condominio') {
+      if (!imagem) return res.status(400).json({ error: 'Envie a foto, o print ou o PDF do boleto.' })
+      if (!pode(req.user, 'contratos', 'editar')) return res.status(403).json({ error: 'Sem permissão para Contratos.' })
+      await ensureIaSchema()
+      const bloqueioLeitura = bloqueioDoLimite(await usoDoDia(req.user?.id), await limitesDoCliente(req.ambiente?.id), true)
+      if (bloqueioLeitura) return res.status(429).json({ error: bloqueioLeitura, codigo: 'limite_ia' })
+      const inicioLeitura = Date.now()
+      const lido = await anthropic().messages.create({
+        model: MODELO,
+        max_tokens: 4000,
+        system: INSTRUCOES_LEITURA,
+        tools: [DEFINICAO_LEITURA],
+        tool_choice: { type: 'tool', name: FERRAMENTA_LEITURA },
+        messages: [{ role: 'user', content: [...blocoDoAnexo(imagem, mime), { type: 'text', text: 'Leia este boleto de condomínio.' }] }],
+      })
+      await registrarUso({
+        ambiente: req.ambiente?.sigla, ferramenta: FERRAMENTA_LEITURA, usage: lido.usage, comImagem: true, usuario: req.user?.id,
+        modelo: lido.model || MODELO, duracaoMs: Date.now() - inicioLeitura, stopReason: lido.stop_reason || null,
+      })
+      const blocoLeitura = lido.content.find(b => b.type === 'tool_use' && b.name === FERRAMENTA_LEITURA)
+      return res.json({ leitura: normalizarSaidaLeitura(blocoLeitura?.input) })
+    }
 
     const textoPedido = `${texto} ${pergunta} ${resposta}`
     if (ehPedidoDeExclusao(`${texto} ${resposta}`)) return res.json({ ferramenta: 'perguntar', parametros: RESPOSTA_EXCLUSAO })

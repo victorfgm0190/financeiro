@@ -183,10 +183,10 @@ describe('reverterEfetivacaoContrato (estorno)', () => {
     credito({ id: 'c', status: 'compensado', origem_lancamento_id: 'tx_cond', compensado_em_lancamento_id: 'outro' }),
   ]
   it('estorno do aluguel reabre os créditos compensados nele', () => {
-    expect(planejarReversao({ tx: { id: 'tx_alug' }, creditos })).toEqual({ reabrir: ['a'], remover: [], manter: [] })
+    expect(planejarReversao({ tx: { id: 'tx_alug' }, creditos })).toEqual({ reabrir: ['a'], statusReabrir: { a: 'aberto' }, remover: [], voltarPrevisto: [], manter: [] })
   })
   it('estorno do condomínio remove o crédito gerado (o já compensado fica)', () => {
-    expect(planejarReversao({ tx: { id: 'tx_cond' }, creditos })).toEqual({ reabrir: [], remover: ['b'], manter: ['c'] })
+    expect(planejarReversao({ tx: { id: 'tx_cond' }, creditos })).toEqual({ reabrir: [], statusReabrir: {}, remover: ['b'], voltarPrevisto: [], manter: ['c'] })
   })
 })
 

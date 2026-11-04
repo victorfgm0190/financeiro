@@ -46,6 +46,7 @@ import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
 import ContratosPanel from './components/Contratos/ContratosPanel'
 import ContratoFichaHost from './components/Contratos/ContratoFichaHost'
 import ContratoEfetivacaoHost from './components/Contratos/ContratoEfetivacaoHost'
+import ComposicaoParcelaHost from './components/Contratos/ComposicaoParcelaHost'
 import MonthStartModal from './components/shared/MonthStartModal'
 import GlobalSearch from './components/shared/GlobalSearch'
 import Login from './pages/Login'
@@ -266,6 +267,7 @@ function AppContent() {
       <MonthStartModal />
       <ContratoFichaHost />
       <ContratoEfetivacaoHost />
+      <ComposicaoParcelaHost />
       <GlobalSearch key={buscaKey} open={showSearch} onClose={() => setShowSearch(false)} />
       <Modal open={showAssistente} onClose={() => setShowAssistente(false)} title="✨ Assistente" size="lg">
         {showAssistente && <Assistente onClose={() => setShowAssistente(false)} onToast={setGenericToast} />}

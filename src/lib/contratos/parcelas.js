@@ -168,8 +168,9 @@ export function confirmadosDe(contrato, schedules) {
   return out
 }
 
-// Valor digitado à mão: marcado (composicao.manual) ou editado fora do contrato (valor ≠ composição).
-export const valorManual = (s) => !!s?.composicao && (!!s.composicao.manual
+// Valor digitado à mão: marcado (composicao.manual), boleto do condomínio informado antes do
+// pagamento (composicao.informada) ou editado fora do contrato (valor ≠ composição).
+export const valorManual = (s) => !!s?.composicao && (!!s.composicao.manual || !!s.composicao.informada
   || (s.composicao.total != null && r2(s.amount) !== r2(s.composicao.total)))
 
 const somaItens = (itens) => r2(itens.reduce((a, i) => a + (Number(i.valor) || 0), 0))

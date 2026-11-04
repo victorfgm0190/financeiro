@@ -11,7 +11,8 @@ import {
 } from '../../lib/contratos/parcelas'
 import { candidatosVinculo, lancamentosCandidatosContrato } from '../../lib/contratos/vinculo'
 import { pendentesForaDaVigencia } from '../../lib/contratos/estorno'
-import { destinosCreditos, REGRAS_ABATIMENTO, regraAbatimento } from '../../lib/contratos/creditos'
+import { destinosCreditos, REGRAS_ABATIMENTO, regraAbatimento, creditoAAbater } from '../../lib/contratos/creditos'
+import { ehCondominioAberto, temComposicaoInformada } from '../../lib/contratos/composicaoAberta'
 import { diferencaDoPagamento, esperadoDoPagamento } from '../../lib/contratos/efetivacao'
 import { rotuloPapel, rotulosContrato, rotuloModalidade, rotuloTipo, ehAluguel } from '../../lib/contratos/rotulos'
 import ComposicaoBoletoModal from './ComposicaoBoletoModal'
@@ -50,6 +51,8 @@ function resumoEvento(e, contrato) {
   if (e.tipo === 'edicao_parcela' && d.acao === 'edicao') return `Parcela de ${fmtDate(d.vencimento)} editada: ${Object.keys(d.campos || {}).join(', ')}${d.escopo === 'proximas' ? ' (esta e as próximas)' : ''}`
   if (e.tipo === 'edicao_parcela' && d.acao === 'credito_manual') return `Crédito manual "${d.descricao || ''}" de ${fmt(e.valor_novo)}${d.parcela_id ? ' com destino escolhido' : ''}`
   if (e.tipo === 'edicao_parcela' && d.acao === 'credito_destino') return `Crédito "${d.descricao || ''}" ${d.parcela_id ? 'com nova parcela de destino' : 'volta a seguir a regra do contrato'}`
+  if (e.tipo === 'edicao_parcela' && (d.acao === 'composicao_informada' || d.acao === 'composicao_alterada')) return `Composição do boleto ${d.acao === 'composicao_informada' ? 'informada' : 'alterada'} na parcela de ${fmtDate(d.vencimento)}: ${fmt(e.valor_novo)}${d.credito > 0 ? ` · crédito previsto ${fmt(d.credito)}` : ''}`
+  if (e.tipo === 'edicao_parcela' && d.acao === 'composicao_removida') return `Composição do boleto removida da parcela de ${fmtDate(d.vencimento)}: volta a ${fmt(e.valor_novo)}`
   if (e.tipo === 'edicao_parcela' && d.acao === 'justificativa') return `Diferença de ${fmt(e.valor_anterior)} justificada com ${fmt(e.valor_novo)} em créditos${d.restante > 0.005 ? ` · ${fmt(d.restante)} continua como diferença` : ''}`
   if (e.tipo === 'aditivo') return Object.keys(d.campos || {}).join(', ')
   if (e.tipo === 'renovacao') return `Fim ${fmtDate(d.de)} → ${fmtDate(d.para)}`
@@ -71,7 +74,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
     contratoPorId, schedules, transactions, accounts, profiles, categories, indicesContratos, carregarIndice, pode,
     planejarParcelasContrato, aplicarParcelasContrato, atualizarContrato, desvincularDoContrato, rescindirContrato,
     excluirContrato, creditosContratos, adiarCreditoNaParcela, editarComposicaoLancamento, aplicarCreditosEmValorManual,
-    desfazerVinculoLancamento, desvincularLancamento, informarComposicao,
+    desfazerVinculoLancamento, desvincularLancamento, informarComposicao, abrirComposicaoParcela,
   } = useApp()
   const contrato = contratoPorId(id)
   const [extra, setExtra] = useState({ itens: [], eventos: [] })
@@ -182,6 +185,10 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
     const out = []
     if (!l.paga) {
       out.push(<button key="vinc" className={acao} onClick={() => setVincularLinha(l)}>Vincular pagamento</button>)
+      // Boleto do condomínio chegou antes do pagamento: os itens já entram na parcela aberta.
+      if (l.papel === 'condominio' && ehCondominioAberto(l.schedule, contrato)) {
+        out.push(<button key="comp" className={acao} onClick={() => abrirComposicaoParcela(l.schedule.id)}>{temComposicaoInformada(l.schedule) ? 'Ver/editar composição' : 'Informar composição'}</button>)
+      }
       if (l.projetado && l.papel === 'aluguel' && !l.vinculada) out.push(<button key="reaj" className={acao} onClick={() => setReajusteDe(l.schedule)}>Confirmar</button>)
       return out
     }
@@ -302,7 +309,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
             </button>
           ))}
           <button onClick={() => setAba('creditos')} className={`text-xs px-2 py-1 rounded ${aba === 'creditos' ? 'bg-primary/15 text-primary-fg font-semibold' : 'text-texto-2 hover:bg-surface-hover'}`}>
-            {rot.abaCreditos} ({creditos.filter(c => c.status === 'aberto').length} aberto(s))
+            {rot.abaCreditos} ({creditos.filter(creditoAAbater).length} a abater)
           </button>
         </div>
         {aba === 'creditos' ? (
@@ -324,7 +331,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
                     const d = destinos.get(c.id)
                     return (
                       <tr key={c.id} className="border-b border-borda/50 align-top">
-                        <td className="px-2 py-1.5 text-texto-2">{c.descricao || '—'}<span className="block text-[11px] text-texto-3">{fmtDate(c.data_origem)}{c.origem_lancamento_id ? '' : ' · manual'}</span></td>
+                        <td className="px-2 py-1.5 text-texto-2">{c.descricao || '—'}<span className="block text-[11px] text-texto-3">{fmtDate(c.data_origem)}{c.origem_lancamento_id ? '' : c.origem_agendamento_id ? ' · boleto informado' : ' · manual'}</span></td>
                         <td className="px-2 py-1.5 text-texto-3 hidden sm:table-cell">{(c.itens || []).map(i => `${i.desc} ${fmt(i.valor)}`).join(' · ')}</td>
                         <td className="px-2 py-1.5 text-right text-texto-1 font-medium whitespace-nowrap">{fmt(c.valor)}</td>
                         <td className="px-2 py-1.5">
@@ -339,9 +346,9 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
                                       {podeEditar && <button className={`${acao} ml-1`} onClick={() => aplicarCreditosEmValorManual(d.parcela.id)}>Aplicar mesmo assim</button>}
                                     </span>
                                   ) : (
-                                    <span className="text-texto-2">Aberto — abate na parcela de {fmtDate(d.parcela.startDate)}{d.fixo ? ' (escolhida)' : ''}</span>
+                                    <span className="text-texto-2">{c.status === 'previsto' ? 'Previsto (condomínio ainda não pago)' : 'Aberto'} — abate na parcela de {fmtDate(d.parcela.startDate)}{d.fixo ? ' (escolhida)' : ''}</span>
                                   )
-                                ) : <span className="text-aviso">Aberto — sem parcela pendente para abater</span>}
+                                ) : <span className="text-aviso">{c.status === 'previsto' ? 'Previsto' : 'Aberto'} — sem parcela pendente para abater</span>}
                                 {podeEditar && d && !d.bloqueado && <button className={acao} onClick={() => adiarCreditoNaParcela(d.parcela.id, c.id)}>Não abater neste mês</button>}
                                 {podeEditar && <button className={acao} onClick={() => setTrocarDestino(c)}>Trocar parcela de destino</button>}
                               </span>

@@ -47,7 +47,7 @@ Contratos de aluguel (e serviço) ligados aos agendamentos. O plano completo est
   - As perguntas aparecem no `ContratoEfetivacaoHost` (composição do boleto; "aplicar às próximas do ciclo?").
   - `baixarComoJaNoCartao` não dispara: contrato não aceita cartão.
 - **Estorno/exclusão.** `reverseTransaction` e `deleteTransaction` chamam `reverterEfetivacaoRef`. O crédito compensado volta a aberto; o gerado (se ainda aberto) sai; um evento é registrado.
-- **Composição do boleto** (`ComposicaoBoletoModal`): digitar, colar texto (`parsearTextoBoleto`) ou foto (em breve, `imagemBoleto.js`).
+- **Composição do boleto** (`ComposicaoBoletoModal`): digitar, colar texto (`parsearTextoBoleto`) ou foto/print/PDF lidos pelo Assistente (`imagemBoleto.js`).
   - Regras em `contrato_regras_itens`: a do contrato vence a global, "começa com" vence "contém".
   - A soma dos itens tem de ser igual ao valor pago.
   - "Pular" usa a composição estimada, marcada para revisar.
@@ -57,6 +57,17 @@ Contratos de aluguel (e serviço) ligados aos agendamentos. O plano completo est
 - **Relatórios.** "Despesa real / Valor pago" (`src/lib/contratos/despesaReal.js`) no relatório por categoria e no Orçado×Realizado. A pizza do Painel segue em valor pago.
 - **Edição de parcela de contrato.** Usa a regra de registros separados (como a parcela de financiamento) e registra o evento `edicao_parcela`.
 - **Regras globais iniciais.** Vêm do kit básico (clientes novos) e de `sql/contratos_entrega2.sql` (bancos existentes).
+
+## Composição do boleto em parcela ABERTA (04/11/2026)
+
+- **Onde:** ficha do contrato ("Informar composição" na parcela pendente de condomínio), Agendamentos (botão "Informar composição"/"Composição" na ocorrência pendente ou paga — no celular, no detalhe da ocorrência) e chat do Assistente (boleto que corresponde a uma parcela aberta). Todas abrem o MESMO `ComposicaoBoletoModal` pelo `ComposicaoParcelaHost` (`abrirComposicaoParcela`).
+- **Parcela aberta** (`useContratos.informarComposicaoAberta`, regras em `src/lib/contratos/composicaoAberta.js`): `schedule.composicao` ganha os itens e `informada: true`; o valor pendente = total do boleto (`valorManual` passa a considerar `informada`, então sincronização e previsão do condomínio não sobrescrevem). As próximas parcelas seguem a regra de sempre (inclusive "Só neste boleto").
+- **Crédito previsto:** `contrato_creditos.status = 'previsto'` (migração `2026-11-04_contratos_credito_previsto`), `origem_agendamento_id` = parcela, sem lançamento. Abate no aluguel de destino como os abertos (marcado "(previsto)"); "Não abater neste mês" e "Trocar parcela de destino" valem igual.
+- **Pagamento:** valor = total do boleto → a composição vai ao lançamento e o MESMO crédito vira 'aberto' (`substituirCreditoGerado` atualiza no lugar, sem criar outro). Valor diferente → a prévia abre com os itens informados (auto-registro: diferença vira "Diferença/arredondamento" do inquilino).
+- **Aluguel pago com crédito previsto:** a confirmação mostra a composição (`ComposicaoParcelaResumo`); o crédito fica 'compensado'; o pagamento do condomínio depois só liga o lançamento (não gera outro).
+- **Editar/remover:** recalcula o crédito e o aluguel. Crédito já abatido com valor diferente → pergunta ("manter" ou "complementar" com crédito da diferença). Remover → volta ao condomínio previsto e o crédito previsto sai.
+- **Estorno do condomínio:** crédito gerado de parcela informada volta a 'previsto'; já abatido → continua abatido e ligado à parcela, e a tela pergunta se vira crédito avulso. Estorno do aluguel reabre o crédito como 'previsto' se o condomínio de origem ainda não foi pago.
+- **Foto/PDF:** `extrairItensDeImagem` → `/api/assistente` com `leitura: 'boleto_condominio'` (ferramenta forçada em `api/_leituraBoleto.js`): só vencimento, total, beneficiário e itens; o responsável vem das regras. Sempre com prévia; o arquivo não é guardado; o consumo vai para `ia_uso` (ferramenta `ler_boleto_condominio`, conta no limite diário com imagem).
 
 ## Pendências registradas (não corrigir sem pedido)
 

@@ -28,7 +28,7 @@ export default function ContratosPanel() {
 
   const abertos = useMemo(() => {
     const m = new Map()
-    for (const cr of creditosContratos || []) if (cr.status === 'aberto') m.set(cr.contrato_id, (m.get(cr.contrato_id) || 0) + Number(cr.valor))
+    for (const cr of creditosContratos || []) if (cr.status === 'aberto' || cr.status === 'previsto') m.set(cr.contrato_id, (m.get(cr.contrato_id) || 0) + Number(cr.valor))
     return m
   }, [creditosContratos])
   const vigencia = (c) => `${fmtDate(c.data_inicio)} – ${c.data_fim ? fmtDate(c.data_fim) : 'sem fim'}`
@@ -103,7 +103,7 @@ export default function ContratosPanel() {
                   <th className="px-3 py-2 text-left">Vigência</th>
                   <th className="px-3 py-2 text-left">Próximo vencimento</th>
                   <th className="px-3 py-2 text-left">Próximo reajuste</th>
-                  <th className="px-3 py-2 text-right">Créditos abertos</th>
+                  <th className="px-3 py-2 text-right" title="Abertos e previstos (boleto informado, condomínio ainda não pago)">Créditos a abater</th>
                   <th className="px-3 py-2 text-left">Status</th>
                 </tr>
               </thead>

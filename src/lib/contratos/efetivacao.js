@@ -83,14 +83,22 @@ export function planejarJustificativa({ tx, esperado = null, ligados = [] }) {
   }
 }
 
-// Estorno/exclusão do lançamento → { reabrir, remover, manter }: créditos compensados NESTE
-// pagamento voltam a abertos; o crédito GERADO por ele (condomínio) sai — se ainda aberto. Gerado e
-// já compensado em outro aluguel pago fica (`manter`), para o usuário decidir.
-export function planejarReversao({ tx, creditos }) {
+// Estorno/exclusão do lançamento → { reabrir, remover, voltarPrevisto, manter }: créditos
+// compensados NESTE pagamento voltam a abater (aberto, ou previsto se o condomínio de origem ainda
+// não foi pago — `statusReabrir`); o crédito GERADO por ele (condomínio) sai — se ainda aberto. Se a
+// parcela de origem tem o boleto informado (`informadas`: ids das parcelas), ele volta a
+// 'previsto' em vez de sair. Gerado e já compensado em outro aluguel pago fica (`manter`), para o
+// usuário decidir.
+export function planejarReversao({ tx, creditos, informadas = new Set() }) {
   const doTx = (creditos || [])
+  const gerados = doTx.filter(c => c.origem_lancamento_id === tx.id)
+  const informado = (c) => !!c.origem_agendamento_id && informadas.has(c.origem_agendamento_id)
+  const reabrir = doTx.filter(c => c.status === 'compensado' && c.compensado_em_lancamento_id === tx.id)
   return {
-    reabrir: doTx.filter(c => c.status === 'compensado' && c.compensado_em_lancamento_id === tx.id).map(c => c.id),
-    remover: doTx.filter(c => c.origem_lancamento_id === tx.id && c.status === 'aberto').map(c => c.id),
-    manter: doTx.filter(c => c.origem_lancamento_id === tx.id && c.status === 'compensado').map(c => c.id),
+    reabrir: reabrir.map(c => c.id),
+    statusReabrir: Object.fromEntries(reabrir.map(c => [c.id, c.origem_agendamento_id && !c.origem_lancamento_id ? 'previsto' : 'aberto'])),
+    remover: gerados.filter(c => c.status === 'aberto' && !informado(c)).map(c => c.id),
+    voltarPrevisto: gerados.filter(c => c.status === 'aberto' && informado(c)).map(c => c.id),
+    manter: gerados.filter(c => c.status === 'compensado').map(c => c.id),
   }
 }

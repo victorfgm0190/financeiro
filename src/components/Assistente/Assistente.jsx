@@ -5,6 +5,7 @@ import { comprimirImagem, imagemDoClipboard, MAX_IMAGEM_ORIGINAL, ehPdf, lerPdf 
 import { interpretar } from '../../lib/assistenteApi'
 import { EXECUTORES } from './executores'
 import LoteAssistente from './LoteAssistente'
+import OfertaComposicaoBoleto from './OfertaComposicaoBoleto'
 import { Pergunta } from './respostas'
 import { useMicrofone, BARRAS, mensagemSemSuporte } from './useMicrofone'
 import AjudaTela from '../BoasVindas/AjudaTela'
@@ -22,6 +23,7 @@ import { hojeStr } from '../../lib/saldos'
 // (operações 🔴). NUNCA exclui nada. Recebe { onClose, onToast } (ação do "+" e modal do desktop).
 
 const MAX_TEXTO = 1000
+const BOLETO = new Set(['criar_agendamento', 'registrar_lancamento', 'baixar_agendamento'])
 const juntar = (...partes) => partes.map(p => (p || '').trim()).filter(Boolean).join(' ')
 
 export default function Assistente({ onClose, onToast }) {
@@ -149,12 +151,17 @@ export default function Assistente({ onClose, onToast }) {
   }
   if (fase.tipo === 'resultado' && fase.ferramenta !== 'perguntar') {
     const Executor = EXECUTORES[fase.ferramenta]
+    // Boleto (foto/PDF) de uma parcela de condomínio aberta: oferece informar a composição nela.
+    const boleto = imagem && BOLETO.has(fase.ferramenta)
     return (
-      <Executor
-        ferramenta={fase.ferramenta} parametros={fase.parametros} extra={fase.extra} textoOriginal={texto.trim()}
-        onClose={onClose} onToast={onToast} onNovo={novoPedido} onResponder={responder} onContexto={aoContexto}
-        onTrocar={(ferramenta, parametros) => setFase({ tipo: 'resultado', ferramenta, parametros, extra: {} })}
-      />
+      <>
+        {boleto && <OfertaComposicaoBoleto parametros={fase.parametros} imagem={imagem} onClose={onClose} />}
+        <Executor
+          ferramenta={fase.ferramenta} parametros={fase.parametros} extra={fase.extra} textoOriginal={texto.trim()}
+          onClose={onClose} onToast={onToast} onNovo={novoPedido} onResponder={responder} onContexto={aoContexto}
+          onTrocar={(ferramenta, parametros) => setFase({ tipo: 'resultado', ferramenta, parametros, extra: {} })}
+        />
+      </>
     )
   }
 

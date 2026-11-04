@@ -41,12 +41,20 @@ export function competenciaOrigem(c, schedules) {
   return ymDe(s?.startDate || c?.data_origem || '')
 }
 
-// → Map(creditoId → { parcela, bloqueado, fixo }) para os créditos abertos do contrato.
+// Crédito que ainda vai abater: 'aberto' ou 'previsto' (boleto informado antes de pagar o
+// condomínio — já entra no aluguel de destino, marcado como previsto).
+export const creditoAAbater = (c) => c?.status === 'aberto' || c?.status === 'previsto'
+
+// Status de um crédito que volta a abater (estorno do aluguel, item tirado da composição): o do
+// boleto ainda não pago (só a parcela de origem, sem lançamento) volta a 'previsto'.
+export const statusAoReabrir = (c) => (c?.origem_agendamento_id && !c?.origem_lancamento_id ? 'previsto' : 'aberto')
+
+// → Map(creditoId → { parcela, bloqueado, fixo }) para os créditos abertos/previstos do contrato.
 export function destinosCreditos(contrato, schedules, creditos) {
   const pendentes = aluguelPendentes(contrato, schedules)
   const regra = regraAbatimento(contrato)
   const out = new Map()
-  const abertos = (creditos || []).filter(c => c.contrato_id === contrato.id && c.status === 'aberto')
+  const abertos = (creditos || []).filter(c => c.contrato_id === contrato.id && creditoAAbater(c))
     .sort((a, b) => String(a.data_origem).localeCompare(String(b.data_origem)))
   for (const c of abertos) {
     const adiado = (s) => (s.composicao?.creditos_adiados || []).includes(c.id)
@@ -78,11 +86,12 @@ export function distribuirCreditos(contrato, schedules, creditos) {
 const ddmm = (d) => (d ? `${String(d).slice(8, 10)}/${String(d).slice(5, 7)}` : '')
 
 // Um item por item de origem: "Fundo de Reserva cond. 05/12 −79,10". Crédito manual (sem
-// lançamento de origem) leva só a descrição.
+// lançamento nem parcela de origem) leva só a descrição. Previsto: "(previsto)" e previsto: true.
 export function itensDoCredito(c) {
   const itens = c.itens?.length ? c.itens : [{ desc: c.descricao || 'Crédito', valor: c.valor }]
-  const sufixo = c.origem_lancamento_id ? ` cond. ${ddmm(c.data_origem)}` : ''
-  return itens.map(i => ({ tipo: 'credito', desc: `${i.desc}${sufixo}`, valor: -r2(i.valor), credito_id: c.id }))
+  const previsto = c.status === 'previsto'
+  const sufixo = `${c.origem_lancamento_id || c.origem_agendamento_id ? ` cond. ${ddmm(c.data_origem)}` : ''}${previsto ? ' (previsto)' : ''}`
+  return itens.map(i => ({ tipo: 'credito', desc: `${i.desc}${sufixo}`, valor: -r2(i.valor), credito_id: c.id, ...(previsto ? { previsto: true } : {}) }))
 }
 
 // Parcela com estes créditos: mantém base/desconto, troca os itens de crédito.
@@ -93,7 +102,8 @@ export function composicaoComCreditos(parcela, creditos) {
   return { amount: total, composicao: { ...(parcela.composicao || {}), itens, total } }
 }
 
-const idsCredito = (s) => (s.composicao?.itens || []).filter(i => i.tipo === 'credito').map(i => `${i.credito_id}:${i.valor}`).sort().join('|')
+// Previsto → aberto muda o item (texto e marca): entra na comparação.
+const idsCredito = (s) => (s.composicao?.itens || []).filter(i => i.tipo === 'credito').map(i => `${i.credito_id}:${i.valor}:${i.previsto ? 'p' : ''}`).sort().join('|')
 
 // Mudanças nas parcelas pendentes para refletir os créditos abertos. Parcela bloqueada (valor à mão
 // sem marcar manual) não é tocada. → [{ id, antes, changes }]

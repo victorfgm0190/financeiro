@@ -24,6 +24,8 @@ import { exportarExcel } from '../../lib/exportExcel'
 import { TIPOS_AGENDAMENTO, filtrarPorTipo, contarPorTipo, lerTipoAgendamento, salvarTipoAgendamento } from '../../lib/agendamentosTipo'
 import { linhasDosAgendamentos, linhasDosPagos, linhasDasFaturas, specAgendamentos, periodoDoArquivo } from '../../lib/exportarAgendamentos'
 import SeloContrato from '../Contratos/SeloContrato'
+import BotaoComposicaoParcela from '../Contratos/BotaoComposicaoParcela'
+import ComposicaoParcelaResumo from '../Contratos/ComposicaoParcelaResumo'
 import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
 import { rotuloParcela } from '../../lib/numeroParcela'
@@ -541,6 +543,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
         )}
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {!parcelaFin && scheduleProp.contratoId && <ComposicaoParcelaResumo schedule={scheduleProp} />}
           {parcelaFin && (
             <>
               <div className="rounded-lg border border-borda-forte bg-surface-2/40 px-3 py-2.5">
@@ -1259,6 +1262,7 @@ function ScheduleRow({
               </span>
             )}
             {schedule.contratoId && <SeloContrato schedule={schedule} />}
+            {schedule.contratoId && nextDate && !futura && <BotaoComposicaoParcela schedule={schedule} />}
             {seloFluxoPrincipal(schedule) && (
               <span className="text-xs bg-surface-hover/60 text-texto-3 px-1 py-0.5 rounded whitespace-nowrap" title="Considerar no Fluxo de Caixa principal (escolha deste agendamento)">
                 {seloFluxoPrincipal(schedule)}
@@ -2560,7 +2564,10 @@ function PagamentosTable({ linhas, categories, accounts, tiposDocumento }) {
                   )}
                 </td>
                 <td className="px-3 py-2 text-texto-2 whitespace-nowrap">{l.vencimento ? fmtDate(l.vencimento) : '—'}</td>
-                <td className="px-3 py-2 text-texto-1 max-w-[14rem] truncate">{l.description || '—'}</td>
+                <td className="px-3 py-2 text-texto-1 max-w-[14rem]">
+                  <span className="block truncate">{l.description || '—'}</span>
+                  {l.txId && l.schedule?.contratoId && <BotaoComposicaoParcela schedule={l.schedule} txId={l.txId} />}
+                </td>
                 <td className="px-3 py-2 text-texto-2 max-w-[11rem] truncate">{l.payee || '—'}</td>
                 <td className="px-3 py-2 text-texto-2 max-w-[11rem] truncate">{cat(l.categoryId)}</td>
                 <td className="px-3 py-2 text-texto-2 whitespace-nowrap" title={tipo?.nome}>{tipo?.sigla || '—'}</td>

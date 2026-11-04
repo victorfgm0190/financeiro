@@ -9,10 +9,13 @@ import ComposicaoBoletoModal from './ComposicaoBoletoModal'
 // celular, baixa em lote…): montado uma vez nos overlays do App. Uma pendência por vez.
 //   composicao → "Composição do boleto" do condomínio (Pular = estimativa a revisar);
 //   reajuste   → parcela projetada paga vale como confirmação: "Aplicar às próximas do ciclo?".
+//   estorno_credito → condomínio estornado com crédito já abatido num aluguel pago: continua ligado
+//     à parcela (padrão) ou vira crédito avulso.
 export default function ContratoEfetivacaoHost() {
   const {
     contratosHabilitado, pendenciasContrato, resolverPendenciaContrato, contratoPorId, schedules, transactions,
     confirmarComposicaoContrato, estimarComposicaoContrato, confirmarReajusteContrato, registrarEventoContrato,
+    desligarCreditoDoCondominio,
   } = useApp()
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -20,16 +23,40 @@ export default function ContratoEfetivacaoHost() {
   const contrato = p ? contratoPorId(p.contratoId) : null
   const parcela = p ? schedules.find(s => s.id === p.parcelaId) : null
   const tx = p ? transactions.find(t => t.id === p.txId) : null
+  const doEstorno = p?.tipo === 'estorno_credito'
   // Pendência que perdeu o objeto (lançamento estornado, contrato excluído) sai da fila.
-  const orfa = !!p && (!contrato || !parcela || !tx)
+  const orfa = !!p && (doEstorno ? !contrato : (!contrato || !parcela || !tx))
   useEffect(() => { if (orfa) resolverPendenciaContrato(p.chave) }, [orfa, p, resolverPendenciaContrato])
   if (!p || orfa) return null
   const fechar = () => { setErro(''); setSalvando(false); resolverPendenciaContrato(p.chave) }
 
+  if (doEstorno) {
+    const avulso = async () => {
+      setSalvando(true)
+      try { await desligarCreditoDoCondominio(p.creditoId); fechar() } catch (err) { setErro(err?.message || 'Falha ao gravar.'); setSalvando(false) }
+    }
+    return (
+      <Modal open onClose={fechar} title="Crédito do condomínio já abatido" size="sm">
+        <div className="space-y-3 text-sm">
+          <p className="text-texto-2">
+            O pagamento do condomínio de {fmtDate(p.dataTx)} foi estornado, mas o crédito dele (<strong className="text-texto-1">{fmt(p.valor)}</strong>)
+            já tinha sido abatido no aluguel pago{p.dataCompensacao ? ` em ${fmtDate(p.dataCompensacao)}` : ''}. O aluguel pago não muda.
+          </p>
+          <p className="text-texto-1 font-medium">O que fazer com esse crédito?</p>
+          {erro && <p className="text-xs text-perigo">{erro}</p>}
+          <div className="flex flex-col gap-2">
+            <button className="btn-primary" disabled={salvando} onClick={fechar}>Manter ligado a esta parcela — quando pagar de novo, não gera outro crédito</button>
+            <button className="btn-secondary" disabled={salvando} onClick={avulso}>Tratar como crédito avulso — o próximo pagamento gera crédito novo</button>
+          </div>
+        </div>
+      </Modal>
+    )
+  }
+
   if (p.tipo === 'composicao') {
     return (
       <ComposicaoBoletoModal
-        key={p.chave} contrato={contrato} tx={tx} modo="pagamento"
+        key={p.chave} contrato={contrato} tx={tx} modo="pagamento" composicaoInicial={p.itensIniciais ? { itens: p.itensIniciais } : null}
         onConfirmar={async ({ itens, lembrar }) => { await confirmarComposicaoContrato({ contrato, parcela, tx, itens, lembrar }); fechar() }}
         onPular={async () => { await estimarComposicaoContrato({ contrato, parcela, tx }); fechar() }}
         onClose={async () => { await estimarComposicaoContrato({ contrato, parcela, tx }); fechar() }}

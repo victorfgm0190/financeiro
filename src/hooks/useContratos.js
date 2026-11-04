@@ -14,9 +14,13 @@ import { planoVinculo, planoDesvinculo } from '../lib/contratos/vinculo'
 import { mapaVinculos } from '../lib/vinculo'
 import { analisarEstorno, cancelarOcorrencia } from '../lib/contratos/estorno'
 import { composicaoCondominio, composicaoEstimada, creditoDaComposicao } from '../lib/contratos/composicao'
-import { planoCreditosAluguel, adiarCredito, liberarAdiamento, marcarValorManual } from '../lib/contratos/creditos'
+import { planoCreditosAluguel, adiarCredito, liberarAdiamento, marcarValorManual, statusAoReabrir } from '../lib/contratos/creditos'
+import {
+  ehCondominioAberto, temComposicaoInformada, composicaoDaParcela, planoInformarParcela, planoRemoverComposicao,
+  creditoPrevistoDaParcela, creditoDaParcela, planoCreditoDaParcela, composicaoNoPagamento, vencimentoParcela,
+} from '../lib/contratos/composicaoAberta'
 import { planejarPosEfetivacao, planejarReversao, planejarJustificativa } from '../lib/contratos/efetivacao'
-import { ultimoCondominioPago, planoPrevisaoCondominio } from '../lib/contratos/condominio'
+import { ultimoCondominioPago, planoPrevisaoCondominio, valorPrevistoCondominio } from '../lib/contratos/condominio'
 import { hojeStr, ymDe } from '../lib/contratos/datas'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { ESCOPO } from '../lib/camposSerie'
@@ -70,6 +74,9 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   const [regras, setRegras] = useState([])
   const [creditos, setCreditosState] = useState([])
   const [pendencias, setPendencias] = useState([])
+  // Pedido de abrir a "Composição do boleto" de uma parcela (ficha, Agendamentos, Assistente): um só
+  // lugar na tela (ComposicaoParcelaHost). { parcelaId, txId?, leitura? }
+  const [pedidoComposicao, setPedidoComposicao] = useState(null)
   const contratosRef = useRef([])
   // Definidos mais abaixo e usados por ações declaradas antes deles.
   const notificarEfetivacaoRef = useRef(null)
@@ -333,16 +340,33 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   // ── Créditos do proprietário ──────────────────────────────────────────────────────────────────
   const trocarCredito = (row) => setCreditos(prev => (prev.some(c => c.id === row.id) ? prev.map(c => (c.id === row.id ? row : c)) : [...prev, row]))
 
-  // Crédito GERADO pelo lançamento do condomínio: troca pelo da composição nova. Já compensado num
-  // aluguel pago não muda (devolve false para a tela avisar).
+  // Crédito GERADO pelo lançamento do condomínio (ou o PREVISTO da parcela, boleto informado antes
+  // de pagar): passa a ser o da composição nova — o MESMO registro (id, destino escolhido e "não
+  // abater" continuam valendo), 'aberto' e ligado ao lançamento. Já compensado num aluguel pago:
+  // com o mesmo valor só ganha o lançamento (não gera outro igual); com outro valor não muda
+  // (devolve false para a tela avisar).
   const substituirCreditoGerado = useCallback(async (contrato, tx, parcela, composicao) => {
-    const atual = creditosRef.current.find(c => c.origem_lancamento_id === tx.id)
-    if (atual?.status === 'compensado') return false
+    const doContrato = creditosRef.current.filter(c => c.contrato_id === contrato.id)
+    const atual = creditoDaParcela(doContrato, parcela?.id, tx.id)
+    const novo = creditoDaComposicao(composicao, { contratoId: contrato.id, tx, parcela })
+    if (atual?.status === 'compensado') {
+      if (!novo || r2(novo.valor) !== r2(atual.valor)) return false
+      if (atual.origem_lancamento_id !== tx.id) trocarCredito(await atualizarCreditoApi({ id: atual.id, origem_lancamento_id: tx.id, itens: novo.itens }))
+      return true
+    }
+    if (atual && novo) {
+      trocarCredito(await atualizarCreditoApi({
+        id: atual.id, itens: novo.itens, valor: novo.valor, descricao: novo.descricao, status: 'aberto', origem_lancamento_id: tx.id,
+        // O previsto mantém a data (o destino não pula de aluguel ao pagar).
+        ...(atual.status === 'previsto' ? {} : { data_origem: novo.data_origem }),
+      }))
+      return true
+    }
     if (atual) {
       await excluirCreditoApi(atual.id)
       setCreditos(prev => prev.filter(c => c.id !== atual.id))
+      return true
     }
-    const novo = creditoDaComposicao(composicao, { contratoId: contrato.id, tx, parcela })
     if (novo) trocarCredito(await criarCreditoApi(novo))
     return true
   }, [setCreditos]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -374,7 +398,10 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   }, [criarRegra, gravarComposicaoCondominio])
 
   // Sem a composição: os itens do proprietário repetem a última conhecida — "estimada, revisar".
+  // Parcela com o boleto informado: os itens informados (a diferença, se houver, fica com o inquilino).
   const estimarComposicao = useCallback(async ({ contrato, parcela, tx }) => {
+    const informada = composicaoNoPagamento(parcela, tx.amount, { auto: true })
+    if (informada?.composicao) return gravarComposicaoCondominio({ contrato, parcela, tx, composicao: informada.composicao })
     const anteriores = dataRef.current.transactions
       .filter(t => t.contratoId === contrato.id && t.id !== tx.id && t.composicao?.tipo === 'condominio')
       .sort((a, b) => String(b.date).localeCompare(String(a.date)))
@@ -490,6 +517,83 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     }
     return gravarComposicaoCondominio({ contrato, parcela, tx, composicao: composicaoCondominio(itens) })
   }, [criarRegra, gravarComposicaoCondominio])
+
+  // ── Composição do boleto na parcela de condomínio ABERTA (boleto chegou antes do pagamento) ────
+  // A mesma ação na ficha, em Agendamentos e no Assistente (ComposicaoParcelaHost). A parcela passa
+  // ao total do boleto ("valor informado") e os itens do proprietário viram crédito PREVISTO, que já
+  // abate no aluguel de destino. Crédito já abatido num aluguel pago e com valor diferente: devolve
+  // { ok: false, conflito } e a tela pede a decisão ('manter' | 'complementar').
+  const aplicarCreditoDaParcela = useCallback(async (contrato, parcela, plano, decisao) => {
+    if (plano.acao === 'criar') trocarCredito(await criarCreditoApi(plano.dados))
+    else if (plano.acao === 'atualizar') trocarCredito(await atualizarCreditoApi({ id: plano.id, ...plano.dados }))
+    else if (plano.acao === 'remover') {
+      await excluirCreditoApi(plano.id)
+      setCreditos(prev => prev.filter(c => c.id !== plano.id))
+    } else if (plano.acao === 'conflito' && decisao === 'complementar' && plano.novo > plano.abatido) {
+      const v = r2(plano.novo - plano.abatido)
+      const data = vencimentoParcela(parcela)
+      trocarCredito(await criarCreditoApi({
+        contrato_id: contrato.id, descricao: `Complemento do condomínio ${data.slice(8, 10)}/${data.slice(5, 7)}`, valor: v,
+        itens: [{ desc: 'Complemento do boleto do condomínio', valor: v }], data_origem: data, status: 'aberto',
+      }))
+    }
+  }, [setCreditos]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const informarComposicaoAberta = useCallback(async (contrato, parcelaId, { itens, lembrar = [], decisao = null }) => {
+    const parcela = dataRef.current.schedules.find(s => s.id === parcelaId)
+    if (!ehCondominioAberto(parcela, contrato)) throw new Error('Esta parcela de condomínio não está mais aberta.')
+    const composicao = composicaoDaParcela(itens)
+    const novo = creditoPrevistoDaParcela(composicao, { contratoId: contrato.id, parcela })
+    const atual = creditoDaParcela(creditosRef.current.filter(c => c.contrato_id === contrato.id), parcela.id)
+    const plano = planoCreditoDaParcela({ atual, novo })
+    if (plano.acao === 'conflito' && !decisao) return { ok: false, conflito: plano }
+    for (const l of lembrar) {
+      await criarRegra({ contrato_id: contrato.id, padrao: l.padrao, tipo_match: 'comeca_com', responsavel: l.responsavel })
+        .catch(err => console.warn('[contratos] regra não gravada:', err.message))
+    }
+    await aplicarCreditoDaParcela(contrato, parcela, plano, decisao)
+    const antes = temComposicaoInformada(parcela)
+    await aplicarParcelas({ atualizar: [{ id: parcela.id, antes: parcela, changes: planoInformarParcela(parcela, composicao) }] }, {
+      motivo: `Contrato ${rotuloContrato(contrato)}: composição do boleto do condomínio ${antes ? 'alterada' : 'informada'}`, escopo: ESCOPO.PARCELA,
+    })
+    await registrarEvento(contrato.id, {
+      tipo: 'edicao_parcela', valor_anterior: r2(parcela.amount), valor_novo: composicao.total,
+      detalhes: { acao: antes ? 'composicao_alterada' : 'composicao_informada', parcela_id: parcela.id, vencimento: vencimentoParcela(parcela), credito: novo?.valor || 0, decisao },
+    }).catch(err => console.warn('[contratos] evento da composição não gravado:', err.message))
+    return { ok: true, credito: novo?.valor || 0 }
+  }, [dataRef, criarRegra, aplicarCreditoDaParcela, aplicarParcelas, registrarEvento])
+
+  // "Remover composição" da parcela aberta: volta ao condomínio previsto; o crédito previsto sai.
+  const removerComposicaoAberta = useCallback(async (contrato, parcelaId, { decisao = null } = {}) => {
+    const parcela = dataRef.current.schedules.find(s => s.id === parcelaId)
+    if (!ehCondominioAberto(parcela, contrato) || !temComposicaoInformada(parcela)) throw new Error('Esta parcela não tem composição informada.')
+    const atual = creditoDaParcela(creditosRef.current.filter(c => c.contrato_id === contrato.id), parcela.id)
+    const plano = planoCreditoDaParcela({ atual, novo: null })
+    if (plano.acao === 'conflito' && !decisao) return { ok: false, conflito: plano }
+    await aplicarCreditoDaParcela(contrato, parcela, plano, decisao)
+    const est = dataRef.current
+    const previsto = valorPrevistoCondominio(contrato, est.schedules, est.transactions)
+    const valor = previsto > 0 ? previsto : r2(contrato.valor_condominio_previsto || parcela.amount)
+    await aplicarParcelas({ atualizar: [{ id: parcela.id, antes: parcela, changes: planoRemoverComposicao(parcela, valor) }] }, {
+      motivo: `Contrato ${rotuloContrato(contrato)}: composição do boleto do condomínio removida`, escopo: ESCOPO.PARCELA,
+    })
+    await registrarEvento(contrato.id, {
+      tipo: 'edicao_parcela', valor_anterior: r2(parcela.amount), valor_novo: valor,
+      detalhes: { acao: 'composicao_removida', parcela_id: parcela.id, vencimento: vencimentoParcela(parcela), decisao },
+    }).catch(err => console.warn('[contratos] evento da composição não gravado:', err.message))
+    return { ok: true }
+  }, [dataRef, aplicarCreditoDaParcela, aplicarParcelas, registrarEvento])
+
+  // Estorno de condomínio com crédito já abatido: por padrão ele fica ligado à parcela (o próximo
+  // pagamento dela não gera outro igual); "avulso" o desliga (o próximo pagamento gera crédito novo).
+  const desligarCreditoDoCondominio = useCallback(async (creditoId) => {
+    const c = creditosRef.current.find(x => x.id === creditoId)
+    if (!c) return
+    trocarCredito(await atualizarCreditoApi({ id: creditoId, origem_agendamento_id: null, origem_lancamento_id: null, descricao: `${c.descricao || 'Crédito'} (avulso)` }))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const abrirComposicaoParcela = useCallback((parcelaId, opcoes = {}) => setPedidoComposicao(parcelaId ? { parcelaId, ...opcoes } : null), [])
+  const fecharComposicaoParcela = useCallback(() => setPedidoComposicao(null), [])
 
   // ── Vínculo de lançamento a uma linha do contrato (C2) ────────────────────────────────────────
   // Tudo ou nada (lib/contratos/gravarVinculo): parcela + baixa + vínculo no lançamento vão ao banco
@@ -617,7 +721,8 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
       for (const id of antes) {
         if (depois.has(id)) continue
         try {
-          trocarCredito(await atualizarCreditoApi({ id, status: 'aberto', compensado_em_lancamento_id: null, compensado_em_agendamento_id: null, data_compensacao: null }))
+          const c = creditosRef.current.find(x => x.id === id)
+          trocarCredito(await atualizarCreditoApi({ id, status: statusAoReabrir(c), compensado_em_lancamento_id: null, compensado_em_agendamento_id: null, data_compensacao: null }))
         } catch (err) { console.warn('[contratos] crédito não reaberto:', err.message) }
       }
       updateTransaction(tx.id, { amount: r2(composicao.total), composicao })
@@ -634,6 +739,18 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
 
   // posEfetivacaoContrato(agendamento, lançamento): o que acontece depois que uma parcela é paga.
   const posEfetivacao = useCallback(async ({ contrato, parcela, tx, auto, estado = null }) => {
+    // Condomínio com o boleto já informado: a composição vai ao lançamento e o crédito previsto vira
+    // aberto (o mesmo). Pago com outro valor: com tela, a prévia já vem com os itens informados.
+    if (temComposicaoInformada(parcela)) {
+      const r = composicaoNoPagamento(parcela, tx.amount, { auto })
+      if (r?.pedir) {
+        updateTransaction(tx.id, { contratoId: contrato.id })
+        adicionarPendencia({ chave: `composicao:${tx.id}`, tipo: 'composicao', contratoId: contrato.id, parcelaId: parcela.id, txId: tx.id, itensIniciais: r.itensIniciais })
+      } else if (r?.composicao) {
+        await gravarComposicaoCondominio({ contrato, parcela, tx, composicao: r.composicao })
+      }
+      return
+    }
     const plano = planejarPosEfetivacao({ contrato, parcela, tx, auto })
     // Condomínio pago (pelo agendamento ou pelo contrato): as pendentes passam ao valor pago.
     if ((parcela.contratoPapel || 'aluguel') === 'condominio') {
@@ -650,7 +767,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     }
     if (plano.pedirComposicao) adicionarPendencia({ chave: `composicao:${tx.id}`, tipo: 'composicao', contratoId: contrato.id, parcelaId: parcela.id, txId: tx.id })
     if (plano.estimar) await estimarComposicao({ contrato, parcela, tx })
-  }, [updateTransaction, compensarCreditos, redistribuirCreditos, adicionarPendencia, estimarComposicao, atualizarPrevisaoCondominio, dataRef])
+  }, [updateTransaction, compensarCreditos, redistribuirCreditos, adicionarPendencia, estimarComposicao, atualizarPrevisaoCondominio, dataRef, gravarComposicaoCondominio])
 
   // Fila do gancho: { scheduleId, occurrenceDate, lancamentoId, auto }. Processada quando o estado
   // já tem o agendamento e o lançamento (o update() do ponto de efetivação é assíncrono).
@@ -694,12 +811,28 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
       const ctr = contratosRef.current.find(c => c.id === daBaixa.contratoId)
       if (ctr) await atualizarPrevisaoCondominio(ctr, est, { excluirTx: tx.id }).catch(err => console.warn('[contratos] previsão do condomínio:', err.message))
     }
-    const r = planejarReversao({ tx, creditos: creditosRef.current })
-    if (!r.reabrir.length && !r.remover.length && !r.manter.length) return
+    const informadas = new Set(est.schedules.filter(temComposicaoInformada).map(s => s.id))
+    const r = planejarReversao({ tx, creditos: creditosRef.current, informadas })
+    if (!r.reabrir.length && !r.remover.length && !r.manter.length && !r.voltarPrevisto.length) return
     for (const id of r.reabrir) {
       try {
-        trocarCredito(await atualizarCreditoApi({ id, status: 'aberto', compensado_em_lancamento_id: null, compensado_em_agendamento_id: null, data_compensacao: null }))
+        trocarCredito(await atualizarCreditoApi({ id, status: r.statusReabrir[id] || 'aberto', compensado_em_lancamento_id: null, compensado_em_agendamento_id: null, data_compensacao: null }))
       } catch (err) { console.warn('[contratos] crédito não reaberto:', err.message) }
+    }
+    // Boleto informado na parcela: o crédito volta a previsto (a parcela reaberta continua com ele).
+    for (const id of r.voltarPrevisto) {
+      try {
+        trocarCredito(await atualizarCreditoApi({ id, status: 'previsto', origem_lancamento_id: null }))
+      } catch (err) { console.warn('[contratos] crédito não voltou a previsto:', err.message) }
+    }
+    // Já abatido num aluguel pago: continua abatido e ligado à parcela (o pagamento de novo não gera
+    // outro igual) — a tela pergunta se ele deve virar avulso.
+    for (const id of r.manter) {
+      const c = creditosRef.current.find(x => x.id === id)
+      try {
+        trocarCredito(await atualizarCreditoApi({ id, origem_lancamento_id: null }))
+      } catch (err) { console.warn('[contratos] crédito abatido não desligado do lançamento:', err.message) }
+      if (c) adicionarPendencia({ chave: `estorno_credito:${id}`, tipo: 'estorno_credito', contratoId: c.contrato_id, creditoId: id, valor: r2(c.valor), dataCompensacao: c.data_compensacao, dataTx: tx.date })
     }
     for (const id of r.remover) {
       try {
@@ -712,10 +845,10 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     if (contratoId) {
       await registrarEvento(contratoId, {
         tipo: 'edicao_parcela', valor_anterior: r2(tx.amount),
-        detalhes: { acao: 'reversao_creditos', lancamento_id: tx.id, creditos_reabertos: r.reabrir, creditos_removidos: r.remover, creditos_mantidos: r.manter },
+        detalhes: { acao: 'reversao_creditos', lancamento_id: tx.id, creditos_reabertos: r.reabrir, creditos_removidos: r.remover, creditos_mantidos: r.manter, creditos_previstos: r.voltarPrevisto },
       }).catch(err => console.warn('[contratos] evento de reversão não gravado:', err.message))
     }
-  }, [habilitado, setCreditos, redistribuirCreditos, registrarEvento, atualizarPrevisaoCondominio, dataRef]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [habilitado, setCreditos, redistribuirCreditos, registrarEvento, atualizarPrevisaoCondominio, dataRef, adicionarPendencia]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Uma vez por sessão, depois do load do banco, para cada contrato ativo:
   //   • sem data de fim: estende as parcelas até 12 meses à frente (ids determinísticos: outro
@@ -796,5 +929,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     pendenciasContrato: pendencias, resolverPendenciaContrato: resolverPendencia,
     confirmarComposicaoContrato: confirmarComposicao, estimarComposicaoContrato: estimarComposicao,
     notificarEfetivacao, reverterEfetivacaoContrato: reverterEfetivacao,
+    informarComposicaoAberta, removerComposicaoAberta, desligarCreditoDoCondominio,
+    pedidoComposicaoParcela: pedidoComposicao, abrirComposicaoParcela, fecharComposicaoParcela,
   }
 }
