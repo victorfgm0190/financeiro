@@ -184,6 +184,7 @@ export const COLUNAS_OPCIONAIS = {
   contas: ['spread_cambio', 'iof_linha_separada'],
   configuracoes: ['iof_compra_internacional'],
   agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato'],
+  envelopes: ['tipo_orcamento', 'valor_dia', 'dias_semana', 'descontar_feriados'],
 }
 const cacheColunasOpcionais = new Map()
 export const _limparCacheColunasOpcionais = () => cacheColunasOpcionais.clear()

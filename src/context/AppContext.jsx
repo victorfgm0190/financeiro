@@ -17,6 +17,13 @@ import {
 import { buildDailyLedgerRows, localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
 import { getToken, getSessao, noAmbientePrincipal, definirSemConexao } from '../lib/api'
 import { useContratos } from '../hooks/useContratos'
+import { useFeriados } from '../hooks/useFeriados'
+import { feriadosAtivos } from '../lib/feriados'
+import {
+  aGastarEnvelope, ehDiario, diaInicioCiclo, cicloDaCompetencia, gastosDoEnvelope, envelopesParaProjecao,
+  historicoAoAlterar, mudouOrcamento, ciclosParaCongelar, hojeLocal,
+} from '../lib/envelopeOrcamento'
+import { competenciaKeyOf as competenciaDoEnvelope } from '../lib/envelopes'
 import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
 import { comCamposDaOcorrencia, ESCOPO, agendamentoDoMotor } from '../lib/camposSerie'
@@ -2956,6 +2963,37 @@ export function AppProvider({ children }) {
     reverterEfetivacaoRef.current = contratosCtx.reverterEfetivacaoContrato
   }, [contratosCtx.notificarEfetivacao, contratosCtx.reverterEfetivacaoContrato])
 
+  // ── Envelope com orçamento diário + feriados (src/lib/envelopeOrcamento.js) ──────────────────
+  // Antes de mudar o cadastro de feriados, os ciclos encerrados dos envelopes diários ganham o
+  // orçamento gravado com os feriados de ANTES (ciclo encerrado mantém o orçamento que teve).
+  const congelarOrcamentosEnvelopes = useCallback((cadastroAntes) => {
+    update(d => {
+      const di = diaInicioCiclo(d.settings)
+      const comp = competenciaDoEnvelope(hojeLocal(), di)
+      const inicioAtual = cicloDaCompetencia(comp, di).inicio
+      const feriadosDe = (i, f) => feriadosAtivos(cadastroAntes, i, f)
+      let mudou = false
+      const envelopes = (d.envelopes || []).map(e => {
+        const congelar = ciclosParaCongelar(e, { compKeyAtual: comp, diaInicio: di, feriadosDe })
+        if (!congelar.length) return e
+        mudou = true
+        return { ...e, history: historicoAoAlterar(e, e, { inicioCicloAtual: inicioAtual, congelar }) }
+      })
+      return mudou ? { ...d, envelopes } : d
+    })
+  }, [update])
+  const feriadosCtx = useFeriados({ dbConectado: dbStatus === 'connected', antesDeMudar: congelarOrcamentosEnvelopes })
+  const feriadosRef = useRef([])
+  useEffect(() => { feriadosRef.current = feriadosCtx.feriados }, [feriadosCtx.feriados])
+  // Contexto do "A gastar" (card, Painel, Fluxo, relatórios): dia de início da competência dos
+  // envelopes, dia de início do ciclo (mês corrido = 1), hoje (data local) e os feriados ativos.
+  const orcamentoEnvelopes = useMemo(() => ({
+    startDay: data.settings.financialMonthStartDay || 1,
+    diaInicio: diaInicioCiclo(data.settings),
+    hoje: hojeLocal(),
+    feriadosDe: (inicio, fim) => feriadosAtivos(feriadosCtx.feriados, inicio, fim),
+  }), [data.settings, feriadosCtx.feriados])
+
   // Chain ID: agendamento de resgate avulso vinculado a um lançamento (source_tx_id), se houver.
   // Usado pelos painéis de exclusão para avisar que o resgate vinculado também será removido.
   const findLinkedResgate = useCallback((txId) => {
@@ -3622,6 +3660,15 @@ export function AppProvider({ children }) {
     let envelopesRestante = 0
     for (const env of (data.envelopes || [])) {
       if (env.accountId !== account.id) continue
+      // A gastar pela função ÚNICA (lib/envelopeOrcamento): mensal = max(0, limite − gasto), como antes.
+      if (ehDiario(env)) {
+        const ciclo = cicloDaCompetencia(currentComp, orcamentoEnvelopes.diaInicio)
+        envelopesRestante = rb(envelopesRestante + aGastarEnvelope(env, {
+          ciclo, gastos: gastosDoEnvelope(env, data.transactions, rateiosByLancamento, ciclo.inicio, ciclo.fim),
+          hoje: toStr(referenceDate), feriados: orcamentoEnvelopes.feriadosDe(ciclo.inicio, ciclo.fim),
+        }))
+        continue
+      }
       let spent = 0
       for (const tx of data.transactions) {
         if (tx.type !== 'expense' || tx.reservaAuto || isReservaShadowOrigin(tx) || isPatrimonioOrigin(tx) || isInvestAutoOrigin(tx)) continue
@@ -3630,7 +3677,7 @@ export function AppProvider({ children }) {
         if (!tx.date || competenciaKeyOf(tx.date) !== currentComp) continue
         spent += parte
       }
-      envelopesRestante = rb(envelopesRestante + Math.max(0, rb((env.limitAmount || 0) - spent)))
+      envelopesRestante = rb(envelopesRestante + aGastarEnvelope(env, { gasto: spent }))
     }
 
     const saldoAtual = rb(base + txDeltaUpTo(cycleEndStr))
@@ -3659,7 +3706,7 @@ export function AppProvider({ children }) {
       saldoAtualCalendario, saldoFinalCalendario,
       cycleEnd: cycleEndStr, calendarEnd: calendarEndStr, today: todayStr,
     }
-  }, [data.transactions, data.schedules, data.envelopes, data.settings, getNextOccurrences, getFinancialPeriod, etapaAPrevistasTodas, rateiosByLancamento])
+  }, [data.transactions, data.schedules, data.envelopes, data.settings, getNextOccurrences, getFinancialPeriod, etapaAPrevistasTodas, rateiosByLancamento, orcamentoEnvelopes])
 
   // FINAL CICLO / PROJETADO do Saldo Principal usando EXATAMENTE a engine do relatório
   // Fluxo de Caixa por Conta (computeFluxoCaixa) — ancorada no saldo REAL das contas. Pool:
@@ -3680,6 +3727,7 @@ export function AppProvider({ children }) {
       transactions: data.transactions, schedules: data.schedules,
       envelopes: data.envelopes, reserveFunctions: data.reserveFunctions,
       getNextOccurrences, includeSchedules: true, etapaAPrevistas, rateios: rateiosByLancamento,
+      orcamentoEnvelopes,
     })
     return {
       saldoAnterior: r.saldoAnterior,
@@ -3687,15 +3735,22 @@ export function AppProvider({ children }) {
       saldoFinalCiclo: r.saldoFinalSemEnvelopes, // sem subtrair envelopes
       envelopesTotal: r.envelopesTotal,
     }
-  }, [data.accounts, data.transactions, data.schedules, data.envelopes, data.reserveFunctions, activeProfileId, getNextOccurrences, getFinancialPeriod, etapaAPrevistas, rateiosByLancamento])
+  }, [data.accounts, data.transactions, data.schedules, data.envelopes, data.reserveFunctions, activeProfileId, getNextOccurrences, getFinancialPeriod, etapaAPrevistas, rateiosByLancamento, orcamentoEnvelopes])
 
   // Breakdown detalhado ("Como chegamos aqui") do Saldo Principal. ⚠ PROTEGIDA: o cálculo mora
   // em calcularSaldoPrincipalBreakdown (src/lib/saldoPrincipal.js); este wrapper só repassa os dados.
+  // Envelope DIÁRIO (alteração autorizada pelo usuário em 04/11/2026, só aqui no wrapper): entra com
+  // limite = gasto da competência + A gastar (envelopesParaProjecao), então o "limite − gasto" do
+  // cálculo protegido dá o A gastar da função única. Mensal entra exatamente como antes.
   const getSaldoPrincipalBreakdown = useCallback((referenceDate = new Date()) => calcularSaldoPrincipalBreakdown({
     accounts: data.accounts, transactions: data.transactions, schedules: data.schedules,
-    envelopes: data.envelopes, settings: data.settings, gerencialGroups: data.gerencialGroups,
+    envelopes: envelopesParaProjecao(data.envelopes, {
+      transactions: data.transactions, rateios: rateiosByLancamento, startDay: data.settings.financialMonthStartDay || 1,
+      diaInicio: orcamentoEnvelopes.diaInicio, referenceDate, feriadosDe: orcamentoEnvelopes.feriadosDe,
+    }),
+    settings: data.settings, gerencialGroups: data.gerencialGroups,
     profileId: activeProfileId, getNextOccurrences, getFinancialPeriod, rateios: rateiosByLancamento,
-  }, referenceDate), [data.accounts, data.transactions, data.schedules, data.envelopes, data.settings, data.gerencialGroups, activeProfileId, getNextOccurrences, getFinancialPeriod, rateiosByLancamento])
+  }, referenceDate), [data.accounts, data.transactions, data.schedules, data.envelopes, data.settings, data.gerencialGroups, activeProfileId, getNextOccurrences, getFinancialPeriod, rateiosByLancamento, orcamentoEnvelopes])
 
   // Saldo Principal exibido no Painel: o breakdown protegido + a etapa A prevista, somada POR FORA.
   const getSaldoPrincipal = useCallback(
@@ -3922,8 +3977,21 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, envelopes: [...(d.envelopes || []), { ...envelope, id, history: [] }] }))
   }, [update])
 
+  // Mudar o orçamento (tipo, valor por dia, dias, feriados) vale do ciclo atual em diante: a
+  // configuração anterior e o orçamento dos ciclos encerrados ficam em `history`.
   const updateEnvelope = useCallback((id, changes) => {
-    update(d => ({ ...d, envelopes: (d.envelopes || []).map(e => e.id === id ? { ...e, ...changes } : e) }))
+    update(d => ({
+      ...d,
+      envelopes: (d.envelopes || []).map(e => {
+        if (e.id !== id) return e
+        const novo = { ...e, ...changes }
+        if (!mudouOrcamento(e, novo)) return novo
+        const di = diaInicioCiclo(d.settings)
+        const comp = competenciaDoEnvelope(hojeLocal(), di)
+        const congelar = ciclosParaCongelar(e, { compKeyAtual: comp, diaInicio: di, feriadosDe: (i, f) => feriadosAtivos(feriadosRef.current, i, f) })
+        return { ...novo, history: historicoAoAlterar(e, novo, { inicioCicloAtual: cicloDaCompetencia(comp, di).inicio, congelar }) }
+      }),
+    }))
   }, [update])
 
   const deleteEnvelope = useCallback((id) => {
@@ -6214,6 +6282,7 @@ export function AppProvider({ children }) {
       reservePeriods, reserveAdjustments, reserveSnapshots,
       datasProvisorias, salvarDataProvisoria, removerDatasProvisorias,
       ...contratosCtx,
+      ...feriadosCtx, orcamentoEnvelopes,
       tiposDocumento, addTipoDocumento, updateTipoDocumento, deleteTipoDocumento, reordenarTiposDocumento,
       recarregarTiposDocumento, setTipoDocumentoEmMassa,
       registrarEdicao, temHistorico,

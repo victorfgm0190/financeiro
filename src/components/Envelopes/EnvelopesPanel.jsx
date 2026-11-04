@@ -3,7 +3,9 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Package, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { gastoEnvelopes, currentCompetencia, resumoEnvelope, totaisEnvelopes } from '../../lib/envelopes'
+import { gastoEnvelopes, currentCompetencia, resumoEnvelope, totaisEnvelopes, comOrcamentoDiario } from '../../lib/envelopes'
+import { DIAS_PRESETS, TIPOS_ORCAMENTO, cicloDaData, orcamentoDiario, hojeLocal } from '../../lib/envelopeOrcamento'
+import { fmt } from '../shared/utils'
 import { dueDateInMonth } from '../../lib/fatura'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
@@ -37,14 +39,25 @@ export function getEnvelopePeriod(dueDay) {
 }
 
 // ── EnvelopeForm ──────────────────────────────────────────────────────────────
+const presetDe = (dias) => DIAS_PRESETS.find(p => p.dias.length === (dias || []).length && p.dias.every(d => dias.includes(d)))?.id || DIAS_PRESETS[0].id
+
 function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, accountGroups }) {
   const [name,        setName]        = useState(initial?.name        ?? '')
-  const [limitAmount, setLimitAmount] = useState(initial?.limitAmount ?? '')
+  const [limitAmount, setLimitAmount] = useState(initial?.limitAmount || '')
   const [dueDay,      setDueDay]      = useState(initial?.dueDay      ?? 13)
   const [categoryIds, setCategoryIds] = useState(initial?.categoryIds ?? [])
   const [accountId,   setAccountId]   = useState(initial?.accountId   ?? '')
+  // Tipo de orçamento: Mensal (valor do mês, como sempre) ou Diário (valor por dia × dias que contam).
+  const [tipo,        setTipo]        = useState(initial?.tipoOrcamento === 'diario' ? 'diario' : 'mensal')
+  const [valorDia,    setValorDia]    = useState(initial?.valorDia || '')
+  const [preset,      setPreset]      = useState(presetDe(initial?.diasSemana))
+  const [descontar,   setDescontar]   = useState(!!initial?.descontarFeriados)
+  const diario = tipo === 'diario'
+  const diasSemana = useMemo(() => DIAS_PRESETS.find(p => p.id === preset)?.dias || [], [preset])
 
-  const valid = name.trim() && Number(limitAmount) > 0 && Number(dueDay) >= 1 && Number(dueDay) <= 28
+  const valid = name.trim() && (diario
+    ? Number(valorDia) > 0 && diasSemana.length > 0
+    : Number(limitAmount) > 0 && Number(dueDay) >= 1 && Number(dueDay) <= 28)
 
   function toggleCat(id) {
     setCategoryIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id])
@@ -52,7 +65,13 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
 
   // Categorias por perfil: o da conta do envelope (se tiver perfil), senão o chip do topo; as já
   // vinculadas ao envelope continuam na lista.
-  const { activeProfileId, categoryGroupOrder, pode } = useApp()
+  const { activeProfileId, categoryGroupOrder, pode, orcamentoEnvelopes } = useApp()
+  // Prévia do ciclo atual com o que está no formulário (vale do ciclo atual em diante).
+  const previa = useMemo(() => {
+    if (!diario || !(Number(valorDia) > 0) || !orcamentoEnvelopes) return null
+    const ciclo = cicloDaData(hojeLocal(), orcamentoEnvelopes.diaInicio)
+    return { ciclo, ...orcamentoDiario({ tipoOrcamento: 'diario', valorDia: Number(valorDia), diasSemana, descontarFeriados: descontar, history: [] }, ciclo, { feriados: orcamentoEnvelopes.feriadosDe(ciclo.inicio, ciclo.fim) }) }
+  }, [diario, valorDia, diasSemana, descontar, orcamentoEnvelopes])
   const podeSalvar = pode('envelopes', initial ? 'editar' : 'incluir')
   const perfilCategorias = perfilParaCategorias(accounts, accountId, activeProfileId)
   const expCats     = filtrarCategoriasPorPerfil(categories.filter(c => c.type === 'expense' || c.type === 'both'), perfilCategorias, categoryIds)
@@ -78,6 +97,44 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
         <input className="input" placeholder="Digite o nome do envelope" value={name} onChange={e => setName(e.target.value)} />
       </div>
 
+      <div data-guia="envelope-form.tipo">
+        <label className="label">Tipo de orçamento</label>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(TIPOS_ORCAMENTO).map(([k, rot]) => (
+            <label key={k} className={`flex items-center gap-2 px-3 min-h-[40px] rounded-lg border cursor-pointer text-sm ${tipo === k ? 'border-primary bg-primary/10 text-texto-1' : 'border-borda-forte text-texto-2'}`}>
+              <input type="radio" name="tipoOrcamento" className="accent-primary" checked={tipo === k} onChange={() => setTipo(k)} />
+              {rot}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {diario ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div data-guia="envelope-form.valor-dia">
+              <label className="label">Valor por dia (R$)</label>
+              <InputMoeda min="0" placeholder="Quanto pode gastar em cada dia que conta" value={valorDia} onChange={e => setValorDia(e.target.value)} />
+            </div>
+            <div data-guia="envelope-form.dias">
+              <label className="label">Dias que contam</label>
+              <select className="input" value={preset} onChange={e => setPreset(e.target.value)}>
+                {DIAS_PRESETS.map(p => <option key={p.id} value={p.id}>{p.rotulo}</option>)}
+              </select>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-texto-2 cursor-pointer">
+            <input type="checkbox" className="accent-primary" checked={descontar} onChange={e => setDescontar(e.target.checked)} />
+            Descontar feriados <span className="text-xs text-texto-3">(Configurações → Cadastros → Feriados)</span>
+          </label>
+          {previa && (
+            <p className="text-xs text-texto-2 bg-surface-2/60 rounded-lg px-3 py-2" data-testid="previa-orcamento">
+              Ciclo atual ({previa.ciclo.inicio.slice(8)}/{previa.ciclo.inicio.slice(5, 7)} a {previa.ciclo.fim.slice(8)}/{previa.ciclo.fim.slice(5, 7)}): {previa.dias} dias × {fmt(previa.valorDia)} = <strong className="text-texto-1">{fmt(previa.orcamento)}</strong>.
+              {initial ? ' A mudança vale do ciclo atual em diante; ciclos encerrados mantêm o orçamento que tiveram.' : ''}
+            </p>
+          )}
+        </div>
+      ) : (
       <div className="grid grid-cols-2 gap-3">
         <div data-guia="envelope-form.limite">
           <label className="label">Limite Mensal (R$)</label>
@@ -95,6 +152,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
           />
         </div>
       </div>
+      )}
 
       <div data-guia="envelope-form.conta">
         <label className="label">Conta Vinculada</label>
@@ -133,7 +191,11 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
       <div className="flex gap-2 justify-end pt-1">
         <button className="btn-ghost" onClick={onCancel}>Cancelar</button>
         {podeSalvar && (
-        <button className="btn-primary" data-guia="envelope-form.salvar" onClick={() => onSave({ name: name.trim(), limitAmount: Number(limitAmount), dueDay: Number(dueDay), categoryIds, accountId: accountId || null })} disabled={!valid}>
+        <button className="btn-primary" data-guia="envelope-form.salvar" onClick={() => onSave({
+          name: name.trim(), tipoOrcamento: tipo, limitAmount: diario ? 0 : Number(limitAmount), dueDay: Number(dueDay) || 1,
+          valorDia: diario ? Number(valorDia) : null, diasSemana: diario ? diasSemana : [], descontarFeriados: diario && descontar,
+          categoryIds, accountId: accountId || null,
+        })} disabled={!valid}>
           Salvar
         </button>
         )}
@@ -145,7 +207,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
 
 // ── Main Panel ────────────────────────────────────────────────────────────────
 export default function EnvelopesPanel() {
-  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, pode, rateiosByLancamento } = useApp()
+  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, pode, rateiosByLancamento, orcamentoEnvelopes } = useApp()
   const podeIncluir = pode('envelopes', 'incluir')
   const podeEditar = pode('envelopes', 'editar')
   const podeExcluir = pode('envelopes', 'excluir')
@@ -176,9 +238,13 @@ export default function EnvelopesPanel() {
   }, [comp, startDay])
   const shiftComp = (delta) => setMonthOffset(o => o + delta)
 
+  // Diário: a conta do ciclo (orçamento, previsto, excesso, A gastar) vai junto (comOrcamentoDiario).
   const envelopeData = useMemo(
-    () => gastoEnvelopes(envelopes, transactions, compKey, startDay, rateiosByLancamento),
-    [envelopes, transactions, compKey, startDay, rateiosByLancamento]
+    () => comOrcamentoDiario(gastoEnvelopes(envelopes, transactions, compKey, startDay, rateiosByLancamento), {
+      compKey, startDay, diaInicio: orcamentoEnvelopes.diaInicio, hoje: orcamentoEnvelopes.hoje, feriadosDe: orcamentoEnvelopes.feriadosDe,
+      transactions, rateios: rateiosByLancamento,
+    }),
+    [envelopes, transactions, compKey, startDay, rateiosByLancamento, orcamentoEnvelopes]
   )
 
   function handleSave(data) {
@@ -210,7 +276,7 @@ export default function EnvelopesPanel() {
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-lg font-bold text-texto-1">Envelopes</h1>
-          <p className="text-xs text-texto-3 mt-0.5">Controle de gastos por categoria com limite mensal</p>
+          <p className="text-xs text-texto-3 mt-0.5">Controle de gastos por categoria com limite mensal ou valor por dia</p>
         </div>
         {podeIncluir && (
           <button className="btn-primary flex items-center gap-1.5 text-sm whitespace-nowrap shrink-0" onClick={openNew} aria-label="Novo envelope" data-guia="envelopes.novo">

@@ -161,6 +161,7 @@ const ROTAS = [
   [/^(reserve-periods|reserve-snapshots|reserve-adjustments|reserve-daily-ledger)$/, (m) => PORMETODO('reservas')[m]],
   [/^(fluxo-datas-provisorias|fluxo-provisorios|fluxo-consultas)$/, (m) => PORMETODO('fluxo')[m]],
   [/^tipos-documento$/, (m) => PORMETODO('cadastros')[m]],
+  [/^feriados$/, (m) => PORMETODO('cadastros')[m]],
   [/^(contratos|contrato-itens|contrato-eventos|contrato-regras|contrato-creditos)$/, (m) => PORMETODO('contratos')[m]],
   [/^indices$/, () => null],
   // Assistente IA: interpretar e guardar pré-lançamento = quem inclui lançamentos. Apelidos: aprender

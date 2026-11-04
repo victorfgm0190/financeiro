@@ -13,6 +13,7 @@ import { occCampos } from './camposSerie.js'
 import { dueDateInMonth } from './fatura.js'
 import { agendamentoNoFluxoPrincipal, valorNoFluxoPrincipal } from './fluxoPrincipal.js'
 import { parteDoEnvelope } from './rateio.js'
+import { aGastarEnvelope, ehDiario, ciclosNaFaixa, gastosDoEnvelope } from './envelopeOrcamento.js'
 
 const round2 = n => Math.round(n * 100) / 100
 
@@ -102,6 +103,10 @@ export function computeFluxoCaixa({
   // os agendamentos seguem o "Considerar no Fluxo de Caixa principal?" (fluxoPrincipal.js); sem
   // ele (consulta de contas/grupos avulsos), a regra de sempre pelas contas do conjunto.
   fluxoPrincipal = null,
+  // Envelope com orçamento DIÁRIO (lib/envelopeOrcamento): { diaInicio, hoje, feriadosDe(i, f) }.
+  // Com ele, o diário projeta o A gastar de cada ciclo do mês financeiro; sem ele (ou Mensal), a
+  // regra de sempre.
+  orcamentoEnvelopes = null,
 }) {
   const empty = {
     rows: [], saldoAnterior: currentBalance,
@@ -280,6 +285,24 @@ export function computeFluxoCaixa({
     ;(envelopes || []).forEach(env => {
       if (!env.accountId || !accountIds.has(env.accountId)) return
       if (oculto(env.accountId, null)) return
+      // Diário: ciclos do mês financeiro; A gastar pela função única (ciclo encerrado = 0, futuro =
+      // orçamento inteiro), datado no fim do ciclo como o mensal.
+      if (ehDiario(env) && orcamentoEnvelopes) {
+        for (const cyc of ciclosNaFaixa(start, end, orcamentoEnvelopes.diaInicio)) {
+          const restante = aGastarEnvelope(env, {
+            ciclo: cyc, gastos: gastosDoEnvelope(env, transactions, rateios, cyc.inicio, cyc.fim),
+            hoje: orcamentoEnvelopes.hoje, feriados: orcamentoEnvelopes.feriadosDe(cyc.inicio, cyc.fim),
+          })
+          if (restante <= 0) continue
+          out.push({
+            date: cyc.fim, description: `Envelope: ${env.name || '(envelope)'}`, type: 'expense',
+            fromAccountId: env.accountId, toAccountId: null,
+            entrada: 0, saida: restante, _envelope: true,
+            status: 'Projetado', real: false, _key: 'env_' + env.id + '_' + cyc.fim,
+          })
+        }
+        return
+      }
       for (const cyc of envelopeCyclesOverlapping(env.dueDay || 1, start, end)) {
         let spent = 0
         for (const tx of transactions) {
@@ -289,7 +312,7 @@ export function computeFluxoCaixa({
           if (!tx.date || tx.date < cyc.from || tx.date > cyc.to) continue
           spent += parte
         }
-        const restante = round2(Math.max(0, (env.limitAmount || 0) - spent))
+        const restante = aGastarEnvelope(env, { gasto: spent })
         if (restante <= 0) continue
         out.push({
           date: cyc.to, description: `Envelope: ${env.name || '(envelope)'}`, type: 'expense',

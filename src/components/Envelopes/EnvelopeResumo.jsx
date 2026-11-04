@@ -4,7 +4,8 @@ import { ptBR } from 'date-fns/locale'
 import { MoreHorizontal, Edit2, Trash2, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
-import { gastoEnvelopes, currentCompetencia, resumosPorUso, totaisEnvelopes, barraEnvelope, ehParcela } from '../../lib/envelopes'
+import { gastoEnvelopes, currentCompetencia, resumosPorUso, totaisEnvelopes, barraEnvelope, ehParcela, comOrcamentoDiario } from '../../lib/envelopes'
+import { rotuloDias, textoDaConta } from '../../lib/envelopeOrcamento'
 import Modal from '../shared/Modal'
 
 // Peças da exibição dos envelopes, compartilhadas pela tela Envelopes, pelo card "Envelopes do mês"
@@ -110,8 +111,49 @@ export function MenuEnvelope({ nome, onEditar, onExcluir }) {
 
 // Conteúdo de um envelope: nome + "x categorias", barra, "Gasto R$ X de R$ Y", "Disponível R$ Z"
 // (ou "Estourou R$ W" em vermelho) e "Parcelado R$ A · À vista R$ B". Tocar abre os lançamentos.
+// Envelope DIÁRIO: valor por dia e dias, orçamento do ciclo, gasto real, previsto até ontem,
+// economia ou excesso até ontem, dias restantes e A gastar.
+function LinhasDiario({ o, r, v }) {
+  const enc = o.estado === 'encerrado'
+  return (
+    <div className="mt-1.5 space-y-0.5 text-xs" data-testid="envelope-diario">
+      <p className="text-[11px] text-texto-3">{v(o.valorDia)}/dia · {rotuloDias(o.diasSemana)}{o.descontarFeriados ? ' · sem feriados' : ''}</p>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <span className="text-texto-2">Gasto <span className="text-texto-1 font-medium tabular-nums">{v(r.gasto)}</span> de <span className="tabular-nums">{v(o.orcamento)}</span> <span className="text-texto-3">({o.dias} dias)</span></span>
+        {enc
+          ? <span className={r.disponivel < 0 ? 'text-perigo font-semibold' : 'text-texto-2'}>Ciclo encerrado</span>
+          : <span className="text-texto-2">A gastar <span className="text-primary-fg font-semibold tabular-nums">{v(o.aGastar)}</span></span>}
+      </div>
+      {!enc && (
+        <p className="text-[11px] text-texto-3 tabular-nums">
+          Previsto até ontem {v(o.previstoAteOntem)} · {o.excesso > 0
+            ? <span className="text-perigo">excesso {v(o.excesso)}</span>
+            : <span className="text-receita">economia {v(o.economia)}</span>} · {o.diasRestantes} {o.diasRestantes === 1 ? 'dia restante' : 'dias restantes'}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function EnvelopeLinha({ r, v = fmtPadrao, onAbrir, menu = null, mostrarCategorias = true }) {
   const nCats = r.env.categoryIds?.length || 0
+  if (r.orc) {
+    return (
+      <div className="min-w-0">
+        <div className="flex items-start gap-2">
+          <button type="button" onClick={onAbrir} className="flex-1 min-w-0 text-left">
+            <p className="text-sm font-semibold text-texto-1 truncate">{r.env.name} <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-2 text-texto-2 align-middle">Diário</span></p>
+            {mostrarCategorias && <p className="text-[11px] text-texto-3">{nCats} categoria{nCats !== 1 ? 's' : ''}</p>}
+          </button>
+          {menu}
+        </div>
+        <button type="button" onClick={onAbrir} className="block w-full text-left mt-2" aria-label={`Ver lançamentos de ${r.env.name}`}>
+          <BarraEnvelope r={r} />
+          <LinhasDiario o={r.orc} r={r} v={v} />
+        </button>
+      </div>
+    )
+  }
   return (
     <div className="min-w-0">
       <div className="flex items-start gap-2">
@@ -153,9 +195,36 @@ export function EnvelopeDetalhe({ r, compLabel, v = fmtPadrao }) {
   const account = accounts.find(a => a.id === r.env.accountId)
   const sortedTxs = [...r.txs].sort((a, b) => b.date.localeCompare(a.date))
   const kpi = 'text-sm sm:text-base font-bold tabular-nums whitespace-nowrap'
+  const o = r.orc
 
   return (
     <div className="space-y-4">
+      {o ? (
+        <div className="space-y-2">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="card py-3 px-2 text-center min-w-0">
+              <p className="text-[10px] sm:text-xs text-texto-3 uppercase tracking-wide mb-1">Orçamento do ciclo</p>
+              <p className={`${kpi} text-texto-1`}>{v(o.orcamento)}</p>
+            </div>
+            <div className="card py-3 px-2 text-center min-w-0">
+              <p className="text-[10px] sm:text-xs text-texto-3 uppercase tracking-wide mb-1">Gasto</p>
+              <p className={`${kpi} text-despesa`}>{v(r.gasto)}</p>
+            </div>
+            <div className="card py-3 px-2 text-center min-w-0">
+              <p className="text-[10px] sm:text-xs text-texto-3 uppercase tracking-wide mb-1">A gastar</p>
+              <p className={`${kpi} text-primary-fg`}>{v(o.aGastar)}</p>
+            </div>
+          </div>
+          <p className="text-sm text-texto-1 bg-surface-2/60 rounded-lg px-3 py-2 tabular-nums" data-testid="conta-diario">{textoDaConta(o, v)}</p>
+          <p className="text-xs text-texto-3 tabular-nums">
+            {v(o.valorDia)}/dia · {rotuloDias(o.diasSemana)}{o.descontarFeriados ? ' · descontando feriados' : ''} · {o.dias} dias no ciclo
+            {r.ciclo ? ` (${r.ciclo.inicio.slice(8)}/${r.ciclo.inicio.slice(5, 7)} a ${r.ciclo.fim.slice(8)}/${r.ciclo.fim.slice(5, 7)})` : ''}
+            {' '}· previsto até ontem {v(o.previstoAteOntem)} ({o.diasPassados} dias) · gasto até ontem {v(o.gastoAteOntem)}
+            {' '}· {o.excesso > 0 ? `excesso ${v(o.excesso)}` : `economia ${v(o.economia)} (não aumenta o A gastar)`}
+            {o.gastoHoje > 0 ? ` · gasto hoje ${v(o.gastoHoje)}` : ''}
+          </p>
+        </div>
+      ) : (
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <div className="card py-3 px-2 text-center min-w-0">
           <p className="text-[10px] sm:text-xs text-texto-3 uppercase tracking-wide mb-1">Limite</p>
@@ -170,6 +239,7 @@ export function EnvelopeDetalhe({ r, compLabel, v = fmtPadrao }) {
           <p className={`${kpi} ${r.estourado ? 'text-perigo' : 'text-primary-fg'}`}>{v(Math.abs(r.disponivel))}</p>
         </div>
       </div>
+      )}
 
       <div className="text-xs text-texto-3 flex flex-wrap gap-x-4 gap-y-1">
         <span>Competência: <span className="text-texto-2">{compLabel}</span></span>
@@ -233,15 +303,19 @@ export function EnvelopeDetalhe({ r, compLabel, v = fmtPadrao }) {
 
 // Envelopes da competência ATUAL (a do Painel / Início), perfil ativo, ordenados por % usado.
 function useEnvelopesDoMes() {
-  const { envelopes, profileTransactions, settings, rateiosByLancamento } = useApp()
+  const { envelopes, profileTransactions, settings, rateiosByLancamento, orcamentoEnvelopes } = useApp()
   const startDay = settings?.financialMonthStartDay || 1
   const comp = currentCompetencia(startDay)
   const compKey = comp.year * 12 + comp.month0
   return useMemo(() => {
-    const resumos = resumosPorUso(gastoEnvelopes(envelopes, profileTransactions, compKey, startDay, rateiosByLancamento))
+    const dados = comOrcamentoDiario(gastoEnvelopes(envelopes, profileTransactions, compKey, startDay, rateiosByLancamento), {
+      compKey, startDay, diaInicio: orcamentoEnvelopes?.diaInicio ?? startDay, hoje: orcamentoEnvelopes?.hoje,
+      feriadosDe: orcamentoEnvelopes?.feriadosDe, transactions: profileTransactions, rateios: rateiosByLancamento,
+    })
+    const resumos = resumosPorUso(dados)
     const compLabel = rotuloCompetencia({ year: Math.floor(compKey / 12), month0: compKey % 12 })
     return { resumos, totais: totaisEnvelopes(resumos), compLabel }
-  }, [envelopes, profileTransactions, compKey, startDay, rateiosByLancamento])
+  }, [envelopes, profileTransactions, compKey, startDay, rateiosByLancamento, orcamentoEnvelopes])
 }
 
 // Lista + modal, usada pelo card do Painel e pelo do Início.

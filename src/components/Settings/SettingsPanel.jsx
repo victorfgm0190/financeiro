@@ -15,6 +15,7 @@ import ApelidosIaPanel from './ApelidosIaPanel'
 import ControleGerencialChave from './ControleGerencialChave'
 import FavorecidosPanel from './FavorecidosPanel'
 import TiposDocumentoPanel from './TiposDocumentoPanel'
+import FeriadosPanel from './FeriadosPanel'
 import AtalhosPanel from './AtalhosPanel'
 import UsuariosPanel from './UsuariosPanel'
 import { MODULO_DA_ABA_CONFIG } from '../../lib/permissoes'
@@ -1979,6 +1980,7 @@ export default function SettingsPanel() {
 
       {secao === 'favorecidos' && <FavorecidosPanel />}
       {secao === 'tipos-documento' && <TiposDocumentoPanel />}
+      {secao === 'feriados' && <FeriadosPanel />}
       {secao === 'depara-importacao' && <DeParaImportacaoPanel />}
       {secao === 'apelidos-ia' && <ApelidosIaPanel />}
       {secao === 'atalhos' && <AtalhosPanel />}

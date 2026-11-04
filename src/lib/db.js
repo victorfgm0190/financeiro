@@ -990,6 +990,8 @@ export const rowToPayable = (r) => ({
   importId: r.import_id || null,
 })
 
+// Orçamento: 'mensal' (limitAmount) ou 'diario' (valorDia × diasSemana no ciclo, descontando
+// feriados se pedido) — src/lib/envelopeOrcamento.js. Banco sem a migração: tudo 'mensal'.
 export const envelopeToRow = (e) => ({
   id: e.id,
   name: e.name,
@@ -998,6 +1000,10 @@ export const envelopeToRow = (e) => ({
   category_ids: e.categoryIds || [],
   account_id: e.accountId || null,
   history: e.history || [],
+  tipo_orcamento: e.tipoOrcamento === 'diario' ? 'diario' : 'mensal',
+  valor_dia: e.tipoOrcamento === 'diario' ? Number(e.valorDia) || 0 : null,
+  dias_semana: e.tipoOrcamento === 'diario' ? (e.diasSemana || []).map(Number) : [],
+  descontar_feriados: e.tipoOrcamento === 'diario' && !!e.descontarFeriados,
 })
 
 export const rowToEnvelope = (r) => ({
@@ -1008,6 +1014,10 @@ export const rowToEnvelope = (r) => ({
   categoryIds: r.category_ids || [],
   accountId: r.account_id || null,
   history: r.history || [],
+  tipoOrcamento: r.tipo_orcamento === 'diario' ? 'diario' : 'mensal',
+  valorDia: r.valor_dia != null ? Number(r.valor_dia) : null,
+  diasSemana: Array.isArray(r.dias_semana) ? r.dias_semana.map(Number) : [],
+  descontarFeriados: !!r.descontar_feriados,
 })
 
 // ─── Carga inicial via API /api/load ─────────────────────────────────────────

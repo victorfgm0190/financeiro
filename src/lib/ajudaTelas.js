@@ -1591,6 +1591,18 @@ export const AJUDA_TELAS = {
       'O tipo do sistema (com cadeado) não pode ser excluído.',
     ],
   },
+  'settings:feriados': {
+    titulo: 'Feriados',
+    descricao: 'Feriados que os envelopes com orçamento diário descontam quando "Descontar feriados" está ligado.',
+    itens: [
+      { chave: 'lista', rotulo: 'Lista do ano', texto: 'Nacionais automáticos, opcionais e os seus; ligue ou desligue cada um.',
+        detalhe: 'Os nacionais (01/01, Sexta-feira Santa, 21/04, 01/05, 07/09, 12/10, 02/11, 15/11, 20/11 e 25/12) entram sozinhos todo ano. Carnaval e Corpus Christi aparecem desligados: ligue se forem folga para você. Os estaduais e municipais você acrescenta embaixo.',
+        exemplo: 'Exemplo: desligue "Finados" se você trabalha nesse dia; ligue "Carnaval" se é folga.' },
+    ],
+    dicas: [
+      'Mudar um feriado vale do ciclo atual em diante: os ciclos encerrados mantêm o orçamento que tiveram.',
+    ],
+  },
   'settings:usuarios': {
     titulo: 'Usuários',
     descricao: 'Quem pode entrar no sistema, com o nível de acesso, os perfis permitidos e a situação de cada pessoa.',

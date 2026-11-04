@@ -96,7 +96,7 @@ export default function CashFlowPanel({ setActivePage }) {
     getOccurrencesProjecao: getNextOccurrences, envelopes, accountGroups, reserveFunctions,
     profiles, activeProfileId, updateSchedule, addTransaction, mergeScheduleFromDb,
     datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, tiposDocumento, registrarEdicao,
-    toggleScheduleConfirmado, categories, projetarEtapaA, pode, rateiosByLancamento,
+    toggleScheduleConfirmado, categories, projetarEtapaA, pode, rateiosByLancamento, orcamentoEnvelopes,
   } = useApp()
   // Nível de acesso (src/lib/permissoes.js): consultas, provisórios e datas simuladas = fluxo;
   // a flag Confirmado é do agendamento; "Efetivar" grava um agendamento/lançamento.
@@ -282,7 +282,7 @@ export default function CashFlowPanel({ setActivePage }) {
     const etapaAPrevistas = projetarEtapaA(agds)
     const r = computeFluxoCaixa({
       ...comum, start: hoje, end: fim, transactions, schedules: agds, etapaAPrevistas,
-      envelopes: incluirEnvelopes ? envelopes : [], provisorios,
+      envelopes: incluirEnvelopes ? envelopes : [], provisorios, orcamentoEnvelopes,
     })
     const futuras = linhasFuturas(r.rows, { hoje, fim, incluirLancamentosFuturos: consulta.incluir_lancamentos_futuros })
     // Pendências em atraso: as mesmas ocorrências que o relatório soma no "saldo anterior c/
@@ -295,7 +295,7 @@ export default function CashFlowPanel({ setActivePage }) {
       atraso: anotarLinhasProvisorias(a, dpPorChave, scheduleById, occEfetiva),
     }
   }, [rateiosByLancamento, accountIds, saldoInicial, reserveFunctions, getNextOccurrences, ocultarReserva, consulta, reservaSet, patrimonioSet,
-    schedulesFluxo, hoje, fim, transactions, incluirEnvelopes, envelopes, provisorios, dpPorChave, scheduleById, projetarEtapaA, fluxoPrincipal])
+    schedulesFluxo, hoje, fim, transactions, incluirEnvelopes, envelopes, provisorios, dpPorChave, scheduleById, projetarEtapaA, fluxoPrincipal, orcamentoEnvelopes])
 
   const { atrasoTotal, atrasoAtivas, base } = useMemo(() => {
     const { total, ativas } = totalEmAtraso(atraso, excluidas)

@@ -37,7 +37,7 @@ describe('rota de Configurações no hash', () => {
     expect(CONFIG_ABAS.map(a => a.id)).toEqual(['geral', 'cadastros', 'regras', 'dados', 'usuarios', 'perigo'])
     expect(CONFIG_ABAS.map(a => a.secoes.map(s => s.id))).toEqual([
       ['periodo', 'identidade', 'estornos', 'perfis', 'agenda-celular', 'guias'],
-      ['categorias', 'centros-custo', 'grupos-contas', 'controle-gerencial', 'favorecidos', 'tipos-documento', 'depara-importacao', 'apelidos-ia', 'atalhos'],
+      ['categorias', 'centros-custo', 'grupos-contas', 'controle-gerencial', 'favorecidos', 'tipos-documento', 'feriados', 'depara-importacao', 'apelidos-ia', 'atalhos'],
       ['classificacao', 'grupo-gerencial'],
       ['dados-aparelho', 'backup', 'importacao', 'manutencao'],
       ['usuarios'],
