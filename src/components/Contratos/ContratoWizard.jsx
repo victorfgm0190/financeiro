@@ -14,6 +14,9 @@ import { MODALIDADES, ehAluguel, rotuloPapel, rotulosContrato } from '../../lib/
 import { REGRAS_ABATIMENTO } from '../../lib/contratos/creditos'
 import { hojeStr, ymDe, fmtYm } from '../../lib/contratos/datas'
 import VinculoModal from './VinculoModal'
+import EncargosNaParcela from './EncargosNaParcela'
+import { encargoParaForm, formParaEncargo, encargosIncompletos } from '../../lib/contratos/encargosForm'
+import { encargoParaItem, encargoDoItem } from '../../lib/contratos/encargos'
 
 // Etapas com índice fixo (validarEtapa); a 3 (imóvel e condomínio) só existe no Aluguel — nas
 // demais modalidades ela não aparece e a numeração na tela não tem buraco.
@@ -32,9 +35,12 @@ const MAX_LINHAS_PREVIA = 36
 // Campos que mexem nas parcelas: mudou algum → evento 'aditivo' e regeneração das pendentes.
 const FINANCEIROS = ['valor_base', 'periodicidade', 'dia_vencimento', 'bonificacao_valor', 'bonificacao_meses', 'indice_reajuste',
   'percentual_fixo', 'mes_base_reajuste', 'data_inicio', 'data_fim', 'tem_condominio', 'valor_condominio_previsto', 'dia_vencimento_condominio',
-  'meses_sem_cobranca', 'credito_abatimento', 'modalidade']
+  'meses_sem_cobranca', 'credito_abatimento', 'modalidade', 'encargos']
 // Valor "de antes" dos campos novos em contrato gravado antes da migração (a coluna ainda não veio).
-const ANTES_PADRAO = { meses_sem_cobranca: [], credito_abatimento: 'proximo_pendente' }
+const ANTES_PADRAO = { meses_sem_cobranca: [], credito_abatimento: 'proximo_pendente', encargos: [] }
+// Encargos comparáveis (o aditivo só os vê como mudança se algo deles mudou de verdade).
+const chaveEncargos = (l) => JSON.stringify((l || []).map(encargoDoItem).map(e => [e.descricao, e.sinal, e.valor, e.parcelas_total, e.parcela_inicio, e.ativo])
+  .sort((a, b) => `${a[0]}|${a[4]}`.localeCompare(`${b[0]}|${b[4]}`)))
 
 const txt = (v) => (v == null ? '' : String(v))
 const num = (v) => { const n = parseValorBR(v); return Number.isFinite(n) ? n : null }
@@ -160,6 +166,8 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
     })
   }
   const [itens, setItens] = useState([])
+  // Encargos e descontos na parcela (contrato_itens com na_parcela).
+  const [encargosForm, setEncargosForm] = useState(() => (contrato?.encargos || []).map(encargoParaForm))
   const [etapa, setEtapa] = useState(0)
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -173,7 +181,11 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
   useEffect(() => {
     if (!edicao) return
-    buscarContratoApi(contrato.id).then(r => setItens((r.itens || []).map(i => ({ ...i, valor_previsto: valorBRFormatado(i.valor_previsto ?? '') })))).catch(() => {})
+    buscarContratoApi(contrato.id).then(r => {
+      const todos = r.itens || []
+      setItens(todos.filter(i => !i.na_parcela).map(i => ({ ...i, valor_previsto: valorBRFormatado(i.valor_previsto ?? '') })))
+      if (todos.some(i => i.na_parcela)) setEncargosForm(todos.filter(i => i.na_parcela).map(encargoDoItem).map(encargoParaForm))
+    }).catch(() => {})
   }, [edicao, contrato?.id])
 
   useEffect(() => {
@@ -181,7 +193,15 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   }, [f.indice_reajuste, carregarIndice])
 
   const contas = useMemo(() => accounts.filter(a => a.type !== 'credit' && a.active !== false && (!f.perfil_id || !a.profileId || a.profileId === f.perfil_id)), [accounts, f.perfil_id])
-  const dados = useMemo(() => paraContrato(f), [f])
+  // Nº da próxima parcela pendente do contrato (contrato em andamento: "está na parcela k de N").
+  const numeroProxima = useMemo(() => {
+    if (!edicao) return 1
+    const nums = (schedules || []).filter(s => s.contratoId === contrato.id && s.contratoPapel === 'aluguel' && ehParcelaGerada(s, contrato.id) && !parcelaPaga(s))
+      .map(s => Number(s.composicao?.numero)).filter(n => n > 0)
+    return nums.length ? Math.min(...nums) : 1
+  }, [edicao, schedules, contrato])
+  const encargosDados = useMemo(() => encargosForm.map(l => formParaEncargo(l, numeroProxima)).filter(Boolean), [encargosForm, numeroProxima])
+  const dados = useMemo(() => ({ ...paraContrato(f), encargos: encargosDados }), [f, encargosDados])
   const indice = indicesContratos[f.indice_reajuste]
   const tipoCat = f.tipo === 'receber' ? 'income' : 'expense'
 
@@ -209,15 +229,22 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
     if (e) return setErro(e)
     setEtapa(x => proxima(x))
   }
-  const itensPayload = () => (aluguel ? itens : []).filter(i => txt(i.descricao).trim()).map(i => ({
-    descricao: i.descricao.trim(), grupo: i.grupo || 'outro', responsavel: i.responsavel || 'inquilino',
-    valor_previsto: num(i.valor_previsto), categoria_id: i.categoria_id || null, ativo: i.ativo !== false,
-  }))
+  const itensPayload = () => [
+    ...(aluguel ? itens : []).filter(i => txt(i.descricao).trim()).map(i => ({
+      descricao: i.descricao.trim(), grupo: i.grupo || 'outro', responsavel: i.responsavel || 'inquilino',
+      valor_previsto: num(i.valor_previsto), categoria_id: i.categoria_id || null, ativo: i.ativo !== false,
+    })),
+    ...encargosDados.map(encargoParaItem),
+  ]
 
   const confirmar = async () => {
     for (let i = 0; i < 4; i++) {
       const e = validarEtapa(i, f)
       if (e) { setEtapa(i); return setErro(e) }
+    }
+    if (encargosIncompletos(encargosForm, numeroProxima).length) {
+      setEtapa(1)
+      return setErro('Encargos e descontos na parcela: preencha descrição, valor, número de parcelas e o início (ou remova a linha).')
     }
     setSalvando(true)
     setErro('')
@@ -233,7 +260,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       const mudou = {}
       for (const [k, v] of Object.entries(dados)) {
         const antes = contrato[k] ?? ANTES_PADRAO[k] ?? null
-        if (JSON.stringify(antes) !== JSON.stringify(v)) mudou[k] = { de: antes, para: v }
+        if (k === 'encargos' ? chaveEncargos(antes) !== chaveEncargos(v) : JSON.stringify(antes) !== JSON.stringify(v)) mudou[k] = { de: antes, para: v }
       }
       const financeiro = Object.keys(mudou).some(k => FINANCEIROS.includes(k))
       const evento = financeiro ? {
@@ -241,8 +268,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
         detalhes: { campos: mudou },
       } : null
       const campos = Object.fromEntries(Object.keys(mudou).map(k => [k, dados[k]]))
-      const salvo = await atualizarContrato(contrato.id, campos, evento)
-      await salvarItensContrato(contrato.id, itensPayload())
+      const salvo0 = await atualizarContrato(contrato.id, campos, evento)
+      const rows = await salvarItensContrato(contrato.id, itensPayload())
+      // O plano usa os encargos gravados agora (a lista substitui a anterior).
+      const salvo = { ...salvo0, encargos: (rows || []).filter(i => i.na_parcela).map(encargoDoItem) }
       const plano = await planejarParcelasContrato(salvo)
       await aplicarParcelasContrato(plano, { motivo: `Contrato ${rotuloContrato(salvo)}: ${financeiro ? 'aditivo' : 'edição'}` })
       onSalvo?.(salvo)
@@ -390,6 +419,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               Parcelas 1 a {int(f.bonificacao_meses) || 0}: {fmt(num(f.valor_base))} − {fmt(num(f.bonificacao_valor))} = <strong className="text-texto-1">{fmt(r2(num(f.valor_base) - num(f.bonificacao_valor)))}</strong>
             </p>
           )}
+          <EncargosNaParcela linhas={encargosForm} onChange={(v) => { setErro(''); setEncargosForm(v) }} proxima={numeroProxima} />
           <Campo label="Meses sem cobrança" className="sm:col-span-2">
             <div data-guia="contrato-form.meses-sem-cobranca">
               <MesesSemCobranca valor={f.meses_sem_cobranca || []} onChange={v => set('meses_sem_cobranca', v)} inicio={f.data_inicio} fim={f.sem_fim ? null : f.data_fim} />

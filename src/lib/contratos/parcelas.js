@@ -4,6 +4,7 @@
 // parcela gravam a mesma linha). Contrato = linha da tabela `contratos` (snake_case, como vem da API).
 // Parcela paga (registered) nunca muda; reajuste/aditivo/renovação só mexem nas pendentes.
 import { ymDe, addMeses, diaNoMes, diaDe, hojeStr } from './datas.js'
+import { itensEncargos } from './encargos.js'
 import { computeOccurrences } from '../occurrences.js'
 import { occEfetiva } from '../fluxoCaixa.js'
 import { PAPEIS, rotuloPapel, rotulosContrato } from './rotulos.js'
@@ -202,6 +203,8 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
     const itens = [{ tipo: 'base', desc: rot.itemBase, valor: base }]
     // Desconto nas `bonifMeses` primeiras parcelas COBRADAS (o número não conta mês sem cobrança).
     if (bonifValor > 0 && v.numero <= bonifMeses) itens.push({ tipo: 'bonificacao', desc: rot.desconto, valor: -bonifValor })
+    // Encargos e descontos do contrato ativos nesta parcela ("Seguro 3/36 +49,06"); sem reajuste.
+    itens.push(...itensEncargos(contrato, v.numero))
     const composicao = mantida('aluguel', v.competencia, {
       ciclo, base, itens, total: somaItens(itens), numero: v.numero, total_parcelas: totalAluguel,
       ...(status === 'projetado' ? { projecao } : {}),

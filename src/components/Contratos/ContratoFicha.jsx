@@ -189,6 +189,10 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
       if (l.papel === 'condominio' && ehCondominioAberto(l.schedule, contrato)) {
         out.push(<button key="comp" className={acao} onClick={() => abrirComposicaoParcela(l.schedule.id)}>{temComposicaoInformada(l.schedule) ? 'Ver/editar composição' : 'Informar composição'}</button>)
       }
+      // Recibo do aluguel antes do pagamento: os itens dele passam a ser os da parcela (só esta).
+      if (l.papel === 'aluguel' && !l.vinculada && l.schedule) {
+        out.push(<button key="recibo" className={acao} onClick={() => abrirComposicaoParcela(l.schedule.id)}>{l.schedule.composicao?.informada ? 'Ver/editar recibo' : 'Informar composição'}</button>)
+      }
       if (l.projetado && l.papel === 'aluguel' && !l.vinculada) out.push(<button key="reaj" className={acao} onClick={() => setReajusteDe(l.schedule)}>Confirmar</button>)
       return out
     }
@@ -197,6 +201,10 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
     }
     if (l.tx && l.papel === 'condominio' && !l.tx.composicao?.itens?.length) {
       out.push(<button key="comp" className={acao} onClick={() => setInformar(l)}>Informar composição</button>)
+    }
+    // Aluguel pago: composição pelo recibo (o lançamento não muda).
+    if (l.tx && l.papel === 'aluguel' && l.schedule) {
+      out.push(<button key="recibo" className={acao} onClick={() => abrirComposicaoParcela(l.schedule.id, { txId: l.tx.id })}>{l.tx.composicao?.informada ? 'Ver/editar recibo' : 'Informar composição'}</button>)
     }
     if (l.tx && l.papel === 'aluguel' && diferencaDoPagamento(l.tx, esperadoDoPagamento(l, plano)).diferenca > 0.005) {
       out.push(<button key="just" className={acao} onClick={() => setJustificar(l)}>Justificar diferença</button>)
@@ -270,11 +278,25 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
         </Info>
       </div>
 
-      {aluguel && extra.itens.length > 0 && (
+      {(contrato.encargos || []).length > 0 && (
+        <div data-testid="ficha-encargos">
+          <p className="label">Encargos e descontos na parcela</p>
+          <ul className="text-xs text-texto-2 space-y-0.5">
+            {contrato.encargos.map(e => (
+              <li key={e.id || e.descricao}>
+                {e.descricao} · {e.sinal === 'desconto' ? '−' : '+'}{fmt(e.valor)} · {e.parcelas_total}x · {e.parcela_inicio >= 1
+                  ? `parcelas ${e.parcela_inicio} a ${e.parcela_inicio + e.parcelas_total - 1} do contrato`
+                  : `começou antes do contrato; vai até a parcela ${e.parcela_inicio + e.parcelas_total - 1}`}{e.ativo === false ? ' · inativo' : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {aluguel && extra.itens.filter(i => !i.na_parcela).length > 0 && (
         <div>
           <p className="label">Itens previstos</p>
           <ul className="text-xs text-texto-2 space-y-0.5">
-            {extra.itens.map(i => <li key={i.id}>{i.descricao} · {i.responsavel === 'proprietario' ? 'proprietário' : 'inquilino'}{i.valor_previsto != null ? ` · ${fmt(i.valor_previsto)}` : ''}</li>)}
+            {extra.itens.filter(i => !i.na_parcela).map(i => <li key={i.id}>{i.descricao} · {i.responsavel === 'proprietario' ? 'proprietário' : 'inquilino'}{i.valor_previsto != null ? ` · ${fmt(i.valor_previsto)}` : ''}</li>)}
           </ul>
         </div>
       )}

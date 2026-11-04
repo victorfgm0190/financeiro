@@ -6,4 +6,6 @@
 export const MSG_ENVELOPE_DIARIO = 'Não foi possível salvar: o banco deste ambiente ainda não tem a atualização do envelope diário. Nada foi alterado — avise o suporte para atualizar o banco.'
 export const MSG_CREDITO_PREVISTO = 'Não foi possível salvar: o banco deste ambiente ainda não tem a atualização da composição antes do pagamento (crédito previsto). Nada foi alterado — avise o suporte para atualizar o banco.'
 
+export const MSG_ENCARGOS = 'Não foi possível salvar: o banco deste ambiente ainda não tem a atualização de encargos e descontos na parcela. Nada foi alterado — avise o suporte para atualizar o banco.'
+
 export const faltaRecurso = (recursos, chave) => !!recursos && recursos[chave] === false

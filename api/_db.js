@@ -231,7 +231,8 @@ export async function recursosDoBanco(q) {
   )
   const creditoPrevisto = !chk.length || /previsto/.test(chk[0].def || '')
   const fer = await q("SELECT to_regclass('feriados') IS NOT NULL AS tem")
-  return { envelopeDiario, creditoPrevisto, feriados: !!fer[0]?.tem }
+  const enc = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_itens' AND column_name = 'na_parcela'")
+  return { envelopeDiario, creditoPrevisto, feriados: !!fer[0]?.tem, encargosContrato: enc.length > 0 }
 }
 
 const cacheColunasOpcionais = new Map()

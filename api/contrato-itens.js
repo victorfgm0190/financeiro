@@ -34,6 +34,7 @@ async function handler(req, res) {
     }
     return res.status(405).end()
   } catch (err) {
+    if (err?.codigo === 'banco_desatualizado') return res.status(409).json({ error: err.message, codigo: err.codigo })
     console.error('[api/contrato-itens]', err.message)
     res.status(500).json({ error: err.message })
   }

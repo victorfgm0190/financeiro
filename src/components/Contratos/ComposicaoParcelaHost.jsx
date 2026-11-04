@@ -15,6 +15,7 @@ export default function ComposicaoParcelaHost() {
   const {
     contratosHabilitado, pedidoComposicaoParcela: pedido, fecharComposicaoParcela, contratoPorId, schedules, transactions,
     creditosContratos, informarComposicaoAberta, removerComposicaoAberta, informarComposicao, editarComposicaoLancamento,
+    informarReciboAluguel,
   } = useApp()
   const [conflito, setConflito] = useState(null)
   const [aviso, setAviso] = useState('')
@@ -66,6 +67,23 @@ export default function ComposicaoParcelaHost() {
           </div>
         </div>
       </Modal>
+    )
+  }
+
+  // Parcela PRINCIPAL (aluguel): composição pelo recibo — pendente (o valor passa ao total do recibo)
+  // ou paga (o lançamento não muda). Mesmo modal (papel 'aluguel').
+  if ((parcela.contratoPapel || 'aluguel') === 'aluguel') {
+    const ocorrencia = tx ? (Object.entries(parcela.registeredMeta || {}).find(([, m]) => m?.lancamento_id === tx.id)?.[0] || tx.dataOcorrencia || tx.date) : parcela.startDate
+    const inicial = tx ? (tx.composicao?.informada ? tx.composicao : null) : (parcela.composicao?.informada ? parcela.composicao : null)
+    return (
+      <ComposicaoBoletoModal
+        papel="aluguel" key={`${pedido.parcelaId}:${tx?.id || ''}`} contrato={contrato} parcela={parcela} tx={tx} ocorrencia={ocorrencia}
+        composicaoInicial={inicial} leituraInicial={pedido.leitura || null}
+        onConfirmar={async (dados) => {
+          await informarReciboAluguel(contrato, { parcelaId: parcela.id, tx, ...dados })
+          fechar()
+        }}
+        onClose={fechar} />
     )
   }
 

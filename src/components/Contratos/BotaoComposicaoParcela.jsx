@@ -9,20 +9,27 @@ import { temComposicaoInformada } from '../../lib/contratos/composicaoAberta'
 // o mesmo modal da ficha (ComposicaoParcelaHost) — o que for informado em um aparece no outro.
 export default function BotaoComposicaoParcela({ schedule, txId = null }) {
   const { contratosHabilitado, contratoPorId, abrirComposicaoParcela, transactions, pode } = useApp()
-  if (!contratosHabilitado || !schedule?.contratoId || (schedule.contratoPapel || 'aluguel') !== 'condominio') return null
+  if (!contratosHabilitado || !schedule?.contratoId) return null
   if (!pode?.('contratos', 'editar')) return null
+  const papel = schedule.contratoPapel || 'aluguel'
   const contrato = contratoPorId(schedule.contratoId)
-  if (!contrato?.tem_condominio) return null
+  if (!contrato || (papel === 'condominio' && !contrato.tem_condominio)) return null
+  // Aluguel: composição pelo recibo (pendente: valor = total do recibo; paga: lançamento intocado).
+  const aluguel = papel === 'aluguel'
   const paga = !!txId
   // Pendente: só a parcela gerada pelo contrato (a série vinculada guarda o histórico).
   if (!paga && (!ehParcelaGerada(schedule, contrato.id) || parcelaPaga(schedule))) return null
   const tx = paga ? (transactions || []).find(t => t.id === txId) : null
   if (paga && !tx) return null
-  const temItens = paga ? !!tx.composicao?.itens?.length : temComposicaoInformada(schedule)
+  const temItens = aluguel
+    ? !!(paga ? tx.composicao?.informada : schedule.composicao?.informada)
+    : (paga ? !!tx.composicao?.itens?.length : temComposicaoInformada(schedule))
   const rotulo = temItens ? 'Composição' : 'Informar composição'
   const titulo = paga
     ? (temItens ? 'Ver ou editar a composição do boleto deste pagamento' : 'Informar os itens do boleto deste pagamento')
-    : (temItens ? `Boleto informado (${fmt(schedule.composicao.total)}): ver ou editar os itens` : 'O boleto chegou? Informe os itens (digitar, colar, foto ou PDF)')
+    : aluguel
+      ? (temItens ? `Recibo informado (${fmt(schedule.composicao.total)}): ver ou editar os itens` : 'O recibo chegou? Informe os itens (digitar, colar, foto ou PDF)')
+      : (temItens ? `Boleto informado (${fmt(schedule.composicao.total)}): ver ou editar os itens` : 'O boleto chegou? Informe os itens (digitar, colar, foto ou PDF)')
   return (
     <button
       type="button"

@@ -21,9 +21,15 @@ const SQL_EXCLUIDAS = `COALESCE((SELECT json_agg(e.detalhes->>'parcela_id') FROM
 // Créditos abertos só depois da migração da Entrega 2 (sem a tabela, a lista sai sem a coluna).
 const SQL_CREDITOS = `COALESCE((SELECT sum(cr.valor) FROM contrato_creditos cr
                WHERE cr.contrato_id = c.id AND cr.status = 'aberto'), 0) AS creditos_abertos`
+// Encargos e descontos que entram na parcela (migração 2026-11-05): vão junto com o contrato, para o
+// app calcular as parcelas (lib/contratos/parcelas.js gerarPlanoParcelas).
+const SQL_ENCARGOS = `COALESCE((SELECT json_agg(json_build_object('id', i.id, 'descricao', i.descricao, 'sinal', i.sinal,
+               'valor', i.valor_previsto, 'parcelas_total', i.parcelas_total, 'parcela_inicio', i.parcela_inicio, 'ativo', i.ativo)
+               ORDER BY i.descricao) FROM contrato_itens i WHERE i.contrato_id = c.id AND i.na_parcela), '[]'::json) AS encargos`
 async function sqlLista() {
-  const [{ t } = {}] = await query("SELECT to_regclass('contrato_creditos') IS NOT NULL AS t")
-  return `SELECT c.*, ${SQL_EXCLUIDAS}${t ? `, ${SQL_CREDITOS}` : ''} FROM contratos c`
+  const [{ t, e } = {}] = await query(`SELECT to_regclass('contrato_creditos') IS NOT NULL AS t,
+    EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_itens' AND column_name = 'na_parcela') AS e`)
+  return `SELECT c.*, ${SQL_EXCLUIDAS}${t ? `, ${SQL_CREDITOS}` : ''}${e ? `, ${SQL_ENCARGOS}` : ''} FROM contratos c`
 }
 
 // Conta do contrato: tem de ser conta (cartão fica de fora na 1ª versão) e, com perfis restritos,
@@ -141,6 +147,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
+    if (err?.codigo === 'banco_desatualizado') return res.status(409).json({ error: err.message, codigo: err.codigo })
     console.error('[api/contratos]', err.message)
     res.status(500).json({ error: err.message })
   }

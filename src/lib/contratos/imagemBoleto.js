@@ -5,6 +5,7 @@
 import { interpretar } from '../assistenteApi.js'
 import { comprimirImagem, ehPdf, lerPdf, MAX_IMAGEM_ORIGINAL } from '../assistente.js'
 import { r2 } from './parcelas.js'
+import { normalizarLeituraRecibo } from './composicaoAluguel.js'
 
 export const LEITURA_DE_IMAGEM_DISPONIVEL = true
 
@@ -35,5 +36,15 @@ export async function extrairItensDeImagem(arquivo, { ler = interpretar } = {}) 
   const r = await ler({ leitura: 'boleto_condominio', imagemBase64: anexo.base64, mimeType: anexo.mimeType })
   const leitura = normalizarLeitura(r?.leitura)
   if (!leitura.itens.length) throw new Error('Não consegui ler os itens do boleto. Tente outra foto (mais nítida e reta) ou digite os itens.')
+  return leitura
+}
+
+// Recibo/demonstrativo de ALUGUEL (parcela principal): mesma rota, leitura 'recibo_aluguel'. Débito = +,
+// crédito = −; total/subtotal/"PAGAMENTO EFETUADO" ficam de fora (lib/contratos/composicaoAluguel).
+export async function extrairReciboDeImagem(arquivo, { ler = interpretar } = {}) {
+  const anexo = arquivo?.base64 ? arquivo : await anexoDoArquivo(arquivo)
+  const r = await ler({ leitura: 'recibo_aluguel', imagemBase64: anexo.base64, mimeType: anexo.mimeType })
+  const leitura = normalizarLeituraRecibo(r?.leitura)
+  if (!leitura.itens.length) throw new Error('Não consegui ler os itens do recibo. Tente outra foto (mais nítida e reta) ou digite os itens.')
   return leitura
 }

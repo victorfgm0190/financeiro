@@ -15,6 +15,7 @@ import {
   composicaoDaParcela, creditoPrevistoDaParcela, creditoDaParcela, previaDoAbatimento, vencimentoParcela,
 } from '../../lib/contratos/composicaoAberta'
 import CampoValor from './CampoValor'
+import ComposicaoReciboAluguel from './ComposicaoReciboAluguel'
 
 const RESPONSAVEIS = [['inquilino', 'Inquilino (meu)'], ['proprietario', 'Proprietário (dono)']]
 const comoLinha = (i) => ({ ...i, valorTexto: valorBRFormatado(i.valor) })
@@ -32,7 +33,14 @@ const comoLinha = (i) => ({ ...i, valorTexto: valorBRFormatado(i.valor) })
 //   modo 'aberta': parcela PENDENTE (boleto chegou antes do pagamento) — o total do boleto vira o
 //     valor pendente; com o total informado (ou lido), a soma dos itens tem de fechar com ele. Os
 //     itens do proprietário viram crédito PREVISTO no aluguel de destino (a prévia mostra onde).
-export default function ComposicaoBoletoModal({
+// Parcela PRINCIPAL (aluguel, papel 'aluguel'): o mesmo modal, com o corpo do recibo
+// (ComposicaoReciboAluguel — débitos/créditos, encargos recorrentes, ligação com créditos a abater).
+export default function ComposicaoBoletoModal(props) {
+  if (props.papel === 'aluguel') return <ComposicaoReciboAluguel {...props} />
+  return <ComposicaoBoletoCondominio {...props} />
+}
+
+function ComposicaoBoletoCondominio({
   contrato, tx = null, parcela = null, composicaoInicial = null, leituraInicial = null, modo = 'pagamento',
   onConfirmar, onPular, onRemover = null, onClose,
 }) {

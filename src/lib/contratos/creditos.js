@@ -58,17 +58,20 @@ export function destinosCreditos(contrato, schedules, creditos) {
     .sort((a, b) => String(a.data_origem).localeCompare(String(b.data_origem)))
   for (const c of abertos) {
     const adiado = (s) => (s.composicao?.creditos_adiados || []).includes(c.id)
+    // Parcela com o recibo informado: os itens são os do recibo — só fica com os créditos que estão nele.
+    const noRecibo = (s) => (s.composicao?.itens || []).some(i => i.tipo === 'credito' && i.credito_id === c.id)
+    const aceita = (s) => !adiado(s) && (!s.composicao?.informada || noRecibo(s))
     let alvo = c.destino_agendamento_id ? pendentes.find(s => s.id === c.destino_agendamento_id) || null : null
     const fixo = !!alvo
     if (!alvo) {
       if (regra === 'mes_seguinte') {
         const ym = competenciaOrigem(c, schedules)
-        alvo = pendentes.find(s => ymDe(s.startDate) > ym && !adiado(s)) || null
+        alvo = pendentes.find(s => ymDe(s.startDate) > ym && aceita(s)) || null
       } else {
-        alvo = pendentes.find(s => vencimento(s) >= String(c.data_origem || '') && !adiado(s)) || null
+        alvo = pendentes.find(s => vencimento(s) >= String(c.data_origem || '') && aceita(s)) || null
       }
     }
-    if (alvo) out.set(c.id, { parcela: alvo, bloqueado: bloqueiaCredito(alvo), fixo })
+    if (alvo) out.set(c.id, { parcela: alvo, bloqueado: bloqueiaCredito(alvo) && !noRecibo(alvo), fixo })
   }
   return out
 }

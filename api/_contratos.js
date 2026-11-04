@@ -125,13 +125,28 @@ export function normalizarItem(it) {
   const resp = umDe(['inquilino', 'proprietario'])(it.responsavel || 'inquilino')
   const valor = numero()(it.valor_previsto)
   if (grupo.erro || resp.erro || valor.erro) return { erro: `item "${descricao}": ${grupo.erro || resp.erro || valor.erro}` }
-  return {
-    item: {
-      descricao, grupo: grupo.v, responsavel: resp.v, valor_previsto: valor.v,
-      categoria_id: texto(80)(it.categoria_id).v, ativo: it.ativo !== false,
-    },
+  const item = {
+    descricao, grupo: grupo.v, responsavel: resp.v, valor_previsto: valor.v,
+    categoria_id: texto(80)(it.categoria_id).v, ativo: it.ativo !== false,
   }
+  // Encargo/desconto que ENTRA na parcela (migração 2026-11-05): sinal, valor > 0, quantas parcelas
+  // dura e em qual parcela do contrato está na 1ª dele (0 ou negativa: começou antes do contrato).
+  if (it.na_parcela) {
+    const sinal = umDe(['encargo', 'desconto'], { obrigatorio: true })(it.sinal)
+    if (sinal.erro) return { erro: `item "${descricao}": sinal ${sinal.erro}` }
+    if (!(valor.v > 0)) return { erro: `item "${descricao}": valor maior que zero` }
+    const total = Number(it.parcelas_total)
+    const inicio = Number(it.parcela_inicio)
+    if (!Number.isInteger(total) || total < 1 || total > 1200) return { erro: `item "${descricao}": número de parcelas inválido` }
+    if (!Number.isInteger(inicio) || inicio < -1200 || inicio > 1200) return { erro: `item "${descricao}": parcela de início inválida` }
+    Object.assign(item, { na_parcela: true, sinal: sinal.v, parcelas_total: total, parcela_inicio: inicio })
+  }
+  return { item }
 }
+
+// Colunas dos encargos na parcela (só depois da migração 2026-11-05).
+export const COLS_ENCARGO = ['na_parcela', 'sinal', 'parcelas_total', 'parcela_inicio']
+export const MSG_SEM_ENCARGOS = 'O banco deste ambiente ainda não tem a atualização de encargos e descontos na parcela. Nada foi gravado — avise o suporte para atualizar o banco.'
 
 export const TIPOS_EVENTO = ['criacao', 'reajuste', 'confirmacao_valor', 'aditivo', 'renovacao', 'rescisao', 'suspensao', 'vinculo', 'desvinculo', 'edicao_parcela']
 
@@ -185,13 +200,16 @@ export async function inserirEvento(q, contratoId, ev) {
 }
 
 export async function substituirItens(q, contratoId, itens) {
+  // Encargo na parcela num banco sem a migração: erro claro ANTES de apagar a lista (nada muda).
+  const temEncargo = (await colunasDe(q, 'contrato_itens')).has('na_parcela')
+  if (!temEncargo && itens.some(it => it.na_parcela)) throw Object.assign(new Error(MSG_SEM_ENCARGOS), { status: 409, codigo: 'banco_desatualizado' })
   await q('DELETE FROM contrato_itens WHERE contrato_id = $1', [contratoId])
   const out = []
   for (const it of itens) {
+    const cols = ['descricao', 'grupo', 'responsavel', 'valor_previsto', 'categoria_id', 'ativo', ...(temEncargo ? COLS_ENCARGO : [])]
     const [row] = await q(
-      `INSERT INTO contrato_itens (contrato_id, descricao, grupo, responsavel, valor_previsto, categoria_id, ativo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [contratoId, it.descricao, it.grupo, it.responsavel, it.valor_previsto, it.categoria_id, it.ativo],
+      `INSERT INTO contrato_itens (contrato_id, ${cols.join(', ')}) VALUES ($1, ${cols.map((_, i) => `$${i + 2}`).join(', ')}) RETURNING *`,
+      [contratoId, ...cols.map(k => (k === 'na_parcela' ? !!it.na_parcela : it[k] ?? null))],
     )
     out.push(row)
   }

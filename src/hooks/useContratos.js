@@ -1,8 +1,8 @@
-import { faltaRecurso, MSG_CREDITO_PREVISTO } from '../lib/recursosBanco'
+import { faltaRecurso, MSG_CREDITO_PREVISTO, MSG_ENCARGOS } from '../lib/recursosBanco'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   listarContratosApi, criarContratoApi, atualizarContratoApi, excluirContratoApi, salvarItensContratoApi,
-  registrarEventoContratoApi, buscarIndiceApi,
+  registrarEventoContratoApi, buscarIndiceApi, buscarContratoApi,
   listarRegrasApi, criarRegraApi, atualizarRegraApi, excluirRegraApi,
   listarCreditosApi, criarCreditoApi, atualizarCreditoApi, excluirCreditoApi,
 } from '../lib/contratosApi'
@@ -26,6 +26,8 @@ import { hojeStr, ymDe } from '../lib/contratos/datas'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { ESCOPO } from '../lib/camposSerie'
 import { gravarVinculoNaLinha, vinculoRepetido } from '../lib/contratos/gravarVinculo'
+import { composicaoDoRecibo, validarRecibo } from '../lib/contratos/composicaoAluguel'
+import { encargoParaItem, encargoDoItem, inicioPelaParcelaAtual } from '../lib/contratos/encargos'
 
 // ESTADO E AÇÕES DO MÓDULO DE CONTRATOS (usado dentro do AppProvider). Ficha, regras de itens e
 // créditos do proprietário vivem fora de `data`: CRUD direto nas rotas api/contrato*.js. As
@@ -229,10 +231,13 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   }, [aplicarParcelas])
 
   const criarContrato = useCallback(async (dadosContrato, itens = []) => {
+    if (itens.some(i => i.na_parcela) && faltaRecurso(recursosRef.current, 'encargosContrato')) throw new Error(MSG_ENCARGOS)
     const r = await criarContratoApi({ ...dadosContrato, proximo_reajuste: proximoReajuste(dadosContrato, hojeStr()) }, itens)
-    trocarNaLista(r.contrato)
-    contratosRef.current = [r.contrato, ...contratosRef.current.filter(c => c.id !== r.contrato.id)]
-    return r.contrato
+    // Encargos/descontos na parcela vão junto no contrato (o plano das parcelas usa).
+    const c = { ...r.contrato, encargos: (r.itens || []).filter(i => i.na_parcela).map(encargoDoItem) }
+    trocarNaLista(c)
+    contratosRef.current = [c, ...contratosRef.current.filter(x => x.id !== c.id)]
+    return c
   }, [])
 
   const atualizarContrato = useCallback(async (id, campos, evento = null) => {
@@ -246,7 +251,16 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     return { ...atual, ...r.contrato }
   }, [contratos])
 
-  const salvarItens = useCallback((id, itens) => salvarItensContratoApi(id, itens), [])
+  // Itens do contrato (registro + encargos na parcela): a lista substitui a anterior; os encargos
+  // gravados atualizam o contrato no estado (a ref na hora — o plano logo depois já os usa).
+  const salvarItens = useCallback(async (id, itens) => {
+    if (itens.some(i => i.na_parcela) && faltaRecurso(recursosRef.current, 'encargosContrato')) throw new Error(MSG_ENCARGOS)
+    const rows = await salvarItensContratoApi(id, itens)
+    const encargos = rows.filter(i => i.na_parcela).map(encargoDoItem)
+    trocarNaLista({ id, encargos })
+    contratosRef.current = contratosRef.current.map(c => (c.id === id ? { ...c, encargos } : c))
+    return rows
+  }, [])
 
   // Vínculo (D2) de séries existentes + geração das parcelas, num só update().
   //   selecoes: [{ schedule, papel }]; valoresMantidos: { papel: { 'AAAA-MM': valor } }.
@@ -524,6 +538,108 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     }
     return gravarComposicaoCondominio({ contrato, parcela, tx, composicao: composicaoCondominio(itens) })
   }, [criarRegra, gravarComposicaoCondominio])
+
+  // ── Encargos e descontos recorrentes do contrato (contrato_itens com na_parcela) ─────────────────
+  // Grava a lista (mantendo os "Itens previstos" de registro), atualiza o contrato no estado (a ref na
+  // hora: o plano logo depois já usa os encargos novos) e devolve o contrato com `encargos`.
+  const salvarEncargosContrato = useCallback(async (contrato, encargos) => {
+    if (faltaRecurso(recursosRef.current, 'encargosContrato')) throw new Error(MSG_ENCARGOS)
+    const atual = await buscarContratoApi(contrato.id)
+    const previstos = (atual?.itens || []).filter(i => !i.na_parcela)
+    const rows = await salvarItensContratoApi(contrato.id, [...previstos, ...encargos.map(encargoParaItem)])
+    const novos = rows.filter(i => i.na_parcela).map(encargoDoItem)
+    trocarNaLista({ id: contrato.id, encargos: novos })
+    contratosRef.current = contratosRef.current.map(c => (c.id === contrato.id ? { ...c, encargos: novos } : c))
+    return { ...contrato, encargos: novos }
+  }, [])
+
+  // ── Composição do ALUGUEL pelo recibo (pendente ou paga) — o mesmo ComposicaoParcelaHost ─────────
+  // itens: [{ desc, valor, tipo, encargo_id?, credito_id?, acao? }] já decididos na tela:
+  //   tipo 'credito' + credito_id → liga ao crédito a abater (pendente: destino = esta parcela;
+  //     paga: compensado neste lançamento) — sai do destino anterior; nunca duas vezes;
+  //   tipo 'credito' + acao 'manual' → crédito manual já abatido nesta parcela;
+  //   tipo 'unico' → só neste mês.
+  // recorrentes: [{ indice, parcelas_total, parcela_atual }] — "Tornar recorrente" (item único → encargo);
+  // seguir: [{ encargo_id, valor }] — valor diferente do recorrente que deve seguir nas próximas.
+  // Pendente: o valor passa ao total do recibo (informado, substitui a previsão só desta parcela).
+  // Paga: soma = valor pago; o lançamento NÃO muda (só a composição).
+  const informarReciboAluguel = useCallback(async (contrato, { parcelaId, tx = null, itens, total = null, recibo = null, recorrentes = [], seguir = [] }) => {
+    const est = dataRef.current
+    const parcela = est.schedules.find(s => s.id === parcelaId) || null
+    if (!tx && (!parcela || parcelaPaga(parcela))) throw new Error('Esta parcela não está mais pendente.')
+    if ((recorrentes.length || seguir.length) && faltaRecurso(recursosRef.current, 'encargosContrato')) throw new Error(MSG_ENCARGOS)
+    const alvo = tx ? r2(tx.amount) : (total != null ? r2(total) : null)
+    const erro = validarRecibo(itens, alvo)
+    if (erro) throw new Error(erro)
+    const dataDoRecibo = tx ? tx.date : vencimentoParcela(parcela)
+    const finais = []
+    for (const it of itens) {
+      if (it.tipo === 'credito' && it.acao === 'manual') {
+        const v = r2(Math.abs(it.valor))
+        const novo = await criarCreditoApi({
+          contrato_id: contrato.id, descricao: it.desc || 'Desconto do recibo', valor: v, data_origem: dataDoRecibo,
+          itens: [{ desc: it.desc || 'Desconto do recibo', valor: v }],
+          ...(tx
+            ? { status: 'compensado', compensado_em_lancamento_id: tx.id, compensado_em_agendamento_id: parcela?.id || null, data_compensacao: tx.date }
+            : { status: 'aberto', destino_agendamento_id: parcelaId }),
+        })
+        trocarCredito(novo)
+        finais.push({ ...it, credito_id: novo.id })
+      } else finais.push(it)
+    }
+    const ligados = finais.filter(i => i.tipo === 'credito' && i.credito_id && i.acao !== 'manual').map(i => i.credito_id)
+    const creditoPorId = new Map(creditosRef.current.map(c => [c.id, c]))
+    if (tx) {
+      // Créditos compensados neste pagamento que saíram do recibo voltam a abater.
+      for (const c of creditosRef.current.filter(x => x.status === 'compensado' && x.compensado_em_lancamento_id === tx.id)) {
+        if (finais.some(i => i.credito_id === c.id)) continue
+        trocarCredito(await atualizarCreditoApi({ id: c.id, status: statusAoReabrir(c), compensado_em_lancamento_id: null, compensado_em_agendamento_id: null, data_compensacao: null }))
+      }
+      await compensarCreditos(ligados.filter(id => creditoPorId.get(id)?.status !== 'compensado'), tx, parcela)
+    } else {
+      for (const id of ligados) {
+        if (creditoPorId.get(id)?.destino_agendamento_id === parcelaId) continue
+        trocarCredito(await atualizarCreditoApi({ id, destino_agendamento_id: parcelaId }))
+      }
+    }
+    const previstoDe = (id) => creditosRef.current.find(c => c.id === id)?.status === 'previsto'
+    const meta = (tx ? tx.composicao : null) || parcela?.composicao || {}
+    const composicao = composicaoDoRecibo(
+      finais.map(i => ({ ...i, previsto: i.tipo === 'credito' && !tx && previstoDe(i.credito_id) })),
+      { meta, recibo },
+    )
+    if (tx) {
+      updateTransaction(tx.id, { contratoId: contrato.id, composicao })
+      redistribuirCreditos()
+    } else {
+      await aplicarParcelas({ atualizar: [{ id: parcela.id, antes: parcela, changes: { amount: composicao.total, valorStatus: 'confirmado', composicao } }] }, {
+        motivo: `Contrato ${rotuloContrato(contrato)}: recibo informado`, escopo: ESCOPO.PARCELA,
+      })
+    }
+    // Encargos: "Tornar recorrente" e "seguir nas próximas" mudam o contrato e as próximas parcelas.
+    if (recorrentes.length || seguir.length) {
+      const numero = Number(meta.numero) || null
+      let encargos = (contratosRef.current.find(c => c.id === contrato.id)?.encargos || contrato.encargos || []).map(e => ({ ...e }))
+      for (const sg of seguir) encargos = encargos.map(e => (e.id === sg.encargo_id ? { ...e, valor: r2(Math.abs(sg.valor)) } : e))
+      for (const rr of recorrentes) {
+        const it = finais[rr.indice]
+        if (!it || !numero) continue
+        encargos.push({
+          descricao: String(it.desc || '').replace(/\s*\d+\s*\/\s*\d+\s*$/, '').trim() || 'Encargo', sinal: it.valor < 0 ? 'desconto' : 'encargo',
+          valor: r2(Math.abs(it.valor)), parcelas_total: Number(rr.parcelas_total) || 1,
+          parcela_inicio: inicioPelaParcelaAtual(numero, Number(rr.parcela_atual) || 1),
+        })
+      }
+      const atualizado = await salvarEncargosContrato(contrato, encargos)
+      const plano = await planejarParcelas(atualizado)
+      await aplicarParcelas(plano, { motivo: `Contrato ${rotuloContrato(contrato)}: encargos do recibo` })
+    }
+    await registrarEvento(contrato.id, {
+      tipo: 'edicao_parcela', valor_anterior: tx ? null : r2(parcela.amount), valor_novo: composicao.total,
+      detalhes: { acao: 'recibo_aluguel', parcela_id: parcela?.id || parcelaId, lancamento_id: tx?.id || null, creditos: finais.filter(i => i.credito_id).map(i => i.credito_id) },
+    }).catch(err => console.warn('[contratos] evento do recibo não gravado:', err.message))
+    return { ok: true, composicao }
+  }, [dataRef, updateTransaction, redistribuirCreditos, aplicarParcelas, compensarCreditos, salvarEncargosContrato, planejarParcelas, registrarEvento]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Composição do boleto na parcela de condomínio ABERTA (boleto chegou antes do pagamento) ────
   // A mesma ação na ficha, em Agendamentos e no Assistente (ComposicaoParcelaHost). A parcela passa
@@ -941,7 +1057,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     pendenciasContrato: pendencias, resolverPendenciaContrato: resolverPendencia,
     confirmarComposicaoContrato: confirmarComposicao, estimarComposicaoContrato: estimarComposicao,
     notificarEfetivacao, reverterEfetivacaoContrato: reverterEfetivacao,
-    informarComposicaoAberta, removerComposicaoAberta, desligarCreditoDoCondominio,
+    informarComposicaoAberta, removerComposicaoAberta, desligarCreditoDoCondominio, informarReciboAluguel, salvarEncargosContrato,
     pedidoComposicaoParcela: pedidoComposicao, abrirComposicaoParcela, fecharComposicaoParcela,
   }
 }

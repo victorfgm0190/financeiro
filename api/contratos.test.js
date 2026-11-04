@@ -237,6 +237,23 @@ describe('/api/contrato-regras e /api/contrato-creditos (Entrega 2)', () => {
     expect(ok.body.credito).toMatchObject({ status: 'previsto', valor: 90 })
   })
 
+  it('encargos na parcela (2026-11-05): sem a migração → 409 e nada muda; com ela, grava e a lista traz `encargos`', async () => {
+    const { body } = await chamar(contratos, 'POST', { body: { contrato: CONTRATO, itens: [{ descricao: 'IPTU', grupo: 'iptu', valor_previsto: 120 }] } })
+    const id = body.contrato.id
+    const seguro = { descricao: 'Seguro incêndio', na_parcela: true, sinal: 'encargo', valor_previsto: 49.06, parcelas_total: 36, parcela_inicio: 2 }
+    const sem = await chamar(itens, 'PUT', { url: '/api/contrato-itens', body: { contrato_id: id, itens: [{ descricao: 'IPTU', grupo: 'iptu', valor_previsto: 120 }, seguro] } })
+    expect(sem.statusCode).toBe(409)
+    expect(sem.body).toMatchObject({ codigo: 'banco_desatualizado' })
+    expect((await chamar(itens, 'GET', { url: `/api/contrato-itens?contrato_id=${id}` })).body.itens.map(i => i.descricao)).toEqual(['IPTU'])
+    await estado.db.exec(readFileSync(new URL('../supabase/migrations/2026-11-05_contratos_encargos.sql', import.meta.url), 'utf-8'))
+    expect((await chamar(itens, 'PUT', { url: '/api/contrato-itens', body: { contrato_id: id, itens: [{ ...seguro, parcelas_total: 0 }] } })).statusCode).toBe(400)
+    expect((await chamar(itens, 'PUT', { url: '/api/contrato-itens', body: { contrato_id: id, itens: [{ ...seguro, sinal: 'x' }] } })).statusCode).toBe(400)
+    const ok = await chamar(itens, 'PUT', { url: '/api/contrato-itens', body: { contrato_id: id, itens: [{ descricao: 'IPTU', grupo: 'iptu', valor_previsto: 120 }, { ...seguro, parcela_inicio: -5 }] } })
+    expect(ok.statusCode).toBe(200)
+    const lista = (await chamar(contratos, 'GET')).body.contratos.find(c => c.id === id)
+    expect(lista.encargos).toEqual([{ id: expect.any(String), descricao: 'Seguro incêndio', sinal: 'encargo', valor: 49.06, parcelas_total: 36, parcela_inicio: -5, ativo: true }])
+  })
+
   it('perfil sem acesso não vê o crédito', async () => {
     const { body } = await chamar(contratos, 'POST', { body: { contrato: CONTRATO } })
     await chamar(creditos, 'POST', { url: '/api/contrato-creditos', body: { contrato_id: body.contrato.id, valor: 10, itens: [] } })
