@@ -827,6 +827,9 @@ export function AppProvider({ children }) {
   // Recarga do banco sem sair do app (voltar à aba, puxar para atualizar, botão 🔄): assinatura do
   // banco na última carga (api/last-change.js), quando foi, e a recarga adiada por modal/edição/fila.
   const assinaturaRef = useRef(null)
+  // Migrações que o banco do ambiente tem (envelope diário, crédito previsto, feriados): a tela recusa
+  // ANTES de gravar o que se perderia. null = ainda não carregou / servidor antigo (não bloqueia).
+  const [recursosBanco, setRecursosBanco] = useState(null)
   const recarregandoRef = useRef(false)
   const recargaAdiadaRef = useRef(null)
   const [recargaAdiada, setRecargaAdiada] = useState(false)
@@ -1164,6 +1167,7 @@ export function AppProvider({ children }) {
       const dados = aplicarFilaSobreDados(merged, pendentes)
       carregouDoBancoRef.current = true
       assinaturaRef.current = result.assinatura ?? null
+      setRecursosBanco(result.recursos ?? null)
       setUltimaCarga(Date.now())
       setErroEnvio(null)
       mudarDbStatus('connected')
@@ -1178,6 +1182,7 @@ export function AppProvider({ children }) {
       // cliente nasce com o kit básico no servidor (api/_kitBasico.js) — nada sai do navegador.
       carregouDoBancoRef.current = true
       assinaturaRef.current = result.assinatura ?? null
+      setRecursosBanco(result.recursos ?? null)
       setUltimaCarga(Date.now())
       setErroEnvio(null)
       mudarDbStatus('connected')
@@ -2956,7 +2961,7 @@ export function AppProvider({ children }) {
   const contratosCtx = useContratos({
     habilitado: podeNivel(usuario, 'contratos', 'ver'), update, dataRef,
     dbConectado: dbStatus === 'connected', registrarEdicao, reverseTransaction, updateTransaction, dados: data,
-    persistirAgora,
+    persistirAgora, recursosBanco,
   })
   useEffect(() => {
     posEfetivacaoRef.current = contratosCtx.notificarEfetivacao
@@ -6282,7 +6287,7 @@ export function AppProvider({ children }) {
       reservePeriods, reserveAdjustments, reserveSnapshots,
       datasProvisorias, salvarDataProvisoria, removerDatasProvisorias,
       ...contratosCtx,
-      ...feriadosCtx, orcamentoEnvelopes,
+      ...feriadosCtx, orcamentoEnvelopes, recursosBanco,
       tiposDocumento, addTipoDocumento, updateTipoDocumento, deleteTipoDocumento, reordenarTiposDocumento,
       recarregarTiposDocumento, setTipoDocumentoEmMassa,
       registrarEdicao, temHistorico,

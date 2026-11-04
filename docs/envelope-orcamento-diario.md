@@ -22,3 +22,11 @@
 ## Feriados (Configurações → Cadastros → Feriados)
 - `src/lib/feriados.js`: nacionais gerados (01/01, Sexta-feira Santa, 21/04, 01/05, 07/09, 12/10, 02/11, 15/11, 20/11, 25/12); Carnaval e Corpus Christi opcionais, desligados por padrão.
 - Tabela `feriados` (por cliente) só com o que muda: linha com `chave` liga/desliga um automático; sem chave = estadual/municipal em `data` ou todo ano em `dia_mes`. Rota `api/feriados.js` (módulo Cadastros).
+
+## Totais do topo (tela Envelopes, card "Envelopes do mês" do Painel e do Início no celular)
+- `totaisEnvelopes` (`src/lib/envelopes.js`): Total limite = soma dos orçamentos do ciclo; Já gasto = soma dos gastos; **Ainda posso gastar = soma do que cada card mostra** (Mensal: limite − gasto, negativo quando estourou; Diário: A gastar). Só com Mensais, é a mesma conta de antes (limite − gasto). Teste: `src/lib/envelopesTotais.test.js`.
+
+## Banco do ambiente sem a migração (perda silenciosa corrigida)
+- Antes: o sync tirava as colunas que faltavam (`COLUNAS_OPCIONAIS`) e respondia 200 — a tela dizia "Tudo sincronizado" e o envelope voltava a Mensal ao recarregar.
+- Agora (`api/_db.js`): coluna opcional ausente só sai do upsert se o valor for neutro (vazio/false/'mensal'…, `NEUTRO_OPCIONAL`); valor de verdade → `ErroBancoDesatualizado` (409, `codigo: 'banco_desatualizado'`), nada gravado, e o app marca a alteração com erro (indicador "1 alteração com erro — ver detalhes").
+- `/api/load` devolve `recursos` (`recursosDoBanco`: `envelopeDiario`, `creditoPrevisto`, `feriados`); o formulário do envelope e a composição em parcela aberta recusam ANTES de mudar a tela (`src/lib/recursosBanco.js`). Crédito 'previsto' recusado pelo CHECK antigo → 409 com mensagem clara (`api/contrato-creditos.js`).

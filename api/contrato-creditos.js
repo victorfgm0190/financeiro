@@ -21,6 +21,8 @@ const colunasGravaveis = async (dados) => {
   return COLS.filter(k => k in dados && existem.has(k))
 }
 
+export const MSG_SEM_PREVISTO = 'O banco deste ambiente ainda não tem a atualização para crédito previsto (composição antes do pagamento). Nada foi gravado — avise o suporte para atualizar o banco.'
+
 async function creditoVisivel(id, user) {
   const [c] = await query('SELECT * FROM contrato_creditos WHERE id = $1', [String(id || '')])
   if (!c || !(await contratoVisivel(query, c.contrato_id, user))) return null
@@ -79,6 +81,10 @@ async function handler(req, res) {
     }
     return res.status(405).end()
   } catch (err) {
+    // Status 'previsto' num banco sem a migração 2026-11-04 (CHECK antigo): erro claro, nada gravado.
+    if (err?.code === '23514' && err.constraint === 'contrato_creditos_status_check') {
+      return res.status(409).json({ error: MSG_SEM_PREVISTO, codigo: 'banco_desatualizado' })
+    }
     console.error('[api/contrato-creditos]', err.message)
     res.status(500).json({ error: err.message })
   }

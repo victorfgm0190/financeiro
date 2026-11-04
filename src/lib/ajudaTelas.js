@@ -786,7 +786,7 @@ export const AJUDA_TELAS = {
       { chave: 'competencia', rotulo: 'Competência', texto: 'Use as setas para ver os envelopes de outro mês.',
         detalhe: 'O mês que está sendo mostrado. Use as setas para ver os envelopes de meses anteriores ou do próximo.', exemplo: 'Exemplo: voltar para o mês passado para ver se o envelope "Lazer" estourou.' },
       { chave: 'totais', rotulo: 'Total limite / Já gasto / Ainda posso gastar', texto: 'A soma de todos os envelopes do mês.',
-        detalhe: 'Somando todos os envelopes do mês: o limite total, quanto já foi gasto e quanto ainda dá para gastar (ou quanto estourou).', exemplo: 'Exemplo: limite R$ 2.000,00, já gasto R$ 1.400,00, ainda posso gastar R$ 600,00.' },
+        detalhe: 'Somando todos os envelopes do mês: o limite total, quanto já foi gasto e quanto ainda dá para gastar (ou quanto estourou). "Ainda posso gastar" soma o que cada envelope mostra: no mensal, limite menos gasto; no diário, o "A gastar" (a economia de dias passados não volta).', exemplo: 'Exemplo: limite R$ 2.000,00, já gasto R$ 1.400,00, ainda posso gastar R$ 600,00.' },
       { chave: 'envelope', rotulo: 'Barra do envelope', texto: 'A parte cheia é o que já foi gasto; a cor avisa quando está perto do limite ou passou dele. Toque para ver os lançamentos.',
         detalhe: 'A barra mostra quanto do limite já foi usado. A cor muda quando está perto do limite e quando passa dele. Toque para ver os lançamentos que entraram no envelope.', exemplo: 'Exemplo: o envelope "Combustível" com R$ 380,00 de R$ 400,00 fica amarelo.', porLinha: true },
       { chave: 'opcoes', rotulo: 'Opções (⋯)', texto: 'Edita ou exclui o envelope.',

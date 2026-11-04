@@ -1,4 +1,4 @@
-import { upsertRows, deleteRows, parseBody, query, ErroIdentificador } from './_db.js'
+import { upsertRows, deleteRows, parseBody, query, ErroIdentificador, ErroBancoDesatualizado } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { autorizarSync } from './_permissoesApi.js'
 import { ErroHttp } from './_usuarios.js'
@@ -127,6 +127,9 @@ async function handler(req, res) {
     return res.status(400).json({ error: `Unknown sync type: ${type}` })
   } catch (err) {
     if (err instanceof ErroHttp || err instanceof ErroIdentificador) return res.status(err.status).json({ error: err.message })
+    // Banco do ambiente sem a migração e a alteração usa a coluna nova: recusa (o app marca a
+    // alteração com erro e mostra o motivo; nunca "Tudo sincronizado").
+    if (err instanceof ErroBancoDesatualizado) return res.status(err.status).json({ error: err.message, codigo: err.codigo, colunas: err.colunas })
     console.error('[api/sync]', err.message)
     // codigoBanco/coluna: o app traduz a recusa do banco para o usuário (lib/filaOffline
     // motivoDaRecusa) e para de reenviar a alteração — repetir não adianta.

@@ -186,6 +186,54 @@ export const COLUNAS_OPCIONAIS = {
   agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato'],
   envelopes: ['tipo_orcamento', 'valor_dia', 'dias_semana', 'descontar_feriados'],
 }
+// Coluna opcional ausente só sai do upsert quando o valor dela é NEUTRO (o mesmo que o banco sem a
+// coluna significa): null/vazio/false, ou o padrão listado aqui. Valor de verdade (ex.: envelope
+// 'diario') → recusa com ErroBancoDesatualizado: descartar calado fazia a tela dizer "Tudo
+// sincronizado" e a alteração sumir ao recarregar.
+const NEUTRO_OPCIONAL = {
+  'envelopes.tipo_orcamento': ['mensal'],
+  'envelopes.valor_dia': [0],
+  'agendamentos.valor_status': ['confirmado'],
+  'agendamentos.sincronizar_agenda': [true],
+}
+export function valorNeutro(table, col, v) {
+  if (v == null || v === false || v === '') return true
+  if (Array.isArray(v)) return v.length === 0
+  if (typeof v === 'object') return Object.keys(v).length === 0
+  if (typeof v === 'string' && (v === '[]' || v === '{}')) return true
+  const padroes = NEUTRO_OPCIONAL[`${table}.${col}`] || []
+  return padroes.some(p => p === v || (typeof p === 'number' && Number(v) === p))
+}
+export class ErroBancoDesatualizado extends Error {
+  constructor(table, colunas) {
+    super(`O banco deste ambiente ainda não tem a atualização necessária para gravar isto (${colunas.map(c => `${table}.${c}`).join(', ')}). Nada foi gravado — avise o suporte para atualizar o banco.`)
+    this.status = 409
+    this.codigo = 'banco_desatualizado'
+    this.colunas = colunas
+  }
+}
+function exigirColunasPreenchidas(table, faltam, rows) {
+  const usadas = faltam.filter(col => rows.some(r => col in r && !valorNeutro(table, col, r[col])))
+  if (usadas.length) throw new ErroBancoDesatualizado(table, usadas)
+}
+
+// O que o banco do ambiente já suporta (migrações aplicadas), para a tela recusar ANTES de mudar
+// qualquer coisa. Lido no /api/load. Cada item: true | false.
+export async function recursosDoBanco(q) {
+  const cols = await q(
+    "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'envelopes' AND column_name = ANY($1)",
+    [COLUNAS_OPCIONAIS.envelopes],
+  )
+  const envelopeDiario = cols.length === COLUNAS_OPCIONAIS.envelopes.length
+  const chk = await q(
+    `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = to_regclass('contrato_creditos') AND contype = 'c' AND conname = 'contrato_creditos_status_check'`,
+  )
+  const creditoPrevisto = !chk.length || /previsto/.test(chk[0].def || '')
+  const fer = await q("SELECT to_regclass('feriados') IS NOT NULL AS tem")
+  return { envelopeDiario, creditoPrevisto, feriados: !!fer[0]?.tem }
+}
+
 const cacheColunasOpcionais = new Map()
 export const _limparCacheColunasOpcionais = () => cacheColunasOpcionais.clear()
 
@@ -243,6 +291,7 @@ export async function upsertRowsNoClient(client, table, rows, conflictCol = 'id'
   citarIdent(table)
   const faltam = await colunasOpcionaisAusentes(client, table)
   if (faltam.length) {
+    exigirColunasPreenchidas(table, faltam, rows)
     rows = rows.map((r) => {
       const copia = { ...r }
       for (const col of faltam) delete copia[col]

@@ -1,3 +1,4 @@
+import { faltaRecurso, MSG_ENVELOPE_DIARIO } from '../../lib/recursosBanco'
 import { useState, useMemo } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -65,7 +66,10 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
 
   // Categorias por perfil: o da conta do envelope (se tiver perfil), senão o chip do topo; as já
   // vinculadas ao envelope continuam na lista.
-  const { activeProfileId, categoryGroupOrder, pode, orcamentoEnvelopes } = useApp()
+  const { activeProfileId, categoryGroupOrder, pode, orcamentoEnvelopes, recursosBanco } = useApp()
+  // Banco do ambiente sem a migração do envelope diário: recusa aqui, antes de mudar qualquer coisa
+  // (o sync não tem onde gravar o tipo e o valor por dia — sumiriam ao recarregar).
+  const semDiario = diario && faltaRecurso(recursosBanco, 'envelopeDiario')
   // Prévia do ciclo atual com o que está no formulário (vale do ciclo atual em diante).
   const previa = useMemo(() => {
     if (!diario || !(Number(valorDia) > 0) || !orcamentoEnvelopes) return null
@@ -188,6 +192,10 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
         </div>
       </div>
 
+      {semDiario && (
+        <p role="alert" className="text-sm text-perigo bg-perigo/10 rounded-lg px-3 py-2" data-testid="erro-envelope-diario">{MSG_ENVELOPE_DIARIO}</p>
+      )}
+
       <div className="flex gap-2 justify-end pt-1">
         <button className="btn-ghost" onClick={onCancel}>Cancelar</button>
         {podeSalvar && (
@@ -195,7 +203,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
           name: name.trim(), tipoOrcamento: tipo, limitAmount: diario ? 0 : Number(limitAmount), dueDay: Number(dueDay) || 1,
           valorDia: diario ? Number(valorDia) : null, diasSemana: diario ? diasSemana : [], descontarFeriados: diario && descontar,
           categoryIds, accountId: accountId || null,
-        })} disabled={!valid}>
+        })} disabled={!valid || semDiario}>
           Salvar
         </button>
         )}
@@ -207,7 +215,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
 
 // ── Main Panel ────────────────────────────────────────────────────────────────
 export default function EnvelopesPanel() {
-  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, pode, rateiosByLancamento, orcamentoEnvelopes } = useApp()
+  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, pode, rateiosByLancamento, orcamentoEnvelopes, recursosBanco } = useApp()
   const podeIncluir = pode('envelopes', 'incluir')
   const podeEditar = pode('envelopes', 'editar')
   const podeExcluir = pode('envelopes', 'excluir')
@@ -248,6 +256,7 @@ export default function EnvelopesPanel() {
   )
 
   function handleSave(data) {
+    if (data.tipoOrcamento === 'diario' && faltaRecurso(recursosBanco, 'envelopeDiario')) return
     if (editEnv) updateEnvelope(editEnv.id, data)
     else         addEnvelope(data)
     setShowForm(false)

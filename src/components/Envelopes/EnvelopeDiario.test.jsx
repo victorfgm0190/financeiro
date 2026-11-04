@@ -10,6 +10,9 @@ import { normalizarFeriado } from '../../../api/feriados.js'
 const app = vi.hoisted(() => ({}))
 vi.mock('../../context/AppContext', () => ({ useApp: () => app }))
 const { default: EnvelopesPanel } = await import('./EnvelopesPanel.jsx')
+const { TotaisEnvelopes } = await import('./EnvelopeResumo.jsx')
+const { resumoEnvelope, totaisEnvelopes } = await import('../../lib/envelopes')
+const { MSG_ENVELOPE_DIARIO } = await import('../../lib/recursosBanco')
 
 const DIARIO = { id: 'd', name: 'Almoço', categoryIds: ['alm'], accountId: 'cc', tipoOrcamento: 'diario', valorDia: 40, diasSemana: [1, 2, 3, 4, 5], descontarFeriados: true, limitAmount: 0, dueDay: 1, history: [] }
 const MENSAL = { id: 'm', name: 'Mercado', categoryIds: ['merc'], accountId: 'cc', limitAmount: 800, dueDay: 14, history: [] }
@@ -24,6 +27,7 @@ const base = (o = {}) => Object.assign(app, {
   pode: () => true, rateiosByLancamento: null, activeProfileId: null, categoryGroupOrder: [],
   addEnvelope: vi.fn(), updateEnvelope: vi.fn(), deleteEnvelope: vi.fn(),
   orcamentoEnvelopes: { startDay: 15, diaInicio: 15, hoje: '2026-11-04', feriadosDe: (i, f) => feriadosAtivos([], i, f) },
+  recursosBanco: { envelopeDiario: true, creditoPrevisto: true, feriados: true },
   ...o,
 })
 
@@ -75,6 +79,40 @@ describe('tela Envelopes — orçamento diário', () => {
     const modal = screen.getByRole('dialog')
     expect(within(modal).getByLabelText('Mensal').checked).toBe(true)
     expect(within(modal).getByText('Limite Mensal (R$)')).toBeTruthy()
+  })
+})
+
+describe('banco do ambiente sem a atualização do envelope diário', () => {
+  it('Diário: erro claro, Salvar bloqueado e nada gravado; Mensal continua salvando', () => {
+    base({ envelopes: [], recursosBanco: { envelopeDiario: false, creditoPrevisto: false, feriados: false } })
+    render(<EnvelopesPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Criar primeiro envelope' }))
+    const modal = screen.getByRole('dialog')
+    fireEvent.change(within(modal).getByPlaceholderText('Digite o nome do envelope'), { target: { value: 'Almoço' } })
+    fireEvent.click(within(modal).getByLabelText('Diário'))
+    fireEvent.change(within(modal).getByPlaceholderText('Quanto pode gastar em cada dia que conta'), { target: { value: '40' } })
+    expect(within(modal).getByTestId('erro-envelope-diario').textContent).toBe(MSG_ENVELOPE_DIARIO)
+    const salvar = within(modal).getByRole('button', { name: 'Salvar' })
+    expect(salvar.disabled).toBe(true)
+    fireEvent.click(salvar)
+    expect(app.addEnvelope).not.toHaveBeenCalled()
+    fireEvent.click(within(modal).getByLabelText('Mensal'))
+    expect(within(modal).queryByTestId('erro-envelope-diario')).toBeNull()
+    fireEvent.change(within(modal).getByPlaceholderText('0,00'), { target: { value: '300' } })
+    fireEvent.click(within(modal).getByRole('button', { name: 'Salvar' }))
+    expect(app.addEnvelope).toHaveBeenCalledWith(expect.objectContaining({ tipoOrcamento: 'mensal', limitAmount: 300 }))
+  })
+})
+
+describe('topo da tela Envelopes — Ainda posso gastar', () => {
+  it('soma do que cada card mostra: 816,26 (limite 8.720,00, gasto 7.416,44)', () => {
+    const m = (limite, gasto) => resumoEnvelope({ env: { limitAmount: limite }, txs: [], spent: gasto })
+    const d = (orcamento, gasto, aGastar) => resumoEnvelope({ env: {}, txs: [], spent: gasto, orc: { orcamento, aGastar, estado: 'atual' } })
+    render(<TotaisEnvelopes totais={totaisEnvelopes([m(2000, 1503.67), m(1500, 1826.76), m(1000, 737.31), d(2640, 2200, 288), d(1580, 1148.70, 96)])} />)
+    const celula = (rot) => screen.getByText(rot).nextSibling.textContent.replace(/\s/g, ' ')
+    expect(celula('Ainda posso gastar')).toBe('R$ 816,26')
+    expect(celula('Total limite')).toBe('R$ 8.720,00')
+    expect(celula('Já gasto')).toBe('R$ 7.416,44')
   })
 })
 

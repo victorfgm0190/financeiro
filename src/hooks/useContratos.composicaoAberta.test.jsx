@@ -49,7 +49,7 @@ let hook
 const s = (id) => estado.schedules.find(x => x.id === id)
 const creditos = () => api.creditos
 
-async function montar() {
+async function montar({ recursos = null } = {}) {
   api.contrato = C
   api.creditos = []
   api.eventos = []
@@ -61,7 +61,7 @@ async function montar() {
   const updateTransaction = (id, changes) => update(d => ({ ...d, transactions: d.transactions.map(t => (t.id === id ? { ...t, ...changes } : t)) }))
   const props = () => ({
     habilitado: true, update, dataRef, dados: estado, dbConectado: true, registrarEdicao: async () => {},
-    reverseTransaction: () => {}, updateTransaction, persistirAgora: async () => ({ ok: true }),
+    reverseTransaction: () => {}, updateTransaction, persistirAgora: async () => ({ ok: true }), recursosBanco: recursos,
   })
   hook = renderHook((p) => useContratos(p), { initialProps: props() })
   await vi.waitFor(() => expect(hook.result.current.contratosCarregados).toBe(true))
@@ -239,5 +239,23 @@ describe('composição do boleto em parcela de condomínio aberta', () => {
     expect(pend).toBeTruthy()
     expect(s(COND).amount).toBe(1290)
     expect(s(idParcela('c1', 'condominio', '2027-01')).amount).toBe(1350)
+  })
+
+  it('banco do ambiente sem o crédito previsto: erro claro e NADA muda (parcela, crédito, regra, evento)', async () => {
+    await montar({ recursos: { envelopeDiario: false, creditoPrevisto: false, feriados: false } })
+    const antes = s(COND).amount
+    let erro = null
+    await act(async () => {
+      try { await hook.result.current.informarComposicaoAberta(C, COND, { itens: BOLETO, lembrar: [{ padrao: 'Fundo de reserva', responsavel: 'proprietario' }] }) } catch (e) { erro = e }
+    })
+    const { MSG_CREDITO_PREVISTO } = await import('../lib/recursosBanco')
+    expect(erro?.message).toBe(MSG_CREDITO_PREVISTO)
+    expect(s(COND).amount).toBe(antes)
+    expect(s(COND).composicao?.informada).toBeFalsy()
+    expect(creditos()).toEqual([])
+    expect(api.eventos).toEqual([])
+    // Boleto sem item do proprietário não precisa de crédito: grava normalmente.
+    await act(async () => { await hook.result.current.informarComposicaoAberta(C, COND, { itens: BOLETO.filter(i => i.responsavel === 'inquilino') }) })
+    expect(s(COND).amount).toBe(1200)
   })
 })

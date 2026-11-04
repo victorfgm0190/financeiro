@@ -104,12 +104,17 @@ export function resumosPorUso(dados) {
     .sort((a, b) => b.pct - a.pct || String(a.env.name).localeCompare(String(b.env.name), 'pt-BR'))
 }
 
-// Totais do topo: limite, já gasto, ainda posso gastar (negativo = estourou).
+// Totais do topo: limite (soma dos orçamentos do ciclo), já gasto e "Ainda posso gastar" = soma do
+// que cada card mostra (resumoEnvelope): Mensal = limite − gasto (negativo quando estourou); Diário =
+// A gastar. Antes era limite − gasto no total, o que devolvia a economia dos dias passados do diário.
+// Só com Mensais, a soma das diferenças é a mesma conta de antes.
 export function totaisEnvelopes(resumos) {
-  const limite = r2((resumos || []).reduce((s, r) => s + r.limite, 0))
-  const gasto = r2((resumos || []).reduce((s, r) => s + r.gasto, 0))
-  const parcelado = r2((resumos || []).reduce((s, r) => s + r.parcelado, 0))
-  return { limite, gasto, parcelado, aVista: r2(gasto - parcelado), disponivel: r2(limite - gasto) }
+  const lista = resumos || []
+  const limite = r2(lista.reduce((s, r) => s + r.limite, 0))
+  const gasto = r2(lista.reduce((s, r) => s + r.gasto, 0))
+  const parcelado = r2(lista.reduce((s, r) => s + r.parcelado, 0))
+  const disponivel = r2(lista.reduce((s, r) => s + r.disponivel, 0))
+  return { limite, gasto, parcelado, aVista: r2(gasto - parcelado), disponivel }
 }
 
 // Larguras (%) dos dois tons da barra. Até o limite, a barra é o limite; estourado, a barra

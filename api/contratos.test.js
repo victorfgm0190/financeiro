@@ -222,6 +222,21 @@ describe('/api/contrato-regras e /api/contrato-creditos (Entrega 2)', () => {
     expect((await chamar(creditos, 'GET', { url: `/api/contrato-creditos?contrato_id=${id}` })).body.creditos).toEqual([])
   })
 
+  it('crédito PREVISTO em banco sem a migração 2026-11-04 → 409 com motivo claro, nada gravado; com a migração, grava', async () => {
+    const { body } = await chamar(contratos, 'POST', { body: { contrato: CONTRATO } })
+    const id = body.contrato.id
+    const previsto = { contrato_id: id, origem_agendamento_id: 'ctr_x_condominio_202612', descricao: 'Condomínio 10/12 (previsto)', valor: 90, data_origem: '2026-12-10', status: 'previsto', itens: [{ desc: 'Fundo de reserva', valor: 90 }] }
+    const r = await chamar(creditos, 'POST', { url: '/api/contrato-creditos', body: previsto })
+    expect(r.statusCode).toBe(409)
+    expect(r.body).toMatchObject({ codigo: 'banco_desatualizado' })
+    expect(r.body.error).toMatch(/ainda não tem a atualização para crédito previsto.*Nada foi gravado/)
+    expect((await chamar(creditos, 'GET', { url: `/api/contrato-creditos?contrato_id=${id}` })).body.creditos).toEqual([])
+    await estado.db.exec(readFileSync(new URL('../supabase/migrations/2026-11-04_contratos_credito_previsto.sql', import.meta.url), 'utf-8'))
+    const ok = await chamar(creditos, 'POST', { url: '/api/contrato-creditos', body: previsto })
+    expect(ok.statusCode).toBe(200)
+    expect(ok.body.credito).toMatchObject({ status: 'previsto', valor: 90 })
+  })
+
   it('perfil sem acesso não vê o crédito', async () => {
     const { body } = await chamar(contratos, 'POST', { body: { contrato: CONTRATO } })
     await chamar(creditos, 'POST', { url: '/api/contrato-creditos', body: { contrato_id: body.contrato.id, valor: 10, itens: [] } })

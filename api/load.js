@@ -1,4 +1,4 @@
-import { query } from './_db.js'
+import { query, recursosDoBanco } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { ensureBemSchema } from './_bem.js'
 import { ensureTiposDocumentoSchema } from './_tiposDocumento.js'
@@ -467,6 +467,8 @@ async function handler(req, res) {
     // /api/last-change ao voltar para a aba. Mudança entre os dois só causa uma recarga a mais.
     // null (banco sem a migração updated_at): o app recarrega por botão/puxar, não ao voltar.
     const assinatura = await lerAssinatura().catch(() => null)
+    // O que este banco suporta (migrações aplicadas): a tela recusa antes de gravar o que se perderia.
+    const recursos = await recursosDoBanco(query).catch((err) => { console.error('[api/load] recursos:', err.message); return null })
 
     const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios, srfs, aliases, tipos] =
       await Promise.all([
@@ -515,6 +517,7 @@ async function handler(req, res) {
       // banco — que é indistinguível de "o banco não salvou" olhando só para a tela.
       served_at: new Date().toISOString(),
       assinatura,
+      recursos,
       accs, txs, scheds, cats, buds, rules, gers, pays, faves,
       cfg: cfgRows[0] || null,
       envs, groups, perfis, imports, grules, rfns, rateios, srfs, aliases, tipos,

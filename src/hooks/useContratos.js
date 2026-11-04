@@ -1,3 +1,4 @@
+import { faltaRecurso, MSG_CREDITO_PREVISTO } from '../lib/recursosBanco'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   listarContratosApi, criarContratoApi, atualizarContratoApi, excluirContratoApi, salvarItensContratoApi,
@@ -65,7 +66,9 @@ const eventoDoVinculo = (linha, tx, parcelaId) => ({
 // Tabela da Entrega 2 ainda não criada no banco do ambiente (rota responde erro): segue sem créditos.
 const semTabela = (err) => /contrato_(creditos|regras_itens)|does not exist|não existe/i.test(String(err?.message || ''))
 
-export function useContratos({ habilitado, update, dataRef, dados, dbConectado, registrarEdicao, reverseTransaction, updateTransaction, persistirAgora }) {
+export function useContratos({ habilitado, update, dataRef, dados, dbConectado, registrarEdicao, reverseTransaction, updateTransaction, persistirAgora, recursosBanco = null }) {
+  const recursosRef = useRef(recursosBanco)
+  useEffect(() => { recursosRef.current = recursosBanco }, [recursosBanco])
   const [contratos, setContratos] = useState([])
   const [carregados, setCarregados] = useState(false)
   const [indices, setIndices] = useState({})
@@ -546,6 +549,11 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     const novo = creditoPrevistoDaParcela(composicao, { contratoId: contrato.id, parcela })
     const atual = creditoDaParcela(creditosRef.current.filter(c => c.contrato_id === contrato.id), parcela.id)
     const plano = planoCreditoDaParcela({ atual, novo })
+    // Crédito PREVISTO precisa da migração 2026-11-04 no banco do ambiente: sem ela, erro claro antes
+    // de gravar qualquer coisa (regra, crédito ou parcela) — nada fica só na tela.
+    if ((plano.acao === 'criar' || plano.acao === 'atualizar') && faltaRecurso(recursosRef.current, 'creditoPrevisto')) {
+      throw new Error(MSG_CREDITO_PREVISTO)
+    }
     if (plano.acao === 'conflito' && !decisao) return { ok: false, conflito: plano }
     for (const l of lembrar) {
       await criarRegra({ contrato_id: contrato.id, padrao: l.padrao, tipo_match: 'comeca_com', responsavel: l.responsavel })

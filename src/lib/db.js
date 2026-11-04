@@ -1040,13 +1040,15 @@ export async function loadFromDb(defaultData) {
     // semeia no ambiente principal). Banco com o kit básico e ainda sem contas (cliente novo) é um
     // banco normal: abre vazio, sem semear nada.
     if (!d.cfg && (!d.cats || d.cats.length === 0)) {
-      return { status: 'empty', data: null, assinatura: d.assinatura ?? null }
+      return { status: 'empty', data: null, assinatura: d.assinatura ?? null, recursos: d.recursos ?? null }
     }
 
     return {
       status: 'connected',
       // Assinatura do banco no momento da carga (api/last-change.js): referência da checagem ao voltar.
       assinatura: d.assinatura ?? null,
+      // O que o banco do ambiente suporta (api/_db.js recursosDoBanco); null = servidor antigo.
+      recursos: d.recursos ?? null,
       data: {
         settings: d.cfg
           ? {
