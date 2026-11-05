@@ -28,6 +28,17 @@ async function buscar(path, init) {
 const comPrazo = (ms) => (ms && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
   ? { signal: AbortSignal.timeout(ms) } : {})
 
+// Gravação que mexeu em mês já fechado pelas Reservas e cujo recálculo da virada falhou: o dado foi
+// gravado, mas o recálculo ficou pendente (api/_viradaReservaServidor.js). Avisa a tela — nunca um
+// "sucesso" silencioso. O AppContext mostra o aviso; Reservas oferece "Refazer recálculo".
+export const EVENTO_RECALCULO_PENDENTE = 'finup:virada-recalculo-pendente'
+function avisarRecalculoPendente(corpo) {
+  if (corpo?.viradaRecalculoPendente && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent(EVENTO_RECALCULO_PENDENTE))
+  }
+  return corpo
+}
+
 async function apiGet(path, { timeoutMs } = {}) {
   const res = await buscar(path, { cache: 'no-store', headers: { ...authHeaders() }, ...comPrazo(timeoutMs) })
   if (res.status === 401) { onUnauthorized() }
@@ -63,7 +74,7 @@ async function apiPost(path, body) {
     err.dados = corpo
     throw err
   }
-  return res.json()
+  return avisarRecalculoPendente(await res.json())
 }
 
 // Busca Global: consulta combinada de lançamentos + agendamentos via /api/search.
@@ -124,7 +135,7 @@ async function apiPut(path, body) {
     err.status = res.status
     throw err
   }
-  return res.json()
+  return avisarRecalculoPendente(await res.json())
 }
 
 async function apiDelete(path) {
@@ -137,7 +148,7 @@ async function apiDelete(path) {
     err.status = res.status
     throw err
   }
-  return res.json()
+  return avisarRecalculoPendente(await res.json())
 }
 
 // Períodos de saldo inicial. Objetos em snake_case (mesma forma do banco/endpoint):

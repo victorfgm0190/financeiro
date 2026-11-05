@@ -158,3 +158,21 @@ describe('prévia e confirmação', () => {
     expect(app.recarregarHistoricoReservas).toHaveBeenCalled()
   })
 })
+
+describe('pendência de recálculo', () => {
+  it('mostra o aviso e "Refazer recálculo" chama o servidor; "Entendi" não dá baixa na pendência', async () => {
+    base()
+    api.status = vi.fn(async () => STATUS({ pendentes: [], recalculoPendente: true, recalculos: [
+      { id: 'pend1', campo: 'recalculo_pendente', motivo: 'x' },
+      { id: 'm1', campo: 'entradas', tabela: 'reserve_period_snapshots', data_corte: '2026-08-14', function_id: 'f1', antes: 0, depois: 40 },
+    ] }))
+    api.acao = vi.fn(async () => ({ ok: true, mudancas: 2 }))
+    render(<ReservasPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Resumo' }))
+    await waitFor(() => expect(screen.getByTestId('recalculo-pendente')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Entendi' }))
+    await waitFor(() => expect(api.acao).toHaveBeenCalledWith({ acao: 'ciente', ids: ['m1'] }))
+    fireEvent.click(screen.getByRole('button', { name: 'Refazer recálculo' }))
+    await waitFor(() => expect(api.acao).toHaveBeenCalledWith({ acao: 'recalcular' }))
+  })
+})

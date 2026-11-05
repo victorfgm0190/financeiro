@@ -2112,20 +2112,39 @@ const CAMPO_RECALCULO = {
   saldo_inicial: 'Saldo Inicial', entradas: 'Entradas', saidas: 'Saídas', ajuste: 'Ajuste',
   rendimentos: 'Rendimentos', saldo: 'Saldo Final', saldo_atualizado: 'Saldo Final',
 }
-function AvisoRecalculo({ itens, functions, onCiente }) {
+function AvisoRecalculo({ itens, functions, onCiente, onRefazer }) {
   const [aberto, setAberto] = useState(false)
+  const [refazendo, setRefazendo] = useState(false)
+  const [erro, setErro] = useState('')
   const nome = (id) => functions.find(f => f.id === id)?.name || '(função removida)'
+  // Recálculo que falhou (pendência): o lançamento foi gravado, as viradas fechadas não.
+  const pendente = itens.some(r => r.campo === 'recalculo_pendente')
   // Uma linha por (virada, função, campo, tabela): snapshot = mês fechado; período = saldo inicial seguinte.
-  const linhas = itens.filter(r => !(r.tabela === 'reserve_period_snapshots' && r.campo === 'saldo_atualizado'))
+  const linhas = itens.filter(r => r.campo !== 'recalculo_pendente' && !(r.tabela === 'reserve_period_snapshots' && r.campo === 'saldo_atualizado'))
+  const refazer = async () => {
+    setRefazendo(true)
+    setErro('')
+    try { await onRefazer() } catch (err) { setErro(err?.dados?.error || err?.message || 'Não foi possível refazer o recálculo.') } finally { setRefazendo(false) }
+  }
   return (
     <div className="card border border-aviso/40 bg-aviso/5 py-2.5 px-3 text-xs space-y-1.5" role="status" data-testid="aviso-recalculo">
+      {pendente && (
+        <div className="flex items-center gap-2 flex-wrap" data-testid="recalculo-pendente">
+          <AlertTriangle size={13} className="text-perigo shrink-0" />
+          <span className="text-texto-1">Uma alteração mexeu num mês já fechado e o recálculo das viradas não pôde ser concluído. O que foi gravado está salvo; as viradas fechadas ainda precisam ser recalculadas.</span>
+          <button type="button" className="btn-primary text-xs py-1 ml-auto" disabled={refazendo} onClick={refazer}>{refazendo ? 'Recalculando…' : 'Refazer recálculo'}</button>
+          {erro && <span className="text-perigo w-full">{erro}</span>}
+        </div>
+      )}
+      {linhas.length > 0 && (
       <div className="flex items-center gap-2 flex-wrap">
         <AlertTriangle size={13} className="text-aviso shrink-0" />
         <span className="text-texto-1">Lançamentos com data em mês já fechado mudaram {linhas.length} valor(es) de viradas anteriores. As viradas foram recalculadas, sem criar registros novos.</span>
         <button type="button" className="underline text-texto-2" onClick={() => setAberto(a => !a)}>{aberto ? 'ocultar' : 'ver o que mudou'}</button>
         <button type="button" className="btn-secondary text-xs py-1 ml-auto" onClick={onCiente}>Entendi</button>
       </div>
-      {aberto && (
+      )}
+      {aberto && linhas.length > 0 && (
         <ul className="space-y-0.5 pl-5">
           {linhas.map(r => (
             <li key={r.id} className="text-texto-2">
@@ -2226,8 +2245,14 @@ export default function ReservasPanel() {
     }
   }
 
+  const refazerRecalculo = async () => {
+    await viradaReservaAcao({ acao: 'recalcular' })
+    await aposVirada()
+  }
+
+  // "Entendi" dá ciência das mudanças; a pendência de recálculo só sai com "Refazer recálculo".
   const marcarRecalculosVistos = async () => {
-    const ids = (viradaStatus?.recalculos || []).map(r => r.id)
+    const ids = (viradaStatus?.recalculos || []).filter(r => r.campo !== 'recalculo_pendente').map(r => r.id)
     try { await viradaReservaAcao({ acao: 'ciente', ids }) } catch { /* tenta de novo na próxima entrada */ }
     await aposVirada()
   }
@@ -2336,7 +2361,7 @@ export default function ReservasPanel() {
       )}
 
       {tab === 'resumo' && viradaStatus?.recalculos?.length > 0 && (
-        <AvisoRecalculo itens={viradaStatus.recalculos} functions={functions} onCiente={marcarRecalculosVistos} />
+        <AvisoRecalculo itens={viradaStatus.recalculos} functions={functions} onCiente={marcarRecalculosVistos} onRefazer={refazerRecalculo} />
       )}
 
       {tab === 'resumo' && (

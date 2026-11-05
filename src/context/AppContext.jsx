@@ -13,7 +13,7 @@ import {
   aplicarEdicaoApi, fetchHistoricoResumo,
   fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi, deleteAjustesDoRendimentoApi,
   fetchReserveSnapshots, createReserveSnapshots,
-  recalcularRazaoReservas,
+  recalcularRazaoReservas, EVENTO_RECALCULO_PENDENTE,
 } from '../lib/db'
 import { localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
 import { getToken, getSessao, noAmbientePrincipal, definirSemConexao } from '../lib/api'
@@ -3881,6 +3881,14 @@ export function AppProvider({ children }) {
     if (!temFuncoesReserva) return { ok: true, upserted: 0 }
     return recalcularRazaoReservas(ledgerDateStr(new Date()))
   }, [temFuncoesReserva])
+
+  // Recálculo de virada que falhou numa gravação (src/lib/db.js avisarRecalculoPendente): o dado foi
+  // salvo, mas as viradas fechadas precisam ser recalculadas — avisa em vez de sucesso silencioso.
+  useEffect(() => {
+    const aviso = () => setAvisoToast('Uma alteração mexeu num mês já fechado das Reservas e o recálculo da virada não pôde ser concluído. O que você gravou está salvo. Abra Reservas e use "Refazer recálculo".')
+    window.addEventListener(EVENTO_RECALCULO_PENDENTE, aviso)
+    return () => window.removeEventListener(EVENTO_RECALCULO_PENDENTE, aviso)
+  }, [])
 
   // Recarrega períodos, ajustes e snapshots do banco (depois de virada/desfazer/recálculo).
   const recarregarHistoricoReservas = useCallback(async () => {

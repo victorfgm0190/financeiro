@@ -183,6 +183,8 @@ export async function statusVirada({ hoje: hojeTela } = {}) {
   )
   return {
     disponivel: true,
+    // Recálculo que falhou e precisa ser refeito (a tela mostra com o botão "Refazer recálculo").
+    recalculoPendente: recalculos.some(r => r.campo === CAMPO_PENDENTE),
     hoje,
     perguntar: cfg.reserva_perguntar_virada !== false,
     ultimoCorte,
@@ -212,7 +214,7 @@ export async function previaVirada({ fim, hoje: hojeTela }) {
   if (!dados.functions.length) bloqueios.push({ codigo: 'sem_funcoes', texto: 'Não há funções de reserva cadastradas.' })
   if (bloqueios.length) return { hoje, mes, bloqueios, previa: null }
   // Razão Diário do período recalculado com o banco — é a base de conferência da prévia.
-  try { await gravarRazao(query, dados, { hoje, desde: mes.inicio }) } catch (err) { console.error('[virada] razão:', err.message) }
+  try { await gravarRazao(query, dados, { hoje, desde: mes.inicio }) } catch (err) { console.error('[virada] razão:', codigoDoErro(err)) }
   return { hoje, mes, bloqueios, previa: montarPrevia({ mes, ...dados }) }
 }
 
@@ -271,7 +273,7 @@ export async function confirmarVirada({ fim, chave = null, hoje: hojeTela, usuar
     try {
       const periods = await lerPeriodos(query)
       await gravarRazao(query, { ...dados, periods }, { hoje, desde: somarDias(fim, 1) })
-    } catch (err) { console.error('[virada] razão após virada:', err.message) }
+    } catch (err) { console.error('[virada] razão após virada:', codigoDoErro(err)) }
   }
   return resp
 }
@@ -297,7 +299,7 @@ export async function desfazerVirada({ usuario = null, hoje: hojeTela } = {}) {
     await q("UPDATE reserve_viradas SET status = 'desfeita', desfeita_em = now(), desfeita_por = $2 WHERE id = $1", [v.id, usuario])
     return { virada: v, removidos: { snapshots: snaps.length, periodos: pers.length } }
   })
-  try { await recalcularRazaoNoBanco({ hoje, desde: somarDias(r.virada.data_corte, 1) }) } catch (err) { console.error('[virada] razão após desfazer:', err.message) }
+  try { await recalcularRazaoNoBanco({ hoje, desde: somarDias(r.virada.data_corte, 1) }) } catch (err) { console.error('[virada] razão após desfazer:', codigoDoErro(err)) }
   return r
 }
 
@@ -308,12 +310,13 @@ export async function marcarRecalculosVistos(ids) {
 }
 
 // ── Recálculo por mudança retroativa ────────────────────────────────────────────────────────────
-// Última data coberta por virada ASSISTIDA ativa (null = nenhuma). Banco sem a migração → null.
+// Última data coberta por virada ASSISTIDA ativa (null = nenhuma). Banco SEM a migração → null, sem
+// erro (comportamento de antes). Com a migração, uma falha na leitura PROPAGA: quem chama decide
+// (registra pendência) — engolir aqui escondia a falha como "nada a recalcular".
 export async function corteAssistido(q = query) {
-  try {
-    const [r] = await q("SELECT to_char(MAX(data_corte), 'YYYY-MM-DD') AS corte FROM reserve_viradas WHERE status = 'ativa'")
-    return r?.corte || null
-  } catch { return null }
+  if (!(await temViradaAssistida(q))) return null
+  const [r] = await q("SELECT to_char(MAX(data_corte), 'YYYY-MM-DD') AS corte FROM reserve_viradas WHERE status = 'ativa'")
+  return r?.corte || null
 }
 
 const CAMPOS_RECALCULO = {
@@ -368,8 +371,66 @@ export async function lancamentosAfetamViradas(q, { upsert = [], del = [] } = {}
   return false
 }
 
-// Dispara o recálculo sem derrubar quem chamou (o dado já foi gravado).
-export async function recalcularSeAfetou(afetou, motivo) {
-  if (!afetou) return null
-  try { return await recalcularViradasNoBanco(motivo) } catch (err) { console.error('[virada] recálculo:', err.message); return null }
+// ── Ganchos de recálculo (sync, ajustes, saldo inicial) ─────────────────────────────────────────
+// Uso: `const prep = await prepararRecalculo(() => <verifica se afeta mês fechado>)` ANTES de gravar;
+// depois de gravar, `const r = await concluirRecalculo(prep, motivo)`. O dado do usuário é gravado
+// sempre — a verificação/recálculo nunca derruba a gravação. Mas falha não é silenciosa:
+//   • log só com o código do erro (nada de valores, datas ou descrições);
+//   • pendência em reserve_virada_recalculos (campo 'recalculo_pendente'), mostrada em Reservas
+//     com o botão "Refazer recálculo";
+//   • a resposta leva `viradaRecalculoPendente: true` (a tela avisa).
+// Banco sem a migração: corteAssistido devolve null sem erro → nada a fazer, nada a avisar.
+const codigoDoErro = (err) => err?.code || err?.name || 'erro'
+
+export const CAMPO_PENDENTE = 'recalculo_pendente'
+
+export async function registrarPendenciaRecalculo(motivo) {
+  try {
+    await query(
+      'INSERT INTO reserve_virada_recalculos (campo, motivo) VALUES ($1, $2)',
+      [CAMPO_PENDENTE, `Recálculo das viradas precisa ser refeito (${motivo || 'mudança em mês fechado'}).`],
+    )
+    return true
+  } catch (err) {
+    console.error('[virada] pendência de recálculo não registrada:', codigoDoErro(err))
+    return false
+  }
+}
+
+export async function prepararRecalculo(verificar) {
+  try {
+    return { afetou: !!(await verificar()), falhou: false }
+  } catch (err) {
+    console.error('[virada] verificação de mês fechado falhou:', codigoDoErro(err))
+    return { afetou: false, falhou: true }
+  }
+}
+
+// { mudancas, pendente } — pendente = o recálculo não foi feito e precisa ser refeito.
+export async function concluirRecalculo(prep, motivo) {
+  if (prep?.falhou) {
+    await registrarPendenciaRecalculo(motivo)
+    return { mudancas: [], pendente: true }
+  }
+  if (!prep?.afetou) return { mudancas: [], pendente: false }
+  try {
+    return { mudancas: await recalcularViradasNoBanco(motivo), pendente: false }
+  } catch (err) {
+    console.error('[virada] recálculo falhou:', codigoDoErro(err))
+    await registrarPendenciaRecalculo(motivo)
+    return { mudancas: [], pendente: true }
+  }
+}
+
+// Campos da resposta da API para o resultado do gancho.
+export const respostaRecalculo = (r) => ({
+  ...(r?.mudancas?.length ? { viradaRecalculada: r.mudancas.length } : {}),
+  ...(r?.pendente ? { viradaRecalculoPendente: true } : {}),
+})
+
+// "Refazer recálculo" (tela de Reservas): recalcula tudo e, dando certo, dá baixa nas pendências.
+export async function refazerRecalculo() {
+  const mudancas = await recalcularViradasNoBanco('recálculo refeito pelo usuário')
+  await query('UPDATE reserve_virada_recalculos SET visto_em = now() WHERE campo = $1 AND visto_em IS NULL', [CAMPO_PENDENTE])
+  return mudancas
 }
