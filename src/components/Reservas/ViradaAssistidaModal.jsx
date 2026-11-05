@@ -110,7 +110,11 @@ function TabelaConta({ conta, fim }) {
 }
 
 export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje, manual = false, onVirou, onAgoraNao, onFechar }) {
-  const pendentes = status?.pendentes || []
+  // A sequência de meses é CONGELADA quando a virada começa. O painel recarrega o status depois de
+  // cada mês fechado (onVirou) e a lista dele perde o mês recém-fechado: ler por posição dessa lista
+  // viva fazia o resultado mostrar o mês SEGUINTE como fechado e o "próximo" pular um mês.
+  const [fila, setFila] = useState(null)
+  const pendentes = fila ?? status?.pendentes ?? []
   const [passo, setPasso] = useState(PASSO.PERGUNTA)
   const [indice, setIndice] = useState(0)               // mês pendente da vez
   const [dados, setDados] = useState(null)              // resposta da prévia
@@ -126,6 +130,7 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
   const verPrevia = async (i = indice) => {
     const m = pendentes[i]
     if (!m || bloqueado) return
+    if (!fila) setFila(pendentes)
     setIndice(i)
     setPasso(PASSO.PREVIA)
     setCarregando(true)
@@ -148,7 +153,7 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
     setErro('')
     try {
       const r = await viradaReservaAcao({ acao: 'confirmar', fim: mes.fim, chave: chaveRef.current, hoje })
-      setResultado(r)
+      setResultado({ ...r, mes })
       setPasso(PASSO.RESULTADO)
       await onVirou?.()
     } catch (err) {
@@ -160,6 +165,9 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
   }
 
   const proximo = pendentes[indice + 1] || null
+  const mesFechado = resultado?.virada?.data_corte
+    ? { inicio: resultado.virada.data_inicio || resultado.mes?.inicio, fim: resultado.virada.data_corte }
+    : (resultado?.mes || mes)
   const titulo = 'Virada de saldo'
 
   if (status && status.disponivel === false) {
@@ -236,8 +244,9 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
 
         {passo === PASSO.RESULTADO && mes && (
           <>
-            <p className="text-sm text-receita font-semibold flex items-center gap-1.5"><CheckCircle size={16} /> Mês {rotuloMes(mes)} fechado{resultado?.repetida ? ' (já estava gravado)' : ''}.</p>
-            <p className="text-xs text-texto-2">O Saldo das funções não mudou: apenas o período foi fechado. O fechamento está na aba Histórico, e Entradas, Saídas, Ajuste e Rendimentos recomeçam em {fmtDate(somarDias(mes.fim, 1))}.</p>
+            {/* O mês fechado é o que o SERVIDOR gravou (virada.data_inicio/data_corte). */}
+            <p className="text-sm text-receita font-semibold flex items-center gap-1.5" data-testid="virada-resultado"><CheckCircle size={16} /> Mês {rotuloMes(mesFechado)} fechado{pendentes.length > 1 ? ` (${indice + 1} de ${pendentes.length})` : ''}{resultado?.repetida ? ' (já estava gravado)' : ''}.</p>
+            <p className="text-xs text-texto-2">O Saldo das funções não mudou: apenas o período foi fechado. O fechamento está na aba Histórico, e Entradas, Saídas, Ajuste e Rendimentos recomeçam em {fmtDate(somarDias(mesFechado.fim, 1))}.</p>
             {resultado?.resumo?.contas?.map(c => (
               <Fragment key={c.accountId}>
                 <p className="text-xs text-texto-2">{c.nome}: soma das funções {fmt(c.somaFuncoes)} · saldo da conta {c.saldoConta == null ? '—' : fmt(c.saldoConta)} · diferença {c.diferenca == null ? '—' : fmtSinal(c.diferenca)}{c.diferenca && Math.abs(c.diferenca) > 0.005 ? ' (pode ser distribuída pela coluna Distribuir do Resumo)' : ''}</p>

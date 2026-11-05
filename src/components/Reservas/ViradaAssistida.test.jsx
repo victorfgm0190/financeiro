@@ -176,3 +176,59 @@ describe('pendência de recálculo', () => {
     await waitFor(() => expect(api.acao).toHaveBeenCalledWith({ acao: 'recalcular' }))
   })
 })
+
+describe('sequência de vários meses (o status recarrega entre um e outro)', () => {
+  const TRES = [
+    { inicio: '2026-07-15', fim: '2026-08-14' },
+    { inicio: '2026-08-15', fim: '2026-09-14' },
+    { inicio: '2026-09-15', fim: '2026-10-14' },
+  ]
+  it('fecha 1 de 3, 2 de 3, 3 de 3, na ordem, sem pular mês e com a mensagem do mês certo', async () => {
+    base()
+    let fechados = 0
+    // Como o servidor: depois de cada virada o status deixa de listar o mês fechado.
+    api.status = vi.fn(async () => STATUS({ ultimoCorte: fechados ? TRES[fechados - 1].fim : '2026-07-14', pendentes: TRES.slice(fechados) }))
+    api.acao = vi.fn(async (b) => {
+      if (b.acao === 'previa') return { ...PREVIA, mes: TRES.find(m => m.fim === b.fim) }
+      const m = TRES.find(x => x.fim === b.fim)
+      expect(m).toBe(TRES[fechados]) // o motor exige ordem: só o primeiro pendente
+      fechados++
+      return { repetida: false, virada: { id: `v${fechados}`, data_inicio: m.inicio, data_corte: m.fim }, resumo: { contas: [] } }
+    })
+    render(<ReservasPanel />)
+    await waitFor(() => expect(pergunta()).not.toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Ver prévia e continuar' }))
+
+    const rotulos = ['15/07/2026 a 14/08/2026', '15/08/2026 a 14/09/2026', '15/09/2026 a 14/10/2026']
+    for (let i = 0; i < 3; i++) {
+      await waitFor(() => expect(screen.getByText(`(${i + 1} de 3)`, { exact: false })).toBeTruthy())
+      fireEvent.click(await screen.findByRole('button', { name: `Confirmar virada de ${rotulos[i]}` }))
+      await waitFor(() => expect(screen.getByTestId('virada-resultado').textContent).toContain(`Mês ${rotulos[i]} fechado (${i + 1} de 3)`))
+      expect(app.recarregarHistoricoReservas).toHaveBeenCalledTimes(i + 1)
+      if (i < 2) fireEvent.click(screen.getByRole('button', { name: `Ver prévia de ${rotulos[i + 1]}` }))
+    }
+    expect(screen.getByRole('button', { name: 'Concluir' })).toBeTruthy()
+    expect(api.acao.mock.calls.filter(([b]) => b.acao === 'confirmar').map(([b]) => b.fim)).toEqual(['2026-08-14', '2026-09-14', '2026-10-14'])
+  })
+
+  it('"Parar aqui" depois do 1º mês: a próxima entrada oferece o mês seguinte, não pula', async () => {
+    base()
+    let fechados = 0
+    api.status = vi.fn(async () => STATUS({ pendentes: TRES.slice(fechados) }))
+    api.acao = vi.fn(async (b) => {
+      if (b.acao === 'previa') return { ...PREVIA, mes: TRES.find(m => m.fim === b.fim) }
+      fechados++
+      return { virada: { id: 'v1', data_inicio: TRES[0].inicio, data_corte: TRES[0].fim }, resumo: { contas: [] } }
+    })
+    const r = render(<ReservasPanel />)
+    await waitFor(() => expect(pergunta()).not.toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Ver prévia e continuar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar virada de 15/07/2026 a 14/08/2026' }))
+    await waitFor(() => expect(screen.getByTestId('virada-resultado').textContent).toContain('Mês 15/07/2026 a 14/08/2026 fechado'))
+    expect(screen.getByRole('button', { name: 'Ver prévia de 15/08/2026 a 14/09/2026' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Parar aqui' }))
+    r.unmount()
+    render(<ReservasPanel />)
+    await waitFor(() => expect(screen.getByTestId('virada-pendentes').textContent).toMatch(/^15\/08\/2026 a 14\/09\/2026/))
+  })
+})
