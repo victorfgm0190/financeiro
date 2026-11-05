@@ -65,3 +65,28 @@ describe('mesesPendentes', () => {
     expect(mesesPendentes({ ultimoCorte: null, hoje: '2026-11-05', cfg: dia15 })).toEqual([{ inicio: '2026-09-15', fim: '2026-10-14', primeiro: true }])
   })
 })
+
+describe('ambiente que nunca fez virada: começa no mês da primeira função', () => {
+  const dia1 = configDoMes({ financialMonthStartDay: 1 })
+  it('primeira função no mês atual (dia 1, criada em 10/11): nada até o mês acabar; a partir de 01/12, só 01/11 a 30/11', () => {
+    expect(mesesPendentes({ ultimoCorte: null, inicioUso: '2026-11-10', hoje: '2026-11-30', cfg: dia1 })).toEqual([])
+    expect(mesesPendentes({ ultimoCorte: null, inicioUso: '2026-11-10', hoje: '2026-12-01', cfg: dia1 })).toEqual([{ inicio: '2026-11-01', fim: '2026-11-30' }])
+  })
+  it('dia 15, criada em 20/11: o primeiro mês é 15/11 a 14/12 e só fica pendente em 15/12', () => {
+    expect(mesesPendentes({ ultimoCorte: null, inicioUso: '2026-11-20', hoje: '2026-12-14', cfg: dia15 })).toEqual([])
+    expect(mesesPendentes({ ultimoCorte: null, inicioUso: '2026-11-20', hoje: '2026-12-15', cfg: dia15 })).toEqual([{ inicio: '2026-11-15', fim: '2026-12-14' }])
+  })
+  it('primeira função criada em mês já encerrado: aquele mês e os seguintes, em ordem, nenhum anterior', () => {
+    expect(mesesPendentes({ ultimoCorte: null, inicioUso: '2026-09-10', hoje: '2026-11-05', cfg: dia1 }))
+      .toEqual([{ inicio: '2026-09-01', fim: '2026-09-30' }, { inicio: '2026-10-01', fim: '2026-10-31' }])
+  })
+  it('mês curto (dia 31): criada em 05/03/2027 → mês de 28/02 a 30/03', () => {
+    const cfg = configDoMes({ financialMonthStartDay: 31 })
+    expect(mesesPendentes({ ultimoCorte: null, inicioUso: '2027-03-05', hoje: '2027-03-30', cfg })).toEqual([])
+    expect(mesesPendentes({ ultimoCorte: null, inicioUso: '2027-03-05', hoje: '2027-03-31', cfg })).toEqual([{ inicio: '2027-02-28', fim: '2027-03-30' }])
+  })
+  it('com fechamento anterior vale a regra de sempre (a data da 1ª função é ignorada, sem pular mês)', () => {
+    expect(mesesPendentes({ ultimoCorte: '2026-10-14', inicioUso: '2026-06-03', hoje: '2026-11-14', cfg: dia15 })).toEqual([])
+    expect(mesesPendentes({ ultimoCorte: '2026-10-14', inicioUso: '2026-06-03', hoje: '2026-11-15', cfg: dia15 })).toEqual([{ inicio: '2026-10-15', fim: '2026-11-14' }])
+  })
+})

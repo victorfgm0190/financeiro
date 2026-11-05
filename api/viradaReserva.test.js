@@ -410,3 +410,36 @@ describe('falha no gancho de recálculo (nunca silenciosa)', () => {
     expect(v.body.codigo).toBe('banco_desatualizado')
   })
 })
+
+describe('ambiente que nunca fez virada (servidor)', () => {
+  const tkB = () => token({ amb: AMB.b, sigla: 'cb' })
+  const novaFuncaoB = (id, criada) => bancoB.query("INSERT INTO reserve_functions (id, name, account_id, created_at) VALUES ($1, $1, 'acc_b', $2)", [id, criada])
+
+  it('sem funções: nenhuma pergunta; com a 1ª função criada em 10/08: só 01/08 a 31/08 (dia 1), nunca antes', async () => {
+    expect((await status(tkB())).body.pendentes).toEqual([])
+    await bancoB.query("INSERT INTO contas (id, name, type, initial_balance) VALUES ('acc_b', 'Reserva B', 'checking', 0)")
+    await novaFuncaoB('fb2', '2026-09-02T15:00:00Z')
+    await novaFuncaoB('fb1', '2026-08-10T15:00:00Z') // vale a data da PRIMEIRA
+    expect((await status(tkB())).body.pendentes).toEqual([{ inicio: '2026-08-01', fim: '2026-08-31' }])
+    // servidor recusa mês anterior ao início do uso
+    const antes = await acao({ acao: 'confirmar', fim: '2026-07-31', chave: 'b0' }, tkB())
+    expect(antes.statusCode).toBe(422)
+    expect(antes.body.codigo).toBe('antes_do_inicio')
+    const previaAntes = await acao({ acao: 'previa', fim: '2026-07-31' }, tkB())
+    expect(previaAntes.body.bloqueios[0].codigo).toBe('antes_do_inicio')
+    expect(await linhas(bancoB, 'SELECT id FROM reserve_viradas')).toEqual([])
+    // o mês do início é liberado
+    const ok = await acao({ acao: 'confirmar', fim: '2026-08-31', chave: 'b1' }, tkB())
+    expect(ok.statusCode).toBe(200)
+    // o outro cliente (com fechamento antigo) segue a regra de sempre, sem mistura
+    expect((await status()).body.pendentes).toEqual([{ inicio: '2026-08-01', fim: '2026-08-14' }, { inicio: '2026-08-15', fim: '2026-09-14' }])
+    expect(await linhas(bancoA, 'SELECT id FROM reserve_viradas')).toEqual([])
+  })
+
+  it('1ª função criada no mês atual: nada pendente; todas as funções excluídas: nenhuma pergunta', async () => {
+    await novaFuncaoB('fb_atual', '2026-09-05T15:00:00Z')
+    expect((await status(tkB())).body.pendentes).toEqual([])
+    await bancoB.query('DELETE FROM reserve_functions')
+    expect((await status(tkB())).body.pendentes).toEqual([])
+  })
+})

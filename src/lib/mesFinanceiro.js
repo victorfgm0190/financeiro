@@ -54,16 +54,18 @@ export function mesFinanceiroDe(dataIso, cfg) {
 //   ultimoCorte = último dia do último período fechado (data_fim do snapshot mais recente), ou null.
 //   Com corte: o primeiro pendente começa no dia seguinte a ele (pode ser um mês parcial, se o dia
 //   de início mudou) e vai até o fim do mês financeiro desse dia; os demais são meses cheios.
-//   Sem corte (nunca houve virada): só o último mês encerrado, acumulando desde o começo.
+//   Sem corte (nunca houve virada): começa no mês financeiro em que a PRIMEIRA função de reserva foi
+//   criada (`inicioUso`, YYYY-MM-DD) — nenhum mês anterior ao uso é oferecido. Sem essa data
+//   (registro antigo sem created_at): só o último mês encerrado, acumulando desde o começo.
 // Encerrado = fim < hoje (dia 15 → no dia 15/11 o mês de 15/10 a 14/11 já está encerrado).
-export function mesesPendentes({ ultimoCorte, hoje, cfg, limite = 60 }) {
-  if (!ultimoCorte) {
+export function mesesPendentes({ ultimoCorte, hoje, cfg, inicioUso = null, limite = 60 }) {
+  if (!ultimoCorte && !inicioUso) {
     const atual = mesFinanceiroDe(hoje, cfg)
     const anterior = mesFinanceiroDe(somarDias(atual.inicio, -1), cfg)
     return [{ ...anterior, primeiro: true }]
   }
   const out = []
-  let inicio = somarDias(ultimoCorte, 1)
+  let inicio = ultimoCorte ? somarDias(ultimoCorte, 1) : mesFinanceiroDe(inicioUso, cfg).inicio
   while (out.length < limite) {
     const { fim } = mesFinanceiroDe(inicio, cfg)
     if (fim >= hoje) break

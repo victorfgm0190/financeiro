@@ -38,6 +38,14 @@ export async function temViradaAssistida(q = query) {
   return !!r?.tem
 }
 
+// Dia (fuso de Brasília) em que a PRIMEIRA função de reserva existente foi criada. created_at é
+// preenchido pelo banco (DEFAULT now()) e o app nunca o envia nem o sobrescreve. null = sem funções
+// ou sem data (aí vale a regra antiga: último mês encerrado).
+export async function inicioDoUso(q = query) {
+  const [r] = await q("SELECT to_char(MIN(created_at) AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS d FROM reserve_functions")
+  return r?.d || null
+}
+
 async function lerConfig(q) {
   const [cfg] = await q('SELECT * FROM configuracoes WHERE id = 1')
   return cfg || {}
@@ -167,7 +175,8 @@ export async function statusVirada({ hoje: hojeTela } = {}) {
   const [{ n }] = await query('SELECT COUNT(*)::int AS n FROM reserve_functions')
   const [{ corte }] = await query("SELECT to_char(MAX(data_fim), 'YYYY-MM-DD') AS corte FROM reserve_period_snapshots")
   const ultimoCorte = corte || null
-  const pendentes = n > 0 ? mesesPendentes({ ultimoCorte, hoje, cfg: configDoMes(cfg) }) : []
+  const inicioUso = n > 0 ? await inicioDoUso() : null
+  const pendentes = n > 0 ? mesesPendentes({ ultimoCorte, hoje, cfg: configDoMes(cfg), inicioUso }) : []
   const [ultima] = await query(
     `SELECT id, to_char(data_inicio, 'YYYY-MM-DD') AS data_inicio, to_char(data_corte, 'YYYY-MM-DD') AS data_corte, created_at
        FROM reserve_viradas WHERE status = 'ativa' ORDER BY data_corte DESC LIMIT 1`,
@@ -197,8 +206,8 @@ export async function statusVirada({ hoje: hojeTela } = {}) {
 }
 
 // Mês pendente que termina em `fim` (ou o mês inválido, para os bloqueios explicarem).
-function mesPedido(fim, ultimoCorte, hoje, cfg) {
-  const pend = mesesPendentes({ ultimoCorte, hoje, cfg })
+function mesPedido(fim, ultimoCorte, hoje, cfg, inicioUso) {
+  const pend = mesesPendentes({ ultimoCorte, hoje, cfg, inicioUso })
   return pend.find(m => m.fim === fim) || { inicio: ultimoCorte ? somarDias(ultimoCorte, 1) : null, fim }
 }
 
@@ -209,8 +218,9 @@ export async function previaVirada({ fim, hoje: hojeTela }) {
   const dados = await carregarDadosReserva(query)
   const cfg = configDoMes(dados.cfg)
   const ultimoCorte = ultimoCorteDe(dados.snapshots)
-  const mes = mesPedido(fim, ultimoCorte, hoje, cfg)
-  const bloqueios = bloqueiosDeData({ mes, ultimoCorte, hoje, cfg })
+  const inicioUso = await inicioDoUso(query)
+  const mes = mesPedido(fim, ultimoCorte, hoje, cfg, inicioUso)
+  const bloqueios = bloqueiosDeData({ mes, ultimoCorte, hoje, cfg, inicioUso })
   if (!dados.functions.length) bloqueios.push({ codigo: 'sem_funcoes', texto: 'Não há funções de reserva cadastradas.' })
   if (bloqueios.length) return { hoje, mes, bloqueios, previa: null }
   // Razão Diário do período recalculado com o banco — é a base de conferência da prévia.
@@ -234,8 +244,9 @@ export async function confirmarVirada({ fim, chave = null, hoje: hojeTela, usuar
     const dados = await carregarDadosReserva(q)
     const cfg = configDoMes(dados.cfg)
     const ultimoCorte = ultimoCorteDe(dados.snapshots)
-    const mes = mesPedido(fim, ultimoCorte, hoje, cfg)
-    const bloqueios = bloqueiosDeData({ mes, ultimoCorte, hoje, cfg })
+    const inicioUso = await inicioDoUso(q)
+    const mes = mesPedido(fim, ultimoCorte, hoje, cfg, inicioUso)
+    const bloqueios = bloqueiosDeData({ mes, ultimoCorte, hoje, cfg, inicioUso })
     if (!dados.functions.length) bloqueios.push({ codigo: 'sem_funcoes', texto: 'Não há funções de reserva cadastradas.' })
     if (bloqueios.length) {
       const status = bloqueios[0].codigo === 'mes_ja_fechado' ? 409 : 422

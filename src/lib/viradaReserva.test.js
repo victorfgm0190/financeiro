@@ -236,3 +236,13 @@ describe('Histórico: rótulo do período fechado', () => {
     expect(g.map(x => [x.dataInicio, x.dataFim, x.antigo])).toEqual([['2026-07-15', '2026-08-14', false], ['0001-01-01', '2026-07-14', true]])
   })
 })
+
+describe('bloqueio de mês anterior ao início do uso', () => {
+  const cfg1 = configDoMes({ financialMonthStartDay: 1 })
+  it('ambiente sem virada: mês anterior ao da primeira função é recusado; o mês dela é liberado', () => {
+    const b = bloqueiosDeData({ mes: { inicio: '2026-08-01', fim: '2026-08-31' }, ultimoCorte: null, hoje: '2026-11-05', cfg: cfg1, inicioUso: '2026-09-10' })
+    expect(b[0].codigo).toBe('antes_do_inicio')
+    expect(bloqueiosDeData({ mes: { inicio: '2026-09-01', fim: '2026-09-30' }, ultimoCorte: null, hoje: '2026-11-05', cfg: cfg1, inicioUso: '2026-09-10' })).toEqual([])
+    expect(bloqueiosDeData({ mes: { inicio: '2026-10-01', fim: '2026-10-31' }, ultimoCorte: null, hoje: '2026-11-05', cfg: cfg1, inicioUso: '2026-09-10' })[0].codigo).toBe('mes_anterior_aberto')
+  })
+})

@@ -14,7 +14,7 @@ import { indexarReserva, saldoDaFuncao, reserveMovOf, round2, somaSaldos, ehAjus
 import { saldosDaConta, efeitoNaConta } from './saldos.js'
 import { computeOccurrences } from './occurrences.js'
 import { occEfetiva } from './fluxoCaixa.js'
-import { mesesPendentes, somarDias, dataBR, rotuloMes } from './mesFinanceiro.js'
+import { mesesPendentes, mesFinanceiroDe, somarDias, dataBR, rotuloMes } from './mesFinanceiro.js'
 
 export const TOLERANCIA = 0.005
 const fmtValor = (v) => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -187,16 +187,21 @@ function rendimentosNoMes(idx, fid, mes) {
 // Bloqueios que dependem só das datas (os de conexão/sincronização/trava ficam com quem chama).
 //   mes_nao_encerrado   → o mês ainda não terminou;
 //   mes_ja_fechado      → já existe virada até esse dia;
-//   mes_anterior_aberto → há mês anterior pendente (fecha um por vez, em ordem).
-export function bloqueiosDeData({ mes, ultimoCorte, hoje, cfg }) {
+//   mes_anterior_aberto → há mês anterior pendente (fecha um por vez, em ordem);
+//   antes_do_inicio     → ambiente sem virada: mês anterior ao mês em que a 1ª função foi criada.
+// `inicioUso` = data de criação da primeira função de reserva (só vale enquanto não houver virada).
+export function bloqueiosDeData({ mes, ultimoCorte, hoje, cfg, inicioUso = null }) {
   if (!mes?.fim || !/^\d{4}-\d{2}-\d{2}$/.test(mes.fim)) return [{ codigo: 'mes_invalido', texto: 'Mês da virada inválido.' }]
   if (ultimoCorte && mes.fim <= ultimoCorte) {
     return [{ codigo: 'mes_ja_fechado', texto: `O período até ${dataBR(mes.fim)} já foi fechado (último fechamento em ${dataBR(ultimoCorte)}).` }]
   }
+  if (!ultimoCorte && inicioUso && mes.fim < mesFinanceiroDe(inicioUso, cfg).inicio) {
+    return [{ codigo: 'antes_do_inicio', texto: `As reservas começaram a ser usadas em ${dataBR(inicioUso)}: não há virada para meses anteriores a ${rotuloMes(mesFinanceiroDe(inicioUso, cfg))}.` }]
+  }
   if (mes.fim >= hoje) {
     return [{ codigo: 'mes_nao_encerrado', texto: `O mês que termina em ${dataBR(mes.fim)} ainda não acabou. A virada fica disponível a partir de ${dataBR(somarDias(mes.fim, 1))}.` }]
   }
-  const pend = mesesPendentes({ ultimoCorte, hoje, cfg })
+  const pend = mesesPendentes({ ultimoCorte, hoje, cfg, inicioUso })
   const primeiro = pend[0]
   if (!primeiro) return [{ codigo: 'mes_ja_fechado', texto: 'Não há virada pendente.' }]
   if (primeiro.fim !== mes.fim || (mes.inicio && primeiro.inicio !== mes.inicio)) {
