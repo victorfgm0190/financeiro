@@ -26,7 +26,9 @@ import {
 } from '../lib/envelopeOrcamento'
 import { competenciaKeyOf as competenciaDoEnvelope } from '../lib/envelopes'
 import { ordenarTipos } from '../lib/tiposDocumento'
-import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
+import { agendamentoDaEfetivacao, resgateDaEfetivacao } from '../lib/herancaCampos'
+import { aplicarEfetivacao, desfazerEfetivacao, situacaoDesfazer, novoIdEfetivacao } from '../lib/efetivacaoProvisao'
+import { faltaRecurso } from '../lib/recursosBanco'
 import { comCamposDaOcorrencia, ESCOPO, agendamentoDoMotor } from '../lib/camposSerie'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { casaAgendamento } from '../lib/agendamentoManda'
@@ -36,7 +38,7 @@ import { mudancasEntre, mesclarNaFila, removerEnviadas, aplicarFilaSobreDados, e
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
-import { advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
+import { computeOccurrences, registerAndAdvance } from '../lib/occurrences'
 import { aplicarRenomeacao, nomeFavorecido } from '../lib/favorecidos'
 import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada, lancamentosVinculados, ocorrenciaDaCobranca, baixarPeloValor, reabrirBaixasDoLancamento } from '../lib/scheduleBaixa'
 import { extractLearnKeyword } from '../lib/descMatch'
@@ -3011,116 +3013,100 @@ export function AppProvider({ children }) {
     return data.schedules.find(s => s.sourceTxId === txId && s.tipo === 'resgate_reserva') || null
   }, [data.schedules])
 
-  // Efetiva uma Provisão de Despesa com o valor/data reais informados.
+  // Efetiva uma Provisão de Despesa com o valor/data reais informados (src/lib/efetivacaoProvisao.js).
   //
   // • Provisão "Uma vez" (frequency === 'once'): grava valor/data no próprio registro e o marca
   //   como efetivado (provisao_efetivada = true; volta a auto-registrar como despesa normal).
   //
   // • Provisão recorrente (Contínua/Parcelada): cria um agendamento NORMAL de despesa
-  //   (is_provisao = false, autoRegister = false) com o valor/data reais — entra na lista normal
-  //   para ser pago — e AVANÇA a própria provisão para data_real + 1 intervalo da frequência
-  //   (ex.: semanal efetivada em 15/06 → próxima ocorrência 22/06). A série continua como
-  //   provisão recorrente para as próximas ocorrências.
+  //   (is_provisao = false, autoRegister = false) na DATA REAL — entra na lista normal para ser
+  //   pago — e AVANÇA a própria provisão. `aplicarProximas` (pergunta da modal quando a data real
+  //   difere da ocorrência): false → próxima = ocorrência + 1 intervalo (semanal 13/11 efetivada em
+  //   16/11 → 20/11); true → próxima = data real + 1 intervalo (→ 23/11).
   //
   // Em ambos os casos, havendo reservaFuncaoId, cria um agendamento de Transferência (Uma vez)
-  // da conta da reserva → conta principal com o valor/data confirmados e o mesmo reservaFuncaoId:
+  // da conta da reserva → conta principal com o valor/data REAIS e o mesmo reservaFuncaoId:
   // é o resgate REAL que substitui a projeção provisória no Fluxo Futuro da reserva.
-  const efetivarProvisao = useCallback((id, { amount, date, occurrenceDate }) => {
+  //
+  // Vínculo: a provisão guarda em `efetivacoes` a ocorrência, os agendamentos criados e a cópia do
+  // estado anterior — é o que o "Desfazer efetivação" usa. Banco sem a coluna → efetiva sem vínculo.
+  const efetivarProvisao = useCallback((id, { amount, date, occurrenceDate, aplicarProximas = false }) => {
+    const d0 = dataRef.current
+    const prov = d0.schedules.find(s => s.id === id)
+    if (!prov) return false
     // Resgate da reserva → CONTA DA PROVISÃO (de onde a despesa sai). Provisão sem conta (legado) →
     // Conta central do PERFIL DA RESERVA; sem ela, bloqueia antes de gravar.
-    {
-      const d0 = dataRef.current
-      const prov0 = d0.schedules.find(s => s.id === id)
-      const func0 = prov0?.reservaFuncaoId ? (d0.reserveFunctions || []).find(f => f.id === prov0.reservaFuncaoId) : null
-      const reserva0 = func0?.accountId ? d0.accounts.find(a => a.id === func0.accountId) : null
-      const contaProv0 = prov0?.accountId ? d0.accounts.find(a => a.id === prov0.accountId) : null
-      if (reserva0 && !contaProv0) {
-        const { erro } = contaCentralPara(d0.accounts, d0.profiles, reserva0)
-        if (erro) { setAvisoOperacao(erro); return false }
-      }
+    const func = prov.reservaFuncaoId ? (d0.reserveFunctions || []).find(f => f.id === prov.reservaFuncaoId) : null
+    const contaReserva = func?.accountId ? d0.accounts.find(a => a.id === func.accountId) : null
+    const contaProv = prov.accountId ? d0.accounts.find(a => a.id === prov.accountId) : null
+    if (contaReserva && !contaProv) {
+      const { erro } = contaCentralPara(d0.accounts, d0.profiles, contaReserva)
+      if (erro) { setAvisoOperacao(erro); return false }
     }
-    update(d => {
-      const prov = d.schedules.find(s => s.id === id)
-      if (!prov) return d
-      const valor = Number(amount)
-      const isOnce = (prov.frequency || 'once') === 'once'
+    const contaPrincipal = contaProv || contaCentralDoPerfil(d0.accounts, contaReserva?.profileId)
 
-      let schedules = d.schedules.map(s => {
-        if (s.id !== id) return s
-        if (isOnce) {
-          return { ...s, amount: valor, startDate: date, provisaoEfetivada: true, autoRegister: true }
-        }
-        // Recorrente: a série continua como provisão, reiniciando em data_real + 1 intervalo
-        // da frequência (ex.: semanal efetivada em 15/06 → próxima ocorrência 22/06). O
-        // lançamento real vira um agendamento NORMAL separado (criado abaixo). Limpa o
-        // provisao_efetivada_until legado (o modelo agora avança a própria startDate).
-        //
-        // `nextOccurrence` TEM que avançar junto: computeOccurrences ancora a série em
-        // `nextOccurrence || startDate` (occurrences.js:76), então uma provisão que já tinha
-        // âncora gravada — qualquer uma editada pelo formulário de agendamento, ou que teve uma
-        // ocorrência registrada — ignorava o novo startDate e voltava a listar desde a data já
-        // efetivada. Mexer só no startDate não avançava nada.
-        const proximaInicio = advanceByFrequency(date, s.frequency || 'weekly')
-        return {
-          ...s,
-          startDate: proximaInicio,
-          nextOccurrence: proximaInicio,
-          provisaoEfetivadaUntil: null,
-        }
+    const valor = Number(amount)
+    const isOnce = (prov.frequency || 'once') === 'once'
+    // Data real escolhida na modal; vazia → a da ocorrência (nunca a 1ª da série: ver herancaCampos).
+    const dataReal = date || occurrenceDate || prov.startDate
+    const novoId = () => 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+    // Recorrente: agendamento NORMAL de despesa com os campos definitivos da provisão (lib/herancaCampos.js).
+    // "Uma vez" continua virando ela mesma a despesa efetivada — sem agendamento duplicado.
+    const despesa = isOnce ? null : agendamentoDaEfetivacao(prov, { id: novoId(), valor, date: dataReal, occurrenceDate })
+    const resgate = contaReserva && contaPrincipal
+      ? resgateDaEfetivacao(prov, { id: novoId(), valor, date: dataReal, occurrenceDate, contaReserva, contaPrincipal })
+      : null
+    const opts = {
+      valor, dataReal, ocorrencia: occurrenceDate, aplicarProximas, despesa, resgate,
+      comVinculo: !faltaRecurso(recursosBanco, 'efetivacoesProvisao'),
+      id: novoIdEfetivacao(), em: new Date().toISOString(),
+    }
+    const r = aplicarEfetivacao(d0.schedules, id, opts)
+    update(d => ({ ...d, schedules: aplicarEfetivacao(d.schedules, id, opts).schedules }))
+
+    // Histórico de alterações (mesmo padrão da mesclagem / desfazer mesclagem).
+    if (r.registro) {
+      const loteId = novoLoteId()
+      const historico = linhasHistorico({
+        entidade: 'agendamento', loteId, motivo: 'Efetivação de provisão',
+        itens: [{ id, ocorrenciaData: r.registro.ocorrencia, mudancas: [{ campo: 'efetivacao', de: null, para: {
+          ocorrencia: r.registro.ocorrencia, dataReal: r.registro.dataReal, valor, aplicarProximas: r.registro.aplicarProximas,
+          despesaId: r.registro.despesaId, resgateId: r.registro.resgateId,
+        } }] }],
       })
+      registrarEdicao({ agendamentos: [r.provisao], historico, loteId }).catch(e => console.error('[efetivar provisão] histórico:', e?.message || e))
+    }
+    return true
+  }, [update, recursosBanco, registrarEdicao])
 
-      // Provisão recorrente: cria o agendamento NORMAL de despesa (is_provisao=false) com
-      // valor/data REAIS, copiando os campos definitivos da provisão. Não auto-registra —
-      // entra na lista normal para ser pago. (Provisão "Uma vez" continua virando ela mesma
-      // a despesa efetivada, acima — sem agendamento duplicado.)
-      if (!isOnce) {
-        // Campos definitivos da provisão (inclui tipo de documento) — lib/herancaCampos.js.
-        schedules = [...schedules, agendamentoDaEfetivacao(prov, {
-          id: 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-          valor, date, occurrenceDate,
-        })]
-      }
-
-      if (prov.reservaFuncaoId) {
-        const func = (d.reserveFunctions || []).find(f => f.id === prov.reservaFuncaoId)
-        const contaReserva = func?.accountId ? d.accounts.find(a => a.id === func.accountId) : null
-        const contaPrincipal = (prov.accountId && d.accounts.find(a => a.id === prov.accountId))
-          || contaCentralDoPerfil(d.accounts, contaReserva?.profileId)
-        if (contaReserva && contaPrincipal) {
-          schedules = [...schedules, {
-            id: 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-            description: `Resgate provisão — ${prov.description}`,
-            transactionType: 'transfer',
-            accountId: contaReserva.id,
-            accountType: contaReserva.type || null,
-            toAccountId: contaPrincipal.id,
-            amount: valor,
-            categoryId: '',
-            payee: '',
-            costCenter: '',
-            frequency: 'once',
-            // Resgate ancorado à ocorrência efetivada (corrige uso da data da 1ª ocorrência).
-            startDate: occurrenceDate || date,
-            occurrenceType: 'continuous',
-            installments: 0,
-            registered: [],
-            skipped: [],
-            remindDaysBefore: 3,
-            autoRegister: true,
-            overrides: {},
-            grupoGerencial: null,
-            reservaExpenseCategoryId: null,
-            reservaFuncaoId: prov.reservaFuncaoId,
-            isProvisao: false,
-            provisaoEfetivada: false,
-            // Mesma marca da despesa: conta não FC marcada Sim → o resgate também entra (líquido 0).
-            considerarFluxoPrincipal: typeof prov.considerarFluxoPrincipal === 'boolean' ? prov.considerarFluxoPrincipal : null,
-          }]
-        }
-      }
-      return { ...d, schedules }
+  // "Desfazer efetivação" — `scheduleId` = a provisão ou um agendamento criado pela efetivação.
+  // Só a mais recente da série, e só se nada foi pago (src/lib/efetivacaoProvisao.js). Remove a
+  // despesa e o resgate criados e devolve a provisão ao estado anterior. → { ok, mensagem }
+  const situacaoDesfazerEfetivacao = useCallback((scheduleId) => situacaoDesfazer(dataRef.current.schedules, scheduleId), [])
+  const desfazerEfetivacaoProvisao = useCallback((scheduleId) => {
+    const sit = situacaoDesfazer(dataRef.current.schedules, scheduleId)
+    if (!sit.pode) return { ok: false, mensagem: sit.mensagem }
+    const r = desfazerEfetivacao(dataRef.current.schedules, scheduleId)
+    const removidosAntes = dataRef.current.schedules.filter(s => r.removidos.includes(s.id))
+    update(d => {
+      const x = desfazerEfetivacao(d.schedules, scheduleId)
+      return x ? { ...d, schedules: x.schedules } : d
     })
-  }, [update])
+    // Igual ao Excluir agendamento: reconcilia o cartão (se for) e não deixa rateio órfão.
+    if (removidosAntes.length) reconciliarPorAgendamento(removidosAntes)
+    for (const rid of r.removidos) if (rateiosByLancamento.get(rid)?.length) deleteRateiosFor(rid)
+
+    const loteId = novoLoteId()
+    const historico = linhasHistorico({
+      entidade: 'agendamento', loteId, motivo: 'Desfazer efetivação de provisão',
+      itens: [{ id: r.provisao.id, ocorrenciaData: r.registro.ocorrencia, mudancas: [{ campo: 'desfazer_efetivacao', de: {
+        ocorrencia: r.registro.ocorrencia, dataReal: r.registro.dataReal, valor: r.registro.valor,
+        despesaId: r.registro.despesaId, resgateId: r.registro.resgateId,
+      }, para: null }] }],
+    })
+    registrarEdicao({ agendamentos: [r.provisao], historico, loteId }).catch(e => console.error('[desfazer efetivação] histórico:', e?.message || e))
+    return { ok: true, mensagem: null }
+  }, [update, reconciliarPorAgendamento, rateiosByLancamento, deleteRateiosFor, registrarEdicao])
 
   // `date` = data do lançamento criado. `occurrenceDate` = data da OCORRÊNCIA do agendamento
   // a registrar (default = date). Decouplá-las permite baixar a ocorrência correta (nextDate)
@@ -6318,7 +6304,7 @@ export function AppProvider({ children }) {
       addSchedule, updateSchedule, updateSchedulesPayee, salvarFavorecidoDoAgendamento,
       mergeScheduleFromDb,
       deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,
-      efetivarProvisao, getProximaProvisaoOccurrence,
+      efetivarProvisao, getProximaProvisaoOccurrence, desfazerEfetivacaoProvisao, situacaoDesfazerEfetivacao,
       registerScheduleOccurrence, skipScheduleOccurrence, desfazerPuloOcorrencia,
       addBudget, updateBudget, deleteBudget,
       addRule, updateRule, deleteRule,

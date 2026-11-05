@@ -59,7 +59,8 @@ describe('efetivação de provisão recorrente', () => {
   it('o agendamento criado herda tipo, centro de custo e grupo da provisão', () => {
     const prov = { description: 'Luz', transactionType: 'expense', accountId: 'a', categoryId: 'c', payee: 'Copel', costCenter: 'Casa', grupoGerencial: 'grp_D', tipoDocumentoId: 't_bol', reservaFuncaoId: 'rf' }
     const s = agendamentoDaEfetivacao(prov, { id: 'sch_n', valor: 123.4, date: '2026-10-15', occurrenceDate: '2026-10-10' })
-    expect(s).toMatchObject({ id: 'sch_n', amount: 123.4, startDate: '2026-10-10', frequency: 'once', tipoDocumentoId: 't_bol', costCenter: 'Casa', grupoGerencial: 'grp_D', reservaFuncaoId: null, isProvisao: false })
+    // Data real (15/10), não a ocorrência (10/10): o usuário escolheu a data na modal.
+    expect(s).toMatchObject({ id: 'sch_n', amount: 123.4, startDate: '2026-10-15', frequency: 'once', tipoDocumentoId: 't_bol', costCenter: 'Casa', grupoGerencial: 'grp_D', reservaFuncaoId: null, isProvisao: false })
   })
   it('herda a conta e o "Considerar no Fluxo de Caixa principal?" da provisão (null quando vazio)', () => {
     const base = { description: 'DIARISTA', transactionType: 'expense', accountId: 'nugi' }

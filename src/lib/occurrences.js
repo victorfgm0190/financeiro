@@ -55,9 +55,20 @@ export function datasDaSerie(inicio, frequency, n, dia = null) {
   return out
 }
 
+// Datas da série já CONSUMIDAS: registradas, puladas e — em provisão recorrente — as ocorrências
+// efetivadas com vínculo gravado (efetivacoes, src/lib/efetivacaoProvisao.js). A efetivada vira um
+// agendamento à parte e a série avança; sem contá-la aqui, uma provisão parcelada ganhava uma parcela
+// a mais a cada efetivação. 'Uma vez' fica de fora: a efetivação muda o próprio registro.
+export function datasConsumidas(schedule) {
+  const efetivadas = (schedule?.frequency || 'once') !== 'once'
+    ? (schedule?.efetivacoes || []).map(e => e?.ocorrencia).filter(Boolean)
+    : []
+  return [...(schedule?.registered || []), ...(schedule?.skipped || []), ...efetivadas]
+}
+
 // Retorna todas as ocorrências pendentes de um agendamento até upToDateStr (inclusive)
 export function computePendingUpTo(schedule, upToDateStr) {
-  const allDone = new Set([...(schedule.registered || []), ...(schedule.skipped || [])])
+  const allDone = new Set(datasConsumidas(schedule))
   const pending = []
   // next_occurrence re-ancora a série (dia de vencimento atual); null → desde start_date.
   let current = parseScheduleDate(schedule.nextOccurrence || schedule.startDate)
@@ -105,11 +116,9 @@ export function advanceByFrequency(dateStr, frequency) {
 // re-ancora a série (dia de vencimento atual); null → desde start_date.
 export function computeOccurrences(schedule, count = 12) {
   const occurrences = []
-  const registered = schedule.registered || []
-  const skipped = schedule.skipped || []
   let current = parseScheduleDate(schedule.nextOccurrence || schedule.startDate)
   const maxInstallments = schedule.occurrenceType === 'installment' ? schedule.installments : Infinity
-  const allDone = [...registered, ...skipped]
+  const allDone = datasConsumidas(schedule)
   // Parcelas já consumidas (registradas OU puladas) que ficam ANTES do ponto de partida
   // (next_occurrence) não são iteradas no laço — pré-contamos para que `maxInstallments` reflita
   // o total REAL consumido. Sem isso, registrar/pular a parcela N reancorava next_occurrence e a

@@ -4,7 +4,7 @@
 // computeOccurrences — consumidas (registradas OU puladas) antes da âncora (next_occurrence ou
 // Data de Início) + posição na série a partir da âncora. Puladas consomem a posição.
 // Agendamento sem nº de parcelas (contínuo) ou 'Uma vez' → null (sem contador).
-import { datasDaSerie, diaVencimentoDe } from './occurrences.js'
+import { datasDaSerie, diaVencimentoDe, datasConsumidas } from './occurrences.js'
 
 const dia = (d) => String(d || '').slice(0, 10)
 
@@ -14,7 +14,7 @@ export function getNumeroParcela(schedule, dataOcorrencia) {
   if (!s || s.occurrenceType !== 'installment' || (s.frequency || 'once') === 'once' || total < 1) return null
   const data = dia(dataOcorrencia)
   if (!data) return null
-  const consumidas = [...new Set([...(s.registered || []), ...(s.skipped || [])].map(dia))].sort()
+  const consumidas = [...new Set(datasConsumidas(s).map(dia))].sort()
   const ancora = dia(s.nextOccurrence || s.startDate)
   if (ancora) {
     const iSerie = datasDaSerie(ancora, s.frequency, total, diaVencimentoDe(s)).indexOf(data)

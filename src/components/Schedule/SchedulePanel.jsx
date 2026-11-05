@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
-  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown, List, CalendarDays, Smartphone, FileSpreadsheet,
+  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown, List, CalendarDays, Smartphone, FileSpreadsheet, Undo2,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { rateioComQuitacao, quitarPorPadrao, podeQuitarComDesconto } from '../../lib/financiamento'
@@ -67,6 +68,8 @@ import AgendaCalendario from './AgendaCalendario'
 import { faturasSemAgendamento, lerVisaoAgenda, salvarVisaoAgenda } from '../../lib/agendaCalendario'
 import InputMoeda from '../shared/InputMoeda'
 import { hojeSP } from '../../lib/hoje'
+import { previaProximas, vinculoDoAgendamento } from '../../lib/efetivacaoProvisao'
+import { faltaRecurso, MSG_EFETIVACAO_SEM_VINCULO } from '../../lib/recursosBanco'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -1007,7 +1010,7 @@ function ScheduleRow({
   // Regra C: ocorrências pendentes que um lançamento do cartão já cobre (cartão, fatura, valor,
   // data ±3 dias e descrição — ver txCobrindoOcorrencia). Só sinaliza — o agendamento não muda até
   // o usuário baixar. O tooltip cita o lançamento casado para conferência antes de baixar.
-  const { coberturaCartao, baixarComoJaNoCartao, transactions: todasTxs, pode, possiveisDuplicados } = useApp()
+  const { coberturaCartao, baixarComoJaNoCartao, transactions: todasTxs, pode, possiveisDuplicados, schedules: todosAgendamentos } = useApp()
   // Nível de acesso (src/lib/permissoes.js): pagar/estornar/pular/efetivar/confirmar/editar = editar;
   // excluir = excluir. Sem permissão o botão some (a API também barra).
   const podeEditar = pode('agendamentos', 'editar')
@@ -1045,6 +1048,10 @@ function ScheduleRow({
   const [showEstornar, setShowEstornar] = useState(false)
   const [showExcluir, setShowExcluir] = useState(false)
   const [showEfetivar, setShowEfetivar] = useState(false)
+  const [showDesfazerEfetivacao, setShowDesfazerEfetivacao] = useState(false)
+  // "Desfazer efetivação": a provisão com efetivações gravadas, ou a despesa/resgate criados por uma.
+  // Efetivações antigas (sem vínculo gravado) não mostram o botão.
+  const vinculoEfetivacao = useMemo(() => vinculoDoAgendamento(todosAgendamentos, schedule.id), [todosAgendamentos, schedule.id])
   const [showPularUnico, setShowPularUnico] = useState(false)
   // Pular com baixa no mesmo período (src/lib/conflitoPeriodo.js): { baixa } enquanto o aviso está aberto.
   const [conflitoPulo, setConflitoPulo] = useState(null)
@@ -1389,7 +1396,7 @@ function ScheduleRow({
               Antes, efetive a de {fmtDate(futura.antesDe).slice(0, 5)}
             </span>
           )}
-          {!futura && ((isProvisaoPendente && podeEditar) || nCobertas > 0 || nDuplicados > 0) && (
+          {!futura && ((isProvisaoPendente && podeEditar) || (vinculoEfetivacao && podeEditar) || nCobertas > 0 || nDuplicados > 0) && (
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             {isProvisaoPendente && podeEditar && (
               <button
@@ -1399,6 +1406,16 @@ function ScheduleRow({
                 className="flex items-center gap-1 h-7 px-2.5 text-xs bg-ambar/15 text-ambar rounded-md hover:bg-ambar/25 transition-colors font-medium"
               >
                 <Hourglass size={12} /> Efetivar Provisão
+              </button>
+            )}
+            {vinculoEfetivacao && podeEditar && (
+              <button
+                data-guia="schedule.desfazer-efetivacao"
+                onClick={() => setShowDesfazerEfetivacao(true)}
+                title="Desfazer efetivação — volta a provisão ao estado de antes e exclui o que a efetivação criou"
+                className="flex items-center gap-1 h-7 px-2.5 text-xs bg-surface-2 ring-1 ring-inset ring-borda-forte text-texto-2 rounded-md hover:bg-surface-hover transition-colors font-medium"
+              >
+                <Undo2 size={12} /> Desfazer efetivação
               </button>
             )}
             {nDuplicados > 0 && (
@@ -1601,6 +1618,14 @@ function ScheduleRow({
         />
       )}
 
+      {showDesfazerEfetivacao && (
+        <DesfazerEfetivacaoModal
+          scheduleId={schedule.id}
+          onClose={() => setShowDesfazerEfetivacao(false)}
+          onToast={onToast}
+        />
+      )}
+
       {showBreakdown && (
         <ResgateBreakdownModal
           schedule={schedule}
@@ -1614,13 +1639,13 @@ function ScheduleRow({
   )
 }
 
-// Modal de "Efetivar Provisão": edita valor e data REAIS.
+// Modal de "Efetivar Provisão": edita valor e data REAIS (src/lib/efetivacaoProvisao.js).
 //   • Provisão "Uma vez": ao confirmar, grava valor/data no registro e o marca como efetivado.
-//   • Provisão recorrente: efetiva apenas a próxima ocorrência (override) e avança a série; o
-//     botão volta a ficar disponível para a ocorrência seguinte.
+//   • Provisão recorrente: cria um agendamento de despesa na data real para a ocorrência e avança a
+//     série. Data real ≠ ocorrência → pergunta se a mudança vale para as próximas (com prévia).
 // Havendo função de reserva, gera o resgate real (transferência reserva → conta principal).
-function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
-  const { reserveFunctions, getProximaProvisaoOccurrence } = useApp()
+export function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
+  const { reserveFunctions, getProximaProvisaoOccurrence, recursosBanco } = useApp()
   const isOnce = (schedule.frequency || 'once') === 'once'
   // Ocorrência alvo (recorrente): primeira ainda não efetivada.
   const occDate = isOnce ? null : getProximaProvisaoOccurrence(schedule)
@@ -1629,17 +1654,28 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
   const [amount, setAmount] = useState(String(ov?.amount ?? schedule.amount ?? ''))
   const vencimento = ov?.date || (isOnce ? schedule.startDate : occDate) || null
   const [date, setDate] = useState(vencimento || format(new Date(), 'yyyy-MM-dd'))
+  // "Não, só esta" é o padrão.
+  const [aplicarProximas, setAplicarProximas] = useState(false)
 
   const func = schedule.reservaFuncaoId
     ? (reserveFunctions || []).find(f => f.id === schedule.reservaFuncaoId)
     : null
   const contaReserva = func?.accountId ? accounts.find(a => a.id === func.accountId) : null
   const valido = Number(amount) > 0 && !!date
+  // A pergunta só aparece em provisão recorrente com data real diferente da data da ocorrência.
+  const perguntar = !isOnce && !!occDate && !!date && date !== vencimento
+  const opts = { ocorrencia: occDate, dataReal: date }
+  const previaSoEsta = perguntar ? previaProximas(schedule, { ...opts, aplicarProximas: false }, 3) : []
+  const previaTambem = perguntar ? previaProximas(schedule, { ...opts, aplicarProximas: true }, 3) : []
+  const listaDatas = (ds) => (ds.length
+    ? ds.map(d => `${fmtDate(d)} (${format(parseISO(d), 'EEE', { locale: ptBR })})`).join(', ')
+    : 'nenhuma — a série termina aqui')
+  const semVinculo = faltaRecurso(recursosBanco, 'efetivacoesProvisao')
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
-      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-md">
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-borda">
           <h3 className="font-semibold text-texto-1 flex items-center gap-2">
             <Hourglass size={15} className="text-texto-2" /> Efetivar Provisão
@@ -1655,7 +1691,7 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
             <p className="text-sm text-texto-1 font-medium">{schedule.description}</p>
             {!isOnce && occDate && (
               <p className="text-xs text-texto-2 mt-1">
-                Ocorrência de {fmtDate(occDate)} · {FREQ_LABELS[schedule.frequency] || schedule.frequency}
+                Ocorrência de {fmtDate(vencimento || occDate)} · {FREQ_LABELS[schedule.frequency] || schedule.frequency}
               </p>
             )}
           </div>
@@ -1675,24 +1711,49 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
             </div>
           </div>
 
+          {perguntar && (
+            <fieldset className="p-3 bg-surface-2/60 border border-borda rounded-lg space-y-2" data-testid="efetivar-aplicar-proximas">
+              <legend className="px-1 text-xs font-semibold text-texto-1">
+                A mudança de data vale para as próximas ocorrências?
+              </legend>
+              <label className="flex items-start gap-2 text-xs text-texto-2 cursor-pointer">
+                <input type="radio" name="aplicarProximas" className="mt-0.5" checked={!aplicarProximas} onChange={() => setAplicarProximas(false)} />
+                <span>
+                  <span className="font-medium text-texto-1">Não, só esta</span> — as próximas seguem a data original.
+                  <span className="block text-texto-3">Próximas: {listaDatas(previaSoEsta)}</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-xs text-texto-2 cursor-pointer">
+                <input type="radio" name="aplicarProximas" className="mt-0.5" checked={aplicarProximas} onChange={() => setAplicarProximas(true)} />
+                <span>
+                  <span className="font-medium text-texto-1">Sim, também as próximas</span> — a série passa a contar de {fmtDate(date)}.
+                  <span className="block text-texto-3">Próximas: {listaDatas(previaTambem)}</span>
+                </span>
+              </label>
+            </fieldset>
+          )}
+
           {func ? (
             <div className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg text-xs text-texto-2 leading-snug">
               Será criado um resgate (transferência) de{' '}
               <span className="font-semibold">{contaReserva?.apelido || contaReserva?.name || 'conta da reserva'}</span>{' '}
-              → conta principal, vinculado à função <span className="font-semibold">{func.name}</span>.
+              → conta principal em {fmtDate(date)}, vinculado à função <span className="font-semibold">{func.name}</span>.
             </div>
           ) : (
             <p className="text-xs text-texto-3 leading-snug">
-              Sem reserva vinculada — apenas o valor e a data serão atualizados.
+              {isOnce
+                ? 'Sem reserva vinculada — a provisão passa a ser uma despesa com o valor e a data informados.'
+                : 'Sem reserva vinculada — será criado só o agendamento da despesa, com o valor e a data informados.'}
             </p>
           )}
 
           {!isOnce && (
             <p className="text-xs text-texto-3 leading-snug">
-              A série continua: as próximas ocorrências permanecem como provisão e poderão ser
-              efetivadas depois.
+              A despesa desta ocorrência vira um agendamento normal, para ser pago. A série continua: as
+              próximas ocorrências permanecem como provisão e poderão ser efetivadas depois.
             </p>
           )}
+          {semVinculo && <p className="text-xs text-aviso leading-snug">{MSG_EFETIVACAO_SEM_VINCULO}</p>}
         </div>
 
         <div className="flex gap-3 px-5 py-4 border-t border-borda">
@@ -1700,10 +1761,69 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
           <button
             className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40"
             disabled={!valido}
-            onClick={() => valido && onConfirm({ amount: Number(amount), date, occurrenceDate: occDate })}
+            onClick={() => valido && onConfirm({ amount: Number(amount), date, occurrenceDate: occDate, aplicarProximas: perguntar && aplicarProximas })}
           >
             <CheckCircle size={14} /> Efetivar
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// "Desfazer efetivação" (src/lib/efetivacaoProvisao.js): confirma e mostra o que acontece, ou o
+// motivo do bloqueio (já paga / não é a mais recente da série).
+export function DesfazerEfetivacaoModal({ scheduleId, onClose, onToast }) {
+  const { situacaoDesfazerEfetivacao, desfazerEfetivacaoProvisao } = useApp()
+  const sit = situacaoDesfazerEfetivacao(scheduleId)
+  const { provisao, registro, despesa, resgate } = sit
+  const isOnce = provisao && (provisao.frequency || 'once') === 'once'
+  const [erro, setErro] = useState(null)
+  const confirmar = () => {
+    const r = desfazerEfetivacaoProvisao(scheduleId)
+    if (!r.ok) { setErro(r.mensagem); return }
+    onToast?.('Efetivação desfeita')
+    onClose()
+  }
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-label="Desfazer efetivação">
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-borda">
+          <h3 className="font-semibold text-texto-1 flex items-center gap-2">
+            <Undo2 size={15} className="text-texto-2" /> Desfazer efetivação
+          </h3>
+          <button onClick={onClose} className="p-1 text-texto-3 hover:text-texto-2 rounded transition-colors" aria-label="Fechar">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-3 text-sm text-texto-2">
+          {provisao && registro && (
+            <p>
+              Provisão <span className="font-medium text-texto-1">{provisao.description}</span> — ocorrência de{' '}
+              {fmtDate(registro.ocorrencia)}, efetivada para {fmtDate(registro.dataReal)} por {fmt(registro.valor)}.
+            </p>
+          )}
+          {sit.pode ? (
+            <ul className="list-disc pl-5 text-xs space-y-1">
+              {isOnce
+                ? <li>A provisão volta ao valor, à data e à situação de antes ({fmt(registro.anterior?.amount)} em {fmtDate(registro.anterior?.startDate)}) e fica aberta para efetivar de novo.</li>
+                : <li>A série volta ao ponto de antes: a ocorrência de {fmtDate(registro.ocorrencia)} fica de novo como provisão a efetivar.</li>}
+              {despesa && <li>O agendamento da despesa de {fmtDate(despesa.startDate)} ({fmt(despesa.amount)}) será excluído.</li>}
+              {resgate && <li>O resgate da reserva de {fmtDate(resgate.startDate)} ({fmt(resgate.amount)}) será excluído.</li>}
+            </ul>
+          ) : (
+            <p className="p-3 bg-aviso/10 border border-aviso/30 rounded-lg text-xs text-aviso leading-snug" data-testid="desfazer-bloqueado">{sit.mensagem}</p>
+          )}
+          {erro && <p className="text-xs text-perigo">{erro}</p>}
+        </div>
+        <div className="flex gap-3 px-5 py-4 border-t border-borda">
+          <button className="btn-secondary flex-1" onClick={onClose}>{sit.pode ? 'Cancelar' : 'Fechar'}</button>
+          {sit.pode && (
+            <button className="btn-primary flex-1 flex items-center justify-center gap-2" onClick={confirmar}>
+              <Undo2 size={14} /> Desfazer
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -64,6 +64,12 @@ export function txToScheduleInitial(tx) {
 
 // Agendamento NORMAL criado ao efetivar uma ocorrência de provisão recorrente: copia os campos
 // definitivos da provisão, com valor/data reais. Não auto-registra.
+//
+// Data: a DATA REAL informada (`date`). Histórico: em 5b6f3ad passou a usar `occurrenceDate || date`
+// porque a modal mandava como data a startDate da provisão (a 1ª ocorrência da série), e o
+// agendamento nascia lá atrás. Hoje a modal já abre a Data real na própria ocorrência efetivada
+// (vencimento dela, com override) e manda o que o usuário escolheu — usar a ocorrência ignorava
+// essa escolha (13/11 efetivada em 16/11 ficava em 13/11). `occurrenceDate` só cobre `date` vazio.
 export function agendamentoDaEfetivacao(prov, { id, valor, date, occurrenceDate }) {
   return {
     id,
@@ -78,8 +84,7 @@ export function agendamentoDaEfetivacao(prov, { id, valor, date, occurrenceDate 
     costCenter: prov.costCenter || '',
     tipoDocumentoId: prov.tipoDocumentoId || null,
     frequency: 'once',
-    // Ancora à ocorrência efetivada (não à 1ª); cai p/ `date` se a modal não enviar occurrenceDate.
-    startDate: occurrenceDate || date,
+    startDate: date || occurrenceDate,
     occurrenceType: 'continuous',
     installments: 0,
     registered: [],
@@ -94,6 +99,40 @@ export function agendamentoDaEfetivacao(prov, { id, valor, date, occurrenceDate 
     isProvisao: false,
     provisaoEfetivada: false,
     // "Considerar no Fluxo de Caixa principal?" da provisão (conta não FC marcada Sim/Não).
+    considerarFluxoPrincipal: typeof prov.considerarFluxoPrincipal === 'boolean' ? prov.considerarFluxoPrincipal : null,
+  }
+}
+
+// Resgate da reserva criado na efetivação: transferência (Uma vez) da conta da reserva → conta da
+// despesa, com o valor/data REAIS e a mesma função de reserva da provisão. Substitui a projeção
+// provisória no Fluxo Futuro da reserva. Data: a mesma regra do agendamento acima (data real).
+export function resgateDaEfetivacao(prov, { id, valor, date, occurrenceDate, contaReserva, contaPrincipal }) {
+  return {
+    id,
+    description: `Resgate provisão — ${prov.description}`,
+    transactionType: 'transfer',
+    accountId: contaReserva.id,
+    accountType: contaReserva.type || null,
+    toAccountId: contaPrincipal.id,
+    amount: valor,
+    categoryId: '',
+    payee: '',
+    costCenter: '',
+    frequency: 'once',
+    startDate: date || occurrenceDate,
+    occurrenceType: 'continuous',
+    installments: 0,
+    registered: [],
+    skipped: [],
+    remindDaysBefore: 3,
+    autoRegister: true,
+    overrides: {},
+    grupoGerencial: null,
+    reservaExpenseCategoryId: null,
+    reservaFuncaoId: prov.reservaFuncaoId,
+    isProvisao: false,
+    provisaoEfetivada: false,
+    // Mesma marca da despesa: conta não FC marcada Sim → o resgate também entra (líquido 0).
     considerarFluxoPrincipal: typeof prov.considerarFluxoPrincipal === 'boolean' ? prov.considerarFluxoPrincipal : null,
   }
 }

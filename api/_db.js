@@ -183,7 +183,7 @@ export const COLUNAS_OPCIONAIS = {
     'moeda', 'valor_original', 'cotacao', 'data_cotacao', 'spread', 'estimado', 'compra_iof_id'],
   contas: ['spread_cambio', 'iof_linha_separada'],
   configuracoes: ['iof_compra_internacional'],
-  agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato'],
+  agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato', 'efetivacoes'],
   envelopes: ['tipo_orcamento', 'valor_dia', 'dias_semana', 'descontar_feriados'],
 }
 // Coluna opcional ausente só sai do upsert quando o valor dela é NEUTRO (o mesmo que o banco sem a
@@ -232,7 +232,8 @@ export async function recursosDoBanco(q) {
   const creditoPrevisto = !chk.length || /previsto/.test(chk[0].def || '')
   const fer = await q("SELECT to_regclass('feriados') IS NOT NULL AS tem")
   const enc = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_itens' AND column_name = 'na_parcela'")
-  return { envelopeDiario, creditoPrevisto, feriados: !!fer[0]?.tem, encargosContrato: enc.length > 0 }
+  const efet = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'agendamentos' AND column_name = 'efetivacoes'")
+  return { envelopeDiario, creditoPrevisto, feriados: !!fer[0]?.tem, encargosContrato: enc.length > 0, efetivacoesProvisao: efet.length > 0 }
 }
 
 const cacheColunasOpcionais = new Map()

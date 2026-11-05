@@ -8,4 +8,8 @@ export const MSG_CREDITO_PREVISTO = 'Não foi possível salvar: o banco deste am
 
 export const MSG_ENCARGOS = 'Não foi possível salvar: o banco deste ambiente ainda não tem a atualização de encargos e descontos na parcela. Nada foi alterado — avise o suporte para atualizar o banco.'
 
+// Efetivação de provisão: sem a coluna agendamentos.efetivacoes a efetivação continua funcionando, só
+// não guarda o vínculo (e não pode ser desfeita). Aviso na modal Efetivar Provisão.
+export const MSG_EFETIVACAO_SEM_VINCULO = 'O banco deste ambiente ainda não guarda o vínculo da efetivação: esta efetivação não poderá ser desfeita pelo botão. Avise o suporte para atualizar o banco.'
+
 export const faltaRecurso = (recursos, chave) => !!recursos && recursos[chave] === false
