@@ -304,3 +304,23 @@ export function recalcularViradas({ viradas = [], snapshots = [], periods = [], 
   }
   return mudancas
 }
+
+// Histórico: um grupo por fechamento (data_fim), mais recente primeiro. Rótulo de início = a menor
+// data REAL do grupo: função sem período anterior acumula "desde o começo" (data_inicio 0001-01-01,
+// valor correto no snapshot), mas não pode transformar o mês inteiro em "(início)". Só um fechamento
+// em que nenhuma função tinha período (o primeiro de todos) fica como "(início)".
+export function agruparFechamentos(snapshots) {
+  const porFim = {}
+  for (const s of snapshots || []) (porFim[s.data_fim] = porFim[s.data_fim] || []).push(lerSnapshot(s))
+  return Object.entries(porFim)
+    .map(([dataFim, snaps]) => {
+      const reais = snaps.map(s => dia(s.data_inicio)).filter(d => d && d !== '0001-01-01').sort()
+      return {
+        dataFim,
+        dataInicio: reais[0] || '0001-01-01',
+        antigo: snaps.some(s => s.ajusteIncluiRendimentos),
+        snaps: [...snaps].sort((a, b) => (a.function_name || '').localeCompare(b.function_name || '', 'pt-BR')),
+      }
+    })
+    .sort((a, b) => b.dataFim.localeCompare(a.dataFim))
+}

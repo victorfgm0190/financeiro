@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { montarCenario, F, CONTA_RESERVA, CONTA_CORRENTE, REAJUSTES } from './__fixtures__/cenarioVirada.js'
-import { montarPrevia, bloqueiosDeData, registrosDaVirada, recalcularViradas, ultimoCorteDe, lerSnapshot, resumoDaVirada } from './viradaReserva.js'
+import { montarPrevia, bloqueiosDeData, registrosDaVirada, recalcularViradas, ultimoCorteDe, lerSnapshot, resumoDaVirada, agruparFechamentos } from './viradaReserva.js'
 import { saldosDasFuncoes, somaSaldos, saldoDaFuncao, indexarReserva } from './saldoReserva.js'
 import { saldosDaConta } from './saldos.js'
 import { configDoMes, mesesPendentes } from './mesFinanceiro.js'
@@ -220,5 +220,19 @@ describe('lançamento retroativo em mês fechado', () => {
     expect(de('v2', 'reserve_periods', 'saldo_inicial')[0].depois - de('v2', 'reserve_periods', 'saldo_inicial')[0].antes).toBeCloseTo(40, 6)
     // só a função afetada muda
     expect(m.every(x => x.functionId === F.ipva)).toBe(true)
+  })
+})
+
+describe('Histórico: rótulo do período fechado', () => {
+  const snap = (fid, ini, fim, extra = {}) => ({ id: `${fid}_${fim}`, function_id: fid, function_name: fid, data_inicio: ini, data_fim: fim, saldo_inicial: 0, entradas: 0, saidas: 0, ajuste: 0, rendimentos: 1, saldo: 0, ...extra })
+  it('função sem período anterior (0001-01-01) não transforma o mês em "(início)"', () => {
+    const g = agruparFechamentos([snap('a', '2026-07-15', '2026-08-14'), snap('b', '2026-07-15', '2026-08-14'), snap('nova', '0001-01-01', '2026-08-14')])
+    expect(g).toHaveLength(1)
+    expect(g[0].dataInicio).toBe('2026-07-15')
+    expect(g[0].snaps).toHaveLength(3) // nenhum valor some ou muda
+  })
+  it('fechamento em que nenhuma função tinha período continua "(início)"; mais recente primeiro', () => {
+    const g = agruparFechamentos([snap('a', '0001-01-01', '2026-07-14', { rendimentos: null }), snap('a', '2026-07-15', '2026-08-14')])
+    expect(g.map(x => [x.dataInicio, x.dataFim, x.antigo])).toEqual([['2026-07-15', '2026-08-14', false], ['0001-01-01', '2026-07-14', true]])
   })
 })

@@ -9,7 +9,7 @@ import { fmt, fmtSinal, fmtDate, accountsForView } from '../shared/utils'
 import { fetchReserveFunctionTransactions, fetchViradaReservaStatus, viradaReservaAcao } from '../../lib/db'
 import { activePeriodByFunction } from '../../lib/reserveDailyLedger'
 import { indexarReserva, saldoDaFuncao } from '../../lib/saldoReserva'
-import { lerSnapshot, ultimoCorteDe } from '../../lib/viradaReserva'
+import { agruparFechamentos, ultimoCorteDe } from '../../lib/viradaReserva'
 import { rotuloMes } from '../../lib/mesFinanceiro'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
@@ -73,7 +73,7 @@ function MovValue({ value, tipo, onClick }) {
     <button
       onClick={onClick}
       title="Ver lançamentos que compõem este valor"
-      className={`text-right text-xs font-semibold hover:underline cursor-pointer ${color}`}
+      className={`text-right text-xs font-semibold whitespace-nowrap hover:underline cursor-pointer ${color}`}
     >
       {value !== 0 ? fmt(value) : <span className="text-texto-3">0,00</span>}
     </button>
@@ -744,7 +744,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       <button data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.mov-futuros' : undefined} onClick={() => setMovFn(f)} className="text-texto-3 hover:underline whitespace-nowrap">
                         Mov. Futuros:
                         <span className={`ml-1 font-semibold ${liquido > 0 ? 'text-receita' : liquido < 0 ? 'text-despesa' : 'text-texto-3'}`}>
-                          {liquido !== 0 ? (liquido > 0 ? '+' : '') + fmt(liquido) : '0,00'}
+                          {liquido !== 0 ? (liquido > 0 ? '+' : '') + fmtSinal(liquido) : '0,00'}
                         </span>
                       </button>
                       <span className="text-texto-3 whitespace-nowrap">
@@ -779,7 +779,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                             className={`inline-flex items-center gap-1 font-semibold hover:underline ${ajusteColor(f.ajuste)}`}
                             title="Ver histórico de ajustes"
                           >
-                            {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-texto-3">0,00</span>}
+                            {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmtSinal(f.ajuste) : <span className="text-texto-3">0,00</span>}
                           </button>
                           {podeEditar && <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-texto-3 hover:text-primary-fg shrink-0"><Plus size={12} /></button>}
                           {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
@@ -813,7 +813,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     <span className="text-sm font-semibold text-texto-1">{account.apelido || account.name}</span>
                     <span className="text-xs text-texto-3">{fns.length} {fns.length === 1 ? 'função' : 'funções'}</span>
                     <span className="text-xs text-texto-3">
-                      Σ saldos: <span className="text-texto-2 font-medium">{fmt(totalSaldo)}</span>
+                      Σ saldos: <span className="text-texto-2 font-medium">{fmtSinal(totalSaldo)}</span>
                     </span>
                     <div className="flex items-center gap-2 ml-auto">
                       <label className="text-xs text-texto-3 shrink-0">Saldo Real:</label>
@@ -875,16 +875,16 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                               {catNameOf(f.categoryId) && <span className="text-xs text-texto-2">{catNameOf(f.categoryId)}</span>}
                             </span>
                           </td>
-                          <td className="px-4 py-2 text-right text-xs text-texto-2">
+                          <td className="px-4 py-2 text-right whitespace-nowrap text-xs text-texto-2">
                             <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={podeEditar ? onAddPeriod : null} align="right" />
                           </td>
-                          <td className="px-4 py-2 text-right" data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.entradas-saidas' : undefined}>
+                          <td className="px-4 py-2 text-right whitespace-nowrap" data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.entradas-saidas' : undefined}>
                             <MovValue value={f.entradas} tipo="entradas" onClick={() => openOrigem(f, 'entradas')} />
                           </td>
-                          <td className="px-4 py-2 text-right">
+                          <td className="px-4 py-2 text-right whitespace-nowrap">
                             <MovValue value={f.saidas} tipo="saidas" onClick={() => openOrigem(f, 'saidas')} />
                           </td>
-                          <td className="px-4 py-2 text-right">
+                          <td className="px-4 py-2 text-right whitespace-nowrap">
                             <span className="inline-flex items-center justify-end gap-1">
                               <button
                                 data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.ajuste' : undefined}
@@ -892,7 +892,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                                 title="Ver histórico de ajustes"
                                 className={`inline-flex items-center gap-1 text-xs font-semibold hover:underline cursor-pointer ${ajusteColor(f.ajuste)}`}
                               >
-                                {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-texto-3">0,00</span>}
+                                {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmtSinal(f.ajuste) : <span className="text-texto-3">0,00</span>}
                               </button>
                               {podeEditar && <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-texto-3 hover:text-primary-fg shrink-0"><Plus size={11} /></button>}
                               {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
@@ -908,24 +908,24 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                               />
                             ) : <span className="text-xs text-texto-3">—</span>}
                           </td>
-                          <td className="px-4 py-2 text-right text-xs font-semibold text-receita">
+                          <td className="px-4 py-2 text-right whitespace-nowrap text-xs font-semibold text-receita">
                             {f.rendimentos ? fmtSinal(f.rendimentos) : <span className="text-texto-3">0,00</span>}
                           </td>
-                          <td className={`px-4 py-2 text-right text-xs font-bold ${saldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>
-                            {fmt(saldo)}
+                          <td className={`px-4 py-2 text-right whitespace-nowrap text-xs font-bold ${saldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>
+                            {fmtSinal(saldo)}
                           </td>
-                          <td className="px-4 py-2 text-right text-xs font-semibold">
+                          <td className="px-4 py-2 text-right whitespace-nowrap text-xs font-semibold">
                             <button
                               data-guia={f === groups[0]?.fns[0] ? 'reservas:resumo.mov-futuros' : undefined}
                               onClick={() => setMovFn(f)}
                               title="Ver movimentos futuros previstos"
                               className={`hover:underline cursor-pointer ${liquido > 0 ? 'text-receita' : liquido < 0 ? 'text-despesa' : 'text-texto-3'}`}
                             >
-                              {liquido !== 0 ? (liquido > 0 ? '+' : '') + fmt(liquido) : <span className="text-texto-3">0,00</span>}
+                              {liquido !== 0 ? (liquido > 0 ? '+' : '') + fmtSinal(liquido) : <span className="text-texto-3">0,00</span>}
                             </button>
                           </td>
-                          <td className={`px-4 py-2 text-right text-xs font-bold ${saldoFuturo < 0 ? 'text-despesa' : 'text-receita'}`}>
-                            {fmt(saldoFuturo)}
+                          <td className={`px-4 py-2 text-right whitespace-nowrap text-xs font-bold ${saldoFuturo < 0 ? 'text-despesa' : 'text-receita'}`}>
+                            {fmtSinal(saldoFuturo)}
                           </td>
                           <td className="px-4 py-2">
                             <div className="flex items-center justify-end gap-0.5">
@@ -947,34 +947,34 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     {/* Totals row */}
                     <tr className="border-t border-borda-forte bg-surface-2/20">
                       <td className="px-4 py-2 text-xs font-semibold text-texto-3">Total</td>
-                      <td className="px-4 py-2 text-right text-xs font-semibold text-texto-2">
-                        {fmt(fns.reduce((s, f) => s + f.saldoInicial, 0))}
+                      <td className="px-4 py-2 text-right whitespace-nowrap text-xs font-semibold text-texto-2">
+                        {fmtSinal(fns.reduce((s, f) => s + f.saldoInicial, 0))}
                       </td>
-                      <td className="px-4 py-2 text-right text-xs font-semibold text-receita">
-                        {fmt(fns.reduce((s, f) => s + f.entradas, 0))}
+                      <td className="px-4 py-2 text-right whitespace-nowrap text-xs font-semibold text-receita">
+                        {fmtSinal(fns.reduce((s, f) => s + f.entradas, 0))}
                       </td>
-                      <td className="px-4 py-2 text-right text-xs font-semibold text-despesa">
-                        {fmt(fns.reduce((s, f) => s + f.saidas, 0))}
+                      <td className="px-4 py-2 text-right whitespace-nowrap text-xs font-semibold text-despesa">
+                        {fmtSinal(fns.reduce((s, f) => s + f.saidas, 0))}
                       </td>
                       {(() => { const ta = fns.reduce((s, f) => s + (f.ajuste || 0), 0); return (
-                        <td className={`px-4 py-2 text-right text-xs font-semibold ${ajusteColor(ta)}`}>
-                          {ta !== 0 ? (ta > 0 ? '+' : '') + fmt(ta) : <span className="text-texto-3">0,00</span>}
+                        <td className={`px-4 py-2 text-right whitespace-nowrap text-xs font-semibold ${ajusteColor(ta)}`}>
+                          {ta !== 0 ? (ta > 0 ? '+' : '') + fmtSinal(ta) : <span className="text-texto-3">0,00</span>}
                         </td>
                       ) })()}
-                      <td className="px-4 py-2 text-right text-xs font-semibold text-texto-2">
+                      <td className="px-4 py-2 text-right whitespace-nowrap text-xs font-semibold text-texto-2">
                         {totalDistrib !== 0 ? fmtSinal(totalDistrib) : ''}
                       </td>
-                      <td className="px-4 py-2 text-right text-xs font-semibold text-receita">
+                      <td className="px-4 py-2 text-right whitespace-nowrap text-xs font-semibold text-receita">
                         {totalRendimentos ? fmtSinal(totalRendimentos) : <span className="text-texto-3">0,00</span>}
                       </td>
-                      <td className={`px-4 py-2 text-right text-xs font-semibold ${totalSaldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>
-                        {fmt(totalSaldo)}
+                      <td className={`px-4 py-2 text-right whitespace-nowrap text-xs font-semibold ${totalSaldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>
+                        {fmtSinal(totalSaldo)}
                       </td>
-                      <td className={`px-4 py-2 text-right text-xs font-semibold ${totalLiquido > 0 ? 'text-receita' : totalLiquido < 0 ? 'text-despesa' : 'text-texto-3'}`}>
-                        {totalLiquido !== 0 ? (totalLiquido > 0 ? '+' : '') + fmt(totalLiquido) : <span className="text-texto-3">0,00</span>}
+                      <td className={`px-4 py-2 text-right whitespace-nowrap text-xs font-semibold ${totalLiquido > 0 ? 'text-receita' : totalLiquido < 0 ? 'text-despesa' : 'text-texto-3'}`}>
+                        {totalLiquido !== 0 ? (totalLiquido > 0 ? '+' : '') + fmtSinal(totalLiquido) : <span className="text-texto-3">0,00</span>}
                       </td>
-                      <td className={`px-4 py-2 text-right text-xs font-bold ${totalSaldoFuturo < 0 ? 'text-despesa' : 'text-receita'}`}>
-                        {fmt(totalSaldoFuturo)}
+                      <td className={`px-4 py-2 text-right whitespace-nowrap text-xs font-bold ${totalSaldoFuturo < 0 ? 'text-despesa' : 'text-receita'}`}>
+                        {fmtSinal(totalSaldoFuturo)}
                       </td>
                       <td />
                     </tr>
@@ -982,9 +982,9 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     {accountId && diff !== null && (
                       <tr className="bg-surface-2/10">
                         <td colSpan={7} className="px-4 py-2 text-xs font-semibold text-texto-2">
-                          Saldo a distribuir <span className="font-normal text-texto-3">(saldo real {fmt(saldoReal)} − Σ funções)</span>
+                          Saldo a distribuir <span className="font-normal text-texto-3">(saldo real {fmtSinal(saldoReal)} − Σ funções)</span>
                         </td>
-                        <td className={`px-4 py-2 text-right text-xs font-bold ${diff < 0 ? 'text-despesa' : diff > 0 ? 'text-receita' : 'text-texto-3'}`}>
+                        <td className={`px-4 py-2 text-right whitespace-nowrap text-xs font-bold ${diff < 0 ? 'text-despesa' : diff > 0 ? 'text-receita' : 'text-texto-3'}`}>
                           {fmtSinal(diff)}
                         </td>
                         <td colSpan={3} />
@@ -1330,9 +1330,9 @@ function SaldoInicialCell({ f, todayStr, activePeriod, onAddPeriod, align = 'lef
 
   if (!onAddPeriod) {
     return (
-      <span className={`inline-flex items-center text-xs font-semibold text-texto-2 ${align === 'right' ? 'justify-end w-full' : ''}`}
+      <span className={`inline-flex items-center whitespace-nowrap text-xs font-semibold text-texto-2 ${align === 'right' ? 'justify-end w-full' : ''}`}
         title={activePeriod ? `Período desde ${fmtDate(activePeriod.data_inicio)}` : undefined}>
-        {fmt(f.saldoInicial ?? 0)}
+        {fmtSinal(f.saldoInicial ?? 0)}
       </span>
     )
   }
@@ -1342,9 +1342,9 @@ function SaldoInicialCell({ f, todayStr, activePeriod, onAddPeriod, align = 'lef
       <button
         onClick={openPopover}
         title={activePeriod ? `Período desde ${fmtDate(activePeriod.data_inicio)} — clique para definir um novo` : 'Definir saldo inicial com data de referência'}
-        className="inline-flex items-center gap-1 text-xs font-semibold hover:underline cursor-pointer text-texto-2"
+        className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold hover:underline cursor-pointer text-texto-2"
       >
-        {fmt(f.saldoInicial ?? 0)}
+        {fmtSinal(f.saldoInicial ?? 0)}
         <Edit2 size={10} className="text-texto-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
       </button>
       {open && (
@@ -2001,21 +2001,8 @@ function HistoricoTab({ snapshots, selFim, onSelFim }) {
   const iniLabel = (d) => d && d !== '0001-01-01' ? fmtDate(d) : '(início)'
   const sinal = (v) => v !== 0 ? (v > 0 ? '+' : '') + fmt(v) : <span className="text-texto-3">0,00</span>
 
-  // Agrupa por data_fim (cada virada). data_inicio para o rótulo = a mais antiga do grupo.
-  const groups = useMemo(() => {
-    const byFim = {}
-    for (const s of (snapshots || [])) {
-      ;(byFim[s.data_fim] = byFim[s.data_fim] || []).push(lerSnapshot(s))
-    }
-    return Object.entries(byFim)
-      .map(([dataFim, snaps]) => ({
-        dataFim,
-        dataInicio: snaps.reduce((min, s) => (!min || s.data_inicio < min) ? s.data_inicio : min, null),
-        antigo: snaps.some(s => s.ajusteIncluiRendimentos),
-        snaps: [...snaps].sort((a, b) => (a.function_name || '').localeCompare(b.function_name || '', 'pt-BR')),
-      }))
-      .sort((a, b) => b.dataFim.localeCompare(a.dataFim)) // mais recente primeiro
-  }, [snapshots])
+  // Um grupo por fechamento (lib/viradaReserva agruparFechamentos): rótulo pelo início real do mês.
+  const groups = useMemo(() => agruparFechamentos(snapshots), [snapshots])
 
   const sel = groups.find(g => g.dataFim === selFim) || groups[0] || null
   useSubtelaGuia('reservas:historico')

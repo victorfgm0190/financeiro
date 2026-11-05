@@ -232,3 +232,41 @@ describe('sequência de vários meses (o status recarrega entre um e outro)', ()
     await waitFor(() => expect(screen.getByTestId('virada-pendentes').textContent).toMatch(/^15\/08\/2026 a 14\/09\/2026/))
   })
 })
+
+describe('Resumo e Histórico', () => {
+  const CONTA = { id: 'acc_r', name: 'Reserva', apelido: 'Reserva', type: 'checking', isReserva: true, balance: 0 }
+  const fns = [{ id: 'f_neg', name: 'Consórcio', accountId: 'acc_r', saldoInicial: 0, ordem: 0 }, { id: 'f_pos', name: 'Viagem', accountId: 'acc_r', saldoInicial: 0, ordem: 1 }]
+  const periodos = [
+    { id: 'p1', function_id: 'f_neg', data_inicio: '2026-10-15', saldo_inicial: -7583.04 },
+    { id: 'p2', function_id: 'f_pos', data_inicio: '2026-10-15', saldo_inicial: 100 },
+  ]
+
+  it('valor negativo fica inteiro: sinal "−" tipográfico (não quebra antes do R$) e célula sem quebra de linha', async () => {
+    base({ profileAccounts: [CONTA], reserveFunctions: fns, reservePeriods: periodos })
+    api.status = vi.fn(async () => STATUS({ pendentes: [] }))
+    render(<ReservasPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Resumo' }))
+    const linha = screen.getAllByText('Consórcio').map(el => el.closest('tr')).find(Boolean)
+    const celulas = [...linha.querySelectorAll('td')].filter(td => /R\$/.test(td.textContent))
+    const negativas = celulas.filter(td => td.textContent.includes('7.583,04'))
+    expect(negativas.length).toBeGreaterThan(0)
+    for (const td of negativas) {
+      expect(td.textContent).toContain('−R$')
+      expect(td.textContent).not.toMatch(/-R\$/)
+      expect(td.querySelector('.whitespace-nowrap') || td.className.includes('whitespace-nowrap')).toBeTruthy()
+    }
+  })
+
+  it('Histórico mostra 15/07/2026 → 14/08/2026 mesmo com função sem período anterior', async () => {
+    const snaps = [
+      { id: 's1', function_id: 'f_pos', function_name: 'Viagem', data_inicio: '2026-07-15', data_fim: '2026-08-14', saldo_inicial: 1, entradas: 0, saidas: 0, ajuste: 0, rendimentos: 0, saldo: 1, saldo_atualizado: 1 },
+      { id: 's2', function_id: 'f_neg', function_name: 'Consórcio', data_inicio: '0001-01-01', data_fim: '2026-08-14', saldo_inicial: 0, entradas: 0, saidas: 0, ajuste: 0, rendimentos: 0, saldo: 0, saldo_atualizado: 0 },
+    ]
+    base({ reserveSnapshots: snaps })
+    api.status = vi.fn(async () => STATUS({ pendentes: [] }))
+    render(<ReservasPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Histórico' }))
+    const opcao = screen.getByRole('option')
+    expect(opcao.textContent).toBe('15/07/2026 → 14/08/2026')
+  })
+})
