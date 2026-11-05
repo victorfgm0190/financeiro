@@ -83,6 +83,10 @@ function EvolutionChart({ data, series }) {
               dot={false}
               activeDot={{ r: 4 }}
               connectNulls
+              // Sem animação de desenho: o painel de Reservas re-renderiza com frequência (estado do
+              // app), e cada novo render reiniciava a animação — as linhas ficavam paradas no meio
+              // do caminho (ex.: em agosto/setembro), embora o razão tivesse dados até hoje.
+              isAnimationActive={false}
             />
           ))}
         </LineChart>
@@ -110,7 +114,11 @@ function Th({ col, label, sortCol, sortDesc, onSort, align = 'right', className 
   )
 }
 
-export default function RazaoDiarioTab({ functions = [], snapshots = [], onVerPeriodo }) {
+export default function RazaoDiarioTab({ functions: functionsProp = [], snapshots = [], onVerPeriodo }) {
+  // O painel recria o array de funções a cada render (saldos recalculados): aqui só importam id e
+  // nome. Chave textual estável → o gráfico não recebe série/dados "novos" sem mudança real.
+  const chaveFuncoes = functionsProp.map(f => `${f.id}${f.name}`).join('')
+  const functions = useMemo(() => functionsProp.map(f => ({ id: f.id, name: f.name })), [chaveFuncoes]) // eslint-disable-line react-hooks/exhaustive-deps
   const [ledger, setLedger] = useState([])
   const [months, setMonths] = useState([])
   const [resumo, setResumo] = useState(null)

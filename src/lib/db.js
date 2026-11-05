@@ -172,16 +172,19 @@ export async function fetchReserveLedgerBefore(date) {
 export async function fetchReserveLedgerSummary(days) {
   return apiGet(`/api/reserve-daily-ledger${days ? `?days=${days}` : ''}`)
 }
-// Grava em lotes: uma janela cheia de backfill passa de 1 MB num POST só.
-const LEDGER_POST_CHUNK = 1500
-export async function createReserveLedgerRows(rows) {
-  if (!rows || rows.length === 0) return { ok: true, upserted: 0 }
-  let upserted = 0
-  for (let i = 0; i < rows.length; i += LEDGER_POST_CHUNK) {
-    const r = await apiPost('/api/reserve-daily-ledger', { rows: rows.slice(i, i + LEDGER_POST_CHUNK) })
-    upserted += r?.upserted || 0
-  }
-  return { ok: true, upserted }
+// O razão é calculado e gravado pelo SERVIDOR com os dados do banco (api/_viradaReservaServidor.js):
+// não depende do aparelho nem do "Saldo Real" guardado no navegador.
+export async function recalcularRazaoReservas(hoje) {
+  return apiPost('/api/reserve-daily-ledger', { hoje })
+}
+
+// Virada de saldo assistida (api/reserve-virada.js): status/pendências e ações (previa, confirmar,
+// desfazer, ciente). Erros chegam com err.codigo e err.dados (mensagem do servidor).
+export async function fetchViradaReservaStatus(hoje) {
+  return apiGet(`/api/reserve-virada?hoje=${encodeURIComponent(hoje)}`)
+}
+export async function viradaReservaAcao(body) {
+  return apiPost('/api/reserve-virada', body)
 }
 
 // Ajustes por função: { id, function_id, data, valor, observacao, lancamento_id }.
@@ -1073,6 +1076,7 @@ export async function loadFromDb(defaultData) {
               // Identidade do ambiente (Configurações › Geral › Identidade do ambiente).
               rodapeTitulo: d.cfg.rodape_titulo ?? null,
               rodapeFrase: d.cfg.rodape_frase ?? null,
+              reservaPerguntarVirada: typeof d.cfg.reserva_perguntar_virada === 'boolean' ? d.cfg.reserva_perguntar_virada : null,
             }
           : defaultData.settings,
         costCenters: d.cfg?.cost_centers ?? defaultData.costCenters,
@@ -1447,6 +1451,8 @@ export const settingsToRow = (settings, costCenters) => ({
   // Identidade do ambiente (Configurações › Geral): rodapé da barra lateral e relatórios exportados.
   rodape_titulo: settings.rodapeTitulo ?? null,
   rodape_frase: settings.rodapeFrase ?? null,
+  // Reservas › perguntar sobre a virada de saldo ao entrar na tela. null = padrão (ligada).
+  reserva_perguntar_virada: typeof settings.reservaPerguntarVirada === 'boolean' ? settings.reservaPerguntarVirada : null,
 })
 
 // Coluna de configuracoes → chave do estado do app (inverso do settingsToRow; cost_centers mora
@@ -1467,6 +1473,7 @@ export const CHAVE_APP_DA_CONFIGURACAO = {
   iof_compra_internacional: 'iofCompraInternacional',
   rodape_titulo: 'rodapeTitulo',
   rodape_frase: 'rodapeFrase',
+  reserva_perguntar_virada: 'reservaPerguntarVirada',
 }
 
 // Só as colunas alteradas, com camposAlterados (o sinal que a trava do servidor exige).

@@ -760,6 +760,26 @@ export default function SettingsPanel() {
             <Save size={14} /> {saved ? 'Salvo!' : 'Salvar'}
           </button>
         </div>
+
+        {/* Reservas: a virada de saldo fecha o mês financeiro acima. Ligada por padrão (null). */}
+        <label data-guia="settings:periodo.perguntar-virada" className="flex items-center gap-2.5 cursor-pointer mt-4 pt-4 border-t border-borda">
+          <div className="relative shrink-0">
+            <input
+              type="checkbox"
+              checked={settings.reservaPerguntarVirada !== false}
+              disabled={somenteLeitura}
+              onChange={e => updateSettings({ reservaPerguntarVirada: e.target.checked })}
+              className="sr-only peer"
+              aria-label="Perguntar sobre a virada ao entrar em Reservas"
+            />
+            <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
+            <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+          </div>
+          <span className="text-sm text-texto-2 select-none">
+            Perguntar sobre a virada ao entrar em Reservas
+            <span className="block text-xs text-texto-3">Quando um mês financeiro termina sem virada de saldo, a tela de Reservas pergunta se você quer fazê-la. Desligada, a pergunta não aparece, mas o botão "Virar Saldo" continua disponível.</span>
+          </span>
+        </label>
       </div>
       )}
 

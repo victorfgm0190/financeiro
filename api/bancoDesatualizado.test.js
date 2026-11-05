@@ -95,8 +95,8 @@ describe('banco sem a migração do envelope diário', () => {
   })
 
   it('recursosDoBanco: o /api/load avisa a tela do que falta', async () => {
-    expect(await recursosDoBanco(async (s, p) => (await antigo.query(s, p)).rows)).toEqual({ envelopeDiario: false, creditoPrevisto: false, feriados: false, encargosContrato: true, efetivacoesProvisao: true })
-    expect(await recursosDoBanco(async (s, p) => (await novo.query(s, p)).rows)).toEqual({ envelopeDiario: true, creditoPrevisto: true, feriados: true, encargosContrato: true, efetivacoesProvisao: true })
+    expect(await recursosDoBanco(async (s, p) => (await antigo.query(s, p)).rows)).toEqual({ envelopeDiario: false, creditoPrevisto: false, feriados: false, encargosContrato: true, efetivacoesProvisao: true, viradaAssistida: true })
+    expect(await recursosDoBanco(async (s, p) => (await novo.query(s, p)).rows)).toEqual({ envelopeDiario: true, creditoPrevisto: true, feriados: true, encargosContrato: true, efetivacoesProvisao: true, viradaAssistida: true })
   })
 })
 

@@ -16,19 +16,20 @@ async function handler(req, res) {
   if (!requireAuth(req, res)) return
   try {
     if (req.method === 'GET') {
+      // SELECT * (rendimentos e virada_id da virada assistida, quando o banco já tem) + datas em texto.
       const rows = await query(
-        `SELECT id, periodo_id,
-                to_char(data_inicio, 'YYYY-MM-DD') AS data_inicio,
-                to_char(data_fim,    'YYYY-MM-DD') AS data_fim,
-                function_id, function_name,
-                saldo_inicial, entradas, saidas, ajuste, saldo, saldo_atualizado, created_at
+        `SELECT *, to_char(data_inicio, 'YYYY-MM-DD') AS _inicio, to_char(data_fim, 'YYYY-MM-DD') AS _fim
            FROM reserve_period_snapshots
           ORDER BY data_fim DESC, function_name`,
       )
-      return res.json({ snapshots: rows })
+      return res.json({ snapshots: rows.map(({ _inicio, _fim, ...r }) => ({ ...r, data_inicio: _inicio, data_fim: _fim, rendimentos: r.rendimentos ?? null, virada_id: r.virada_id ?? null })) })
     }
 
     if (req.method === 'POST') {
+      // Com a virada assistida no banco, o snapshot só nasce junto com a virada (api/reserve-virada.js),
+      // na mesma transação do período novo. Versão antiga do app em cache → recusa com explicação.
+      const [assist] = await query("SELECT to_regclass('reserve_viradas') IS NOT NULL AS tem")
+      if (assist?.tem) return res.status(409).json({ error: 'A virada de saldo agora é feita pela virada assistida. Recarregue o aplicativo e use "Virar Saldo" de novo.', codigo: 'use_virada_assistida' })
       const { snapshots } = await parseBody(req)
       if (!Array.isArray(snapshots) || snapshots.length === 0) {
         return res.json({ ok: true, inserted: 0 })

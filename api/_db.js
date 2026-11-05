@@ -182,7 +182,7 @@ export const COLUNAS_OPCIONAIS = {
   lancamentos: ['importacao_id', 'fitid', 'data_ocorrencia', 'contrato_id', 'composicao', 'numero_contrato',
     'moeda', 'valor_original', 'cotacao', 'data_cotacao', 'spread', 'estimado', 'compra_iof_id'],
   contas: ['spread_cambio', 'iof_linha_separada'],
-  configuracoes: ['iof_compra_internacional'],
+  configuracoes: ['iof_compra_internacional', 'reserva_perguntar_virada'],
   agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato', 'efetivacoes'],
   envelopes: ['tipo_orcamento', 'valor_dia', 'dias_semana', 'descontar_feriados'],
 }
@@ -191,6 +191,8 @@ export const COLUNAS_OPCIONAIS = {
 // 'diario') → recusa com ErroBancoDesatualizado: descartar calado fazia a tela dizer "Tudo
 // sincronizado" e a alteração sumir ao recarregar.
 const NEUTRO_OPCIONAL = {
+  // Pergunta da virada das reservas: ligada é o padrão (o banco sem a coluna se comporta assim).
+  'configuracoes.reserva_perguntar_virada': [true],
   'envelopes.tipo_orcamento': ['mensal'],
   'envelopes.valor_dia': [0],
   'agendamentos.valor_status': ['confirmado'],
@@ -233,7 +235,8 @@ export async function recursosDoBanco(q) {
   const fer = await q("SELECT to_regclass('feriados') IS NOT NULL AS tem")
   const enc = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_itens' AND column_name = 'na_parcela'")
   const efet = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'agendamentos' AND column_name = 'efetivacoes'")
-  return { envelopeDiario, creditoPrevisto, feriados: !!fer[0]?.tem, encargosContrato: enc.length > 0, efetivacoesProvisao: efet.length > 0 }
+  const vir = await q("SELECT to_regclass('reserve_viradas') IS NOT NULL AS tem")
+  return { envelopeDiario, creditoPrevisto, feriados: !!fer[0]?.tem, encargosContrato: enc.length > 0, efetivacoesProvisao: efet.length > 0, viradaAssistida: !!vir[0]?.tem }
 }
 
 const cacheColunasOpcionais = new Map()

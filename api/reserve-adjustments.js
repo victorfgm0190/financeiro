@@ -1,6 +1,7 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { corteAssistido, recalcularSeAfetou } from './_viradaReservaServidor.js'
 
 // Histórico de ajustes por função de reserva (data + valor ± + observação).
 //   GET    → lista todos os ajustes (todas as funções)
@@ -20,6 +21,16 @@ function queryParam(req, nome) {
 const queryId = (req) => queryParam(req, 'id')
 // Coluna ainda não criada (42703) → repete sem ela.
 const semColuna = (err) => err?.code === '42703'
+
+// Ajuste com data (nova ou antiga) dentro de mês já fechado pela virada assistida → recalcula as
+// viradas daquele mês em diante (api/_viradaReservaServidor.js). Datas antigas lidas ANTES de gravar.
+async function datasGravadas(where, params) {
+  try { return (await query(`SELECT to_char(data, 'YYYY-MM-DD') AS data FROM reserve_adjustments WHERE ${where}`, params)).map(r => r.data) } catch { return [] }
+}
+async function afetaMesFechado(datas) {
+  const corte = await corteAssistido()
+  return !!corte && datas.some(d => d && String(d).slice(0, 10) <= corte)
+}
 
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -41,6 +52,7 @@ async function handler(req, res) {
         return res.status(400).json({ error: 'id, function_id e data são obrigatórios' })
       }
       const params = [id, function_id, data, Number(valor) || 0, observacao ?? null]
+      const afeta = await afetaMesFechado([data, ...(await datasGravadas('id = $1', [id]))])
       try {
         await query(
           `INSERT INTO reserve_adjustments (id, function_id, data, valor, observacao, lancamento_id)
@@ -68,30 +80,37 @@ async function handler(req, res) {
           params,
         )
       }
+      await recalcularSeAfetou(afeta, 'ajuste de reserva com data em mês fechado')
       return res.json({ ok: true, id })
     }
 
     if (req.method === 'PUT') {
       const { id, valor, observacao } = await parseBody(req)
       if (!id) return res.status(400).json({ error: 'id é obrigatório' })
+      const afeta = await afetaMesFechado(await datasGravadas('id = $1', [id]))
       await query(
         `UPDATE reserve_adjustments SET valor = $2, observacao = $3 WHERE id = $1`,
         [id, Number(valor) || 0, observacao ?? null],
       )
+      await recalcularSeAfetou(afeta, 'ajuste de reserva com data em mês fechado')
       return res.json({ ok: true, id })
     }
 
     if (req.method === 'DELETE') {
       const lancamentoId = queryParam(req, 'lancamento_id')
       if (lancamentoId) {
+        const afeta = await afetaMesFechado(await datasGravadas('lancamento_id = $1', [lancamentoId]))
         try {
           await query(`DELETE FROM reserve_adjustments WHERE lancamento_id = $1`, [lancamentoId])
         } catch (err) { if (!semColuna(err)) throw err }
+        await recalcularSeAfetou(afeta, 'rateio de rendimento com data em mês fechado')
         return res.json({ ok: true, lancamento_id: lancamentoId })
       }
       const id = queryId(req)
       if (!id) return res.status(400).json({ error: 'id é obrigatório' })
+      const afeta = await afetaMesFechado(await datasGravadas('id = $1', [id]))
       await query(`DELETE FROM reserve_adjustments WHERE id = $1`, [id])
+      await recalcularSeAfetou(afeta, 'ajuste de reserva com data em mês fechado')
       return res.json({ ok: true, id })
     }
 

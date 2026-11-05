@@ -13,9 +13,9 @@ import {
   aplicarEdicaoApi, fetchHistoricoResumo,
   fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi, deleteAjustesDoRendimentoApi,
   fetchReserveSnapshots, createReserveSnapshots,
-  createReserveLedgerRows,
+  recalcularRazaoReservas,
 } from '../lib/db'
-import { buildDailyLedgerRows, localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
+import { localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
 import { getToken, getSessao, noAmbientePrincipal, definirSemConexao } from '../lib/api'
 import { useContratos } from '../hooks/useContratos'
 import { useFeriados } from '../hooks/useFeriados'
@@ -3873,28 +3873,22 @@ export function AppProvider({ children }) {
   }, [])
 
   // ── Reservas: razão diário (uma linha por função por dia) ────────────────────
-  // Regrava a janela inteira — o upsert por (function_id, snapshot_date) torna a operação
-  // idempotente, e recalcular o passado é o que corrige o razão depois de um lançamento
-  // retroativo. Roda uma vez por dia no mount e sob demanda antes de uma virada.
-  // O cálculo vive no cliente porque depende de regras que o servidor não tem: a janela do
-  // período ativo, a classificação de movimento de reserva e o saldo real da conta (que
-  // pode vir do override em localStorage). Ver src/lib/reserveDailyLedger.js.
-  // `periods` permite passar uma lista já com os períodos recém-criados: logo após uma
-  // virada o state ainda não reflete a inserção, e o razão precisa ser reescrito com ela.
-  const writeReserveDailyLedger = useCallback(async ({ periods } = {}) => {
-    if (!data?.reserveFunctions?.length) return { ok: true, upserted: 0 }
-    let accountBalances = {}
-    try { accountBalances = JSON.parse(localStorage.getItem('finup_reserve_balances') || '{}') } catch { /* sem override local */ }
-    const { rows } = buildDailyLedgerRows({
-      functions: data.reserveFunctions,
-      periods: periods || reservePeriods,
-      adjustments: reserveAdjustments,
-      transactions: data.transactions || [],
-      accounts: data.accounts || [],
-      accountBalances,
-    })
-    return createReserveLedgerRows(rows)
-  }, [data, reservePeriods, reserveAdjustments])
+  // Calculado e gravado pelo SERVIDOR com os dados do banco (api/_viradaReservaServidor.js) — o
+  // mesmo resultado em qualquer aparelho, sem o "Saldo Real" do navegador. Roda uma vez por dia no
+  // mount e antes de cada prévia de virada (lá, pelo próprio endpoint da virada).
+  const temFuncoesReserva = (data.reserveFunctions?.length || 0) > 0
+  const writeReserveDailyLedger = useCallback(async () => {
+    if (!temFuncoesReserva) return { ok: true, upserted: 0 }
+    return recalcularRazaoReservas(ledgerDateStr(new Date()))
+  }, [temFuncoesReserva])
+
+  // Recarrega períodos, ajustes e snapshots do banco (depois de virada/desfazer/recálculo).
+  const recarregarHistoricoReservas = useCallback(async () => {
+    const [p, a, s] = await Promise.all([fetchReservePeriods(), fetchReserveAdjustments(), fetchReserveSnapshots()])
+    setReservePeriods(p?.periods || [])
+    setReserveAdjustments(a?.adjustments || [])
+    setReserveSnapshots(s?.snapshots || [])
+  }, [])
 
   // Rendimento em conta de RESERVA: rateio entre as funções (reserve_adjustments com lancamento_id).
   // Apaga as partes antigas do lançamento e, se ele é (ainda) rendimento de reserva, grava as novas.
@@ -6285,7 +6279,7 @@ export function AppProvider({ children }) {
       addReservePeriod, deleteReservePeriod,
       addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment,
       addReserveSnapshots,
-      writeReserveDailyLedger,
+      writeReserveDailyLedger, recarregarHistoricoReservas, reserveHistoryLoaded,
       addCardImport, updateCardImport, revertCardImport,
       activeProfileId, setActiveProfileId, activeProfile,
       profileAccounts, profileTransactions, profileReportTransactions, profileSchedules,

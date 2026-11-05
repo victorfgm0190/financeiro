@@ -1,4 +1,5 @@
 import { upsertRows, deleteRows, parseBody, query, ErroIdentificador, ErroBancoDesatualizado } from './_db.js'
+import { lancamentosAfetamViradas, recalcularSeAfetou } from './_viradaReservaServidor.js'
 import { requireAuth } from './_auth.js'
 import { autorizarSync } from './_permissoesApi.js'
 import { ErroHttp } from './_usuarios.js'
@@ -67,13 +68,19 @@ async function handler(req, res) {
       const bloqueio = await conferirExclusaoEmMassa(query, table, toDelete, { confirmado })
       if (bloqueio) return recusarExclusao(res, bloqueio)
       const recebido = { table, upsert: upsert?.length ?? 0, delete: toDelete?.length ?? 0 }
+      // Lançamento criado/editado/excluído com data em mês já fechado pela virada assistida das
+      // reservas → recalcula aquela virada e as seguintes depois de gravar (comparação feita ANTES).
+      const afetaVirada = table === 'lancamentos'
+        ? await lancamentosAfetamViradas(query, { upsert, del: toDelete }).catch(() => false)
+        : false
       const [deleted, upserted] = await Promise.all([
         deleteRows(table, toDelete),
         upsertRows(table, upsert),
       ])
       const gravado = { upserted, deleted }
       logSync(`section ${table}`, recebido, gravado)
-      return res.json({ ok: true, ...recebido, written: gravado })
+      const recalculo = await recalcularSeAfetou(afetaVirada, 'lançamento com data em mês fechado')
+      return res.json({ ok: true, ...recebido, written: gravado, ...(recalculo?.length ? { viradaRecalculada: recalculo.length } : {}) })
 
     } else if (type === 'accounts') {
       // Contas + cartões (tabelas separadas)

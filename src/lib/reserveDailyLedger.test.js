@@ -25,8 +25,8 @@ function cenarioBase() {
       { id: 'orf', date: '2026-09-07', type: 'expense', amount: 40, accountId: 'acc1', reservaFuncaoId: null },
     ],
     accounts: [
-      { id: 'acc1', type: 'checking', balance: 1560 }, // 1000 + 500 + 100 − 40
-      { id: 'acc2', type: 'checking', balance: 300 },
+      { id: 'acc1', type: 'checking', balance: 1560, initialBalance: 1500 }, // 1500 + 100 − 40
+      { id: 'acc2', type: 'checking', balance: 300, initialBalance: 300 },
     ],
     accountBalances: {},
   }
@@ -97,12 +97,10 @@ describe('buildDailyLedgerRows — rateio', () => {
     expect(at(rows, 'f1', '2026-09-05').saldo_acumulado).toBe(1100)
   })
 
-  it('usa o override de saldo real da conta quando existe', () => {
+  it('ignora o Saldo Real digitado no navegador: o saldo da conta vem dos lançamentos', () => {
     const base = cenarioBase()
-    const { rows } = buildDailyLedgerRows({ ...base, accountBalances: { acc1: 1600 } })
-    // Com o saldo real igual ao teórico, não há rateio.
-    expect(at(rows, 'f1', TODAY).saldo_atualizado).toBe(1100)
-    expect(at(rows, 'f1', TODAY).divergencia).toBe(0)
+    const { rows } = buildDailyLedgerRows({ ...base, accountBalances: { acc1: 99999 } })
+    expect(at(rows, 'f1', TODAY).saldo_real_conta).toBe(1560)
   })
 
   it('sem funções devolve razão vazio', () => {
@@ -122,7 +120,7 @@ describe('buildDailyLedgerRows — viradas encadeadas', () => {
       { id: 't2', date: '2026-09-05', type: 'transfer', amount: 100, accountId: 'x', toAccountId: 'acc1', reservaFuncaoId: 'f2' },
       { id: 'orf', date: '2026-08-10', type: 'expense', amount: 50, accountId: 'acc1', reservaFuncaoId: null },
     ],
-    accounts: [{ id: 'acc1', type: 'checking', balance: 2250 }], // 1000 + 1000 + 200 + 100 − 50
+    accounts: [{ id: 'acc1', type: 'checking', balance: 2250, initialBalance: 2000 }], // 2000 + 200 + 100 − 50
     accountBalances: {},
   }
   const base = [

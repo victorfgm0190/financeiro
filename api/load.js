@@ -244,6 +244,10 @@ async function handler(req, res) {
       saldo_atualizado NUMERIC NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT now()
     )`)
+    // Virada assistida (migração 2026-11-05c): banco cujas tabelas de reserva nasceram aqui.
+    await query(`ALTER TABLE reserve_period_snapshots ADD COLUMN IF NOT EXISTS rendimentos NUMERIC`)
+    await query(`ALTER TABLE reserve_period_snapshots ADD COLUMN IF NOT EXISTS virada_id TEXT`)
+    await query(`ALTER TABLE reserve_periods ADD COLUMN IF NOT EXISTS virada_id TEXT`)
     await query(`CREATE INDEX IF NOT EXISTS idx_reserve_snapshots_data ON reserve_period_snapshots (data_fim DESC)`)
     await query(`CREATE INDEX IF NOT EXISTS idx_reserve_snapshots_function ON reserve_period_snapshots (function_id)`)
     // Razão DIÁRIO das funções de reserva: uma linha por função por dia, com a movimentação
