@@ -7,6 +7,7 @@ import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import { rotuloParcela } from '../../lib/numeroParcela'
 import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
+import { contaEhCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import { computeFaturaRef } from '../../lib/fatura'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import SearchableSelect from '../shared/SearchableSelect'
@@ -978,13 +979,15 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
                     : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'
                 }`}
               >
-                {t === 'income' ? 'Receita' : t === 'transfer' ? 'Transferência' : 'Despesa'}
+                {t === 'income' ? 'Receita'
+                  : t === 'transfer' ? (form.transactionType === 'transfer' && (contaEhCartao(accounts, form.toAccountId) || initial?.tipo === 'pagamento_fatura') ? ROTULO_PAGAMENTO_CARTAO : 'Transferência')
+                  : 'Despesa'}
               </button>
             ))}
           </div>
         </div>
         {/* Transferência para o cartão = pagamento de fatura: só o NOME muda (src/lib/rotuloMovimento.js). */}
-        {(schToAcc?.type === 'credit' || initial?.tipo === 'pagamento_fatura') && (
+        {((form.transactionType === 'transfer' && contaEhCartao(accounts, form.toAccountId)) || initial?.tipo === 'pagamento_fatura') && (
           <p className="sm:col-span-2 flex flex-wrap items-center gap-1.5 text-[11px] text-texto-3 -mt-1">
             <SeloPagamentoCartao /> Não conta como despesa: as compras já contaram quando entraram no cartão.
           </p>

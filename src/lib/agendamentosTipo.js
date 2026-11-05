@@ -1,8 +1,9 @@
 // Filtro por TIPO da tela Agendamentos (Todos · Entradas · Saídas · Transferências). Soma com os
 // demais filtros: recorta a lista que eles já produziram. Lembrado por aparelho (localStorage).
 // Item: agendamento (transactionType), linha paga (transactionType) ou fatura a pagar (sempre saída).
-// "Pagamentos de cartão" (src/lib/rotuloMovimento.js) é um RECORTE das Transferências: o pagamento
-// de fatura continua contando em "Transferências" (é o que ele é por dentro); a opção só filtra.
+// "Pagamentos de cartão" (critério único de src/lib/rotuloMovimento.js) é um tipo À PARTE na tela:
+// o pagamento de fatura conta e aparece SÓ nele — não em "Transferências" nem em "Saídas" (a fatura a
+// pagar da aba Cartão). Só exibição: por dentro ele continua transferência (saldos e totais iguais).
 import { ehPagamentoDeCartao } from './rotuloMovimento.js'
 
 export const TIPOS_AGENDAMENTO = [
@@ -28,20 +29,21 @@ export const itemEhPagamentoCartao = (item, contas) =>
   !!(item?.cartaoId && item?.mesAno && !item.transactionType)
   || ehPagamentoDeCartao(item?.schedule && !item.toAccountId ? item.schedule : item, contas)
 
+// Tipo mostrado na tela: pagamento de cartão primeiro; senão o tipo do movimento.
+export const tipoNaTela = (item, tipoDe = tipoDoItem, contas = []) => (itemEhPagamentoCartao(item, contas) ? 'pagamentos_cartao' : tipoDe(item))
+
 export const filtrarPorTipo = (lista, tipo, tipoDe = tipoDoItem, contas = []) => {
   if (!tipo || tipo === 'todos') return lista || []
-  if (tipo === 'pagamentos_cartao') return (lista || []).filter(i => itemEhPagamentoCartao(i, contas))
-  return (lista || []).filter(i => tipoDe(i) === tipo)
+  return (lista || []).filter(i => tipoNaTela(i, tipoDe, contas) === tipo)
 }
 
 // { todos, entradas, saidas, transferencias, pagamentos_cartao } sobre a lista JÁ filtrada pelos
-// outros filtros. pagamentos_cartao é um recorte (já contado em transferências), não soma no todos.
+// outros filtros. Cada item conta num tipo só; a soma dos tipos é o todos.
 export function contarPorTipo(lista, tipoDe = tipoDoItem, contas = []) {
   const c = { todos: 0, entradas: 0, saidas: 0, transferencias: 0, pagamentos_cartao: 0 }
   for (const i of lista || []) {
     c.todos++
-    c[tipoDe(i)]++
-    if (itemEhPagamentoCartao(i, contas)) c.pagamentos_cartao++
+    c[tipoNaTela(i, tipoDe, contas)]++
   }
   return c
 }

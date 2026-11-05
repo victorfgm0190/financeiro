@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ehPagamentoDeCartao, rotuloDoTipo, tipoVisual, contaEhCartao, ROTULO_PAGAMENTO_CARTAO } from './rotuloMovimento'
+import { ehPagamentoDeCartao, rotuloDoTipo, tipoVisual, contaEhCartao, ROTULO_PAGAMENTO_CARTAO, registrarContas } from './rotuloMovimento'
 import { filtrarPorTipo, contarPorTipo, tipoDoItem } from './agendamentosTipo'
 import { eventoDoItem } from './agendaFeed'
 import { rotuloTipo } from './assistente/loteApp'
@@ -36,18 +36,37 @@ describe('rótulo do tipo (só exibição)', () => {
   })
 })
 
-describe('filtro de Agendamentos: pagamento de cartão continua em Transferências', () => {
+describe('filtro de Agendamentos: pagamento de cartão conta SÓ em "Pagamentos de cartão"', () => {
   const lista = [
     { id: 'a', transactionType: 'transfer', accountId: 'cc', toAccountId: 'card' },
     { id: 'b', transactionType: 'transfer', accountId: 'cc', toAccountId: 'poup' },
     { id: 'c', transactionType: 'expense', accountId: 'cc' },
     { id: 'd', transactionType: 'income', accountId: 'cc' },
   ]
-  it('Transferências inclui o pagamento; "Pagamentos de cartão" é um recorte', () => {
-    expect(filtrarPorTipo(lista, 'transferencias').map(i => i.id)).toEqual(['a', 'b'])
+  it('Transferências fica só com as comuns; o pagamento de fatura conta e aparece só em "Pagamentos de cartão"', () => {
+    expect(filtrarPorTipo(lista, 'transferencias', undefined, contas).map(i => i.id)).toEqual(['b'])
     expect(filtrarPorTipo(lista, 'pagamentos_cartao', undefined, contas).map(i => i.id)).toEqual(['a'])
-    expect(contarPorTipo(lista, undefined, contas)).toEqual({ todos: 4, entradas: 1, saidas: 1, transferencias: 2, pagamentos_cartao: 1 })
+    expect(contarPorTipo(lista, undefined, contas)).toEqual({ todos: 4, entradas: 1, saidas: 1, transferencias: 1, pagamentos_cartao: 1 })
+    // Por dentro continua transferência (só a tela muda).
     expect(tipoDoItem(lista[0])).toBe('transferencias')
+  })
+  it('fatura a pagar do cartão (aba Cartão) não conta em Saídas', () => {
+    const fatura = { id: 'f', cartaoId: 'card', mesAno: '2026-11', amount: 100 }
+    expect(contarPorTipo([fatura, lista[2]], undefined, contas)).toEqual({ todos: 2, entradas: 0, saidas: 1, transferencias: 0, pagamentos_cartao: 1 })
+    expect(filtrarPorTipo([fatura, lista[2]], 'saidas', undefined, contas).map(i => i.id)).toEqual(['c'])
+  })
+  it('25 faturas: "Transferências 0" e "Pagamentos de cartão 25" (antes apareciam 25 nos dois)', () => {
+    const faturas = Array.from({ length: 25 }, (_, k) => ({ id: `p${k}`, transactionType: 'transfer', accountId: 'cc', toAccountId: 'card' }))
+    const c = contarPorTipo(faturas, undefined, contas)
+    expect([c.transferencias, c.pagamentos_cartao, c.todos]).toEqual([0, 25, 25])
+  })
+  it('cartão de OUTRO perfil: reconhecido mesmo com só as contas do perfil ativo na mão', () => {
+    registrarContas([...contas, { id: 'card_pj', type: 'credit', profileId: 'pj' }])
+    const pg = { type: 'transfer', accountId: 'cc', toAccountId: 'card_pj' }
+    expect(ehPagamentoDeCartao(pg, contas)).toBe(true)
+    expect(rotuloDoTipo(pg, contas)).toBe(ROTULO_PAGAMENTO_CARTAO)
+    expect(contarPorTipo([{ ...pg, transactionType: 'transfer' }], undefined, contas).pagamentos_cartao).toBe(1)
+    registrarContas([])
   })
   it('linha paga (aba Pagos) e fatura a pagar do cartão', () => {
     const paga = { key: 'x', schedule: lista[0], transactionType: 'transfer' }

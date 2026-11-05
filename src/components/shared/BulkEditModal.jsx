@@ -7,7 +7,7 @@ import { fmt, fmtDate } from './utils'
 import { useApp } from '../../context/AppContext'
 import { filtrarCategoriasPorPerfil } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
-import { tipoVisual, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
+import { tipoVisual, ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 
 // Paleta acessível (sem verde/vermelho): receita=azul, despesa=laranja, transferência=cinza.
 const TYPE_META = {
@@ -45,13 +45,16 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
     const total = items.reduce((s, t) => s + (t.amount || 0), 0)
     const despesas = items.filter(t => t.type === 'expense').length
     const receitas = items.filter(t => t.type === 'income').length
-    const transferencias = items.filter(t => t.type === 'transfer').length
-    return { count, total, despesas, receitas, transferencias }
-  }, [items])
+    // Pagamento de fatura (transferência para o cartão / credit_payment) conta à parte, com o nome dele.
+    const cartao = items.filter(t => (t.type === 'transfer' || t.type === 'credit_payment') && ehPagamentoDeCartao(t, accounts)).length
+    const transferencias = items.filter(t => t.type === 'transfer').length - items.filter(t => t.type === 'transfer' && ehPagamentoDeCartao(t, accounts)).length
+    return { count, total, despesas, receitas, transferencias, cartao }
+  }, [items, accounts])
 
   const hasExpense = stats.despesas > 0
   const hasIncome = stats.receitas > 0
-  const hasTransfer = stats.transferencias > 0
+  // Pagamento de cartão é transferência por dentro: as mesmas regras de bloqueio valem para ele.
+  const hasTransfer = stats.transferencias + stats.cartao > 0
   const distinctTypes = (hasExpense ? 1 : 0) + (hasIncome ? 1 : 0) + (hasTransfer ? 1 : 0)
 
   const catType = hasExpense && !hasIncome ? 'expense' : hasIncome && !hasExpense ? 'income' : null
@@ -99,8 +102,12 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
     apply()
   }
 
-  const dateAlertText = stats.transferencias > 0
-    ? `A nova data será aplicada a todos os ${stats.count} registros selecionados, incluindo ${stats.transferencias} ${stats.transferencias === 1 ? 'Transferência' : 'Transferências'}. Deseja continuar?`
+  const partesTransf = [
+    stats.transferencias > 0 ? `${stats.transferencias} ${stats.transferencias === 1 ? 'Transferência' : 'Transferências'}` : null,
+    stats.cartao > 0 ? `${stats.cartao} ${stats.cartao === 1 ? 'Pagamento de cartão' : 'Pagamentos de cartão'}` : null,
+  ].filter(Boolean).join(' e ')
+  const dateAlertText = hasTransfer
+    ? `A nova data será aplicada a todos os ${stats.count} registros selecionados, incluindo ${partesTransf}. Deseja continuar?`
     : `A nova data será aplicada a todos os ${stats.count} registros selecionados, de tipos diferentes (Receitas e Despesas). Deseja continuar?`
 
   const modalSize = stage === 'review' ? 'lg' : 'md'
@@ -127,6 +134,7 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
             <span className="text-despesa font-semibold">{stats.despesas}</span> Desp ·{' '}
             <span className="text-receita font-semibold">{stats.receitas}</span> Rec ·{' '}
             <span className="text-texto-2 font-semibold">{stats.transferencias}</span> Transf
+            {stats.cartao > 0 && <> · <span className="text-texto-2 font-semibold">{stats.cartao}</span> Pag. cartão</>}
           </p>
         </div>
       </div>

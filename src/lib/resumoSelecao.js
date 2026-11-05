@@ -6,6 +6,8 @@
 // O saldo de caixa é receita + resgate − despesa − aplicação. Fatura e transferências comuns ficam
 // em grupos à parte, fora do saldo.
 
+import { ehPagamentoDeCartao } from './rotuloMovimento.js'
+
 const r2 = (n) => Math.round(n * 100) / 100
 
 export const GRUPOS_SELECAO = ['aplicacao', 'resgate', 'despesa', 'receita', 'fatura', 'transferencia']
@@ -40,8 +42,11 @@ export function resumoSelecao(itens, accounts = [], { reservaFoco = null } = {})
   const somaImpacto = (id, v) => impacto.set(id, r2((impacto.get(id) || 0) + v))
 
   for (const { schedule: s, amount } of itens) {
-    const key = classificarAgendamento(s, accounts, reservaFoco)
+    let key = classificarAgendamento(s, accounts, reservaFoco)
     if (!key) continue
+    // Transferência para o cartão = pagamento de cartão: fica no grupo da fatura (os dois ficam fora
+    // do saldo, então nada muda nos totais). classificarAgendamento segue igual para os demais usos.
+    if (key === 'transferencia' && ehPagamentoDeCartao(s, accounts)) key = 'fatura'
     const amt = Number.isFinite(Number(amount)) ? Number(amount) : 0
     g[key].items.push({ id: s.id, description: s.description || '—', amount: amt })
     g[key].total = r2(g[key].total + amt)

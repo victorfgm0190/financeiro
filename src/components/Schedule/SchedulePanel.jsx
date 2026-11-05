@@ -31,7 +31,7 @@ import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModa
 import { rotuloParcela } from '../../lib/numeroParcela'
 import FilterBar from './FilterBar'
 import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
-import { ehPagamentoDeCartao } from '../../lib/rotuloMovimento'
+import { ehPagamentoDeCartao, contaEhCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import { lerHandoff, ABRIR_AGENDAMENTO_KEY, ABRIR_AGENDAMENTOS_FILTRO_KEY, EVENTO_NAVEGAR } from '../../lib/abrirTela'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -506,7 +506,11 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
     concluir(pago)
   }
 
-  const TAB_LABELS = { pagamento: 'Pagamento', recebimento: 'Recebimento', transferencia: 'Transferência' }
+  // Pagamento de fatura (critério único: lib/rotuloMovimento): a aba e o botão dizem "Pagamento de
+  // cartão". Só o nome — campos, valores e o que se grava ao confirmar continuam os da transferência.
+  const pagamentoCartao = ehPagamentoDeCartao(scheduleProp, accounts) || contaEhCartao(accounts, trfToId)
+  const TAB_LABELS = { pagamento: 'Pagamento', recebimento: 'Recebimento', transferencia: pagamentoCartao ? ROTULO_PAGAMENTO_CARTAO : 'Transferência' }
+  const rotuloConfirmar = tab === 'transferencia' && pagamentoCartao ? 'Confirmar pagamento de cartão' : `Confirmar ${TAB_LABELS[tab]}`
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -855,7 +859,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
             </button>
           ) : (
             <button data-guia="baixa-form.confirmar" className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40" disabled={!valorOk || !!avisoPulo} onClick={() => handleConfirm()}>
-              <CheckCircle size={14} /> {duplicado ? 'Registrar mesmo assim' : `Confirmar ${TAB_LABELS[tab]}`}
+              <CheckCircle size={14} /> {duplicado ? 'Registrar mesmo assim' : rotuloConfirmar}
             </button>
           )}
         </div>
@@ -1733,7 +1737,7 @@ function ResumoLote({ resumo, deFato = null, onDeFato = null }) {
   const outros = [
     ['despesa', '↓', 'Saídas (despesas)', 'text-despesa'],
     ['receita', '↑', 'Entradas (receitas)', 'text-receita'],
-    ['fatura', '🧾', 'Pagamento de fatura', 'text-texto-2'],
+    ['fatura', '🧾', ROTULO_PAGAMENTO_CARTAO, 'text-texto-2'],
     ['transferencia', '⇄', 'Transferências', 'text-transferencia'],
   ].filter(([k]) => g[k].items.length > 0)
 
@@ -1979,7 +1983,7 @@ const SELECTION_GROUP_META = {
   resgate:   { glyph: '↓', label: 'Resgate',   cls: 'text-despesa' },
   despesa:   { glyph: '↓', label: 'Despesas',  cls: 'text-despesa' },
   receita:   { glyph: '↑', label: 'Receitas',  cls: 'text-receita' },
-  fatura:    { glyph: '🧾', label: 'Fatura',    cls: 'text-texto-2' },
+  fatura:    { glyph: '🧾', label: ROTULO_PAGAMENTO_CARTAO, cls: 'text-texto-2' },
   transferencia: { glyph: '⇄', label: 'Transferências', cls: 'text-transferencia' },
 }
 const SELECTION_GROUP_ORDER = GRUPOS_SELECAO

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { registrarContas } from '../lib/rotuloMovimento'
 import { addMonths, addWeeks, addDays, addYears, format } from 'date-fns'
 import {
   loadFromDb, seedDefaults, pingDb, fetchUltimaAlteracao,
@@ -1526,6 +1527,10 @@ export function AppProvider({ children }) {
   const update = useCallback((updater) => {
     setData(prev => typeof updater === 'function' ? updater(prev) : updater)
   }, [])
+
+  // Rótulo "Pagamento de cartão" (lib/rotuloMovimento): cartões de TODOS os perfis, antes de qualquer
+  // tela pedir o rótulo com as contas do perfil ativo. Só exibição.
+  useMemo(() => registrarContas(data.accounts), [data.accounts])
 
   // ── Profile-filtered views ────────────────────────────────────────────────────
   const profileAccounts = useMemo(() => {

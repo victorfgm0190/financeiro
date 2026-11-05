@@ -20,7 +20,19 @@ const contaPorId = (contas, id) => {
   return contas.find?.(c => c?.id === id) || null
 }
 
-export const contaEhCartao = (contas, id) => contaPorId(contas, id)?.type === 'credit'
+// Cartões de TODOS os perfis (o AppContext registra a cada carga): muitas telas passam só as contas
+// do perfil ativo, e o pagamento feito de uma conta deste perfil para o cartão de OUTRO perfil
+// deixava de ser reconhecido. A lista passada vale primeiro; o cadastro completo só completa.
+let cartoesConhecidos = new Set()
+export function registrarContas(todas) {
+  cartoesConhecidos = new Set((todas || []).filter(c => c?.type === 'credit').map(c => c.id))
+}
+
+export const contaEhCartao = (contas, id) => {
+  const c = contaPorId(contas, id)
+  if (c) return c.type === 'credit'
+  return !!id && cartoesConhecidos.has(id)
+}
 
 // Tipo do movimento: lançamento usa `type`; agendamento, `transactionType`.
 export const tipoDoMovimento = (mov) => mov?.type || mov?.transactionType || null

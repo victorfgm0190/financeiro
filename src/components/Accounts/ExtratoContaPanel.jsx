@@ -971,16 +971,17 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   // Resumo dos selecionados por natureza, para o modal de exclusão em lote. Gerencial tem
   // precedência (id tx_gerA_* ou descrição "…Gerencial…"), depois transfer/expense/income.
   const bulkDeleteSummary = useMemo(() => {
-    const s = { gerencial: 0, transfer: 0, expense: 0, income: 0, outros: 0 }
+    const s = { gerencial: 0, cartao: 0, transfer: 0, expense: 0, income: 0, outros: 0 }
     for (const tx of selectedTxs) {
       if (tx.id?.startsWith('tx_gerA_') || /gerencial/i.test(tx.description || '')) s.gerencial++
+      else if (ehPagamentoDeCartao(tx, accounts)) s.cartao++
       else if (tx.type === 'transfer') s.transfer++
       else if (tx.type === 'expense') s.expense++
       else if (tx.type === 'income') s.income++
       else s.outros++
     }
     return s
-  }, [selectedTxs])
+  }, [selectedTxs, accounts])
 
   // Exclui todos os selecionados em sequência (mesmo fluxo do delete individual: reverte saldo,
   // cascata gerencial/filhos no AppContext e remove o resgate vinculado). Limpa seleção ao fim.
@@ -1503,6 +1504,9 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         <div className="space-y-1.5 mb-6 text-sm">
           {bulkDeleteSummary.gerencial > 0 && (
             <div className="flex justify-between text-texto-2"><span>Transferências gerenciais</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.gerencial}</span></div>
+          )}
+          {bulkDeleteSummary.cartao > 0 && (
+            <div className="flex justify-between text-texto-2"><span>{bulkDeleteSummary.cartao === 1 ? ROTULO_PAGAMENTO_CARTAO : 'Pagamentos de cartão'}</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.cartao}</span></div>
           )}
           {bulkDeleteSummary.transfer > 0 && (
             <div className="flex justify-between text-texto-2"><span>Transferências</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.transfer}</span></div>

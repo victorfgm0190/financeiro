@@ -11,6 +11,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import InputMoeda from '../shared/InputMoeda'
 import { computeFaturaRef } from '../../lib/fatura'
 import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
+import { contaEhCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment } from '../../lib/installments'
 import { buildSeries, clampDateToFatura, newSerieId, valoresDasParcelas } from '../../lib/parcelas'
@@ -1581,14 +1582,15 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'
               }`}
             >
-              {t.label}
+              {/* Transferência para o cartão = pagamento de fatura: só o nome (lib/rotuloMovimento). */}
+              {t.value === 'transfer' && form.type === 'transfer' && contaEhCartao(accounts, form.toAccountId) ? ROTULO_PAGAMENTO_CARTAO : t.label}
               <ShortcutHint actionId={t.atalho} habilitado={atalhosForm} className="ml-1.5" />
             </button>
           ))}
         </div>
       </div>
       {/* Transferência para o cartão = pagamento de fatura: só o NOME muda (src/lib/rotuloMovimento.js). */}
-      {transferToAcc?.type === 'credit' && (
+      {form.type === 'transfer' && contaEhCartao(accounts, form.toAccountId) && (
         <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-texto-3 -mt-1">
           <SeloPagamentoCartao /> Não conta como despesa: as compras já contaram quando entraram no cartão.
         </p>
