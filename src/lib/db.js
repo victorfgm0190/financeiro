@@ -189,6 +189,14 @@ export async function recalcularRazaoReservas(hoje) {
   return apiPost('/api/reserve-daily-ledger', { hoje })
 }
 
+// Kit de categorias (api/kit-categorias.js): tipo do cliente (PF/PJ) e criação das de ganho/perda.
+export async function fetchTipoDoKit() {
+  return apiGet('/api/kit-categorias')
+}
+export async function criarCategoriasCapital() {
+  return apiPost('/api/kit-categorias', { acao: 'capital' })
+}
+
 // Virada de saldo assistida (api/reserve-virada.js): status/pendências e ações (previa, confirmar,
 // desfazer, ciente). Erros chegam com err.codigo e err.dados (mensagem do servidor).
 export async function fetchViradaReservaStatus(hoje) {

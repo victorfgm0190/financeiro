@@ -1,5 +1,6 @@
 import { query, parseBody, withTransaction } from '../_db.js'
 import { requireAuth } from '../_auth.js'
+import { categoriaDeCapital } from '../../src/lib/kitCategorias.js'
 import {
   genId, num, round2, fail, serializarBem,
   categoriasInexistentes, ACCOUNT_TYPE_BEM, TIPO_BEM, explicarErro,
@@ -27,9 +28,15 @@ async function handler(req, res) {
       return fail(res, 400, 'valor_nota_fiscal deve ser um número maior que zero')
     }
 
+    // Ganho/perda não informados: usa as categorias de capital do ambiente, se existirem.
+    let sugeridas = {}
+    if (!categoria_perda_bem_id || !categoria_ganho_bem_id) {
+      const todas = await query('SELECT id, name, type FROM categorias')
+      sugeridas = { perda: categoriaDeCapital(todas, 'perda')?.id, ganho: categoriaDeCapital(todas, 'ganho')?.id }
+    }
     const cats = {
-      perda: categoria_perda_bem_id,
-      ganho: categoria_ganho_bem_id,
+      perda: categoria_perda_bem_id || sugeridas.perda,
+      ganho: categoria_ganho_bem_id || sugeridas.ganho,
       prestacao: categoria_prestacao_id,
       taxa_finan: categoria_taxa_finan_id,
     }

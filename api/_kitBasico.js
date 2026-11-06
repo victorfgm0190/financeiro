@@ -1,4 +1,7 @@
 import { sqlSeedTiposDocumento, SEED_TIPOS_DOCUMENTO } from './_tiposDocumento.js'
+import { KIT_PF, KIT_PJ, KIT_CATEGORIA_SISTEMA, ehClientePJ, categoriasDoKit } from '../src/lib/kitCategorias.js'
+
+export { KIT_PF, KIT_PJ, KIT_CATEGORIA_SISTEMA, ehClientePJ }
 
 // KIT BÁSICO de um ambiente de CLIENTE novo — a ÚNICA lista do que um banco de cliente ganha ao ser
 // criado (api/_provisionar.js, passo "kit"). Nada aqui é do Victor: nada de plano de contas pessoal,
@@ -12,119 +15,17 @@ import { sqlSeedTiposDocumento, SEED_TIPOS_DOCUMENTO } from './_tiposDocumento.j
 // de categorias, os seletores e o Painel seguem essa ordem (src/lib/ordemCategorias.js).
 // ids FIXOS (iguais em todo ambiente novo); os que já existiam no kit antigo mantêm id, cor e ícone.
 // Formato: [grupo, tipo, [[id, nome, cor, ícone], ...]] — cores não se repetem dentro do grupo.
-export const KIT_PF = [
-  ['Despesas da casa', 'expense', [
-    ['cat_kit_aluguel', 'Aluguel', '#8b5cf6', '🏠'],
-    ['cat_kit_condominio', 'Condomínio', '#6366f1', '🏢'],
-    ['cat_kit_gas', 'Gás', '#f97316', '🔥'],
-    ['cat_kit_energia', 'Energia', '#eab308', '⚡'],
-    ['cat_kit_agua', 'Água', '#0ea5e9', '💧'],
-    ['cat_kit_internet_telefone', 'Internet e telefone', '#06b6d4', '📡'],
-    ['cat_kit_manutencao_casa', 'Manutenção', '#64748b', '🔧'],
-    ['cat_kit_obras', 'Obras', '#a16207', '🧱'],
-    ['cat_kit_servicos', 'Serviços', '#ec4899', '🧹'],
-  ]],
-  ['Essenciais', 'expense', [
-    ['cat_kit_mercado', 'Mercado', '#f59e0b', '🛒'],
-    ['cat_kit_alimentacao', 'Alimentação', '#f97316', '🍽️'],
-    ['cat_kit_transporte', 'Transporte', '#3b82f6', '🚗'],
-    ['cat_kit_saude', 'Saúde', '#ef4444', '❤️'],
-    ['cat_kit_educacao', 'Educação', '#84cc16', '📚'],
-  ]],
-  ['Carro', 'expense', [
-    ['cat_kit_combustivel', 'Combustível', '#dc2626', '⛽'],
-    ['cat_kit_manutencao_veicular', 'Manutenção veicular', '#64748b', '🛠️'],
-    ['cat_kit_ipva_licenciamento', 'IPVA e licenciamento', '#eab308', '📄'],
-  ]],
-  ['Estilo de vida', 'expense', [
-    ['cat_kit_lazer', 'Lazer', '#06b6d4', '🎬'],
-    ['cat_kit_vestuario', 'Vestuário', '#ec4899', '👕'],
-    ['cat_kit_cuidados_pessoais', 'Cuidados pessoais', '#d946ef', '💅'],
-    ['cat_kit_assinaturas', 'Assinaturas e streaming', '#a855f7', '📺'],
-    ['cat_kit_pets', 'Pets', '#a16207', '🐾'],
-    ['cat_kit_viagens', 'Viagens', '#0284c7', '✈️'],
-    ['cat_kit_presentes_doacoes', 'Presentes e doações', '#f43f5e', '🎁'],
-  ]],
-  ['Financeiro', 'expense', [
-    ['cat_kit_impostos', 'Impostos e taxas', '#eab308', '🧾'],
-    ['cat_kit_seguros', 'Seguros', '#0d9488', '🛡️'],
-    ['cat_kit_tarifas_bancarias', 'Tarifas bancárias', '#64748b', '🏦'],
-    ['cat_kit_juros_encargos', 'Juros e encargos', '#dc2626', '📉'],
-  ]],
-  ['Outros', 'expense', [
-    ['cat_kit_outras_despesas', 'Outras despesas', '#6b7280', '📌'],
-  ]],
-  ['Receitas', 'income', [
-    ['cat_kit_salario', 'Salário', '#22c55e', '💰'],
-    ['cat_kit_decimo_terceiro', 'Décimo terceiro', '#84cc16', '🎄'],
-    ['cat_kit_ferias', 'Férias', '#f59e0b', '🏖️'],
-    ['cat_kit_vale_refeicao', 'Vale-refeição', '#f97316', '🍴'],
-    ['cat_kit_pro_labore', 'Pró-labore', '#10b981', '💼'],
-    ['cat_kit_rendimentos', 'Rendimentos', '#6366f1', '📈'],
-    ['cat_kit_alugueis_recebidos', 'Aluguéis recebidos', '#8b5cf6', '🏘️'],
-    ['cat_kit_reembolsos', 'Reembolsos', '#0ea5e9', '↩️'],
-    ['cat_kit_outras_receitas', 'Outras receitas', '#14b8a6', '➕'],
-  ]],
-]
-
-export const KIT_PJ = [
-  ['Receitas operacionais', 'income', [
-    ['cat_kit_venda_produtos', 'Venda de produtos', '#22c55e', '🛍️'],
-    ['cat_kit_prestacao_servicos', 'Prestação de serviços', '#10b981', '🛠️'],
-  ]],
-  ['Outras receitas', 'income', [
-    ['cat_kit_receitas_financeiras', 'Receitas financeiras', '#6366f1', '📈'],
-    ['cat_kit_outras_receitas', 'Outras receitas', '#14b8a6', '➕'],
-  ]],
-  ['Custos', 'expense', [
-    ['cat_kit_fornecedores', 'Fornecedores', '#f97316', '📦'],
-    ['cat_kit_fretes', 'Fretes', '#3b82f6', '🚚'],
-  ]],
-  ['Pessoal', 'expense', [
-    ['cat_kit_folha_pagamento', 'Folha de pagamento', '#8b5cf6', '👥'],
-    // Na PJ o pró-labore é DESPESA (na PF é receita): id próprio.
-    ['cat_kit_pro_labore_pj', 'Pró-labore', '#10b981', '💼'],
-    ['cat_kit_encargos_trabalhistas', 'Encargos trabalhistas', '#ef4444', '📑'],
-    ['cat_kit_beneficios', 'Benefícios', '#ec4899', '🎟️'],
-  ]],
-  ['Impostos', 'expense', [
-    ['cat_kit_impostos_vendas', 'Impostos sobre vendas (DAS/tributos)', '#eab308', '🧾'],
-    ['cat_kit_taxas_licencas', 'Taxas e licenças', '#a16207', '📜'],
-  ]],
-  ['Despesas operacionais', 'expense', [
-    ['cat_kit_aluguel', 'Aluguel', '#8b5cf6', '🏢'],
-    ['cat_kit_energia_agua_internet', 'Energia, água e internet', '#0ea5e9', '💡'],
-    ['cat_kit_sistemas_softwares', 'Sistemas e softwares', '#6366f1', '💻'],
-    ['cat_kit_marketing', 'Marketing', '#ec4899', '📣'],
-    ['cat_kit_honorarios_contabeis', 'Honorários contábeis', '#14b8a6', '🧮'],
-    ['cat_kit_material_escritorio', 'Material de escritório', '#f59e0b', '📎'],
-    ['cat_kit_manutencao', 'Manutenção', '#64748b', '🔧'],
-  ]],
-  ['Financeiro', 'expense', [
-    ['cat_kit_tarifas_bancarias', 'Tarifas bancárias', '#64748b', '🏦'],
-    ['cat_kit_juros_encargos', 'Juros e encargos', '#dc2626', '📉'],
-  ]],
-  ['Outros', 'expense', [
-    ['cat_kit_outras_despesas', 'Outras despesas', '#6b7280', '📌'],
-  ]],
-]
-
-// Do SISTEMA, nos dois kits (sem grupo, como antes): o app usa este id como categoria padrão dos
-// lançamentos de reserva. [id, nome, tipo, cor, ícone]
-export const KIT_CATEGORIA_SISTEMA = ['cat_res_ger', 'Reservas Gerais', 'expense', '#6b7280', '🏦']
-
 export const KIT_CENTROS_PF = ['Pessoal', 'Família', 'Trabalho', 'Casa']
 export const KIT_CENTROS_PJ = ['Administrativo', 'Comercial', 'Operacional']
 
 // Kit do cliente pelo tipo_pessoa (sem tipo → PF, o padrão do cadastro).
-export const ehClientePJ = (c) => String(c?.tipo_pessoa || '').toUpperCase() === 'PJ'
 export function kitDoCliente(c) {
   const pj = ehClientePJ(c)
   const grupos = pj ? KIT_PJ : KIT_PF
   return {
     tipo: pj ? 'PJ' : 'PF',
     // [id, nome, tipo, cor, ícone, grupo, ordem no grupo]
-    categorias: grupos.flatMap(([grupo, tipo, cats]) => cats.map(([id, nome, cor, icone], i) => [id, nome, tipo, cor, icone, grupo, i])),
+    categorias: categoriasDoKit(grupos),
     grupos: grupos.map(([grupo]) => grupo),
     centrosDeCusto: pj ? KIT_CENTROS_PJ : KIT_CENTROS_PF,
   }

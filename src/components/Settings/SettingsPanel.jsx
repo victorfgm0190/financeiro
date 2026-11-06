@@ -1,4 +1,5 @@
 import HelpCampo from '../shared/HelpCampo'
+import AdicionarCategoriasKit from './AdicionarCategoriasKit'
 import { useState, useRef, useEffect } from 'react'
 import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator, ChevronRight, Smartphone } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
@@ -1126,6 +1127,7 @@ export default function SettingsPanel() {
           <button type="submit" data-guia="categoria-form.salvar" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
         </form>
         <p className="text-[11px] text-texto-3 mt-1.5">O campo <span className="text-texto-2">Grupo</span><HelpCampo campo="categoria.grupo" /> é obrigatório — selecione um existente ou digite um novo para criá-lo junto. Tipo<HelpCampo campo="categoria.tipo" /> · Perfis<HelpCampo campo="categoria.perfis" /></p>
+        <AdicionarCategoriasKit />
       </div>
       )}
 

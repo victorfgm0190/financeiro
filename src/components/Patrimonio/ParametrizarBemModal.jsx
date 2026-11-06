@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { criarBem } from '../../lib/bemApi'
+import { criarCategoriasCapital } from '../../lib/db'
+import { capitalFaltante, categoriaDeCapital } from '../../lib/kitCategorias'
 import { useApp } from '../../context/AppContext'
 import { filtrarCategoriasPorPerfil } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
@@ -38,8 +40,9 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
   const [form, setForm] = useState({
     valor_nota_fiscal: String(conta.acquisitionValue ?? conta.balance ?? ''),
     descricao: '',
-    categoria_perda_bem_id: '',
-    categoria_ganho_bem_id: '',
+    // null = ainda não escolhida: vale a sugestão (categoria de ganho/perda de capital, se houver).
+    categoria_perda_bem_id: null,
+    categoria_ganho_bem_id: null,
     categoria_prestacao_id: '',
     categoria_taxa_finan_id: '',
   })
@@ -49,7 +52,7 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
 
   // Categorias por perfil: o da conta do bem (se tiver perfil), senão o chip do topo.
   // Ordem salva em Configurações → Categorias; SelectCategoria agrupa preservando a ordem.
-  const { activeProfileId, categoryGroupOrder } = useApp()
+  const { activeProfileId, categoryGroupOrder, addCategory, pode } = useApp()
   const doPerfil = useMemo(
     () => ordenarCategorias(filtrarCategoriasPorPerfil(categorias, conta.profileId || activeProfileId), categoryGroupOrder),
     [categorias, conta.profileId, activeProfileId, categoryGroupOrder]
@@ -57,8 +60,26 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
   const despesas = useMemo(() => doPerfil.filter(c => c.type === 'expense'), [doPerfil])
   const receitas = useMemo(() => doPerfil.filter(c => c.type === 'income'), [doPerfil])
 
+  // Sugestão só entre as que o perfil enxerga; "falta" olha todas, para não duplicar.
+  const perdaId = form.categoria_perda_bem_id ?? categoriaDeCapital(despesas, 'perda')?.id ?? ''
+  const ganhoId = form.categoria_ganho_bem_id ?? categoriaDeCapital(receitas, 'ganho')?.id ?? ''
+  const faltamCapital = capitalFaltante(categorias).length > 0
+  const [criando, setCriando] = useState(false)
+  // Cria no banco na hora (o cadastro confere se a categoria existe) e mostra aqui, sem sair do cadastro.
+  const criarPadrao = async () => {
+    setCriando(true)
+    try {
+      const { criadas } = await criarCategoriasCapital()
+      for (const c of criadas || []) addCategory(c)
+    } catch (err) {
+      onErro(err.message)
+    } finally {
+      setCriando(false)
+    }
+  }
+
   const podeEnviar = Number(form.valor_nota_fiscal) > 0
-    && form.categoria_perda_bem_id && form.categoria_ganho_bem_id
+    && perdaId && ganhoId
     && form.categoria_prestacao_id && form.categoria_taxa_finan_id
     && !loading
 
@@ -72,8 +93,8 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
         nome: conta.name,
         valor_nota_fiscal: Number(form.valor_nota_fiscal),
         descricao: form.descricao || null,
-        categoria_perda_bem_id: form.categoria_perda_bem_id,
-        categoria_ganho_bem_id: form.categoria_ganho_bem_id,
+        categoria_perda_bem_id: perdaId,
+        categoria_ganho_bem_id: ganhoId,
         categoria_prestacao_id: form.categoria_prestacao_id,
         categoria_taxa_finan_id: form.categoria_taxa_finan_id,
       })
@@ -111,14 +132,19 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
         />
       </div>
 
+      {faltamCapital && pode('cadastros', 'incluir') && (
+        <button type="button" className="btn-secondary text-xs py-1.5" disabled={criando} onClick={criarPadrao}>
+          {criando ? 'Criando…' : 'Criar categorias padrão de ganho/perda'}
+        </button>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <SelectCategoria
           label="Perda de Venda de Bem" categorias={despesas}
-          valor={form.categoria_perda_bem_id} onChange={v => set('categoria_perda_bem_id', v)}
+          valor={perdaId} onChange={v => set('categoria_perda_bem_id', v)}
         />
         <SelectCategoria
           label="Ganho de Venda de Bem" categorias={receitas}
-          valor={form.categoria_ganho_bem_id} onChange={v => set('categoria_ganho_bem_id', v)}
+          valor={ganhoId} onChange={v => set('categoria_ganho_bem_id', v)}
         />
         <SelectCategoria
           label="Prestação (Principal)" categorias={despesas}

@@ -448,8 +448,9 @@ describe('usuário próprio (R7): senha em texto só por TLS verificado e nunca 
 })
 
 describe('kit PF × PJ', () => {
-  const SQL_GRUPOS = `SELECT category_group AS grupo, type, string_agg(name, ' | ' ORDER BY sort_order) AS cats
-    FROM categorias WHERE category_group IS NOT NULL GROUP BY 1, 2`
+  // Ganho e perda de capital tem receita e despesa no mesmo grupo: o tipo sai como 'expense,income'.
+  const SQL_GRUPOS = `SELECT category_group AS grupo, string_agg(DISTINCT type, ',') AS type, string_agg(name, ' | ' ORDER BY sort_order) AS cats
+    FROM categorias WHERE category_group IS NOT NULL GROUP BY 1`
   // Grupos na ordem salva em configuracoes.category_groups (a que as telas usam).
   const gruposNaOrdem = async (q) => {
     const [{ category_groups: ordem }] = await q('SELECT category_groups FROM configuracoes')
@@ -473,7 +474,8 @@ describe('kit PF × PJ', () => {
     const q = qde('cliente_pj')
     expect((await q('SELECT name FROM categorias ORDER BY name')).map(r => r.name)).toEqual(nomesDoKit('PJ'))
     const grupos = await gruposNaOrdem(q)
-    expect(grupos.map(g => g.grupo)).toEqual(['Receitas operacionais', 'Outras receitas', 'Custos', 'Pessoal', 'Impostos', 'Despesas operacionais', 'Financeiro', 'Outros'])
+    expect(grupos.map(g => g.grupo)).toEqual(['Receitas operacionais', 'Outras receitas', 'Custos', 'Pessoal', 'Impostos', 'Despesas operacionais', 'Financeiro', 'Outros', 'Ganho e perda de capital'])
+    expect(grupos.at(-1)).toEqual({ grupo: 'Ganho e perda de capital', type: 'expense,income', cats: 'Ganho de capital | Perda de capital' })
     expect(grupos.find(g => g.grupo === 'Pessoal')).toEqual({ grupo: 'Pessoal', type: 'expense', cats: 'Folha de pagamento | Pró-labore | Encargos trabalhistas | Benefícios' })
     expect(await q("SELECT id, type FROM categorias WHERE name = 'Pró-labore'")).toEqual([{ id: 'cat_kit_pro_labore_pj', type: 'expense' }])
     const [cfg] = await q('SELECT cost_centers, category_groups, category_groups_ordem_manual, rodape_titulo FROM configuracoes')
@@ -493,7 +495,8 @@ describe('kit PF × PJ', () => {
   it('cliente PF (mm): grupos e ordem do kit PF, cat_res_ger, cores sem repetir no grupo', async () => {
     const q = qde('cliente_mm')
     const grupos = await gruposNaOrdem(q)
-    expect(grupos.map(g => g.grupo)).toEqual(['Despesas da casa', 'Essenciais', 'Carro', 'Estilo de vida', 'Financeiro', 'Outros', 'Receitas'])
+    expect(grupos.map(g => g.grupo)).toEqual(['Despesas da casa', 'Essenciais', 'Carro', 'Estilo de vida', 'Financeiro', 'Outros', 'Receitas', 'Ganho e perda de capital'])
+    expect(grupos.at(-1)).toEqual({ grupo: 'Ganho e perda de capital', type: 'expense,income', cats: 'Ganho de capital | Perda de capital' })
     expect(grupos[0].cats).toBe('Aluguel | Condomínio | Gás | Energia | Água | Internet e telefone | Manutenção | Obras | Serviços')
     expect(grupos[1].cats).toBe('Mercado | Alimentação | Transporte | Saúde | Educação')
     expect(grupos[2].cats).toBe('Combustível | Manutenção veicular | IPVA e licenciamento')
