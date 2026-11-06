@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { upsertRowsNoClient } from './_db.js'
 
 // Conta central e favorita por perfil (índices únicos parciais em contas). O sync manda TODAS as
@@ -11,11 +11,12 @@ const flags = async () => Object.fromEntries((await db.query('SELECT id, is_main
   .map(r => [r.id, `${r.conta_corrente_principal ? 'C' : '-'}${r.is_main ? 'F' : '-'}`]))
 
 beforeEach(async () => {
-  db = new PGlite()
-  await db.exec(`CREATE TABLE contas (id TEXT PRIMARY KEY, name TEXT, profile_id TEXT, is_main BOOLEAN DEFAULT false, conta_corrente_principal BOOLEAN DEFAULT false)`)
-  await db.exec(`ALTER TABLE contas ADD CONSTRAINT ck_conta_central_com_perfil CHECK (NOT COALESCE(conta_corrente_principal, false) OR profile_id IS NOT NULL)`)
-  await db.exec(`CREATE UNIQUE INDEX uq_contas_central_por_perfil ON contas (profile_id) WHERE conta_corrente_principal`)
-  await db.exec(`CREATE UNIQUE INDEX uq_contas_favorita_por_perfil ON contas ((COALESCE(profile_id, ''))) WHERE is_main`)
+  db = await bancoDoArquivo(async (b) => {
+    await b.exec(`CREATE TABLE contas (id TEXT PRIMARY KEY, name TEXT, profile_id TEXT, is_main BOOLEAN DEFAULT false, conta_corrente_principal BOOLEAN DEFAULT false)`)
+    await b.exec(`ALTER TABLE contas ADD CONSTRAINT ck_conta_central_com_perfil CHECK (NOT COALESCE(conta_corrente_principal, false) OR profile_id IS NOT NULL)`)
+    await b.exec(`CREATE UNIQUE INDEX uq_contas_central_por_perfil ON contas (profile_id) WHERE conta_corrente_principal`)
+    await b.exec(`CREATE UNIQUE INDEX uq_contas_favorita_por_perfil ON contas ((COALESCE(profile_id, ''))) WHERE is_main`)
+  })
   await upsertRowsNoClient(db, 'contas', [
     conta('a', 'p1', { conta_corrente_principal: true, is_main: true }),
     conta('b', 'p1'),

@@ -2,7 +2,7 @@ import process from 'node:process'
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite, bancoDoArquivo } from './_testes/bancoTeste.js'
 import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, usarBancos } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
@@ -24,16 +24,17 @@ const antes = readdirSync(raiz + 'migrations').filter(f => f.endsWith('.sql') &&
 
 let central
 const novoBanco = async () => {
-  const b = new PGlite()
-  await b.exec(ESTRUTURA + '\n' + antes)
-  await b.exec("INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u1', 'admin', 'Admin', 'admin@teste.local', 'x', 'admin')")
+  const b = await bancoDoArquivo(async (b) => {
+    await b.exec(ESTRUTURA + '\n' + antes)
+    await b.exec("INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u1', 'admin', 'Admin', 'admin@teste.local', 'x', 'admin')")
+  })
   return b
 }
 const linhas = async (b, sql) => (await b.query(sql)).rows
 const capital = (b) => linhas(b, "SELECT id, name, type, category_group FROM categorias WHERE lower(name) LIKE '%de capital' ORDER BY type")
 
 beforeAll(async () => {
-  central = new PGlite()
+  central = abrirPGlite()
   await central.exec(SQL_CENTRAL)
   await central.exec(DDL_PLATAFORMA)
   await central.exec(`

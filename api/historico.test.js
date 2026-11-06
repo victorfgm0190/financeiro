@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { upsertRowsNoClient } from './_db.js'
 import { DDL_HISTORICO } from './_historico.js'
 import { aplicarEdicao } from './historico.js'
@@ -23,11 +23,12 @@ const tipoCol = (c) => (c === 'amount' ? 'NUMERIC'
       : ['auto_register', 'confirmado', 'is_provisao', 'provisao_efetivada'].includes(c) ? 'BOOLEAN' : 'TEXT')
 
 beforeEach(async () => {
-  db = new PGlite()
-  await db.exec(`CREATE TABLE agendamentos (${SCH_COLS.map(c => `"${c}" ${tipoCol(c)}${c === 'id' ? ' PRIMARY KEY' : ''}`).join(', ')}, financing_installment_id TEXT)`)
-  await db.exec(`CREATE TABLE lancamentos (id TEXT PRIMARY KEY, date TEXT, category_id TEXT, description TEXT)`)
-  await db.exec(`CREATE TABLE tipos_documento (id TEXT PRIMARY KEY)`)
-  for (const sql of DDL_HISTORICO) await db.exec(sql)
+  db = await bancoDoArquivo(async (b) => {
+    await b.exec(`CREATE TABLE agendamentos (${SCH_COLS.map(c => `"${c}" ${tipoCol(c)}${c === 'id' ? ' PRIMARY KEY' : ''}`).join(', ')}, financing_installment_id TEXT)`)
+    await b.exec(`CREATE TABLE lancamentos (id TEXT PRIMARY KEY, date TEXT, category_id TEXT, description TEXT)`)
+    await b.exec(`CREATE TABLE tipos_documento (id TEXT PRIMARY KEY)`)
+    for (const sql of DDL_HISTORICO) await b.exec(sql)
+  })
 })
 
 const diarista = { id: 'sch_dia', description: 'Diarista', transactionType: 'expense', accountId: 'acc', amount: 200, categoryId: 'cat_limpeza', frequency: 'monthly', startDate: '2026-09-10', registered: ['2026-09-10'] }

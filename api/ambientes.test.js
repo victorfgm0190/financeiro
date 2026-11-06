@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { join, relative } from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite } from './_testes/bancoTeste.js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, usarBancos, poolPGlite } from './_testes/pglite.js'
@@ -57,7 +57,7 @@ async function criarUsuario(nome, username, senha) {
 }
 
 beforeAll(async () => {
-  bancos.central = new PGlite()
+  bancos.central = abrirPGlite()
   await bancos.central.exec(SQL_CENTRAL)
   // O 'vm' do seed aponta para o neondb; aqui ele vai para um banco de teste — e o neondb NÃO existe
   // no mapa: se algo tentar abri-lo, a fábrica lança.
@@ -68,7 +68,7 @@ beforeAll(async () => {
       ('amb-b', 'bb', 'Cliente B', 'banco_b', 'ativo'),
       ('amb-c', 'cc', 'Cliente C', 'banco_c', 'suspenso');`)
   for (const nome of ['banco_vm', 'banco_a', 'banco_b', 'banco_c']) {
-    bancos[nome] = new PGlite()
+    bancos[nome] = abrirPGlite()
     await bancos[nome].exec(MIGRACAO + TABELAS_APP)
   }
   await criarUsuario('banco_vm', 'victor', 'senha-vm-123')
@@ -338,7 +338,7 @@ describe('todas as rotas protegidas usam comAmbiente', () => {
 describe('ensure*Schema(): "já rodei" por banco', () => {
   it('cada um roda nos DOIS bancos (não para depois do primeiro)', async () => {
     for (const nome of ['banco_e1', 'banco_e2']) {
-      bancos[nome] = new PGlite()
+      bancos[nome] = abrirPGlite()
       await bancos[nome].exec(MIGRACAO + TABELAS_APP)
     }
     usarBancos(bancos)
@@ -371,8 +371,8 @@ describe('ensure*Schema(): "já rodei" por banco', () => {
 
   it('ensurePlataformaSchema: um registro por banco central', async () => {
     const { ensurePlataformaSchema } = await import('./_plataforma.js')
-    const c1 = new PGlite()
-    const c2 = new PGlite()
+    const c1 = abrirPGlite()
+    const c2 = abrirPGlite()
     for (const [nome, db] of [['central_um', c1], ['central_dois', c2]]) {
       _definirFabricaDePool(() => poolPGlite(db))
       process.env.CENTRAL_DATABASE_URL = `postgresql://t:t@localhost/${nome}`

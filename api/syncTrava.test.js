@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { filtrarConfiguracoes, vazioOuPadrao } from './_syncTrava.js'
 import { settingsToRow } from '../src/lib/db.js'
 
@@ -58,12 +58,13 @@ const tipo = (c) => (JSONB.has(c) ? 'JSONB' : c === 'financial_month_start_day' 
   : ['category_groups_ordem_manual', 'estorno_cartao_enabled'].includes(c) ? 'BOOLEAN' : 'TEXT')
 
 beforeEach(async () => {
-  estado.db = new PGlite()
-  await estado.db.exec(`CREATE TABLE configuracoes (id INTEGER PRIMARY KEY, ${Object.keys(REAL).map(c => `"${c}" ${tipo(c)}`).join(', ')})`)
-  await estado.db.exec('CREATE TABLE categorias (id TEXT PRIMARY KEY, name TEXT)')
-  await estado.db.exec('CREATE TABLE favorecidos (name TEXT PRIMARY KEY)')
-  await estado.db.exec('CREATE TABLE contas (id TEXT PRIMARY KEY, name TEXT)')
-  await estado.db.exec('CREATE TABLE cartoes (id TEXT PRIMARY KEY)')
+  estado.db = await bancoDoArquivo(async (b) => {
+    await b.exec(`CREATE TABLE configuracoes (id INTEGER PRIMARY KEY, ${Object.keys(REAL).map(c => `"${c}" ${tipo(c)}`).join(', ')})`)
+    await b.exec('CREATE TABLE categorias (id TEXT PRIMARY KEY, name TEXT)')
+    await b.exec('CREATE TABLE favorecidos (name TEXT PRIMARY KEY)')
+    await b.exec('CREATE TABLE contas (id TEXT PRIMARY KEY, name TEXT)')
+    await b.exec('CREATE TABLE cartoes (id TEXT PRIMARY KEY)')
+  })
   const cols = Object.keys(REAL)
   await estado.db.query(
     `INSERT INTO configuracoes (id, ${cols.map(c => `"${c}"`).join(', ')}) VALUES (1, ${cols.map((_, i) => `$${i + 1}`).join(', ')})`,

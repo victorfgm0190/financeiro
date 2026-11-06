@@ -2,7 +2,7 @@ import process from 'node:process'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import jwt from 'jsonwebtoken'
 import { prepararCentralNoMesmoBanco } from './_testes/pglite.js'
 
@@ -60,10 +60,11 @@ beforeEach(async () => {
   envOriginal = { ...process.env }
   process.env.JWT_SECRET = SECRET
   process.env.PLATAFORMA_ADMIN = 'vmoreira'
-  estado.db = new PGlite()
-  await estado.db.exec(MIGRACAO_USUARIOS)
-  // Donos dos tokens dos testes: a sessão é conferida no banco do ambiente (api/_sessao.js).
-  await estado.db.exec("INSERT INTO usuarios (id, username, nome, email, senha_hash) VALUES ('id-vmoreira', 'vmoreira', 'V', 'v@teste.local', 'x'), ('id-gislaine', 'gislaine', 'G', 'g@teste.local', 'x'), ('id-outro', 'outro', 'O', 'o@teste.local', 'x')")
+  estado.db = await bancoDoArquivo(async (b) => {
+    await b.exec(MIGRACAO_USUARIOS)
+    // Donos dos tokens dos testes: a sessão é conferida no banco do ambiente (api/_sessao.js).
+    await b.exec("INSERT INTO usuarios (id, username, nome, email, senha_hash) VALUES ('id-vmoreira', 'vmoreira', 'V', 'v@teste.local', 'x'), ('id-gislaine', 'gislaine', 'G', 'g@teste.local', 'x'), ('id-outro', 'outro', 'O', 'o@teste.local', 'x')")
+  })
   await prepararCentralNoMesmoBanco(() => estado.db)
   _resetSchemaPronto()
 })

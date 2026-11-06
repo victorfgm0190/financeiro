@@ -2,7 +2,7 @@ import process from 'node:process'
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite } from './_testes/bancoTeste.js'
 import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, usarBancos } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
@@ -63,7 +63,7 @@ const bancos = {}
 const q = (nome) => async (sql, params = []) => (await bancos[nome].query(sql, params)).rows
 
 beforeAll(async () => {
-  bancos.central = new PGlite()
+  bancos.central = abrirPGlite()
   await bancos.central.exec(SQL_CENTRAL)
   await bancos.central.exec(DDL_PLATAFORMA)
   await bancos.central.exec(`
@@ -76,9 +76,9 @@ beforeAll(async () => {
       ('amb-a', 'aa', 'Cliente A', 'banco_a', 'ativo', 'cli-a'),
       ('amb-s', 'ss', 'Sem banco', 'banco_inexistente', 'ativo', 'cli-s'),
       ('amb-p', 'pp', 'Parado', 'banco_p', 'suspenso', 'cli-p');`)
-  bancos.banco_vm = new PGlite()
+  bancos.banco_vm = abrirPGlite()
   await bancos.banco_vm.exec(MIGRACAO + "INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('adm', 'vmoreira', 'V', 'v@t.local', 'x', 'admin'), ('outro', 'gislaine', 'G', 'g@t.local', 'x', 'admin')")
-  bancos.banco_a = new PGlite()
+  bancos.banco_a = abrirPGlite()
   await bancos.banco_a.exec(MIGRACAO + TABELAS_CLIENTE + "INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('adm', 'vmoreira', 'V', 'v@t.local', 'x', 'admin')")
 }, 120_000)
 

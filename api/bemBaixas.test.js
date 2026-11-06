@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { extratoDoBem, resumoDoBem } from '../src/lib/extratoBem.js'
 import { batimento, encerramentoDaCota, parcelasFinupPorCota, prazoDaCota } from '../src/lib/consorcio.js'
 import { criarRegraDemonstrativo, totaisDoDemonstrativo } from '../src/lib/regraDemonstrativo.js'
@@ -54,28 +54,29 @@ const agendar = (id, bem = 'cons') => q(
 )
 
 beforeEach(async () => {
-  const db = new PGlite()
+  const db = await bancoDoArquivo(async (b) => {
+    await b.exec(`
+      CREATE TABLE contas (id TEXT PRIMARY KEY, name TEXT, type TEXT, balance NUMERIC DEFAULT 0, initial_balance NUMERIC, descricao TEXT, profile_id TEXT, tipo_bem TEXT,
+        valor_nota_fiscal NUMERIC, valor_pago_manual NUMERIC, patrimonio_use_method TEXT, categoria_prestacao_id TEXT, categoria_taxa_finan_id TEXT, foi_vendido BOOLEAN DEFAULT FALSE,
+        is_reserva BOOLEAN, conta_aplicacao BOOLEAN, is_investimento BOOLEAN, investment_category_id TEXT, vinculo_tipo TEXT, patrimonio_category_id TEXT, conta_corrente_principal BOOLEAN);
+      CREATE TABLE lancamentos (id TEXT PRIMARY KEY, type TEXT, account_id TEXT, to_account_id TEXT, amount NUMERIC, date TEXT, description TEXT, category_id TEXT, payee TEXT, bem_id TEXT,
+        origin TEXT, account_type TEXT, reconciled BOOLEAN, reserva_auto BOOLEAN, reserva_funcao_id TEXT, created_at TIMESTAMPTZ DEFAULT now());
+      CREATE TABLE reserve_functions (id TEXT PRIMARY KEY, account_id TEXT);
+      CREATE TABLE bem_movimentacoes (id TEXT PRIMARY KEY, bem_id TEXT, tipo TEXT, valor NUMERIC, descricao TEXT, data TEXT, lancamento_id TEXT, bem_origem_id TEXT);
+      CREATE TABLE agendamentos (id TEXT PRIMARY KEY, description TEXT, transaction_type TEXT, account_id TEXT, to_account_id TEXT, amount NUMERIC, category_id TEXT, frequency TEXT, start_date TEXT,
+        next_occurrence DATE, occurrence_type TEXT, installments INT, auto_register BOOLEAN, confirmado BOOLEAN, tipo TEXT, financing_installment_id TEXT, registered JSONB, skipped JSONB, overrides JSONB,
+        principal_value NUMERIC, juros_value NUMERIC, tipo_componente TEXT, payee TEXT);
+      CREATE TABLE lancamento_rateios (id TEXT PRIMARY KEY, lancamento_id TEXT, categoria_id TEXT, valor NUMERIC, descricao TEXT);
+      CREATE TABLE financing (id TEXT PRIMARY KEY, bem_id TEXT, valor_principal NUMERIC, juros_totais NUMERIC, valor_total NUMERIC, num_parcelas INT, valor_parcela NUMERIC, principal_por_parcela NUMERIC,
+        juros_por_parcela NUMERIC, banco TEXT, status TEXT, conta_divida_id TEXT, conta_origem_id TEXT, data_primeira_parcela TEXT, banco_favorecido_id TEXT);
+      CREATE TABLE financing_installments (id TEXT PRIMARY KEY, financing_id TEXT, numero_parcela INT, principal_provisioned NUMERIC, juros_provisioned NUMERIC, total_provisioned NUMERIC,
+        principal_pago NUMERIC, juros_pago NUMERIC, total_pago NUMERIC, desvio_juros NUMERIC, data_vencimento TEXT, data_pagamento TEXT, status TEXT, saldo_restante NUMERIC, desconto_antecipacao NUMERIC DEFAULT 0, schedule_id TEXT);
+      INSERT INTO contas (id, name, type, balance, profile_id, tipo_bem) VALUES
+        ('itau', 'Itaú', 'checking', 1000, 'P1', NULL), ('cons', 'Consórcio', 'asset', 0, 'P1', 'consorcio'), ('outro', 'Outro bem', 'asset', 0, 'P2', 'consorcio');
+      INSERT INTO contas (id, name, type, balance, profile_id, tipo_bem, categoria_prestacao_id, categoria_taxa_finan_id) VALUES ('carro', 'Carro', 'asset', 0, 'P1', 'bem_imobilizado', 'cat_p', 'cat_j');
+    `)
+  })
   estado.db = db
-  await db.exec(`
-    CREATE TABLE contas (id TEXT PRIMARY KEY, name TEXT, type TEXT, balance NUMERIC DEFAULT 0, initial_balance NUMERIC, descricao TEXT, profile_id TEXT, tipo_bem TEXT,
-      valor_nota_fiscal NUMERIC, valor_pago_manual NUMERIC, patrimonio_use_method TEXT, categoria_prestacao_id TEXT, categoria_taxa_finan_id TEXT, foi_vendido BOOLEAN DEFAULT FALSE,
-      is_reserva BOOLEAN, conta_aplicacao BOOLEAN, is_investimento BOOLEAN, investment_category_id TEXT, vinculo_tipo TEXT, patrimonio_category_id TEXT, conta_corrente_principal BOOLEAN);
-    CREATE TABLE lancamentos (id TEXT PRIMARY KEY, type TEXT, account_id TEXT, to_account_id TEXT, amount NUMERIC, date TEXT, description TEXT, category_id TEXT, payee TEXT, bem_id TEXT,
-      origin TEXT, account_type TEXT, reconciled BOOLEAN, reserva_auto BOOLEAN, reserva_funcao_id TEXT, created_at TIMESTAMPTZ DEFAULT now());
-    CREATE TABLE reserve_functions (id TEXT PRIMARY KEY, account_id TEXT);
-    CREATE TABLE bem_movimentacoes (id TEXT PRIMARY KEY, bem_id TEXT, tipo TEXT, valor NUMERIC, descricao TEXT, data TEXT, lancamento_id TEXT, bem_origem_id TEXT);
-    CREATE TABLE agendamentos (id TEXT PRIMARY KEY, description TEXT, transaction_type TEXT, account_id TEXT, to_account_id TEXT, amount NUMERIC, category_id TEXT, frequency TEXT, start_date TEXT,
-      next_occurrence DATE, occurrence_type TEXT, installments INT, auto_register BOOLEAN, confirmado BOOLEAN, tipo TEXT, financing_installment_id TEXT, registered JSONB, skipped JSONB, overrides JSONB,
-      principal_value NUMERIC, juros_value NUMERIC, tipo_componente TEXT, payee TEXT);
-    CREATE TABLE lancamento_rateios (id TEXT PRIMARY KEY, lancamento_id TEXT, categoria_id TEXT, valor NUMERIC, descricao TEXT);
-    CREATE TABLE financing (id TEXT PRIMARY KEY, bem_id TEXT, valor_principal NUMERIC, juros_totais NUMERIC, valor_total NUMERIC, num_parcelas INT, valor_parcela NUMERIC, principal_por_parcela NUMERIC,
-      juros_por_parcela NUMERIC, banco TEXT, status TEXT, conta_divida_id TEXT, conta_origem_id TEXT, data_primeira_parcela TEXT, banco_favorecido_id TEXT);
-    CREATE TABLE financing_installments (id TEXT PRIMARY KEY, financing_id TEXT, numero_parcela INT, principal_provisioned NUMERIC, juros_provisioned NUMERIC, total_provisioned NUMERIC,
-      principal_pago NUMERIC, juros_pago NUMERIC, total_pago NUMERIC, desvio_juros NUMERIC, data_vencimento TEXT, data_pagamento TEXT, status TEXT, saldo_restante NUMERIC, desconto_antecipacao NUMERIC DEFAULT 0, schedule_id TEXT);
-    INSERT INTO contas (id, name, type, balance, profile_id, tipo_bem) VALUES
-      ('itau', 'Itaú', 'checking', 1000, 'P1', NULL), ('cons', 'Consórcio', 'asset', 0, 'P1', 'consorcio'), ('outro', 'Outro bem', 'asset', 0, 'P2', 'consorcio');
-    INSERT INTO contas (id, name, type, balance, profile_id, tipo_bem, categoria_prestacao_id, categoria_taxa_finan_id) VALUES ('carro', 'Carro', 'asset', 0, 'P1', 'bem_imobilizado', 'cat_p', 'cat_j');
-  `)
   await db.exec(migracao('2026-11-06_consorcio.sql'))
   await db.exec(migracao('2026-11-06b_consorcio_adesao_por_cota.sql'))
   await db.exec(migracao('2026-11-06c_consorcio_encerramento_cota.sql'))

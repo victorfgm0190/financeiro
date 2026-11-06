@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { montarUpsertSql, saldoDoBancoNasDividas, ehContaDividaFinanciamento } from './_db.js'
 
 // /api/sync de contas: na conta de dívida de financiamento, balance e initial_balance são do
@@ -16,12 +16,13 @@ async function sync(rows) {
 }
 
 beforeEach(async () => {
-  db = new PGlite()
-  await db.exec(`CREATE TABLE contas (id TEXT PRIMARY KEY, name TEXT, type TEXT, active BOOLEAN, balance NUMERIC, initial_balance NUMERIC)`)
-  await db.exec(`INSERT INTO contas VALUES
-    ('acc_divida_msjc0rqh_duoz4y', 'Contas a Pagar - Fin. TIGGO', 'liability', true, -37905.00, -39900.00),
-    ('acc_itau', 'Itau', 'checking', true, 1000, 500),
-    ('acc_cafe_do_bras', 'Café do Bras', 'liability', true, -300, -300)`)
+  db = await bancoDoArquivo(async (b) => {
+    await b.exec(`CREATE TABLE contas (id TEXT PRIMARY KEY, name TEXT, type TEXT, active BOOLEAN, balance NUMERIC, initial_balance NUMERIC)`)
+    await b.exec(`INSERT INTO contas VALUES
+      ('acc_divida_msjc0rqh_duoz4y', 'Contas a Pagar - Fin. TIGGO', 'liability', true, -37905.00, -39900.00),
+      ('acc_itau', 'Itau', 'checking', true, 1000, 500),
+      ('acc_cafe_do_bras', 'Café do Bras', 'liability', true, -300, -300)`)
+  })
 })
 
 describe('sync de contas × saldo da dívida de financiamento', () => {

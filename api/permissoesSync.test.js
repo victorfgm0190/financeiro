@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { autorizarSync, recortarLeitura, contextoPerfis } from './_permissoesApi.js'
 
 // Autorização do /api/sync num Postgres de verdade (PGlite): módulo da tabela, ação (linha nova =
@@ -10,17 +10,18 @@ const user = (nivel, extra = {}) => ({ nivel, permissoes: {}, perfis: 'todos', .
 const tx = (id, account_id, extra = {}) => ({ id, account_id, to_account_id: null, reserva_funcao_id: null, ...extra })
 
 beforeEach(async () => {
-  db = new PGlite()
-  await db.exec(`
-    CREATE TABLE contas (id TEXT PRIMARY KEY, profile_id TEXT);
-    CREATE TABLE lancamentos (id TEXT PRIMARY KEY, account_id TEXT, to_account_id TEXT, reserva_funcao_id TEXT, origin TEXT, bem_id TEXT);
-    CREATE TABLE reserve_functions (id TEXT PRIMARY KEY, account_id TEXT);
-    CREATE TABLE categorias (id TEXT PRIMARY KEY);
-    INSERT INTO contas VALUES ('itau', 'prf_v'), ('cora', 'prf_l'), ('rico', NULL);
-    INSERT INTO lancamentos VALUES ('t1', 'itau', NULL, NULL), ('t2', 'cora', NULL, NULL), ('t3', NULL, NULL, 'rf_v');
-    INSERT INTO reserve_functions VALUES ('rf_v', 'itau');
-    INSERT INTO categorias VALUES ('c1');
-  `)
+  db = await bancoDoArquivo(async (b) => {
+    await b.exec(`
+      CREATE TABLE contas (id TEXT PRIMARY KEY, profile_id TEXT);
+      CREATE TABLE lancamentos (id TEXT PRIMARY KEY, account_id TEXT, to_account_id TEXT, reserva_funcao_id TEXT, origin TEXT, bem_id TEXT);
+      CREATE TABLE reserve_functions (id TEXT PRIMARY KEY, account_id TEXT);
+      CREATE TABLE categorias (id TEXT PRIMARY KEY);
+      INSERT INTO contas VALUES ('itau', 'prf_v'), ('cora', 'prf_l'), ('rico', NULL);
+      INSERT INTO lancamentos VALUES ('t1', 'itau', NULL, NULL), ('t2', 'cora', NULL, NULL), ('t3', NULL, NULL, 'rf_v');
+      INSERT INTO reserve_functions VALUES ('rf_v', 'itau');
+      INSERT INTO categorias VALUES ('c1');
+    `)
+  })
 }, 30000)
 
 describe('autorizarSync', () => {

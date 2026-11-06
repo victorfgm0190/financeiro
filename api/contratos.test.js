@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { normalizarContrato } from './_contratos.js'
 import { lerSerieSgs, comAcumulado12m, urlSgs, indiceAtual } from './indices.js'
 import { regraDaRota, pode } from '../src/lib/permissoes.js'
@@ -51,17 +51,18 @@ const CONTRATO = {
 }
 
 beforeEach(async () => {
-  estado.db = new PGlite()
+  estado.db = await bancoDoArquivo(async (b) => {
+    await b.exec(`
+      CREATE TABLE contas (id TEXT PRIMARY KEY, profile_id TEXT);
+      CREATE TABLE cartoes (id TEXT PRIMARY KEY);
+      CREATE TABLE agendamentos (id TEXT PRIMARY KEY, registered JSONB DEFAULT '[]'::jsonb);
+      CREATE TABLE lancamentos (id TEXT PRIMARY KEY);
+      CREATE TABLE reserve_functions (id TEXT PRIMARY KEY, account_id TEXT);
+      INSERT INTO contas VALUES ('cc1', 'pf'), ('cc2', 'pj');
+      INSERT INTO cartoes VALUES ('card1');
+    `)
+  })
   estado.modulos = { contratos: true }
-  await estado.db.exec(`
-    CREATE TABLE contas (id TEXT PRIMARY KEY, profile_id TEXT);
-    CREATE TABLE cartoes (id TEXT PRIMARY KEY);
-    CREATE TABLE agendamentos (id TEXT PRIMARY KEY, registered JSONB DEFAULT '[]'::jsonb);
-    CREATE TABLE lancamentos (id TEXT PRIMARY KEY);
-    CREATE TABLE reserve_functions (id TEXT PRIMARY KEY, account_id TEXT);
-    INSERT INTO contas VALUES ('cc1', 'pf'), ('cc2', 'pj');
-    INSERT INTO cartoes VALUES ('card1');
-  `)
   await estado.db.exec(MIGRACAO)
   await estado.db.exec(MIGRACAO_E2)
   for (const [padrao, tipo] of KIT_REGRAS_ITENS) {

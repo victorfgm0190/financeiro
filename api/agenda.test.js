@@ -1,7 +1,7 @@
 import process from 'node:process'
 import crypto from 'node:crypto'
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite } from './_testes/bancoTeste.js'
 import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, URL_CENTRAL_TESTE, poolPGlite } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
@@ -26,10 +26,10 @@ let abertos = []
 const q = async (sql, params = []) => (await central.query(sql, params)).rows
 
 beforeAll(async () => {
-  usuariosDoAmbiente = new PGlite()
+  usuariosDoAmbiente = abrirPGlite()
   await usuariosDoAmbiente.exec(`CREATE TABLE usuarios (id TEXT PRIMARY KEY, ativo BOOLEAN NOT NULL DEFAULT true, token_versao INTEGER NOT NULL DEFAULT 0);
     INSERT INTO usuarios (id) VALUES ('u-ana'), ('u-bia');`)
-  central = new PGlite()
+  central = abrirPGlite()
   await central.exec(SQL_CENTRAL)
   await central.exec(`
     UPDATE ambientes SET database_name = 'banco_vm' WHERE sigla = 'vm';

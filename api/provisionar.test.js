@@ -3,7 +3,7 @@ import crypto from 'node:crypto'
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite } from './_testes/bancoTeste.js'
 import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, usarBancos, poolPGlite } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
@@ -52,11 +52,11 @@ async function foto(nome) {
 }
 
 beforeAll(async () => {
-  bancos.central = new PGlite()
+  bancos.central = abrirPGlite()
   await bancos.central.exec(SQL_CENTRAL)
   await bancos.central.exec("UPDATE ambientes SET database_name = 'banco_vm' WHERE sigla = 'vm'")
   // O 'vm', com dados que são SÓ do Victor (nada disso pode aparecer no cliente).
-  bancos.banco_vm = new PGlite()
+  bancos.banco_vm = abrirPGlite()
   await bancos.banco_vm.exec(SQL_BANCO_NOVO)
   await bancos.banco_vm.exec(`
     INSERT INTO organizacoes (id, nome) VALUES ('org1', 'Victor');
@@ -68,7 +68,7 @@ beforeAll(async () => {
     INSERT INTO account_mapping (grupo, nome_finup, nome_dindin) VALUES ('Itau Cofrinhos', 'Pharma', '5. 05 PHARMA LOG');
     INSERT INTO contas (id, name, type, balance) VALUES ('c1', 'Consórcio HS', 'investment', 0);`)
   // Bancos de cliente: só "existem" depois que a API do Neon (simulada) os cria.
-  for (const nome of ['cliente_mm', 'cliente_zz', 'cliente_ww', 'cliente_kk', 'cliente_jj', 'cliente_hh', 'cliente_ll', 'cliente_pj']) bancos[nome] = new PGlite()
+  for (const nome of ['cliente_mm', 'cliente_zz', 'cliente_ww', 'cliente_kk', 'cliente_jj', 'cliente_hh', 'cliente_ll', 'cliente_pj']) bancos[nome] = abrirPGlite()
 }, 180_000) // vários PGlite + migrações: com a suíte inteira em paralelo passa de 60 s
 
 // ─── API do Neon + Resend simulados ─────────────────────────────────────────────────────────────
@@ -163,7 +163,7 @@ describe('estrutura base', () => {
   })
 
   it('estrutura + todas as migrações num PGlite vazio, sem erro', async () => {
-    const db = new PGlite()
+    const db = abrirPGlite()
     await db.exec(SQL_BANCO_NOVO)
     const tabelas = (await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")).rows.map(r => r.table_name)
     for (const t of ['usuarios', 'senha_tokens', 'lancamentos', 'configuracoes', 'categorias']) expect(tabelas).toContain(t)

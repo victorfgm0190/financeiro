@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite } from './_testes/bancoTeste.js'
 import { filtrosBusca } from './search.js'
 
 // Os WHERE da Busca Global num Postgres de verdade (PGlite, em memória).
@@ -10,7 +10,7 @@ const ids = async (tabela, f) => {
 }
 
 beforeAll(async () => {
-  db = new PGlite()
+  db = abrirPGlite()
   await db.exec(`
     CREATE TABLE lancamentos (id TEXT PRIMARY KEY, date TEXT, amount NUMERIC, description TEXT, payee TEXT,
       account_id TEXT, to_account_id TEXT, reserva_auto BOOLEAN, origin TEXT, bem_id TEXT);

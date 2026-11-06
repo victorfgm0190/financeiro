@@ -2,7 +2,7 @@ import process from 'node:process'
 import crypto from 'node:crypto'
 import { Buffer } from 'node:buffer'
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite } from './_testes/bancoTeste.js'
 import bcrypt from 'bcryptjs'
 import { SQL_CENTRAL, SQL_MIGRACOES, usarBancos } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
@@ -41,7 +41,7 @@ async function criarUsuario(banco, username, { email = `${username}@teste.com`, 
 
 const ids = {}
 beforeAll(async () => {
-  bancos.central = new PGlite()
+  bancos.central = abrirPGlite()
   await bancos.central.exec(SQL_CENTRAL)
   await bancos.central.exec(`
     UPDATE ambientes SET database_name = 'banco_vm' WHERE sigla = 'vm';
@@ -50,7 +50,7 @@ beforeAll(async () => {
       ('amb-b', 'bb', 'Cliente B', 'banco_b', 'ativo'),
       ('amb-c', 'cc', 'Cliente C', 'banco_c', 'suspenso');`)
   for (const nome of ['banco_vm', 'banco_a', 'banco_b', 'banco_c']) {
-    bancos[nome] = new PGlite()
+    bancos[nome] = abrirPGlite()
     await bancos[nome].exec(ANTES_DAS_MIGRACOES + SQL_MIGRACOES + TABELAS_APP)
   }
   ids.victor = await criarUsuario('banco_vm', 'victor')

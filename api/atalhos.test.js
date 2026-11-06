@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { DDL_ATALHOS, normalizarItem, gravarAtalhos } from './atalhos.js'
 
 // /api/atalhos num Postgres de verdade (PGlite): upsert por (user_id, acao_id), só o alterado.
@@ -8,8 +8,9 @@ const q = async (sql, params = []) => (await db.query(sql, params)).rows
 const linhas = (userId) => q('SELECT acao_id, combinacao FROM atalhos_usuario WHERE user_id = $1 ORDER BY acao_id', [userId])
 
 beforeEach(async () => {
-  db = new PGlite()
-  await db.exec(DDL_ATALHOS)
+  db = await bancoDoArquivo(async (b) => {
+    await b.exec(DDL_ATALHOS)
+  })
 })
 
 describe('normalizarItem', () => {

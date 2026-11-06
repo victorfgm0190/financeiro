@@ -2,7 +2,7 @@ import process from 'node:process'
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite } from './_testes/bancoTeste.js'
 import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, usarBancos } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
@@ -26,14 +26,14 @@ const bancos = {}
 const qde = (n) => async (sql, p = []) => (await bancos[n].query(sql, p)).rows
 
 beforeAll(async () => {
-  bancos.central = new PGlite()
+  bancos.central = abrirPGlite()
   await bancos.central.exec(SQL_CENTRAL)
   await bancos.central.exec(`
     UPDATE ambientes SET database_name = 'banco_novo' WHERE sigla = 'vm';
     INSERT INTO ambientes (id, sigla, nome, database_name, status) VALUES ('amb-old', 'old', 'Antigo', 'banco_antigo', 'ativo');`)
-  bancos.banco_novo = new PGlite()
+  bancos.banco_novo = abrirPGlite()
   await bancos.banco_novo.exec(ESTRUTURA + '\n' + migracoes(() => true))
-  bancos.banco_antigo = new PGlite()
+  bancos.banco_antigo = abrirPGlite()
   await bancos.banco_antigo.exec(ESTRUTURA + '\n' + migracoes(f => f !== MIGRACAO))
   // Dono do token dos testes nos dois bancos (a sessão é conferida no banco do ambiente: api/_sessao.js).
   for (const b of ['banco_novo', 'banco_antigo']) await bancos[b].exec("INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u1', 'u1', 'U1', 'u1@teste.local', 'x', 'admin')")

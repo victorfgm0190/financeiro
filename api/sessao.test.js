@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { sessaoValida, _limparCacheSessoes, CACHE_SESSAO_MS } from './_sessao.js'
 
 // Conferência da sessão (GRAFITY B5) com o cache de 30 s: positivo fica em cache; divergência
@@ -13,9 +13,10 @@ const T0 = 1_000_000
 beforeEach(async () => {
   _limparCacheSessoes()
   consultas = 0
-  db = new PGlite()
-  await db.exec(`CREATE TABLE usuarios (id TEXT PRIMARY KEY, ativo BOOLEAN, token_versao INTEGER NOT NULL DEFAULT 0);
-    INSERT INTO usuarios (id, ativo) VALUES ('u1', true);`)
+  db = await bancoDoArquivo(async (b) => {
+    await b.exec(`CREATE TABLE usuarios (id TEXT PRIMARY KEY, ativo BOOLEAN, token_versao INTEGER NOT NULL DEFAULT 0);
+      INSERT INTO usuarios (id, ativo) VALUES ('u1', true);`)
+  })
 })
 
 describe('sessaoValida', () => {

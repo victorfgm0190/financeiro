@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import {
   ensureTiposDocumentoSchema, normalizarTipoBody, SEED_TIPOS_DOCUMENTO,
   SQL_TIPO_EM_MASSA_AGENDAMENTOS, SQL_USOS_TIPO,
@@ -10,11 +10,12 @@ let db
 const q = async (sql, params = []) => (await db.query(sql, params)).rows
 
 beforeEach(async () => {
-  db = new PGlite()
-  await db.exec(`CREATE TABLE agendamentos (id TEXT PRIMARY KEY, description TEXT);
-    CREATE TABLE lancamentos (id TEXT PRIMARY KEY, description TEXT);
-    INSERT INTO agendamentos VALUES ('sch_1', 'Aluguel'), ('sch_2', 'Luz'), ('sch_3', 'Água');
-    INSERT INTO lancamentos VALUES ('tx_1', 'Mercado');`)
+  db = await bancoDoArquivo(async (b) => {
+    await b.exec(`CREATE TABLE agendamentos (id TEXT PRIMARY KEY, description TEXT);
+      CREATE TABLE lancamentos (id TEXT PRIMARY KEY, description TEXT);
+      INSERT INTO agendamentos VALUES ('sch_1', 'Aluguel'), ('sch_2', 'Luz'), ('sch_3', 'Água');
+      INSERT INTO lancamentos VALUES ('tx_1', 'Mercado');`)
+  })
 })
 
 describe('migração tipos_documento', () => {

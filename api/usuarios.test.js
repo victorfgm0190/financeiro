@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite, bancoDoArquivo } from './_testes/bancoTeste.js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { prepararCentralNoMesmoBanco } from './_testes/pglite.js'
@@ -64,8 +64,9 @@ beforeEach(async () => {
   envOriginal = { ...process.env }
   process.env.JWT_SECRET = SECRET
   delete process.env.ALLOW_ENV_ADMIN
-  estado.db = new PGlite()
-  await estado.db.exec(MIGRACAO)
+  estado.db = await bancoDoArquivo(async (b) => {
+    await b.exec(MIGRACAO)
+  })
   await prepararCentralNoMesmoBanco(() => estado.db)
   await q("INSERT INTO organizacoes (id, nome, created_at) VALUES ('org1', 'Victor', '2026-01-01'), ('org2', 'Outra', '2026-02-01')")
 })
@@ -157,7 +158,7 @@ describe('acesso de emergência (emergencia: true)', () => {
   })
 
   it('sem a migração (tabela usuarios inexistente) entra com org null', async () => {
-    estado.db = new PGlite()
+    estado.db = abrirPGlite()
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await emerg('emergencia', 'senha-fixa-123')).toMatchObject({ papel: 'admin', origem: 'env', org: null })

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite, bancoDoArquivo } from './_testes/bancoTeste.js'
 import { cifrarSenha, decifrarSenha, aadDoAmbiente, ErroCifra } from './_cifraDb.js'
 import {
   papelDoBanco, gerarSenhaDoBanco, criarOuAtualizarPapel, transferirDono, fecharConexao, comoDonoDoBanco, ErroPapel,
@@ -79,9 +79,10 @@ describe('papel restrito num Postgres de verdade (PGlite)', () => {
   const sqls = []
   const q = async (sql, params = []) => { sqls.push(sql); return (await db.query(sql, params)).rows }
   beforeEach(async () => {
-    db = new PGlite()
+    db = await bancoDoArquivo(async (b) => {
+      await b.exec('CREATE TABLE antes (id TEXT PRIMARY KEY); CREATE SEQUENCE seq_solta; CREATE VIEW v_antes AS SELECT id FROM antes')
+    })
     sqls.length = 0
-    await db.exec('CREATE TABLE antes (id TEXT PRIMARY KEY); CREATE SEQUENCE seq_solta; CREATE VIEW v_antes AS SELECT id FROM antes')
   }, 30_000)
 
   it('cria restrito, com limites, dono de tudo; senha só no CREATE ROLE e guardada como SCRAM; repetir troca a senha', async () => {
@@ -128,7 +129,7 @@ describe('papel restrito num Postgres de verdade (PGlite)', () => {
 
 describe('desenho: banco do admin, tabelas do papel (o que o load.js roda)', () => {
   it('banco de desenho antigo (dono = papel) volta ao admin; papel roda o DDL do load.js e não cria schema', async () => {
-    const db = new PGlite()
+    const db = abrirPGlite()
     const q = async (sql, params = []) => (await db.query(sql, params)).rows
     await db.exec('CREATE TABLE lancamentos (id TEXT PRIMARY KEY); CREATE TABLE atalhos (id SERIAL PRIMARY KEY)')
     await criarOuAtualizarPapel(q, 'cliente_z_app', gerarSenhaDoBanco())
@@ -154,7 +155,7 @@ describe('desenho: banco do admin, tabelas do papel (o que o load.js roda)', () 
 
 describe('testarLimites (verificar): nada fica para trás, nem quando a operação é permitida', () => {
   it('como superusuário (tudo permitido) → relata PERMITIDO e desfaz; como o papel → negado', async () => {
-    const db = new PGlite()
+    const db = abrirPGlite()
     const client = { query: (sql, p) => db.query(sql, p) }
     await db.exec('CREATE ROLE cliente_w_app NOSUPERUSER NOINHERIT')
     const limites = [

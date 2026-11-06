@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite, bancoDoArquivo } from './_testes/bancoTeste.js'
 import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, usarBancos } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
@@ -53,15 +53,16 @@ async function semear(b, c) {
 }
 
 async function novoBanco({ migracaoNova = true, comDados = true } = {}) {
-  const b = new PGlite()
-  await b.exec(ESTRUTURA + '\n' + lerMigracoes(f => migracaoNova || f !== NOVA))
-  await b.exec("INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u1', 'admin', 'Admin', 'admin@teste.local', 'x', 'admin')")
-  if (comDados) await semear(b, montarCenario())
+  const b = await bancoDoArquivo(async (b) => {
+    await b.exec(ESTRUTURA + '\n' + lerMigracoes(f => migracaoNova || f !== NOVA))
+    await b.exec("INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u1', 'admin', 'Admin', 'admin@teste.local', 'x', 'admin')")
+    if (comDados) await semear(b, montarCenario())
+  }, `virada_${migracaoNova}_${comDados}`)
   return b
 }
 
 beforeAll(async () => {
-  central = new PGlite()
+  central = abrirPGlite()
   await central.exec(SQL_CENTRAL)
   await central.exec("UPDATE ambientes SET database_name = 'banco_a' WHERE sigla = 'vm'")
   await central.exec(`INSERT INTO ambientes (id, sigla, nome, database_name, status) VALUES
@@ -71,8 +72,8 @@ beforeAll(async () => {
   AMB.antigo = 'amb-antigo'
 }, 180_000)
 
-// Os outros dois ambientes só existem nos testes que chamam isto: abrir um PGlite custa segundos, e três
-// por teste tornavam este arquivo o gargalo da suíte. Sem chamar, o acesso a eles falha (nunca cai no A).
+// Os outros dois ambientes só existem nos testes que chamam isto. Sem chamar, o acesso a eles falha
+// (nunca cai no A).
 const comBancoB = async () => { bancoB = await novoBanco({ comDados: false }) }
 const comBancoAntigo = async () => { antigo = await novoBanco({ migracaoNova: false }) }
 

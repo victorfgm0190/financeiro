@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { upsertApelidos } from './ia-apelidos.js'
 import { normalizarTermo } from './_ia.js'
 import { sugerirAcaoDespesa, ACAO } from '../src/lib/assistente/prontidao.js'
@@ -11,13 +11,14 @@ import {
 // sugestão era agendamento → na 3ª a sugestão é "Só despesa". Outro cliente (outro banco) e outro
 // perfil do mesmo cliente não são afetados. Postgres real (PGlite), mesma SQL do /api/ia-apelidos.
 const novoBanco = async () => {
-  const db = new PGlite()
-  await db.exec(`CREATE TABLE ia_apelidos (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    tipo TEXT NOT NULL CHECK (tipo IN ('categoria', 'conta', 'favorecido', 'descricao_fatura', 'acao_despesa', 'recorrencia')),
-    termo TEXT NOT NULL, ref_id TEXT NOT NULL, usos INTEGER NOT NULL DEFAULT 1,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (tipo, termo))`)
+  const db = await bancoDoArquivo(async (b) => {
+    await b.exec(`CREATE TABLE ia_apelidos (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      tipo TEXT NOT NULL CHECK (tipo IN ('categoria', 'conta', 'favorecido', 'descricao_fatura', 'acao_despesa', 'recorrencia')),
+      termo TEXT NOT NULL, ref_id TEXT NOT NULL, usos INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (tipo, termo))`)
+  })
   return { db, q: async (sql, params = []) => (await db.query(sql, params)).rows }
 }
 let clienteA, clienteB

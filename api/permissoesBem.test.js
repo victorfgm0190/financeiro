@@ -2,7 +2,7 @@ import process from 'node:process'
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite, bancoDoArquivo } from './_testes/bancoTeste.js'
 import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, usarBancos } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
@@ -39,24 +39,25 @@ const fotografia = async () => {
 }
 
 beforeAll(async () => {
-  central = new PGlite()
+  central = abrirPGlite()
   await central.exec(SQL_CENTRAL)
   await central.exec("UPDATE ambientes SET database_name = 'banco_vm' WHERE sigla = 'vm'")
   ambId = (await central.query("SELECT id FROM ambientes WHERE sigla = 'vm'")).rows[0].id
 }, 180_000)
 
 beforeEach(async () => {
-  banco = new PGlite()
-  await banco.exec(SQL)
-  await banco.exec(`
-    INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u1', 'admin', 'Admin', 'admin@teste.local', 'x', 'admin');
-    INSERT INTO perfis (id, name, type) VALUES ('pa', 'Perfil A', 'pf'), ('pb', 'Perfil B', 'pj');
-    INSERT INTO categorias (id, name, type) VALUES ('perda', 'Perda', 'expense'), ('ganho', 'Ganho', 'income');
-    INSERT INTO contas (id, name, type, balance, initial_balance, profile_id) VALUES ('cc_a', 'Conta A', 'checking', 5000, 5000, 'pa');
-    INSERT INTO contas (id, name, type, balance, initial_balance, profile_id, valor_nota_fiscal, categoria_perda_bem_id, categoria_ganho_bem_id) VALUES
-      ('bem_a', 'Bem A', 'asset', 100000, 100000, 'pa', 100000, 'perda', 'ganho'),
-      ('bem_a2', 'Bem A2', 'asset', 80000, 80000, 'pa', 80000, 'perda', 'ganho');
-    UPDATE contas SET categoria_prestacao_id = 'perda', categoria_taxa_finan_id = 'perda' WHERE type = 'asset';`)
+  banco = await bancoDoArquivo(async (b) => {
+    await b.exec(SQL)
+    await b.exec(`
+      INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u1', 'admin', 'Admin', 'admin@teste.local', 'x', 'admin');
+      INSERT INTO perfis (id, name, type) VALUES ('pa', 'Perfil A', 'pf'), ('pb', 'Perfil B', 'pj');
+      INSERT INTO categorias (id, name, type) VALUES ('perda', 'Perda', 'expense'), ('ganho', 'Ganho', 'income');
+      INSERT INTO contas (id, name, type, balance, initial_balance, profile_id) VALUES ('cc_a', 'Conta A', 'checking', 5000, 5000, 'pa');
+      INSERT INTO contas (id, name, type, balance, initial_balance, profile_id, valor_nota_fiscal, categoria_perda_bem_id, categoria_ganho_bem_id) VALUES
+        ('bem_a', 'Bem A', 'asset', 100000, 100000, 'pa', 100000, 'perda', 'ganho'),
+        ('bem_a2', 'Bem A2', 'asset', 80000, 80000, 'pa', 80000, 'perda', 'ganho');
+      UPDATE contas SET categoria_prestacao_id = 'perda', categoria_taxa_finan_id = 'perda' WHERE type = 'asset';`)
+  })
   usarBancos({ central, banco_vm: () => banco })
   process.env.JWT_SECRET = SECRET
   vi.spyOn(console, 'error').mockImplementation(() => {})

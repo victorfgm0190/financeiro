@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { DDL_HISTORICO } from './_historico.js'
 import { planejarMigracaoNumeroContrato, aplicarMigracaoNumeroContrato, MOTIVO_MIGRACAO } from './_numeroContrato.js'
 import { separarContratoDoTexto, contratoPorNumero, mesmoNumeroContrato } from '../src/lib/contratos/numero.js'
@@ -10,18 +10,19 @@ let db
 const q = async (sql, params = []) => (await db.query(sql, params)).rows
 
 beforeEach(async () => {
-  db = new PGlite()
-  await db.exec('CREATE TABLE agendamentos (id TEXT PRIMARY KEY, description TEXT, numero_contrato TEXT)')
-  await db.exec('CREATE TABLE lancamentos (id TEXT PRIMARY KEY, description TEXT, notes TEXT, numero_contrato TEXT)')
-  for (const sql of DDL_HISTORICO) await db.exec(sql)
-  await db.exec(`INSERT INTO agendamentos VALUES
-    ('ag1', 'Academia X · Contrato nº 12345', NULL),
-    ('ag2', 'Financeira · Contrato nº AB-778/2026', NULL),
-    ('ag3', 'Aluguel', NULL),
-    ('ag4', 'Seguro · Contrato nº 999', '555')`)
-  await db.exec(`INSERT INTO lancamentos VALUES
-    ('tx1', 'Academia X', 'Pago no PIX · Contrato nº 12345', NULL),
-    ('tx2', 'Mercado', NULL, NULL)`)
+  db = await bancoDoArquivo(async (b) => {
+    await b.exec('CREATE TABLE agendamentos (id TEXT PRIMARY KEY, description TEXT, numero_contrato TEXT)')
+    await b.exec('CREATE TABLE lancamentos (id TEXT PRIMARY KEY, description TEXT, notes TEXT, numero_contrato TEXT)')
+    for (const sql of DDL_HISTORICO) await b.exec(sql)
+    await b.exec(`INSERT INTO agendamentos VALUES
+      ('ag1', 'Academia X · Contrato nº 12345', NULL),
+      ('ag2', 'Financeira · Contrato nº AB-778/2026', NULL),
+      ('ag3', 'Aluguel', NULL),
+      ('ag4', 'Seguro · Contrato nº 999', '555')`)
+    await b.exec(`INSERT INTO lancamentos VALUES
+      ('tx1', 'Academia X', 'Pago no PIX · Contrato nº 12345', NULL),
+      ('tx2', 'Mercado', NULL, NULL)`)
+  })
 })
 
 describe('migração do nº do contrato (descrição → campo próprio)', () => {

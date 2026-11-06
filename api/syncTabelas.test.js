@@ -2,7 +2,7 @@ import process from 'node:process'
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite } from './_testes/bancoTeste.js'
 import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, usarBancos } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
@@ -29,10 +29,10 @@ let consultasNoBanco = 0
 const q = async (sql, p = []) => (await banco.query(sql, p)).rows
 
 beforeAll(async () => {
-  central = new PGlite()
+  central = abrirPGlite()
   await central.exec(SQL_CENTRAL)
   await central.exec("UPDATE ambientes SET database_name = 'banco_vm' WHERE sigla = 'vm'")
-  banco = new PGlite()
+  banco = abrirPGlite()
   await banco.exec(ESTRUTURA + '\n' + MIGRACOES)
   await banco.exec("INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u_alvo', 'alvo', 'Alvo', 'alvo@teste.local', 'hash-original', 'consulta')")
   // Dono do token dos testes (a sessão é conferida no banco do ambiente: api/_sessao.js).

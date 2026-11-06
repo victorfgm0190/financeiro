@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { normalizarLayout } from './import-layouts.js'
 
 // /api/import-layouts num Postgres de verdade (PGlite): modelos por usuário, upsert por
@@ -24,7 +24,7 @@ const chamar = async (method, { body, url = '/api/import-layouts', user = 'u1' }
 const MODELO = { nome: 'Bradesco cartão', banco: 'Bradesco', tipo: 'cartao', assinatura: 'data|historico|valor', mapeamento: { linhaCabecalho: 0, colData: 0, colDescricao: 1, colValor: 2, formatoData: 'dmy', decimal: ',', sinalDespesa: 'negativo', ignorar: ['saldo'] } }
 
 // PGlite inicializa na 1ª consulta: aqui (hookTimeout 30 s), não dentro do teste (5 s com a suíte em paralelo).
-beforeEach(async () => { estado.db = new PGlite(); await estado.db.query('SELECT 1') })
+beforeEach(async () => { estado.db = await bancoDoArquivo(async () => {}); await estado.db.query('SELECT 1') })
 
 describe('/api/import-layouts', () => {
   it('cria a tabela, grava e lista só os do usuário', async () => {

@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { consumoDoBanco, listarPrecos, validarPreco, salvarPreco } from './_consumoIa.js'
 
 // Consumo de IA: leitura agregada do ia_uso (com e sem as colunas da migração 2026-10-30_ia_uso_consumo),
 // período no fuso de São Paulo, e o cadastro de preços do central.
 const banco = async (ddl) => {
-  const db = new PGlite()
-  await db.exec(ddl)
+  const db = await bancoDoArquivo(async (b) => {
+    await b.exec(ddl)
+  }, ddl)
   return { db, q: async (sql, p = []) => (await db.query(sql, p)).rows }
 }
 const ANTIGA = `CREATE TABLE ia_uso (id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text, ambiente TEXT, ferramenta TEXT,

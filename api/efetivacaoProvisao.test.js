@@ -2,7 +2,7 @@ import process from 'node:process'
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite } from './_testes/bancoTeste.js'
 import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, usarBancos } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
@@ -27,12 +27,12 @@ const lerMigracoes = (filtro) => readdirSync(raiz + 'migrations').filter(f => f.
 
 let central, antigo, novo
 beforeAll(async () => {
-  central = new PGlite()
+  central = abrirPGlite()
   await central.exec(SQL_CENTRAL)
   await central.exec("UPDATE ambientes SET database_name = 'banco_vm' WHERE sigla = 'vm'")
-  antigo = new PGlite()
+  antigo = abrirPGlite()
   await antigo.exec(ESTRUTURA + '\n' + lerMigracoes(f => f !== NOVA))
-  novo = new PGlite()
+  novo = abrirPGlite()
   await novo.exec(ESTRUTURA + '\n' + lerMigracoes(() => true))
   // A migração é idempotente (roda de novo sem erro).
   await novo.exec(readFileSync(raiz + 'migrations/' + NOVA, 'utf-8'))

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import { bancoDoArquivo } from './_testes/bancoTeste.js'
 import { montarUpsertSql, separarLimpezaDeParcela, CAMPOS_PARCELA_PROTEGIDOS, serializarParam } from './_db.js'
 import { txToRow, categoryToRow, rowToCategory } from '../src/lib/db.js'
 import { SQL_ORFAOS } from './fluxo-datas-provisorias.js'
@@ -35,14 +35,15 @@ async function upsert(tx) {
 }
 
 beforeEach(async () => {
-  db = new PGlite()
-  await db.exec(`CREATE TABLE lancamentos (${COLS.map(c => `"${c}" ${tipo(c)}${c === 'id' ? ' PRIMARY KEY' : ''}`).join(', ')})`)
-  await db.exec('CREATE UNIQUE INDEX uq_lancamentos_installment ON lancamentos (installment_key) WHERE installment_key IS NOT NULL')
-  await db.exec(`CREATE TABLE categorias (
-    id TEXT PRIMARY KEY, name TEXT, type TEXT, color TEXT, icon TEXT, category_group TEXT,
-    investment_account_id TEXT, gera_espelho BOOLEAN, conta_espelho_id TEXT,
-    default_gerencial_group TEXT, perfil_ids TEXT[], sort_order INTEGER
-  )`)
+  db = await bancoDoArquivo(async (b) => {
+    await b.exec(`CREATE TABLE lancamentos (${COLS.map(c => `"${c}" ${tipo(c)}${c === 'id' ? ' PRIMARY KEY' : ''}`).join(', ')})`)
+    await b.exec('CREATE UNIQUE INDEX uq_lancamentos_installment ON lancamentos (installment_key) WHERE installment_key IS NOT NULL')
+    await b.exec(`CREATE TABLE categorias (
+      id TEXT PRIMARY KEY, name TEXT, type TEXT, color TEXT, icon TEXT, category_group TEXT,
+      investment_account_id TEXT, gera_espelho BOOLEAN, conta_espelho_id TEXT,
+      default_gerencial_group TEXT, perfil_ids TEXT[], sort_order INTEGER
+    )`)
+  })
   await upsert(cheio)
 // A 1ª instância do PGlite carrega o WASM; com a suíte inteira rodando em paralelo isso passa dos
 // 10s padrão e o 1º teste falhava por timeout do hook, não por erro.

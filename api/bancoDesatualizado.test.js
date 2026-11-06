@@ -2,7 +2,7 @@ import process from 'node:process'
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { PGlite } from '@electric-sql/pglite'
+import { abrirPGlite } from './_testes/bancoTeste.js'
 import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, usarBancos } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
@@ -30,12 +30,12 @@ let atual
 const q = async (sql, p = []) => (await atual.query(sql, p)).rows
 
 beforeAll(async () => {
-  central = new PGlite()
+  central = abrirPGlite()
   await central.exec(SQL_CENTRAL)
   await central.exec("UPDATE ambientes SET database_name = 'banco_vm' WHERE sigla = 'vm'")
-  antigo = new PGlite()
+  antigo = abrirPGlite()
   await antigo.exec(ESTRUTURA + '\n' + lerMigracoes(f => !NOVAS.includes(f)))
-  novo = new PGlite()
+  novo = abrirPGlite()
   await novo.exec(ESTRUTURA + '\n' + lerMigracoes(() => true))
   for (const b of [antigo, novo]) {
     await b.exec("INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u1', 'admin', 'Admin', 'admin@teste.local', 'x', 'admin')")
