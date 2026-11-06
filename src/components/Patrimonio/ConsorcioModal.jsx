@@ -5,7 +5,7 @@ import DateInput from '../shared/DateInput'
 import { salvarConsorcio } from '../../lib/bemApi'
 
 const COTA_VAZIA = {
-  numero: '', valor_carta: '', prazo_meses: '', percentual_parcela: '100', valor_parcela_cheia: '',
+  numero: '', data_adesao: '', valor_carta: '', prazo_meses: '', percentual_parcela: '100', valor_parcela_cheia: '',
   saldo_devedor_informado: '', saldo_devedor_data: '', parcelas_pagas_informadas: '', valor_pago_informado: '',
 }
 const paraForm = (c) => Object.fromEntries(Object.keys(COTA_VAZIA).map(k => [k, c?.[k] == null ? COTA_VAZIA[k] : String(c[k])]))
@@ -26,6 +26,12 @@ export default function ConsorcioModal({ bemId, consorcio, favorecidos = [], con
 
   const campo = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
   const campoCota = (i, k) => (e) => setCotas(l => l.map((c, n) => (n === i ? { ...c, [k]: e.target.value } : c)))
+  // A data padrão só sugere: preenche as cotas ainda sem data e as novas, e cada cota pode ter a sua.
+  const mudarAdesaoPadrao = (e) => {
+    const data = e.target.value
+    setForm(f => ({ ...f, data_adesao: data }))
+    if (data) setCotas(l => l.map(c => (c.data_adesao ? c : { ...c, data_adesao: data })))
+  }
 
   const enviar = async (e) => {
     e.preventDefault()
@@ -57,8 +63,9 @@ export default function ConsorcioModal({ bemId, consorcio, favorecidos = [], con
           <input className="input" value={form.grupo} onChange={campo('grupo')} placeholder="Número do grupo no contrato" />
         </div>
         <div>
-          <label className="label">Data de adesão</label>
-          <DateInput className="input" value={form.data_adesao} onChange={campo('data_adesao')} />
+          <label className="label">Data de adesão padrão</label>
+          <DateInput className="input" value={form.data_adesao} onChange={mudarAdesaoPadrao} />
+          <p className="text-xs text-texto-3 mt-1">Sugerida ao incluir uma cota. A data que vale é a de cada cota.</p>
         </div>
         <div>
           <label className="label">Índice de reajuste</label>
@@ -87,6 +94,10 @@ export default function ConsorcioModal({ bemId, consorcio, favorecidos = [], con
             <div>
               <label className="label">Número da cota *</label>
               <input className="input" required value={c.numero} onChange={campoCota(i, 'numero')} placeholder="Número da cota no contrato" />
+            </div>
+            <div>
+              <label className="label" htmlFor={`adesao-cota-${i}`}>Data de adesão da cota</label>
+              <DateInput id={`adesao-cota-${i}`} className="input" value={c.data_adesao} onChange={campoCota(i, 'data_adesao')} />
             </div>
             <div>
               <label className="label">Valor da carta de crédito (R$) *</label>
@@ -124,7 +135,7 @@ export default function ConsorcioModal({ bemId, consorcio, favorecidos = [], con
         </div>
       ))}
 
-      <button type="button" className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5" onClick={() => setCotas(l => [...l, { ...COTA_VAZIA }])}>
+      <button type="button" className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5" onClick={() => setCotas(l => [...l, { ...COTA_VAZIA, data_adesao: form.data_adesao }])}>
         <Plus size={13} /> Adicionar outra cota do grupo
       </button>
 

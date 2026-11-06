@@ -155,7 +155,7 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
           <div>
             <h3 className="text-sm font-semibold text-texto-2">Consórcio · {rotuloSituacao(consorcio.situacao)}</h3>
             <p className="text-xs text-texto-3 mt-0.5">
-              {[consorcio.administradora, consorcio.grupo && `Grupo ${consorcio.grupo}`, consorcio.data_adesao && `Adesão ${fmtDate(consorcio.data_adesao)}`, consorcio.indice_reajuste && `Índice ${consorcio.indice_reajuste}`].filter(Boolean).join(' · ') || 'Sem dados do contrato'}
+              {[consorcio.administradora, consorcio.grupo && `Grupo ${consorcio.grupo}`, consorcio.indice_reajuste && `Índice ${consorcio.indice_reajuste}`].filter(Boolean).join(' · ') || 'Sem dados do contrato'}
             </p>
           </div>
           {podeEditar && (
@@ -165,10 +165,11 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
           )}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[620px]">
+          <table className="w-full text-sm min-w-[720px]">
             <thead>
               <tr className="border-b border-borda text-xs text-texto-2">
                 <th className="text-left font-medium py-2 pr-3">Cota</th>
+                <th className="text-left font-medium py-2 px-2">Adesão</th>
                 <th className="text-right font-medium py-2 px-2">Carta</th>
                 <th className="text-right font-medium py-2 px-2">Parcela</th>
                 <th className="text-right font-medium py-2 px-2">Prazo</th>
@@ -180,6 +181,7 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
               {cotas.map(c => (
                 <tr key={c.id} className="border-b border-borda/60">
                   <td className="py-1.5 pr-3 text-texto-1">{c.numero}</td>
+                  <td className="py-1.5 px-2 text-texto-2">{c.data_adesao ? fmtDate(c.data_adesao) : '—'}</td>
                   <td className="py-1.5 px-2 text-right text-texto-1">{fmt(c.valor_carta)}</td>
                   <td className="py-1.5 px-2 text-right text-texto-1">{fmt(parcelaDaCota(c))} <span className="text-xs text-texto-3">({Number(c.percentual_parcela)}%)</span></td>
                   <td className="py-1.5 px-2 text-right text-texto-2">{c.prazo_meses ? `${c.prazo_meses} meses` : '—'}</td>
@@ -194,6 +196,7 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
             <tfoot>
               <tr className="font-semibold">
                 <td className="py-2 pr-3 text-texto-1">Total</td>
+                <td />
                 <td className="py-2 px-2 text-right text-texto-1">{fmt(totais.carta)}</td>
                 <td className="py-2 px-2 text-right text-texto-1">{fmt(totais.parcelaMensal)}</td>
                 <td />

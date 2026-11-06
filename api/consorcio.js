@@ -53,7 +53,7 @@ async function salvar(req, res) {
   if (cotas.some(c => !textoOuNull(c.numero))) return fail(res, 400, 'Toda cota precisa de número')
   if (cotas.some(c => !(Number(c.valor_carta) > 0))) return fail(res, 400, 'Toda cota precisa do valor da carta de crédito')
   if (cotas.some(c => !(Number(c.percentual_parcela) > 0))) return fail(res, 400, 'Informe o % da parcela paga de cada cota')
-  for (const d of [b.data_adesao, ...cotas.map(c => c.saldo_devedor_data)]) {
+  for (const d of [b.data_adesao, ...cotas.flatMap(c => [c.data_adesao, c.saldo_devedor_data])]) {
     if (textoOuNull(d) && !isIsoDate(d)) return fail(res, 400, 'Data inválida')
   }
 
@@ -81,10 +81,10 @@ async function salvar(req, res) {
     await q(`DELETE FROM consorcio_cotas WHERE bem_id = $1`, [bemId])
     for (const c of cotas) {
       await q(
-        `INSERT INTO consorcio_cotas (bem_id, numero, valor_carta, prazo_meses, percentual_parcela, valor_parcela_cheia,
+        `INSERT INTO consorcio_cotas (bem_id, numero, data_adesao, valor_carta, prazo_meses, percentual_parcela, valor_parcela_cheia,
            saldo_devedor_informado, saldo_devedor_data, parcelas_pagas_informadas, valor_pago_informado)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [bemId, textoOuNull(c.numero), Number(c.valor_carta), numeroOuNull(c.prazo_meses), Number(c.percentual_parcela),
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [bemId, textoOuNull(c.numero), textoOuNull(c.data_adesao), Number(c.valor_carta), numeroOuNull(c.prazo_meses), Number(c.percentual_parcela),
           numeroOuNull(c.valor_parcela_cheia) ?? 0, numeroOuNull(c.saldo_devedor_informado), textoOuNull(c.saldo_devedor_data),
           numeroOuNull(c.parcelas_pagas_informadas), numeroOuNull(c.valor_pago_informado)],
       )
