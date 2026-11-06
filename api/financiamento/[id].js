@@ -6,6 +6,7 @@ import {
   ensureBemSchema, withFavorecido, sincronizarFavorecidoAgendamentos,
 } from '../_bem.js'
 import { comAmbiente } from '../_ambiente.js'
+import { exigirContaPermitida } from '../_permissoesApi.js'
 
 // GET   /api/financiamento/[id] — financiamento completo: provisão × realizado, desvios e as
 // N parcelas. `desvio_juros` acumulado é a diferença entre os juros provisionados das parcelas
@@ -27,6 +28,7 @@ async function handler(req, res) {
     // Aceita também o id da CONTA DE DÍVIDA (card "Dívidas e Passivos" › consulta do financiamento).
     const [fin] = await query(`SELECT * FROM financing WHERE id = $1 OR conta_divida_id = $1 LIMIT 1`, [id])
     if (!fin) return fail(res, 404, `financiamento ${id} não encontrado`)
+    await exigirContaPermitida(query, req.user, fin.bem_id)
 
     const [bem] = await query(`SELECT id, name FROM contas WHERE id = $1`, [fin.bem_id])
     const rows = await query(
@@ -85,6 +87,7 @@ async function handler(req, res) {
       },
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/financiamento/[id]]', err.message)
     return fail(res, 500, explicarErro(err))
   }
@@ -114,6 +117,7 @@ async function patch(req, res) {
 
     const [fin] = await query(`SELECT * FROM financing WHERE id = $1`, [id])
     if (!fin) return fail(res, 404, `financiamento ${id} não encontrado`)
+    await exigirContaPermitida(query, req.user, fin.bem_id)
 
     let contaCriada = null
     if (body.novo_banco) {
@@ -208,6 +212,7 @@ async function patch(req, res) {
       } : null,
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/financiamento/[id]] PATCH', err.message)
     return fail(res, 500, explicarErro(err))
   }

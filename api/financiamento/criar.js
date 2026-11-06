@@ -7,6 +7,7 @@ import {
 } from '../_bem.js'
 import { gravarAberturaDoFinanciamento } from '../_bemBaixas.js'
 import { comAmbiente } from '../_ambiente.js'
+import { exigirContaPermitida } from '../_permissoesApi.js'
 
 // POST /api/financiamento/criar — provisiona o financiamento inteiro de uma vez:
 // conta de dívida em "Dívidas e Passivos", N parcelas em financing_installments e N
@@ -27,6 +28,7 @@ async function handler(req, res) {
       bem_id, valor_principal, num_parcelas, valor_parcela, banco,
       data_primeira_parcela, conta_origem_id, banco_favorecido_id,
     } = body
+    if (bem_id) await exigirContaPermitida(query, req.user, bem_id)
 
     if (!bem_id) return fail(res, 400, 'bem_id é obrigatório')
     if (!Number.isFinite(Number(valor_principal)) || Number(valor_principal) <= 0) {
@@ -251,6 +253,7 @@ async function handler(req, res) {
       },
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/financiamento/criar]', err.message)
     return fail(res, 500, explicarErro(err))
   }

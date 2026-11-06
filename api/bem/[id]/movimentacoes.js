@@ -2,6 +2,7 @@ import { query } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
 import { getRouteId, num, fail, explicarErro } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
+import { exigirContaPermitida } from '../../_permissoesApi.js'
 
 // GET /api/bem/[id]/movimentacoes — histórico do bem em ordem cronológica: entradas à vista,
 // trade-ins (com perda/ganho) e pagamentos de parcela (principal × juros).
@@ -13,6 +14,7 @@ async function handler(req, res) {
   try {
     const bemId = getRouteId(req, 1)
     if (!bemId) return fail(res, 400, 'id do bem é obrigatório')
+    await exigirContaPermitida(query, req.user, bemId)
 
     const [bem] = await query(`SELECT id, name FROM contas WHERE id = $1`, [bemId])
     if (!bem) return fail(res, 404, `bem ${bemId} não encontrado`)
@@ -112,6 +114,7 @@ async function handler(req, res) {
       movimentacoes,
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/bem/[id]/movimentacoes]', err.message)
     return fail(res, 500, explicarErro(err))
   }

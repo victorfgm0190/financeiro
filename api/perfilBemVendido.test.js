@@ -147,9 +147,11 @@ describe('gravação igual à leitura (usuário restrito)', () => {
     expect(await oResultado()).toBeUndefined()
   }, 120_000)
 
-  it('perfil do bem vendido: estorna a troca', async () => {
+  it('estorno de troca entre perfis: exige os dois bens', async () => {
     await trocar()
-    expect((await estorno(SO_A())).statusCode).toBe(200)
+    expect((await estorno(SO_A())).statusCode).toBe(403)
+    expect(await oResultado()).toBeDefined()
+    expect((await estorno(token(['pa', 'pb']))).statusCode).toBe(200)
     expect(await oResultado()).toBeUndefined()
   }, 120_000)
 

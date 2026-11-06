@@ -6,6 +6,7 @@ import {
   categoriasInexistentes, ACCOUNT_TYPE_BEM, TIPO_BEM, explicarErro,
 } from '../_bem.js'
 import { comAmbiente } from '../_ambiente.js'
+import { exigirContaPermitida } from '../_permissoesApi.js'
 
 // POST /api/bem/criar — cadastro inicial de um bem imobilizado.
 // Cria (ou converte) a conta do bem e parametriza as 4 categorias usadas pelo módulo:
@@ -23,6 +24,8 @@ async function handler(req, res) {
       categoria_prestacao_id, categoria_taxa_finan_id,
     } = body
 
+    // Transformar uma conta que já existe em bem: só conta dos perfis permitidos.
+    if (conta_id) await exigirContaPermitida(query, req.user, conta_id)
     if (!nome || typeof nome !== 'string') return fail(res, 400, 'nome é obrigatório')
     if (!Number.isFinite(Number(valor_nota_fiscal)) || Number(valor_nota_fiscal) <= 0) {
       return fail(res, 400, 'valor_nota_fiscal deve ser um número maior que zero')
@@ -100,6 +103,7 @@ async function handler(req, res) {
       },
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/bem/criar]', err.message)
     return fail(res, 500, explicarErro(err))
   }

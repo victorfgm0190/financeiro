@@ -4,6 +4,7 @@ import {
   getRouteId, num, fail, serializarBem, explicarErro, montarComposicaoBem,
 } from '../_bem.js'
 import { comAmbiente } from '../_ambiente.js'
+import { exigirContaPermitida } from '../_permissoesApi.js'
 
 // GET /api/bem/[id] — bem com saldo atual, categorias parametrizadas, status de venda e o
 // financiamento vinculado (null se ainda não houver).
@@ -15,6 +16,7 @@ async function handler(req, res) {
   try {
     const id = getRouteId(req)
     if (!id) return fail(res, 400, 'id é obrigatório')
+    await exigirContaPermitida(query, req.user, id)
 
     const [conta] = await query(`SELECT * FROM contas WHERE id = $1`, [id])
     if (!conta) return fail(res, 404, `bem ${id} não encontrado`)
@@ -54,6 +56,7 @@ async function handler(req, res) {
       },
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/bem/[id]]', err.message)
     return fail(res, 500, explicarErro(err))
   }

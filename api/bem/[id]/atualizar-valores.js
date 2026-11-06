@@ -5,6 +5,7 @@ import {
   METODOS_PATRIMONIO, METODO_PATRIMONIO_PADRAO,
 } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
+import { exigirContaPermitida } from '../../_permissoesApi.js'
 
 // POST /api/bem/[id]/atualizar-valores — edita os dois valores do bem e escolhe qual deles
 // representa o bem no Patrimônio.
@@ -35,6 +36,7 @@ async function handler(req, res) {
     const body = await parseBody(req)
     const bemId = getRouteId(req, 1) || body.bem_id
     if (!bemId) return fail(res, 400, 'bem_id é obrigatório')
+    await exigirContaPermitida(query, req.user, bemId)
 
     const [bem] = await query(`SELECT * FROM contas WHERE id = $1`, [bemId])
     if (!bem) return fail(res, 404, `bem ${bemId} não encontrado`)
@@ -126,6 +128,7 @@ async function handler(req, res) {
       },
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/bem/[id]/atualizar-valores]', err.message)
     return fail(res, 500, explicarErro(err))
   }

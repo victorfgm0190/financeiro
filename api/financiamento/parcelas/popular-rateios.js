@@ -4,6 +4,7 @@ import {
   num, round2, fail, explicarErro, ensureBemSchema, criarRateiosParcela,
 } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
+import { exigirContaPermitida } from '../../_permissoesApi.js'
 
 // POST /api/financiamento/parcelas/popular-rateios — divide os agendamentos de parcela de um
 // financiamento ANTIGO nas duas categorias do bem, via rateio.
@@ -43,6 +44,7 @@ async function handler(req, res) {
       return fail(res, 404,
         `financiamento não encontrado para ${financingId ? `id ${financingId}` : `bem ${bemId}`}`)
     }
+    await exigirContaPermitida(query, req.user, fin.bem_id)
 
     const [bem] = await query(`SELECT * FROM contas WHERE id = $1`, [fin.bem_id])
     if (!bem) return fail(res, 404, `bem ${fin.bem_id} não encontrado`)
@@ -208,6 +210,7 @@ async function handler(req, res) {
         : 'Nenhuma parcela precisava de rateio',
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/financiamento/parcelas/popular-rateios]', err.message)
     return fail(res, 500, explicarErro(err))
   }

@@ -2,7 +2,7 @@ import { query, parseBody, withTransaction } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
 import { getRouteId, num, round2, fail, explicarErro, ensureBemSchema } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
-import { exigirLinhasPermitidas } from '../../_permissoesApi.js'
+import { exigirContaPermitida } from '../../_permissoesApi.js'
 
 // POST /api/bem/[id]/estornar-entrada — desfaz TODA a entrada à vista registrada no bem
 // (transferências vinculadas + trade-ins), deixando-o pronto para registrar de novo.
@@ -34,6 +34,7 @@ async function handler(req, res) {
     const body = await parseBody(req)
     const bemId = getRouteId(req, 1) || body.bem_id
     if (!bemId) return fail(res, 400, 'bem_id é obrigatório')
+    await exigirContaPermitida(query, req.user, bemId)
 
     const [bem] = await query(`SELECT id, name, balance FROM contas WHERE id = $1`, [bemId])
     if (!bem) return fail(res, 404, `bem ${bemId} não encontrado`)
@@ -45,14 +46,13 @@ async function handler(req, res) {
     )
     if (!entradas?.n) return fail(res, 400, 'Este bem não tem entrada registrada para estornar')
 
-    // O estorno apaga o ganho/perda da troca: só quem pode gravar esse lançamento (perfil do bem vendido).
-    const resultados = await query(
-      `SELECT m.lancamento_id FROM bem_movimentacoes m
-         JOIN lancamentos l ON l.id = m.lancamento_id AND l.origin = 'patrimonio_auto'
-        WHERE m.bem_id = $1 AND m.tipo IN ('entrada_venda', 'entrada_trade_in')`,
+    // O estorno devolve o saldo do bem dado em troca e apaga o ganho/perda dele: exige também esse bem.
+    const origens = await query(
+      `SELECT DISTINCT bem_origem_id FROM bem_movimentacoes
+        WHERE bem_id = $1 AND tipo IN ('entrada_venda', 'entrada_trade_in') AND bem_origem_id IS NOT NULL`,
       [bemId],
     )
-    await exigirLinhasPermitidas(query, req.user, 'lancamentos', resultados.map(r => r.lancamento_id))
+    for (const o of origens) await exigirContaPermitida(query, req.user, o.bem_origem_id)
 
     // Guarda deliberada, não bloqueio: com financiamento aberto a entrada é a base do valor
     // financiado, então desfazê-la sozinha deixa os dois números incoerentes. Quem sabe se isso

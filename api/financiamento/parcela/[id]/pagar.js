@@ -7,6 +7,7 @@ import {
 } from '../../../_bem.js'
 import { rateioComQuitacao } from '../../../../src/lib/financiamento.js'
 import { comAmbiente } from '../../../_ambiente.js'
+import { exigirContaPermitida } from '../../../_permissoesApi.js'
 
 // POST /api/financiamento/parcela/[id]/pagar — baixa (total ou parcial) de uma parcela.
 //
@@ -66,6 +67,7 @@ async function handler(req, res) {
 
     const [fin] = await query(`SELECT * FROM financing WHERE id = $1`, [parcela.financing_id])
     if (!fin) return fail(res, 404, `financiamento ${parcela.financing_id} não encontrado`)
+    await exigirContaPermitida(query, req.user, fin.bem_id)
 
     const [bem] = await query(`SELECT * FROM contas WHERE id = $1`, [fin.bem_id])
     if (!bem) return fail(res, 404, `bem ${fin.bem_id} não encontrado`)
@@ -288,6 +290,7 @@ async function handler(req, res) {
       },
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/financiamento/parcela/[id]/pagar]', err.message)
     return fail(res, 500, explicarErro(err))
   }

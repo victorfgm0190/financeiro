@@ -5,6 +5,7 @@ import {
   criarLancamentoCategorizado, registrarMovimentacao, explicarErro,
 } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
+import { exigirContaPermitida, exigirLinhasPermitidas } from '../../_permissoesApi.js'
 
 // POST /api/bem/[id]/registrar-entrada — registra a entrada à vista do bem.
 //
@@ -31,9 +32,13 @@ async function handler(req, res) {
     const body = await parseBody(req)
     const bemId = getRouteId(req, 1) || body.bem_id
     if (!bemId) return fail(res, 400, 'bem_id é obrigatório')
+    await exigirContaPermitida(query, req.user, bemId)
 
     const itens = Array.isArray(body.transferencias) ? body.transferencias : []
     if (itens.length === 0) return fail(res, 400, 'transferencias deve ser um array não vazio')
+    // A entrada também baixa o bem dado em troca e altera a transferência escolhida.
+    for (const item of itens) if (item?.bem_origem_id) await exigirContaPermitida(query, req.user, item.bem_origem_id)
+    await exigirLinhasPermitidas(query, req.user, 'lancamentos', itens.map(i => i?.transferencia_id))
 
     const [bem] = await query(`SELECT * FROM contas WHERE id = $1`, [bemId])
     if (!bem) return fail(res, 404, `bem ${bemId} não encontrado`)
@@ -231,6 +236,7 @@ async function handler(req, res) {
       bem_antigo: resultado.bensAntigos[0] || null,
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/bem/[id]/registrar-entrada]', err.message)
     return fail(res, 500, explicarErro(err))
   }

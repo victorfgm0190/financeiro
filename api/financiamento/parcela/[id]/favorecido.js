@@ -5,6 +5,7 @@ import {
 } from '../../../_bem.js'
 import { ensureHistoricoSchema } from '../../../_historico.js'
 import { comAmbiente } from '../../../_ambiente.js'
+import { exigirContaPermitida } from '../../../_permissoesApi.js'
 
 // PATCH /api/financiamento/parcela/[id]/favorecido — o lado INVERSO da sincronização.
 // Body: { payee }
@@ -40,6 +41,7 @@ async function handler(req, res) {
 
     const [fin] = await query(`SELECT * FROM financing WHERE id = $1`, [parcela.financing_id])
     if (!fin) return fail(res, 404, `financiamento ${parcela.financing_id} não encontrado`)
+    await exigirContaPermitida(query, req.user, fin.bem_id)
 
     // O vínculo com a conta favorecida só sobrevive se o texto novo ainda for o nome dela.
     // Sem isso a aba Parcelas mostraria `banco_favorecido_nome` ("Safra") enquanto as parcelas
@@ -86,6 +88,7 @@ async function handler(req, res) {
       agendamentos_payee: payee,
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/financiamento/parcela/[id]/favorecido]', err.message)
     return fail(res, 500, explicarErro(err))
   }

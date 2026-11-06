@@ -4,6 +4,7 @@ import {
   getRouteId, round2, fail, SELECT_PARCELAS, serializarParcela, explicarErro,
 } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
+import { exigirContaPermitida } from '../../_permissoesApi.js'
 
 // GET /api/financiamento/[id]/parcelas?page=1&limit=20 — lista paginada das parcelas.
 // Sem query params devolve todas (limit padrão = total).
@@ -23,8 +24,9 @@ async function handler(req, res) {
     const financingId = getRouteId(req, 1)
     if (!financingId) return fail(res, 400, 'id do financiamento é obrigatório')
 
-    const [fin] = await query(`SELECT id, num_parcelas FROM financing WHERE id = $1`, [financingId])
+    const [fin] = await query(`SELECT id, num_parcelas, bem_id FROM financing WHERE id = $1`, [financingId])
     if (!fin) return fail(res, 404, `financiamento ${financingId} não encontrado`)
+    await exigirContaPermitida(query, req.user, fin.bem_id)
 
     const [{ total }] = await query(
       `SELECT COUNT(*)::int AS total FROM financing_installments WHERE financing_id = $1`,
@@ -57,6 +59,7 @@ async function handler(req, res) {
       }),
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/financiamento/[id]/parcelas]', err.message)
     return fail(res, 500, explicarErro(err))
   }
