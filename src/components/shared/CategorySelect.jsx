@@ -3,6 +3,7 @@ import SearchableSelect from './SearchableSelect'
 import { useApp } from '../../context/AppContext'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
+import { SEM_CATEGORIA } from '../../lib/filtroCategoria'
 
 // `categories` chega JÁ ORDENADA (ordenarCategorias: grupos na ordem salva/padrão, depois
 // sortOrder/alfabética) — aqui só agrupa, preservando a ordem de chegada.
@@ -54,6 +55,8 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
 // Categorias por perfil: `perfilId` ausente (undefined) = perfil do chip do topo; null explícito =
 // sem filtro (ex.: telas de configuração que listam tudo). A categoria já selecionada (`value`)
 // fica sempre na lista, mesmo sendo de outro perfil — editar não apaga nem troca o que foi gravado.
+// `filtro`: usado como filtro de lista. Vazio é "Todas"; "Sem categoria" vira opção (SEM_CATEGORIA). Nos
+// formulários continua o padrão: vazio é "Sem categoria".
 export default function CategorySelect({
   categories: categoriesProp,
   value,
@@ -65,6 +68,7 @@ export default function CategorySelect({
   searchable = false,
   perfilId,
   quebrarRotulo = false,
+  filtro = false,
 }) {
   const { activeProfileId, categoryGroupOrder } = useApp()
   const perfil = perfilId === undefined ? activeProfileId : perfilId
@@ -101,7 +105,8 @@ export default function CategorySelect({
   return (
     <>
     <select className={className} value={value} onChange={onChange} required={required}>
-      <option value="">{placeholder}</option>
+      <option value="">{filtro ? 'Todas' : placeholder}</option>
+      {filtro && <option value={SEM_CATEGORIA}>Sem categoria</option>}
       {sortedGroups.map(groupName => (
         <optgroup key={groupName} label={groupName}>
           {grouped[groupName].map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}

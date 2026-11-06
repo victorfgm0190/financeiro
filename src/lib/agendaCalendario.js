@@ -129,7 +129,7 @@ export function ocorrenciasPagas(linhas, { ini, fim, accounts = [] }) {
   return (linhas || [])
     .filter(l => l.dataPagamento && l.dataPagamento >= ini && l.dataPagamento <= fim)
     .map(l => ({ key: `pago:${l.key}`, schedule: l.schedule, linhaPaga: l, data: l.dataPagamento, amount: r2(l.amount),
-      grupo: classificarAgendamento(l.schedule, accounts), pago: true, semLancamento: !!l.semLancamento,
+      grupo: classificarAgendamento(l.schedule || l, accounts), pago: true, semLancamento: !!l.semLancamento,
       proxima: false, ocorrencia: null, antesDe: null, atrasado: false }))
 }
 

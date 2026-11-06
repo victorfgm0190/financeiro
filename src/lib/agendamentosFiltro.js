@@ -1,5 +1,6 @@
 // Data exibida e filtros da lista de Agendamentos. Sem React: usada pelo SchedulePanel e testável.
 import { occEfetiva, proximaEfetiva } from './fluxoCaixa.js'
+import { casaCategoria } from './filtroCategoria.js'
 
 // Data de vencimento EXIBIDA (e usada no particionamento da lista) para um agendamento
 // RECORRENTE. Para 'once'/faturas e concluídos (nextDate null) devolve nextDate inalterado.
@@ -66,7 +67,7 @@ export function filtrarAgendamentos(schedules, { desc = '', payee = '', category
     if (agenda === 'nao' && s.sincronizarAgenda !== false) return false
     if (d && !(s.description || '').toLowerCase().includes(d)) return false
     if (p && !(s.payee || '').toLowerCase().includes(p)) return false
-    if (categoryId && s.categoryId !== categoryId) return false
+    if (!casaCategoria(s.categoryId, categoryId)) return false
     if (min !== null || max !== null) {
       // Passa se o valor BASE OU o valor EFETIVO da próxima ocorrência (override) cair no range.
       const baseAmt = Number(s.amount) || 0

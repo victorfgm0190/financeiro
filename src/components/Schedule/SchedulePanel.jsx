@@ -45,6 +45,9 @@ import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import DateInput from '../shared/DateInput'
 import { pagamentosDosAgendamentos, filtrarPagamentos, totaisPagamentos } from '../../lib/ocorrenciasRegistradas'
+import { pagosEmConta } from '../../lib/pagosEmConta'
+import { SEM_CATEGORIA } from '../../lib/filtroCategoria'
+import TransactionForm from '../Transactions/TransactionForm'
 import VincularLancamento from './VincularLancamento'
 import { useAtalho, useTituloAtalho } from '../../context/atalhosHooks'
 import ShortcutHint from '../shared/ShortcutHint'
@@ -2100,7 +2103,7 @@ const SELECTION_GROUP_ORDER = GRUPOS_SELECAO
 // `calendario` ({ status, faturas, pagosLinhas, renderFatura }): mostra a Visão Calendário em vez da
 // tabela, com as MESMAS linhas (buildScheduleGroups) e a mesma linha de ações (ScheduleRow).
 // reservaFoco: conta de reserva filtrada na aba Contas Anuais (o resumo da seleção conta pelo lado dela).
-function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true, pagosLinhas = null, calendario = null, reservaFoco = null }) {
+function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true, pagosLinhas = null, calendario = null, reservaFoco = null }) {
   const { profiles, setAvisoOperacao, scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa, pode, definirSincronizarAgenda } = useApp()
   // Seleção (registrar/pular/definir tipo em massa) só para quem edita agendamentos.
   const podeSelecionar = pode('agendamentos', 'editar')
@@ -2364,6 +2367,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
           today={today}
           onSelecionar={selectableRows.length > 0 && podeSelecionar ? () => setSelectionMode(true) : null}
           pagosLinhas={pagosLinhas}
+          onAbrirAvulso={onAbrirAvulso}
           contas={accounts}
           renderDetalhe={({ schedule, nextDate, futureItems, isSerie }) => (
             <table className="w-full text-sm block">
@@ -2637,8 +2641,9 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
 }
 
 
-// Aba "Pagos": uma linha por ocorrência paga (dados do lançamento). Somente leitura.
-function PagamentosTable({ linhas, categories, accounts, tiposDocumento }) {
+// Aba "Pagos": uma linha por pagamento (dados do lançamento). Linha sem agendamento abre a edição dele;
+// a que veio de agendamento é só leitura.
+function PagamentosTable({ linhas, categories, accounts, tiposDocumento, onAbrirAvulso }) {
   if (linhas.length === 0) {
     return (
       <div className="card text-center py-12">
@@ -2667,7 +2672,12 @@ function PagamentosTable({ linhas, categories, accounts, tiposDocumento }) {
             // Baixada sem lançamento: cinza/itálico, data = data baixada, conta e valor do agendamento.
             const sem = !!l.semLancamento
             return (
-              <tr key={l.key} className={`border-b border-borda/60 last:border-0 hover:bg-surface-hover/40 ${sem ? 'italic opacity-70' : ''}`}>
+              <tr key={l.key}
+                className={`border-b border-borda/60 last:border-0 hover:bg-surface-hover/40 ${sem ? 'italic opacity-70' : ''} ${l.semVinculo ? 'cursor-pointer' : ''}`}
+                {...(l.semVinculo ? {
+                  onClick: () => onAbrirAvulso?.(l.tx), tabIndex: 0,
+                  onKeyDown: (e) => { if (e.key === 'Enter') onAbrirAvulso?.(l.tx) },
+                } : {})}>
                 <td className="px-3 py-2 text-texto-1 whitespace-nowrap">
                   {l.dataPagamento ? fmtDate(l.dataPagamento) : '—'}
                   {sem && (
@@ -2678,15 +2688,18 @@ function PagamentosTable({ linhas, categories, accounts, tiposDocumento }) {
                 </td>
                 <td className="px-3 py-2 text-texto-2 whitespace-nowrap">{l.vencimento ? fmtDate(l.vencimento) : '—'}</td>
                 <td className="px-3 py-2 text-texto-1 max-w-[14rem]">
-                  <span className="block truncate">{l.description || '—'}</span>
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <span className="truncate">{l.description || '—'}</span>
+                    {l.semVinculo && <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-texto-3">Avulso</span>}
+                  </span>
                   {l.txId && l.schedule?.contratoId && <BotaoComposicaoParcela schedule={l.schedule} txId={l.txId} />}
                 </td>
                 <td className="px-3 py-2 text-texto-2 max-w-[11rem] truncate">{l.payee || '—'}</td>
                 <td className="px-3 py-2 text-texto-2 max-w-[11rem] truncate">{cat(l.categoryId)}</td>
                 <td className="px-3 py-2 text-texto-2 whitespace-nowrap" title={tipo?.nome}>{tipo?.sigla || '—'}</td>
-                <td className="px-3 py-2 text-texto-2 max-w-[9rem] truncate">{conta(l.accountId)}</td>
+                <td className="px-3 py-2 text-texto-2 max-w-[14rem] truncate">{l.toAccountId ? `${conta(l.accountId)} → ${conta(l.toAccountId)}` : conta(l.accountId)}</td>
                 <td className={`px-3 py-2 text-right whitespace-nowrap font-medium ${sem ? 'text-texto-3' : l.transactionType === 'income' ? 'text-receita' : 'text-despesa'}`}>{fmt(l.amount)}</td>
-                <td className="px-3 py-2 text-texto-2 whitespace-nowrap">{l.avulso ? 'avulso' : l.parcela ? (l.total ? `${l.parcela}/${l.total}` : `${l.parcela}`) : '—'}</td>
+                <td className="px-3 py-2 text-texto-2 whitespace-nowrap">{l.semVinculo ? '' : l.avulso ? 'avulso' : l.parcela ? (l.total ? `${l.parcela}/${l.total}` : `${l.parcela}`) : '—'}</td>
               </tr>
             )
           })}
@@ -2708,7 +2721,7 @@ function PagamentosTable({ linhas, categories, accounts, tiposDocumento }) {
 
 export default function SchedulePanel() {
   const {
-    profileSchedules: schedules, schedules: allSchedules,
+    profileSchedules: schedules, schedules: allSchedules, profileTransactions,
     categories, profileAccounts: accounts, accounts: allAccounts,
     payables, updatePayable, deletePayable,
     gerencialGroups, addTransaction,
@@ -2729,6 +2742,7 @@ export default function SchedulePanel() {
   const provisoesPendentes = useMemo(() => getProvisoesPendentes(), [getProvisoesPendentes])
   const faturasProvisao = useMemo(() => getFaturasProvisaoGerencial(), [getFaturasProvisaoGerencial])
   const [showExecutarGer, setShowExecutarGer] = useState(false)
+  const [editandoLancamento, setEditandoLancamento] = useState(null)
 
   const isMobile = useIsMobile()
   // Visão Lista | Calendário, lembrada por usuário. O calendário NÃO mexe no Período da lista
@@ -2842,7 +2856,7 @@ export default function SchedulePanel() {
   const etiquetas = etiquetasFiltros(
     { avancados: av, datas: fAba.datas, periodo: fAba.periodos[fAba.status] },
     {
-      nomeCategoria: (id) => { const c = categories.find(x => x.id === id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : id },
+      nomeCategoria: (id) => { if (id === SEM_CATEGORIA) return 'Sem categoria'; const c = categories.find(x => x.id === id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : id },
       nomeTipo: (k) => (k === SEM_TIPO ? 'Sem tipo' : tiposDocumento.find(t => t.id === k)?.sigla || k),
       fmtValor: (v) => fmt(Number(v)),
       fmtData: (d) => fmtDate(d),
@@ -3091,7 +3105,13 @@ export default function SchedulePanel() {
   const basePagos = activeTab === 'conta' ? schedules
     : activeTab === 'cartao' ? faturaPaymentsDoCartao
       : activeTab === 'gerencial' ? gerencialSomente : contasAnuais
-  const pagosLinhasTodas = useMemo(() => pagamentosDosAgendamentos(basePagos, transactions), [basePagos, transactions])
+  // Aba Agendamentos: tudo o que foi pago ou recebido em conta (lib/pagosEmConta). Demais abas: só os
+  // agendamentos delas. Os lançamentos já vêm recortados pelos perfis permitidos (/api/load).
+  const pagosLinhasTodas = useMemo(() => {
+    if (activeTab !== 'conta') return pagamentosDosAgendamentos(basePagos, transactions)
+    const linhas = pagosEmConta({ transactions: profileTransactions, todasTransactions: transactions, schedules: allSchedules, accounts: allAccounts })
+    return showZeroed ? linhas : linhas.filter(l => Number(l.amount) !== 0)
+  }, [activeTab, basePagos, transactions, profileTransactions, allSchedules, allAccounts, showZeroed])
   const pagosLinhas = useMemo(
     () => filtrarPorContaReserva(pagosLinhasTodas, contaReserva, l => l.schedule),
     [pagosLinhasTodas, contaReserva]
@@ -3101,7 +3121,8 @@ export default function SchedulePanel() {
       desc: fltDesc, payee: fltPayee, categoryId: fltCat, from: dataDe, to: dataAte,
       min: fltMin !== '' ? parseFloat(fltMin) : null,
       max: fltMax !== '' ? parseFloat(fltMax) : null,
-    }), [abaPagos, pagosLinhas, periodoAtual, hojeStr, fltDesc, fltPayee, fltCat, dataDe, dataAte, fltMin, fltMax])
+      agenda: fltAgenda,
+    }), [abaPagos, pagosLinhas, periodoAtual, hojeStr, fltDesc, fltPayee, fltCat, dataDe, dataAte, fltMin, fltMax, fltAgenda])
   const pagosAntesDoTipo = useMemo(
     () => filtrarPorTipoDocumento(filtrarPagamentos(pagosBuscados, { valores: selValores }), selTipos, tiposDocumento),
     [pagosBuscados, selValores, selTipos, tiposDocumento]
@@ -3219,9 +3240,10 @@ export default function SchedulePanel() {
       desc: fltDesc, payee: fltPayee, categoryId: fltCat,
       min: fltMin !== '' ? parseFloat(fltMin) : null,
       max: fltMax !== '' ? parseFloat(fltMax) : null,
+      agenda: fltAgenda,
     })
     return filtrarPorTipoDocumento(filtrarPagamentos(buscados, { valores: selValores }), selTipos, tiposDocumento)
-  }, [emCalendario, statusCal, pagosLinhas, fltDesc, fltPayee, fltCat, fltMin, fltMax, selValores, selTipos, tiposDocumento])
+  }, [emCalendario, statusCal, pagosLinhas, fltDesc, fltPayee, fltCat, fltMin, fltMax, fltAgenda, selValores, selTipos, tiposDocumento])
   const calPagosTipo = useMemo(() => filtrarPorTipo(calPagos, tipoMov, undefined, allAccounts), [calPagos, tipoMov, allAccounts])
   // Faturas do contas_a_pagar (aba Cartão), pelo vencimento — menos as que já têm o agendamento
   // pagamento_fatura da mesma fatura (senão a fatura apareceria duas vezes no dia).
@@ -3422,7 +3444,7 @@ export default function SchedulePanel() {
             </div>
             <div>
               <label className="label text-xs">Categoria</label>
-              <CategorySelect categories={categories} value={fltCat} onChange={e => setFltCat(e.target.value)} className="input py-1.5 text-xs" />
+              <CategorySelect filtro categories={categories} value={fltCat} onChange={e => setFltCat(e.target.value)} className="input py-1.5 text-xs" />
             </div>
             <div>
               <label className="label text-xs">Tipo de documento</label>
@@ -3586,13 +3608,14 @@ export default function SchedulePanel() {
         />
       ) : abaPagos && isMobile ? (
         // Celular: os pagos na lista por semana, com o detalhe (estornar, histórico…) ao tocar.
-        <SchedulesTable schedules={basePagos} pagosLinhas={pagosVisiveis} accounts={allAccounts} {...propsTabela} />
+        <SchedulesTable schedules={basePagos} pagosLinhas={pagosVisiveis} accounts={allAccounts} onAbrirAvulso={setEditandoLancamento} {...propsTabela} />
       ) : abaPagos ? (
         <PagamentosTable
           linhas={pagosVisiveis}
           categories={categories}
           accounts={allAccounts}
           tiposDocumento={tiposDocumento}
+          onAbrirAvulso={setEditandoLancamento}
         />
       ) : abaSemNada && vazioDaAba ? (
         <div className="card text-center py-12">
@@ -3648,6 +3671,10 @@ export default function SchedulePanel() {
         message={`Excluir "${confirmDeletePayable?.description}"?`}
         danger
       />
+
+      <Modal open={!!editandoLancamento} onClose={() => setEditandoLancamento(null)} title="Editar Lançamento">
+        {editandoLancamento && <TransactionForm initial={editandoLancamento} onClose={() => setEditandoLancamento(null)} />}
+      </Modal>
 
       {showExecutarGer && (
         <ExecutarGerenciaisModal

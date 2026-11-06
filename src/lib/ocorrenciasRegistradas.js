@@ -20,6 +20,7 @@
 import { computeOccurrences } from './occurrences.js'
 import { occEfetiva } from './fluxoCaixa.js'
 import { lancamentosVinculados } from './scheduleBaixa.js'
+import { casaCategoria } from './filtroCategoria.js'
 
 export const STATUS_OCORRENCIA = { PAGA: 'paga', PULADA: 'pulada', BAIXADA: 'baixada', AVULSO: 'avulso' }
 
@@ -169,13 +170,18 @@ export function pagamentosDosAgendamentos(schedules = [], transactions = []) {
 }
 
 // Filtros da barra sobre as linhas da aba Pagos. Data = data do PAGAMENTO; valor = valor pago.
-export function filtrarPagamentos(linhas, { desc = '', payee = '', categoryId = '', from = '', to = '', min = null, max = null, valores = null } = {}) {
+// `agenda`: '' | 'sim' | 'nao', pelo agendamento da linha; lançamento sem agendamento não sincroniza.
+export function filtrarPagamentos(linhas, { desc = '', payee = '', categoryId = '', from = '', to = '', min = null, max = null, valores = null, agenda = '' } = {}) {
   const d = desc.trim().toLowerCase()
   const p = payee.trim().toLowerCase()
   return (linhas || []).filter(l => {
     if (d && !l.description.toLowerCase().includes(d)) return false
     if (p && !l.payee.toLowerCase().includes(p)) return false
-    if (categoryId && l.categoryId !== categoryId) return false
+    if (!casaCategoria(l.categoryId, categoryId)) return false
+    if (agenda) {
+      const sincroniza = !!l.schedule && l.schedule.sincronizarAgenda !== false
+      if ((agenda === 'sim') !== sincroniza) return false
+    }
     if (from && (l.dataPagamento || '') < String(from).slice(0, 10)) return false
     if (to && (l.dataPagamento || '') > String(to).slice(0, 10)) return false
     if (min != null && !Number.isNaN(min) && l.amount < min) return false

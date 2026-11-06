@@ -70,7 +70,7 @@ export function linhasDosPagos(linhas, { accounts, categories, rateios = null })
         ? categoriaParaExportar({ type: l.transactionType, amount: l.amount, categoryId: l.categoryId }, rateios.get(l.txId), categories)
         : nomeCategoria(categories, l.categoryId),
       valor: Number(l.amount) || 0,
-      conta: nomeConta(accounts, l.accountId),
+      conta: l.toAccountId ? `${nomeConta(accounts, l.accountId)} → ${nomeConta(accounts, l.toAccountId)}` : nomeConta(accounts, l.accountId),
       status: statusDe(tipo, 'feito'),
       tipo: itemEhPagamentoCartao(l, accounts) ? ROTULO_PAGAMENTO_CARTAO : ROTULO_TIPO[tipo],
     }

@@ -20,6 +20,7 @@ const PILL = {
   pendente:   { label: 'Pendente',   cls: 'bg-surface-2 text-texto-2' },
   pago:       { label: '✓ Pago',     cls: 'bg-primary/15 text-primary-fg' },
   semlanc:    { label: 'Sem lançamento', cls: 'bg-surface-2 text-texto-3' },
+  avulso:     { label: 'Avulso', cls: 'bg-surface-2 text-texto-2' },
   concluido:  { label: 'Concluído',  cls: 'bg-surface-hover/60 text-texto-2' },
   confirmado: { label: 'Confirmado', cls: 'bg-primary/15 text-primary-fg' },
   // Pagamento de fatura (src/lib/rotuloMovimento.js): só o rótulo; por dentro é transferência.
@@ -62,7 +63,7 @@ function Item({ id, aberto, onToggle, descricao, data, valor, schedule, pills, d
   )
 }
 
-export default function AgendaMobile({ rows, schedules, getNextOccurrences, today, renderDetalhe, onSelecionar, pagosLinhas = null, contas = [] }) {
+export default function AgendaMobile({ onAbrirAvulso, rows, schedules, getNextOccurrences, today, renderDetalhe, onSelecionar, pagosLinhas = null, contas = [] }) {
   const comCartao = (s, pills) => (ehPagamentoDeCartao(s, contas) ? [...pills, 'cartao'] : pills)
   const [aberto, setAberto] = useState(null)
   const toggle = (id) => setAberto(a => (a === id ? null : id))
@@ -107,6 +108,18 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
         <h3 className="px-3 py-2 text-[11px] uppercase tracking-wide text-texto-3 border-b border-borda/60">{sem.label}</h3>
         {sem.items.map(l => {
           const id = `pago:${l.key}`
+          // Lançamento sem agendamento: tocar abre a edição dele.
+          if (l.semVinculo) {
+            return (
+              <Item
+                key={id} id={id} aberto={false} onToggle={() => onAbrirAvulso?.(l.tx)}
+                descricao={l.description || '(lançamento)'}
+                data={l.dataPagamento} valor={Number(l.amount) || 0} schedule={l}
+                pills={l.pagamentoCartao ? ['pago', 'avulso', 'cartao'] : ['pago', 'avulso']}
+                detalhe={null}
+              />
+            )
+          }
           return (
             <Item
               key={id} id={id} aberto={aberto === id} onToggle={toggle}

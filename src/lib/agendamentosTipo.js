@@ -27,6 +27,7 @@ export function tipoDoItem(item) {
 // Fatura a pagar do contas_a_pagar (aba Cartão: cartaoId + mesAno) também é pagamento de cartão.
 export const itemEhPagamentoCartao = (item, contas) =>
   !!(item?.cartaoId && item?.mesAno && !item.transactionType)
+  || !!item?.pagamentoCartao
   || ehPagamentoDeCartao(item?.schedule && !item.toAccountId ? item.schedule : item, contas)
 
 // Tipo mostrado na tela: pagamento de cartão primeiro; senão o tipo do movimento.
