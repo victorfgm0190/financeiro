@@ -169,8 +169,8 @@ export const AJUDA_TELAS = {
         detalhe: 'Lista as contas a pagar e a receber dos próximos 7 dias e as que já estão atrasadas, para nada passar.', exemplo: 'Exemplo: "Escola — vence amanhã — R$ 900,00".' },
       { chave: 'maiores-despesas', rotulo: 'Maiores Despesas', texto: 'Gráfico de pizza com as categorias em que você mais gastou. Clique numa fatia para ver os detalhes.',
         detalhe: 'Gráfico de pizza com as categorias em que mais saiu dinheiro no período. Clicando numa fatia, você vê os lançamentos daquela categoria.', exemplo: 'Exemplo: a fatia "Alimentação" é a maior: clique para ver mercado, padaria e restaurantes.' },
-      { chave: 'filtros-despesas', rotulo: 'Cheio / Líquido e período', texto: 'Escolha o mês (atual, anterior ou últimos 3) e se o valor desconta o que foi pago com dinheiro de reserva.',
-        detalhe: 'O período escolhe o mês (atual, anterior ou os últimos 3). "Cheio" mostra o gasto total; "Líquido" desconta o que foi pago com dinheiro de reserva na mesma categoria.', exemplo: 'Exemplo: R$ 2.000,00 de viagem pagos com a reserva "Férias" aparecem no Cheio, mas não no Líquido.' },
+      { chave: 'filtros-despesas', rotulo: 'Bruto / Líquido e período', texto: 'Escolha o mês (atual, anterior ou últimos 3) e se o valor desconta o que foi pago com dinheiro de reserva.',
+        detalhe: 'O período escolhe o mês (atual, anterior ou os últimos 3). "Bruto" mostra o gasto total; "Líquido" desconta o que foi pago com dinheiro de reserva na mesma categoria.', exemplo: 'Exemplo: R$ 2.000,00 de viagem pagos com a reserva "Férias" aparecem no Bruto, mas não no Líquido.' },
       { chave: 'ranking-categorias', rotulo: 'Ranking por Categoria', texto: 'As mesmas despesas em forma de lista, da categoria que mais gastou para a que menos gastou.',
         detalhe: 'As mesmas despesas do gráfico, em lista ordenada da maior para a menor, com o valor e a parte do total de cada categoria.', exemplo: 'Exemplo: 1º Moradia R$ 1.800,00; 2º Alimentação R$ 1.200,00; 3º Transporte R$ 600,00.' },
       { chave: 'top-favorecidos', rotulo: 'Top 5 Favorecidos', texto: 'De quem você mais recebeu e com quem mais gastou no mês. Clique num nome para ver os lançamentos.',
@@ -226,13 +226,13 @@ export const AJUDA_TELAS = {
     itens: [
       { chave: 'periodo', rotulo: 'Período', texto: 'Mês atual, mês anterior ou os últimos meses.',
         detalhe: 'Escolhe de qual intervalo vêm as despesas: o mês financeiro atual, o anterior ou os últimos meses juntos.', exemplo: 'Exemplo: escolha "Mês anterior" para comparar com o que está gastando agora.' },
-      { chave: 'visao-modo', rotulo: 'Pizza / Ranking e Cheio / Líquido', texto: 'Escolha entre o gráfico de pizza e a lista em ordem, e se o valor é cheio ou descontando o que saiu das reservas.',
-        detalhe: 'Pizza mostra as fatias de cada categoria; Ranking mostra a lista em ordem. "Cheio" é o gasto total; "Líquido" desconta o que foi pago com dinheiro de reserva.', exemplo: 'Exemplo: escolha Ranking + Líquido para ver quanto cada categoria pesou no dinheiro do dia a dia.' },
+      { chave: 'visao-modo', rotulo: 'Pizza / Ranking e Bruto / Líquido', texto: 'Escolha entre o gráfico de pizza e a lista em ordem, e se o valor é bruto ou descontando o que saiu das reservas.',
+        detalhe: 'Pizza mostra as fatias de cada categoria; Ranking mostra a lista em ordem. "Bruto" é o gasto total; "Líquido" desconta o que foi pago com dinheiro de reserva.', exemplo: 'Exemplo: escolha Ranking + Líquido para ver quanto cada categoria pesou no dinheiro do dia a dia.' },
       { chave: 'ver-todas', rotulo: 'Ver todas / Mostrar menos', texto: 'Mostra todas as categorias ou só as maiores.',
         detalhe: 'Por padrão aparecem só as maiores categorias. "Ver todas" abre a lista completa; "Mostrar menos" recolhe de novo.', exemplo: 'Exemplo: toque em "Ver todas (14)" para achar uma categoria pequena, como "Assinaturas".' },
     ],
     dicas: [
-      '"Cheio" bate com as Despesas do Mês do Painel; "Líquido" desconta o resgate de reserva da mesma categoria.',
+      '"Bruto": despesa inteira, com o resgate de reserva em Receitas do Mês. "Líquido": despesa menos o resgate da mesma categoria, sem o resgate nas receitas. O saldo do mês é o mesmo nos dois.',
     ],
   },
   accounts: {

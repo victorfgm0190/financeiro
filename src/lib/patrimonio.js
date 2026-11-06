@@ -18,8 +18,11 @@
 export function bemDoAgendamento(schedule, accounts) {
   if (schedule?.transactionType !== 'transfer' || !schedule.toAccountId) return null
   const destino = (accounts || []).find(a => a.id === schedule.toAccountId)
-  return destino?.tipoBem === 'bem_imobilizado' ? destino.id : null
+  return ehBemParametrizado(destino) ? destino.id : null
 }
+
+export const ehConsorcio = (conta) => conta?.tipoBem === 'consorcio'
+export const ehBemParametrizado = (conta) => conta?.tipoBem === 'bem_imobilizado' || ehConsorcio(conta)
 
 const escolhido = (conta) => (
   conta?.patrimonioUseMethod === 'nota_fiscal' ? conta?.valorNotaFiscal : conta?.valorPagoManual
@@ -32,12 +35,15 @@ const escolhido = (conta) => (
 // porque o método aponta para um campo vazio é pior — e mais silencioso — do que um bem avaliado
 // pelo saldo. `valorPatrimonialEhFallback` diz quando isso está acontecendo, para a UI avisar.
 export function valorPatrimonial(conta) {
+  // Consórcio não contemplado: o PL conta o pago acumulado (inclusive o pago por terceiros), que é o
+  // saldo da conta. O valor de venda é só simulação; o saldo devedor é compromisso, fora do PL.
+  if (ehConsorcio(conta)) return Number(conta?.balance) || 0
   const v = escolhido(conta)
   return v != null ? Number(v) : (Number(conta?.balance) || 0)
 }
 
 export function valorPatrimonialEhFallback(conta) {
-  return escolhido(conta) == null
+  return !ehConsorcio(conta) && escolhido(conta) == null
 }
 
 // Soma o valor patrimonial da lista que RECEBE — sem filtrar por type aqui de propósito.

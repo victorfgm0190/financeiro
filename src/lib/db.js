@@ -647,6 +647,8 @@ export const rowToTx = (r) => ({
   // modal de entrada à vista e para os relatórios do bem. O sync grava o vínculo das baixas de
   // agendamento, mas nunca o apaga (api/_db.js); quem desvincula é /api/bem/[id]/estornar-entrada.
   bemId: r.bem_id || null,
+  // 'terceiro' | 'devolucao'. Fora de txToRow: quem grava é só /api/bem/[id]/vincular-receita.
+  bemPapel: r.bem_papel || null,
   // Bem vendido (ganho/perda de venda de bem): calculado no /api/load pela movimentação, não é coluna.
   bemVendidoId: r.bem_vendido_id || null,
   payee: r.payee || '',

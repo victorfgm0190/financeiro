@@ -67,6 +67,16 @@ export const getMovimentacoes = (bemId) => request(`/api/bem/${enc(bemId)}/movim
 export const getExtratoBens = (bemId = null) =>
   request(`/api/bem/extrato${bemId ? `?bem_id=${enc(bemId)}` : ''}`)
 
+// Liga uma receita ao bem ('terceiro' | 'devolucao') ou desliga (null).
+export const vincularReceita = (bemId, lancamentoId, papel) =>
+  post(`/api/bem/${enc(bemId)}/vincular-receita`, { lancamento_id: lancamentoId, papel })
+
+export const listarConsorcios = () => request('/api/consorcio')
+export const getConsorcio = (bemId) => request(`/api/consorcio?bem_id=${enc(bemId)}`)
+export const salvarConsorcio = (payload) => request('/api/consorcio', { method: 'PUT', body: JSON.stringify(payload) })
+export const registrarEventoConsorcio = (payload) => post('/api/consorcio-eventos', { acao: 'registrar', ...payload })
+export const estornarEventoConsorcio = (eventoId) => post('/api/consorcio-eventos', { acao: 'estornar', evento_id: eventoId })
+
 export const criarFinanciamento = (payload) => post('/api/financiamento/criar', payload)
 
 export const getFinanciamento = (financiamentoId) =>

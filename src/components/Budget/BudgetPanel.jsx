@@ -6,6 +6,9 @@ import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 import SeletorModoValor from '../Contratos/SeletorModoValor'
+import { useModoDespesas } from '../../hooks/useDespesasPorCategoria'
+import { MODO_OPTS } from '../../lib/despesasPorCategoria'
+import { Segmentado } from '../Dashboard/DespesasCategoria'
 import { lancamentosNoModo, MODO_VALOR_PADRAO } from '../../lib/contratos/despesaReal'
 import InputMoeda from '../shared/InputMoeda'
 import { isoLocal } from '../../lib/hoje'
@@ -33,14 +36,15 @@ export default function BudgetPanel() {
   // espelho do depósito conta na categoria da função, a perna de despesa do resgate não conta, a
   // receita de compensação do resgate abate a categoria (pode ficar negativa) e funções que não
   // são "exibir como despesa" ficam fora.
-  const regra = useMemo(() => criarRegraDemonstrativo(reserveFunctions, profileAccounts, transactions), [reserveFunctions, profileAccounts, transactions])
+  const regra = useMemo(() => criarRegraDemonstrativo(reserveFunctions, profileAccounts), [reserveFunctions, profileAccounts])
+  const [modoDespesas, setModoDespesas] = useModoDespesas()
   const categorySpent = useMemo(() => {
     const ids = activeProfile ? new Set(profileAccounts.map(a => a.id)) : null
     const txs = filtrarPerfilDemonstrativo(lancamentosNoModo(transactions, modoValor), reserveFunctions, ids)
-    return despesaPorCategoria(txs, periodStr, regra)
+    return despesaPorCategoria(txs, periodStr, regra, modoDespesas)
   // periodStr é recriado a cada render a partir do período (estável): depende das datas.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transactions, periodStr.start, periodStr.end, modoValor, regra, reserveFunctions, activeProfile, profileAccounts])
+  }, [transactions, periodStr.start, periodStr.end, modoValor, regra, reserveFunctions, activeProfile, profileAccounts, modoDespesas])
 
   const totalBudgeted = budgets.reduce((s, b) => s + b.amount, 0)
   const totalSpent = budgets.reduce((s, b) => s + (categorySpent[b.categoryId] || 0), 0)
@@ -91,6 +95,7 @@ export default function BudgetPanel() {
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-texto-2 flex flex-wrap items-center gap-2">
           Orçamentos por Categoria <SeletorModoValor value={modoValor} onChange={setModoValor} />
+          <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
         </h2>
         {podeIncluir && (
           <button className="btn-primary flex items-center gap-2" data-guia="budget.novo" onClick={() => { setEditBudget(null); setForm({ categoryId: '', amount: '' }); setShowForm(true) }}>

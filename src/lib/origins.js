@@ -30,6 +30,9 @@ export const ORIGIN = {
   // transferido de fato: transferência SEM função e sem categoria, sem espelho, fora dos totais —
   // vira "Saldo a distribuir" da conta de reserva.
   RESERVA_A_DISTRIBUIR: 'reserva_a_distribuir',
+  // Venda de consórcio (api/consorcio-eventos.js): a transferência do bem para a conta que recebeu.
+  // Sem espelho: quem aparece nos relatórios é o ganho ou a perda, não o valor inteiro.
+  VENDA_BEM: 'venda_bem',
 }
 
 // Equivalências canônico ⇄ legado (valor antigo ainda gravado em linhas históricas).

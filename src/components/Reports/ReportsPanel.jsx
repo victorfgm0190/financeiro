@@ -10,6 +10,9 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, aplicacaoAccountIds, countsAsReportExpense, reservaDespesaFuncIds } from '../shared/utils'
 import { regraDosConjuntos, totaisDoDemonstrativo } from '../../lib/regraDemonstrativo'
 import RelatorioBens from './RelatorioBens'
+import { useModoDespesas } from '../../hooks/useDespesasPorCategoria'
+import { MODO_OPTS } from '../../lib/despesasPorCategoria'
+import { Segmentado } from '../Dashboard/DespesasCategoria'
 import RelatorioFatura from '../CreditCard/RelatorioFatura'
 import DemonstrativoFinanceiro from './DemonstrativoFinanceiro'
 import RelatorioPorFavorecido from './RelatorioPorFavorecido'
@@ -42,9 +45,10 @@ export default function ReportsPanel() {
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
   const reservaDespesaFuncSet = useMemo(() => reservaDespesaFuncIds(reserveFunctions), [reserveFunctions])
   const regra = useMemo(
-    () => regraDosConjuntos({ reserveFunctions, aplicSet, reservaSet, reservaDespesaFuncSet, transactions }),
-    [reserveFunctions, aplicSet, reservaSet, reservaDespesaFuncSet, transactions],
+    () => regraDosConjuntos({ reserveFunctions, aplicSet, reservaSet, reservaDespesaFuncSet }),
+    [reserveFunctions, aplicSet, reservaSet, reservaDespesaFuncSet],
   )
+  const [modoDespesas, setModoDespesas] = useModoDespesas()
   const [selectedMonth, setSelectedMonth] = useState(0)
   const [showBens, setShowBens] = useState(false)
   const [modoValor, setModoValor] = useState(MODO_VALOR_PADRAO)
@@ -62,12 +66,12 @@ export default function ReportsPanel() {
       const start = isoLocal(startOfMonth(d))
       const end = isoLocal(endOfMonth(d))
       const label = format(d, 'MMM/yy', { locale: ptBR })
-      // Mesma regra do Demonstrativo: o resgate de reserva não é receita.
-      const { receita: income, despesa: expense } = totaisDoDemonstrativo(transactions, { start, end }, regra)
+      // Mesma regra do Demonstrativo: o resgate não é receita; no líquido, abate a despesa.
+      const { receita: income, despesa: expense } = totaisDoDemonstrativo(transactions, { start, end }, regra, modoDespesas)
       months.push({ label, start, end, income, expense, balance: income - expense })
     }
     return months
-  }, [transactions, regra])
+  }, [transactions, regra, modoDespesas])
 
   const currentMonthData = last6Months[5 - selectedMonth] || last6Months[last6Months.length - 1]
 
@@ -250,7 +254,10 @@ export default function ReportsPanel() {
       </div>
 
       <div data-guia="reports.evolucao" className="card">
-        <h2 className="text-sm font-semibold text-texto-2 mb-4">Evolução dos Últimos 6 Meses</h2>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h2 className="text-sm font-semibold text-texto-2">Evolução dos Últimos 6 Meses</h2>
+          <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
+        </div>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={last6Months} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={cor.chartGrade} />

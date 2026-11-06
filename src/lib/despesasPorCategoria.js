@@ -19,7 +19,7 @@ import { periodoStr } from './receitasDespesas.js'
 export const SEM_CATEGORIA_ID = '__sem_categoria'
 
 export const MODOS_DESPESA = ['cheio', 'liquido']
-export const MODO_DESPESA_PADRAO = 'cheio'
+export const MODO_DESPESA_PADRAO = 'liquido'
 
 // Opções dos seletores dos blocos (Painel e mobile).
 export const PERIOD_OPTS = [
@@ -28,7 +28,7 @@ export const PERIOD_OPTS = [
   { value: '3m', label: 'Últimos 3m' },
 ]
 export const MODO_OPTS = [
-  { value: 'cheio', label: 'Cheio', title: 'Soma as despesas sem descontar resgate de reserva (bate com Despesas do Mês)' },
+  { value: 'cheio', label: 'Bruto', title: 'A despesa inteira, sem descontar o resgate de reserva' },
   { value: 'liquido', label: 'Líquido', title: 'Despesa menos o resgate de reserva da mesma categoria' },
 ]
 
@@ -56,7 +56,6 @@ export function despesasPorCategoria(transactions, periodo, cls, modo = MODO_DES
   // Resgate de reserva: só em categoria que tem despesa no período.
   for (const tx of transactions || []) {
     if (!noPeriodo(tx) || tx.type !== 'income' || !isResgateReservaSombra(tx)) continue
-    if (cls.resgateAbate && !cls.resgateAbate(tx)) continue
     const c = porCat.get(tx.categoryId || SEM_CATEGORIA_ID)
     if (!c) continue
     c.resgate += tx.amount

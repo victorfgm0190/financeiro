@@ -1,18 +1,13 @@
 // Classificação de receita/despesa dos totais do mês (KPIs "Receitas do Mês" / "Despesas do Mês"
-// do Painel e card do Início mobile). Extraído de DashboardPanel sem mudança de regra — as duas
-// telas usam esta mesma função para mostrar os mesmos números.
+// do Painel e card do Início mobile). As duas telas usam esta mesma função para mostrar os mesmos números.
 import {
-  isInvestimentoSombra, isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds,
+  aplicacaoAccountIds, isEntradaDeBem, isInvestimentoSombra, isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds,
 } from '../components/shared/utils.js'
 import { isInvestAutoOrigin } from './origins.js'
 import { isoLocal } from './hoje.js'
-import { criarTesteAbatimento } from './regraDemonstrativo.js'
 
-// reserveFunctions + contas do perfil → predicados de classificação. `transactions` (todos os
-// lançamentos, sem filtro de período) identifica o resgate de função sem depósito: a despesa já
-// aparece no gasto, então esse resgate não é compensação nem receita. Sem ele, conta como antes.
-export function criarClassificadores(reserveFunctions, accounts, transactions) {
-  const resgateAbate = criarTesteAbatimento(transactions, reserveFunctions)
+// reserveFunctions + contas do perfil → predicados de classificação.
+export function criarClassificadores(reserveFunctions, accounts) {
   // Depósitos em reserva de funções marcadas "exibir como despesa" contam como despesa.
   const reservaDespesaFuncSet = reservaDespesaFuncIds(reserveFunctions)
   // category_ids das funções com exibir_como_despesa = true — reconhece sombras legadas
@@ -21,6 +16,7 @@ export function criarClassificadores(reserveFunctions, accounts, transactions) {
     (reserveFunctions || []).filter(f => f.exibirComoDespesa).map(f => f.categoryId).filter(Boolean)
   )
   const reservaSet = new Set((accounts || []).filter(a => a.isReserva).map(a => a.id))
+  const aplicSet = aplicacaoAccountIds(accounts)
   // Sombra de reserva de função com exibir_como_despesa = FALSE (ou sem função vinculada) → entra
   // no card "Reservas", não em Receitas/Despesas. Funções com exibir_como_despesa = TRUE seguem
   // dentro das despesas (reconhecidas por reservaFuncaoId ou pelo category_id da função).
@@ -35,22 +31,31 @@ export function criarClassificadores(reserveFunctions, accounts, transactions) {
     if (isResgateReservaSombra(t)) return false
     // O depósito na reserva conta UMA vez: pelo espelho "Reserva: X" (despesa, na categoria da
     // função). A transferência conta → reserva não entra (contava de novo, sem categoria).
-    return t.type === 'expense'
+    // A entrada em dinheiro de um bem sem espelho também é despesa, como no Demonstrativo.
+    return t.type === 'expense' || isEntradaDeBem(t, aplicSet)
   }
-  // Receita: exclui as sombras de reserva de função não-despesa (ex.: "Resgate Reserva: X"
-  // income), mantendo o par receita+despesa neutro quando a reserva é poupança.
+  // Resgate de função "despesa": no líquido abate as despesas; no bruto soma nas receitas.
+  const isCompensacaoTx = (t) => t.type === 'income' && isResgateReservaSombra(t)
+    && !isReservaGerSombra(t) && !isReservaMovimentoExcluido(t, reservaDespesaFuncSet, reservaSet)
+  // Receita sem o resgate; o resgate entra por modo em totaisDoPeriodo.
   const isIncomeTx = (t) =>
     t.type === 'income' && !isReservaGerSombra(t) && !isReservaMovimentoExcluido(t, reservaDespesaFuncSet, reservaSet)
-    && !(isResgateReservaSombra(t) && !resgateAbate(t))
-  return { isReservaGerSombra, isExpenseTx, isIncomeTx, resgateAbate }
+    && !isResgateReservaSombra(t)
+  return { isReservaGerSombra, isExpenseTx, isIncomeTx, isCompensacaoTx }
 }
 
 // Lançamentos do período (sem investAuto, invisíveis nos relatórios/totais) e seus totais.
-export function totaisDoPeriodo(transactions, { start, end }, { isIncomeTx, isExpenseTx }) {
+// modo 'cheio' (bruto): despesa inteira e resgate nas receitas. 'liquido': despesa − resgate e o resgate
+// fora das receitas. O saldo (income − expense) é o mesmo nos dois modos.
+export function totaisDoPeriodo(transactions, { start, end }, { isIncomeTx, isExpenseTx, isCompensacaoTx }, modo = 'cheio') {
   const periodTxs = (transactions || []).filter(tx => tx.date >= start && tx.date <= end && !isInvestAutoOrigin(tx))
-  const income = periodTxs.filter(isIncomeTx).reduce((s, t) => s + t.amount, 0)
-  const expense = periodTxs.filter(isExpenseTx).reduce((s, t) => s + t.amount, 0)
-  return { periodTxs, income, expense }
+  const soma = (lista) => lista.reduce((s, t) => s + t.amount, 0)
+  const resgates = isCompensacaoTx ? periodTxs.filter(isCompensacaoTx) : []
+  const compensTxs = modo === 'liquido' ? resgates : []
+  const resgatesEmReceita = modo === 'liquido' ? [] : resgates
+  const income = soma(periodTxs.filter(isIncomeTx)) + soma(resgatesEmReceita)
+  const expense = soma(periodTxs.filter(isExpenseTx)) - soma(compensTxs)
+  return { periodTxs, income, expense, compensTxs, resgatesEmReceita }
 }
 
 // Período financeiro (getFinancialPeriod) → { start, end } em 'YYYY-MM-DD', como o Painel usa.

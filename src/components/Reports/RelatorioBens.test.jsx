@@ -11,7 +11,10 @@ import { montarPlanilha } from '../../lib/exportExcel'
 vi.mock('../../lib/bemApi', () => ({ getExtratoBens: vi.fn() }))
 vi.mock('../BoasVindas/subtelaGuia', () => ({ useSubtelaGuia: () => {} }))
 vi.mock('../../context/AppContext', () => ({
-  useApp: () => ({ profiles: [{ id: 'P1', name: 'Família' }, { id: 'P2', name: 'Empresa' }], activeProfile: null }),
+  useApp: () => ({
+    profiles: [{ id: 'P1', name: 'Família' }, { id: 'P2', name: 'Empresa' }], activeProfile: null,
+    pode: () => true, updateTransaction: () => {}, profileTransactions: [],
+  }),
 }))
 
 const dados = {

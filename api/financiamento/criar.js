@@ -49,6 +49,9 @@ async function handler(req, res) {
 
     const [bem] = await query(`SELECT * FROM contas WHERE id = $1`, [bem_id])
     if (!bem) return fail(res, 404, `bem ${bem_id} não encontrado`)
+    // Consórcio não contemplado: criar a dívida reduziria o PL antes da hora. Depois de usar a carta,
+    // o bem deixa de ser tipo consórcio e o financiamento pode ser criado.
+    if (bem.tipo_bem === 'consorcio') return fail(res, 409, 'Consórcio só pode ter financiamento depois de usar a carta.')
 
     const [jaExiste] = await query(
       `SELECT id FROM financing WHERE bem_id = $1 AND status <> 'canceled' LIMIT 1`, [bem_id],

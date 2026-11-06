@@ -66,6 +66,21 @@ describe('totais: o depósito na reserva conta UMA vez (opção B)', () => {
     expect(income).toBe(260)
     expect(expense - income).toBe(290)
   })
+  it('líquido: resgate abate a despesa, sai das receitas e o saldo é igual ao do bruto', () => {
+    const cls = criarClassificadores(reserveFunctions, accounts)
+    const bruto = totaisDoPeriodo(ciclo, periodo, cls, 'cheio')
+    const liquido = totaisDoPeriodo(ciclo, periodo, cls, 'liquido')
+    expect(liquido.income).toBe(0)
+    expect(liquido.expense).toBe(290)
+    expect(liquido.income - liquido.expense).toBe(bruto.income - bruto.expense)
+  })
+  it('entrada em dinheiro de bem sem espelho entra nos KPIs; trade-in não', () => {
+    const contas = [...accounts, { id: 'carro', type: 'asset', tipoBem: 'bem_imobilizado' }, { id: 'antigo', type: 'asset', tipoBem: 'bem_imobilizado' }]
+    const cls = criarClassificadores(reserveFunctions, contas)
+    const entrada = { id: 'e', type: 'transfer', accountId: 'itau', toAccountId: 'carro', bemId: 'carro', amount: 1000, date: '2026-10-20' }
+    const troca = { ...entrada, id: 't', accountId: 'antigo' }
+    expect(totaisDoPeriodo([entrada, troca], periodo, cls, 'liquido').expense).toBe(1000)
+  })
   it('Relatórios/Demonstrativo: mesma regra', () => {
     const fs = reservaDespesaFuncIds(reserveFunctions)
     const rs = new Set(accounts.filter(a => a.isReserva).map(a => a.id))

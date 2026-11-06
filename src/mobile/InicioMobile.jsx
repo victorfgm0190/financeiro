@@ -15,6 +15,7 @@ import { getSessao } from '../lib/api'
 import { hojeStr } from '../lib/saldos'
 import { occEfetiva } from '../lib/fluxoCaixa'
 import { criarClassificadores, totaisDoPeriodo, periodoStr } from '../lib/receitasDespesas'
+import { useModoDespesas } from '../hooks/useDespesasPorCategoria'
 import { EnvelopesInicio } from '../components/Envelopes/EnvelopeResumo'
 import { resolverCards, prefDosCards } from './navegacao'
 import { gravarPreferencias } from '../lib/preferenciasUi'
@@ -149,9 +150,10 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpen
 function ResumoCard({ saldosPrincipais, v: valor, ocultar, carregando, onAbrir }) {
   const { profileAccounts, profileReportTransactions, reserveFunctions, getFinancialPeriod, getSaldoPrincipal } = useApp()
   // Mesma classificação e período dos KPIs "Receitas do Mês"/"Despesas do Mês" do Painel.
-  const cls = useMemo(() => criarClassificadores(reserveFunctions, profileAccounts, profileReportTransactions), [reserveFunctions, profileAccounts, profileReportTransactions])
+  const cls = useMemo(() => criarClassificadores(reserveFunctions, profileAccounts), [reserveFunctions, profileAccounts])
   const periodo = getFinancialPeriod()
-  const { income, expense } = totaisDoPeriodo(profileReportTransactions, periodoStr(periodo), cls)
+  const [modoDespesas] = useModoDespesas()
+  const { income, expense } = totaisDoPeriodo(profileReportTransactions, periodoStr(periodo), cls, modoDespesas)
   const b = useMemo(() => getSaldoPrincipal(), [getSaldoPrincipal])
   const ddmm = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '')
   // Mesmas linhas e regras do card do desktop (DashboardPanel cicloRows): Atual Cal./Final Cal.

@@ -87,17 +87,18 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   const transactions = profileReportTransactions
 
   // Classificação receita/despesa (mesma função do card do Início mobile).
-  const { isReservaGerSombra, isExpenseTx, isIncomeTx } = useMemo(
-    () => criarClassificadores(reserveFunctions, accounts, transactions), [reserveFunctions, accounts, transactions]
-  )
+  const cls = useMemo(() => criarClassificadores(reserveFunctions, accounts), [reserveFunctions, accounts])
+  const { isReservaGerSombra, isExpenseTx, isIncomeTx } = cls
+  // Bruto (cheio) ou líquido (despesa − resgate de reserva): vale para os KPIs, o gráfico e os blocos.
+  const [modoDespesas, setModoDespesas] = useModoDespesas()
 
   const period = getFinancialPeriod()
   const periodStr = periodoStr(period)
 
   // Current period (lançamentos investAuto são invisíveis nos relatórios/totais)
-  const { periodTxs, income, expense } = totaisDoPeriodo(transactions, periodStr, { isIncomeTx, isExpenseTx })
+  const { periodTxs, income, expense, compensTxs, resgatesEmReceita } = totaisDoPeriodo(transactions, periodStr, cls, modoDespesas)
   // Lançamentos exatos dos KPIs Receitas/Despesas do Mês (drill-down e Top 5 Favorecidos).
-  const incomeTxs = periodTxs.filter(isIncomeTx)
+  const incomeTxs = [...periodTxs.filter(isIncomeTx), ...resgatesEmReceita]
   const expenseTxs = periodTxs.filter(isExpenseTx)
   // Reservas do período (funções sem categoria): líquido = utilizadas (resgate _r) − feitas (depósito).
   const reservasFeitas = periodTxs.filter(t => isReservaGerSombra(t) && t.type === 'expense' && !isResgateReservaSombra(t))
@@ -115,8 +116,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   const prevStart = isoLocal(subMonths(period.start, 1))
   const prevEnd = isoLocal(subMonths(period.end, 1))
   const prevTxs = transactions.filter(tx => tx.date >= prevStart && tx.date <= prevEnd && !isInvestAutoOrigin(tx))
-  const prevIncome = prevTxs.filter(isIncomeTx).reduce((s, t) => s + t.amount, 0)
-  const prevExpense = prevTxs.filter(isExpenseTx).reduce((s, t) => s + t.amount, 0)
+  const { income: prevIncome, expense: prevExpense } = totaisDoPeriodo(prevTxs, { start: prevStart, end: prevEnd }, cls, modoDespesas)
   const prevBalance = prevIncome - prevExpense
 
   const mkDelta = (cur, prev) => ({
@@ -172,11 +172,10 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       const start = isoLocal(startOfMonth(d))
       const end = isoLocal(endOfMonth(d))
       const label = format(d, "MMM'/'yy", { locale: ptBR })
-      const inc = transactions.filter(tx => isIncomeTx(tx) && !isInvestAutoOrigin(tx) && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
-      const exp = transactions.filter(tx => isExpenseTx(tx) && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
+      const { income: inc, expense: exp } = totaisDoPeriodo(transactions, { start, end }, cls, modoDespesas)
       return { label, income: inc, expense: exp }
     })
-  }, [transactions, isExpenseTx, isIncomeTx])
+  }, [transactions, cls, modoDespesas])
 
   // Upcoming & overdue schedules (next 7 days + overdue)
   const upcomingSchedules = useMemo(() => {
@@ -304,7 +303,6 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // Período (meses financeiros) e modo Cheio/Líquido compartilhados pela pizza e pelo ranking;
   // "Ver todas" é de cada bloco. Valores, % e a lista do clique vêm de despesasPorCategoria (src/lib).
   const [pieFilter, setPieFilter] = useState('current')
-  const [modoDespesas, setModoDespesas] = useModoDespesas()
   const pieRange = useMemo(() => periodoDoFiltro(pieFilter, getFinancialPeriod), [pieFilter, getFinancialPeriod])
   const [pizzaTodas, setPizzaTodas] = useState(false)
   const [rankingTodas, setRankingTodas] = useState(false)
@@ -402,7 +400,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
         <KpiCard
           icon={TrendingDown}
           iconColor="text-despesa"
-          label="Despesas do Mês"
+          label={modoDespesas === 'liquido' ? 'Despesas do Mês (líquido)' : 'Despesas do Mês (bruto)'}
           value={expense}
           valueColor="text-despesa"
           loading={loading}
@@ -413,7 +411,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             title: 'Despesas do Mês',
             total: expense,
             color: 'text-despesa',
-            txs: expenseTxs,
+            txs: [...expenseTxs, ...compensTxs],
           })}
         />
         <KpiCard
@@ -447,7 +445,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             total: balance,
             color: balance >= 0 ? 'text-receita' : 'text-despesa',
             // Saldo = receitas (+) − despesas (−) do período.
-            txs: [...incomeTxs, ...expenseTxs],
+            txs: [...incomeTxs, ...expenseTxs, ...compensTxs],
             mixed: true,
           })}
         />
@@ -660,7 +658,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       </div>
 
       {/* Top 5 Favorecidos — mesmos lançamentos dos KPIs Receitas/Despesas do Mês */}
-      <TopFavorecidos receitas={incomeTxs} despesas={expenseTxs} onAbrirLancamentos={setTxModal} />
+      <TopFavorecidos receitas={periodTxs.filter(isIncomeTx)} despesas={expenseTxs} onAbrirLancamentos={setTxModal} />
 
       {/* Receitas/Despesas do mês drill-down modal */}
       {txModal && (

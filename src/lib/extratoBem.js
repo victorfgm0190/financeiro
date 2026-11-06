@@ -19,9 +19,11 @@ export const CLASSE = {
   DEVOLUCAO: 'devolucao',
   TROCA: 'troca',
   AJUSTE: 'ajuste',
+  VENDA: 'venda',
 }
 
 export const ROTULO_CLASSE = {
+  venda: 'Venda do bem',
   principal: 'Principal',
   juros: 'Juros',
   desconto: 'Desconto de antecipação',
@@ -40,6 +42,7 @@ const TIPOS_SEM_CAIXA = new Set(['asset', 'liability'])
 function classificar(l, bem) {
   const naConta = l.account_id === bem.id
   const paraOBem = l.to_account_id === bem.id
+  if (l.origin === 'venda_bem') return { classe: CLASSE.VENDA, origem: null, caixa: true }
   if (l.type === 'transfer') {
     if (paraOBem) {
       return { classe: CLASSE.PRINCIPAL, origem: ORIGEM.PROPRIOS, caixa: !TIPOS_SEM_CAIXA.has(l.origem_tipo) }
@@ -49,8 +52,11 @@ function classificar(l, bem) {
   }
   if (l.type === 'income') {
     if (l.origin === 'rendimento_manual') return { classe: CLASSE.AJUSTE, origem: null, caixa: false }
-    if (naConta) return { classe: CLASSE.TERCEIRO, origem: ORIGEM.TERCEIRO, caixa: false }
-    return { classe: CLASSE.DEVOLUCAO, origem: null, caixa: true }
+    // A marcação do usuário manda. Sem ela, a regra automática vale só como sugestão a confirmar.
+    if (l.bem_papel === 'terceiro') return { classe: CLASSE.TERCEIRO, origem: ORIGEM.TERCEIRO, caixa: false }
+    if (l.bem_papel === 'devolucao') return { classe: CLASSE.DEVOLUCAO, origem: null, caixa: true }
+    if (naConta) return { classe: CLASSE.TERCEIRO, origem: ORIGEM.TERCEIRO, caixa: false, sugerida: true }
+    return { classe: CLASSE.DEVOLUCAO, origem: null, caixa: true, sugerida: true }
   }
   if (l.type === 'expense') {
     if (l.origin === 'pagamento_divida') {
@@ -80,6 +86,8 @@ export function extratoDoBem(bem, dados) {
       caixa: c.caixa,
       valor: r2(l.amount) * (c.sinal || 1),
       descricao: l.description || l.payee || '',
+      receita: l.type === 'income' && c.classe !== CLASSE.AJUSTE,
+      sugerida: !!c.sugerida,
     })
   }
   for (const t of dados.trocas || []) {
@@ -109,8 +117,27 @@ export function faltaPagar(parcelas = []) {
     .reduce((s, p) => s + Math.max(0, (Number(p.total_provisioned) || 0) - (Number(p.total_pago) || 0)), 0))
 }
 
-export function resumoDoBem(bem, linhas, parcelas = []) {
-  const valorBem = r2(bem.valor_nota_fiscal)
+// Consórcio com cotas: o valor é o da carta, a falta é o saldo devedor informado pela administradora.
+const cotasDoConsorcio = (bem, cotas) => (bem.tipo_bem === 'consorcio' ? (cotas || []).filter(c => c.bem_id === bem.id) : [])
+
+export function resumoDoBem(bem, linhas, parcelas = [], cotas = []) {
+  const doConsorcio = cotasDoConsorcio(bem, cotas)
+  const ehConsorcio = doConsorcio.length > 0
+  const carta = r2(doConsorcio.reduce((s, c) => s + (Number(c.valor_carta) || 0), 0))
+  const saldoInformado = r2(doConsorcio.reduce((s, c) => s + (Number(c.saldo_devedor_informado) || 0), 0))
+  const valorBem = ehConsorcio ? carta : r2(bem.valor_nota_fiscal)
+
+  // Bem sem nenhum pagamento lançado: vale o valor pago informado à mão, com aviso na tela.
+  const semPagamentos = !linhas.some(l => [CLASSE.PRINCIPAL, CLASSE.JUROS, CLASSE.TERCEIRO, CLASSE.TROCA].includes(l.classe))
+  if (semPagamentos && bem.valor_pago_manual != null) {
+    const informado = r2(bem.valor_pago_manual)
+    return {
+      valorBem, pagoSemJuros: informado, pagoComJuros: informado, terceiros: 0, proprios: informado,
+      devolucoes: 0, custoProprioLiquido: informado, jurosPagos: 0, descontos: 0, faltaPagar: 0,
+      custoFinalRealizado: valorBem, custoFinalProjetado: valorBem, valorInformado: true, ehConsorcio,
+    }
+  }
+
   const principal = somar(linhas, CLASSE.PRINCIPAL)
   const juros = somar(linhas, CLASSE.JUROS)
   const terceiros = somar(linhas, CLASSE.TERCEIRO)
@@ -131,11 +158,31 @@ export function resumoDoBem(bem, linhas, parcelas = []) {
     custoProprioLiquido: r2(proprios - devolucoes),
     jurosPagos: juros,
     descontos,
-    faltaPagar: faltaPagar(parcelas),
+    faltaPagar: ehConsorcio ? saldoInformado : faltaPagar(parcelas),
     // juros_pago já vem líquido do desconto: subtrair de novo contaria o desconto duas vezes.
-    custoFinalRealizado: r2(valorBem + juros),
-    custoFinalProjetado: r2(valorBem + jurosPrevistos - descontos),
+    // Consórcio: o que já pagou, e o que já pagou mais o saldo informado.
+    custoFinalRealizado: ehConsorcio ? pagoComJuros : r2(valorBem + juros),
+    custoFinalProjetado: ehConsorcio ? r2(pagoComJuros + saldoInformado) : r2(valorBem + jurosPrevistos - descontos),
+    valorInformado: false,
+    ehConsorcio,
   }
+}
+
+// Por mês, desde o primeiro pagamento e sem buracos: quanto foi pago e quanto saiu do próprio bolso
+// (sem terceiros, descontando devoluções). Base do simulador de saída do consórcio.
+export function historicoDePagamentos(linhas) {
+  const pagos = linhas.filter(l => [CLASSE.PRINCIPAL, CLASSE.JUROS, CLASSE.TERCEIRO, CLASSE.TROCA].includes(l.classe))
+  if (pagos.length === 0) return []
+  const relevantes = linhas.filter(l => pagos.includes(l) || l.classe === CLASSE.DEVOLUCAO)
+  const primeiro = pagos[0].data.slice(0, 7)
+  const ultimo = relevantes.reduce((m, l) => (l.data.slice(0, 7) > m ? l.data.slice(0, 7) : m), primeiro)
+  const saida = []
+  for (let mes = primeiro; mes <= ultimo; mes = proximoMes(mes)) {
+    const doMes = relevantes.filter(l => l.data.slice(0, 7) === mes)
+    const total = r2(doMes.filter(l => l.classe !== CLASSE.DEVOLUCAO).reduce((s, l) => s + l.valor, 0))
+    saida.push({ mes, total, proprio: r2(total - somar(doMes, CLASSE.TERCEIRO) - somar(doMes, CLASSE.DEVOLUCAO)) })
+  }
+  return saida
 }
 
 const proximoMes = (mes) => {
@@ -144,7 +191,7 @@ const proximoMes = (mes) => {
 }
 
 // Tabela mês a mês, sem buracos: do primeiro lançamento até o último (ou `ate`, se for depois).
-export function linhaDoTempo(linhas, parcelas = [], { ate = null } = {}) {
+export function linhaDoTempo(linhas, parcelas = [], { ate = null, faltaFixa = null } = {}) {
   const pagamentos = [CLASSE.PRINCIPAL, CLASSE.JUROS, CLASSE.TERCEIRO, CLASSE.TROCA]
   const relevantes = linhas.filter(l => pagamentos.includes(l.classe))
   if (relevantes.length === 0) return []
@@ -166,7 +213,7 @@ export function linhaDoTempo(linhas, parcelas = [], { ate = null } = {}) {
       .reduce((s, p) => s + (Number(p.total_pago) || 0) + (Number(p.desconto_antecipacao) || 0), 0)
     saida.push({
       mes, pagoNoMes, pagoAcumulado: acumulado, jurosAcumulados,
-      faltaPagar: r2(Math.max(0, totalContratado - abatido)),
+      faltaPagar: faltaFixa != null ? faltaFixa : r2(Math.max(0, totalContratado - abatido)),
     })
   }
   return saida
@@ -212,6 +259,7 @@ export function totaisDeSaidas(linhas) {
 // Parcela de bem no Demonstrativo: entra no grupo "Bens e investimentos", com principal e juros em
 // linhas separadas. `isInvestimentoSombra` vem de quem chama, para esta lib não depender de telas.
 export function linhaDeBemNoDemonstrativo(tx, isInvestimentoSombra) {
+  if (tx.type === 'transfer') return tx.bemId && tx.bemId === tx.toAccountId ? { sufixo: 'entrada' } : null
   if (tx.type !== 'expense') return null
   if (isInvestimentoSombra(tx)) return { sufixo: '' }
   if (tx.origin !== 'pagamento_divida') return null

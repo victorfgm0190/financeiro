@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { listarConsorcios } from '../../lib/bemApi'
+import { totaisDasCotas } from '../../lib/consorcio'
 import { format, subMonths, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
@@ -110,6 +112,17 @@ export default function PatrimonioPanel({ setActivePage }) {
 
   // Conta de dívida de financiamento clicada → consulta; "Abrir a parcela" abre o bem na parcela.
   const [consultaFin, setConsultaFin] = useState(null)
+  // Saldo devedor de consórcio: compromisso à parte, nunca entra no PL. Falha aqui não derruba a tela.
+  const [consorcios, setConsorcios] = useState([])
+  useEffect(() => {
+    let vivo = true
+    listarConsorcios().then(r => { if (vivo) setConsorcios(r.consorcios || []) }).catch(() => {})
+    return () => { vivo = false }
+  }, [])
+  const compromissos = useMemo(() => consorcios
+    .filter(c => c.tipo_bem === 'consorcio' && c.situacao !== 'vendida' && c.situacao !== 'quitada')
+    .map(c => ({ conta: accounts.find(a => a.id === c.bem_id), saldo: totaisDasCotas(c.cotas).saldoDevedor }))
+    .filter(c => c.conta && c.saldo > 0), [consorcios, accounts])
   const [parcelaInicial, setParcelaInicial] = useState(null)
 
   // Categorias, totais e itens de cada total — fonte única (cards, Resumo, gráfico e composição).
@@ -410,6 +423,31 @@ export default function PatrimonioPanel({ setActivePage }) {
                 </Tag>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {compromissos.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-texto-2 flex items-center gap-2">
+            <AlertTriangle size={14} className="text-aviso" /> Dívidas e Passivos: compromissos (fora do PL)
+          </h2>
+          <div className="space-y-2">
+            {compromissos.map(c => (
+              <button
+                key={c.conta.id} type="button" onClick={() => setDetalheBem(c.conta)}
+                className="card border border-aviso/20 w-full text-left hover:bg-surface-hover/40 transition-colors flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-texto-1 text-sm">{c.conta.name}</p>
+                  <p className="text-xs text-texto-3">Consórcio não contemplado: não subtrai do patrimônio</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-lg font-bold text-aviso">{fmt(c.saldo)}</p>
+                  <p className="text-xs text-texto-3">Saldo devedor informado</p>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       )}

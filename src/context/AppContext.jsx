@@ -547,6 +547,7 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
   if (tx.type !== 'transfer') return []
   // Diferença da operação da reserva: dinheiro "a distribuir", sem espelho (fora dos totais).
   if (tx.origin === ORIGIN.RESERVA_A_DISTRIBUIR) return []
+  if (tx.origin === ORIGIN.VENDA_BEM) return []
   const extraTxs = []
   const toAcc = accounts.find(a => a.id === tx.toAccountId)
   const fromAcc = accounts.find(a => a.id === tx.accountId)

@@ -109,10 +109,27 @@ function geraEspelhoProprio(a) {
     || (a.vinculoTipo === 'patrimonio' && !!a.patrimonioCategoryId)
 }
 
+const ehBem = (a) => a.tipoBem === 'bem_imobilizado' || a.tipoBem === 'consorcio'
+
 // Conjunto de ids de contas marcadas como "Aplicação Financeira". Conta que gera espelho próprio fica
 // de fora: o espelho já representa a saída, e contar a transferência também dobraria o valor.
+// Leva também, com prefixo, os bens sem espelho (`bem:`) e as contas que não são caixa (`semcaixa:`),
+// usados por isEntradaDeBem: quem calcula relatório já recebe este conjunto.
 export function aplicacaoAccountIds(accounts) {
-  return new Set((accounts || []).filter(a => a.contaAplicacao && !geraEspelhoProprio(a)).map(a => a.id))
+  const ids = new Set()
+  for (const a of accounts || []) {
+    if (a.contaAplicacao && !geraEspelhoProprio(a)) ids.add(a.id)
+    if (ehBem(a) && !geraEspelhoProprio(a)) ids.add(`bem:${a.id}`)
+    if (a.type === 'asset' || a.type === 'liability') ids.add(`semcaixa:${a.id}`)
+  }
+  return ids
+}
+
+// Pagamento em dinheiro de um bem sem espelho (ex.: a entrada do carro): é despesa no relatório, no mês
+// do pagamento. Bem com espelho já conta pelo espelho; trade-in e terceiro não são transferência de caixa.
+export function isEntradaDeBem(tx, aplicSet) {
+  return tx.type === 'transfer' && !!tx.bemId && tx.bemId === tx.toAccountId
+    && aplicSet instanceof Set && aplicSet.has(`bem:${tx.bemId}`) && !aplicSet.has(`semcaixa:${tx.accountId}`)
 }
 
 // Espelho de aporte em conta de investimento ("Investimento - X", id tx_inv_): é despesa, não reserva,
@@ -194,6 +211,7 @@ export function countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reser
   // função); a transferência conta → reserva não entra (contava de novo, sem categoria).
   return tx.type === 'expense'
     || isAplicacaoAporte(tx, aplicSet)
+    || isEntradaDeBem(tx, aplicSet)
 }
 
 // 0 = Conta Principal / Cartão, 1 = appPriority, 2 = rest

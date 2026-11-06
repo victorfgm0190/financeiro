@@ -3,6 +3,9 @@ import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet, ArrowL
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView, reservaDespesaFuncIds, groupedAccountOptions, isResgateReservaSombra, isInvestimentoSombra } from '../shared/utils'
 import { linhaDeBemNoDemonstrativo } from '../../lib/extratoBem'
+import { useModoDespesas } from '../../hooks/useDespesasPorCategoria'
+import { MODO_OPTS } from '../../lib/despesasPorCategoria'
+import { Segmentado } from '../Dashboard/DespesasCategoria'
 import { isPatrimonioOrigin } from '../../lib/origins'
 import { filtrarPerfilDemonstrativo, regraDosConjuntos } from '../../lib/regraDemonstrativo'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -78,7 +81,7 @@ function expandInterProfileTransfers(transactions, accounts, profiles) {
   return out
 }
 
-function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reservaAccSet, reserveFunctions, activeProfile, profileAccountIds) {
+export function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reservaAccSet, reserveFunctions, activeProfile, profileAccountIds, modo = 'liquido') {
   const catMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
   // ── Precedência de perfil (antes do filtro de contas) ───────────────────────
@@ -111,22 +114,23 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
     !(hidePatrimonio && isPatrimonioOrigin(tx))
   )
 
-  function buildSection(txList) {
+  function buildSection(txList, emReceitas = false) {
     const groups = {}
     txList.forEach(tx => {
       const cat = catMap[tx.categoryId]
       // Parcela de bem: grupo próprio, com principal e juros em linhas separadas (D4 do Patrimônio).
       const deBem = linhaDeBemNoDemonstrativo(tx, isInvestimentoSombra)
+      // Modo bruto: o resgate soma nas receitas, em grupo próprio, com o sinal positivo.
+      const resgateEmReceita = emReceitas && tx.type === 'income' && isResgateReservaSombra(tx)
       const nomeCat = cat?.name || 'Sem Categoria'
-      const groupKey = deBem ? '__bens' : (cat?.group || cat?.id || '__none__')
-      const groupName = deBem ? 'Bens e investimentos' : (cat?.group || cat?.name || 'Sem Categoria')
+      const groupKey = resgateEmReceita ? '__resgates' : deBem ? '__bens' : (cat?.group || cat?.id || '__none__')
+      const groupName = resgateEmReceita ? 'Resgates de reserva' : deBem ? 'Bens e investimentos' : (cat?.group || cat?.name || 'Sem Categoria')
       const subcatKey = `${cat?.id || '__none__'}${deBem?.sufixo ? `:${deBem.sufixo}` : ''}`
-      const subcatName = deBem?.sufixo === 'juros' ? `${nomeCat} (juros)`
-        : deBem?.sufixo === 'principal' ? `${nomeCat} (principal)` : nomeCat
-      const isFlat = deBem ? false : !cat?.group // top-level category or uncategorised
+      const subcatName = deBem?.sufixo ? `${nomeCat} (${deBem.sufixo})` : nomeCat
+      const isFlat = (deBem || resgateEmReceita) ? false : !cat?.group // top-level category or uncategorised
       // Resgate de reserva (perna _r, receita de compensação) entra na categoria de DESPESA
       // ABATENDO o total (sinal negativo); a despesa real e o depósito somam normalmente.
-      const signed = (tx.type === 'income' && isResgateReservaSombra(tx)) ? -tx.amount : tx.amount
+      const signed = (!emReceitas && tx.type === 'income' && isResgateReservaSombra(tx)) ? -tx.amount : tx.amount
 
       if (!groups[groupKey]) groups[groupKey] = { name: groupName, subcats: {}, total: 0, isFlat }
       groups[groupKey].total += signed
@@ -152,13 +156,17 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
   // Sombras legadas com reservaFuncaoId = null são reconhecidas pelo category_id da função
   // (reservaDespesaCategorySet), evitando que depósitos de funções "despesa" caiam em Reservas.
   // Regra única com o Orçamento (lib/regraDemonstrativo).
-  const { isReservaGerSombra, ehDespesa, ehCompensacao } = regraDosConjuntos({ reserveFunctions, aplicSet, reservaSet: reservaAccSet, reservaDespesaFuncSet, transactions })
+  const { isReservaGerSombra, ehDespesa, ehCompensacao } = regraDosConjuntos({ reserveFunctions, aplicSet, reservaSet: reservaAccSet, reservaDespesaFuncSet })
 
   const expenseTxs = inRange.filter(ehDespesa)
-  // Receitas de compensação do resgate de reserva → vão para a seção de DESPESAS abatendo a
-  // categoria; saem da seção de RECEITAS para não duplicar.
-  const compensTxs = inRange.filter(ehCompensacao)
-  const incomeTxs = inRange.filter(t => !isReservaGerSombra(t) && t.type === 'income' && !isResgateReservaSombra(t))
+  // Resgate de reserva. Líquido: vai para a seção de DESPESAS abatendo a categoria. Bruto: a despesa
+  // fica inteira e o resgate vai para a seção de RECEITAS. O resultado é o mesmo nos dois modos.
+  const resgates = inRange.filter(ehCompensacao)
+  const compensTxs = modo === 'liquido' ? resgates : []
+  const incomeTxs = [
+    ...inRange.filter(t => !isReservaGerSombra(t) && t.type === 'income' && !isResgateReservaSombra(t)),
+    ...(modo === 'liquido' ? [] : resgates),
+  ]
   const totalExpense = expenseTxs.reduce((s, t) => s + t.amount, 0) - compensTxs.reduce((s, t) => s + t.amount, 0)
 
   // Bloco Reservas: movimentos de funções de reserva sem categoria vinculada. Independe do
@@ -174,7 +182,7 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
 
   return {
     expenses: buildSection([...expenseTxs, ...compensTxs]),
-    income: buildSection(incomeTxs),
+    income: buildSection(incomeTxs, true),
     totalExpense,
     totalIncome: incomeTxs.reduce((s, t) => s + t.amount, 0),
     totalReservasFeitas,
@@ -205,8 +213,8 @@ function exportCSV(report, showTx, from, to) {
         if (!g.isFlat) rows.push(['', g.name, s.name, '', '', '', num(s.total)].map(q).join(sep))
         if (showTx) {
           s.txs.forEach(tx => {
-            // Resgate de compensação abate a categoria → valor negativo no CSV.
-            const v = (tx.type === 'income' && isResgateReservaSombra(tx)) ? -tx.amount : tx.amount
+            // Resgate que abate a categoria de despesa → valor negativo no CSV.
+            const v = (label === 'DESPESAS' && tx.type === 'income' && isResgateReservaSombra(tx)) ? -tx.amount : tx.amount
             rows.push(['', g.name, g.isFlat ? '' : s.name, fmtDate(tx.date), tx.description || '', tx.payee || '', num(v)].map(q).join(sep))
           })
         }
@@ -473,6 +481,7 @@ export default function DemonstrativoFinanceiro() {
   const initialFilters = useMemo(() => loadFilters(), [])
   const [hideReserva, setHideReserva] = useState(() => initialFilters?.hideReserveMovements ?? false)
   const [hidePatrimonio, setHidePatrimonio] = useState(() => initialFilters?.hidePatrimonyMovements ?? false)
+  const [modoDespesas, setModoDespesas] = useModoDespesas()
   // Incluir as duas pernas das transferências entre perfis (CPF↔CNPJ) no modo "Todos". Não persiste.
   const [includeInterProfile, setIncludeInterProfile] = useState(false)
 
@@ -605,8 +614,8 @@ export default function DemonstrativoFinanceiro() {
   // ── Report data ───────────────────────────────────────────────────────────
   const report = useMemo(() => {
     if (!applied) return null
-    return buildReport(reportTransactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio, reservaDespesaFuncSet, reservaSet, reserveFunctions, activeProfile, profileAccountIds)
-  }, [applied, reportTransactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reserveFunctions, activeProfile, profileAccountIds])
+    return buildReport(reportTransactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio, reservaDespesaFuncSet, reservaSet, reserveFunctions, activeProfile, profileAccountIds, modoDespesas)
+  }, [applied, reportTransactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reserveFunctions, activeProfile, profileAccountIds, modoDespesas])
 
   const isDirty = applied && (fromDraft !== applied.from || toDraft !== applied.to || showTxDraft !== applied.showTx || JSON.stringify([...selectedCatsDraft].sort()) !== JSON.stringify([...applied.cats].sort()) || JSON.stringify([...selectedAccsDraft].sort()) !== JSON.stringify([...applied.accs].sort()))
 
@@ -657,6 +666,7 @@ export default function DemonstrativoFinanceiro() {
               </div>
               Exibir lançamentos
             </label>
+            <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
           </div>
         </div>
 

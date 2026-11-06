@@ -43,19 +43,23 @@ describe('Orçamento = regra do Demonstrativo', () => {
 })
 
 describe('gráfico dos 6 meses = totais do Demonstrativo', () => {
-  it('resgate não soma como receita: abate a despesa, se a função tem depósito', () => {
+  it('líquido: o resgate abate a despesa e fica fora das receitas', () => {
     const lista = [...txs, { id: 'sal', type: 'income', amount: 1000, accountId: 'itau', date: '2026-10-20', categoryId: 'cat_sal' }]
-    const regra = criarRegraDemonstrativo(reserveFunctions, accounts, lista)
+    const regra = criarRegraDemonstrativo(reserveFunctions, accounts)
     expect(totaisDoDemonstrativo(lista, periodo, regra)).toEqual({ receita: 1000, despesa: -210 })
   })
-  it('resgate de função sem depósito não é receita nem abate', () => {
+  it('bruto: despesa inteira e resgate na receita; líquido: abate; saldo igual; mesmo sem depósito', () => {
     const f = [{ id: 'f', accountId: 'ca', categoryId: 'cat_x', exibirComoDespesa: true }]
     const lista = [
       { id: 'g', type: 'expense', amount: 300, accountId: 'itau', date: '2026-10-20', categoryId: 'cat_x' },
       sombra('tx_rsg_9_r', 'income', 300, 'f', 'cat_x', 'Resgate Reserva: CA'),
       sombra('tx_rsg_9_d', 'expense', 300, 'f', 'cat_x', 'Resgate Reserva: CA'),
     ]
-    expect(totaisDoDemonstrativo(lista, periodo, criarRegraDemonstrativo(f, accounts, lista))).toEqual({ receita: 0, despesa: 300 })
+    const regra = criarRegraDemonstrativo(f, accounts)
+    expect(totaisDoDemonstrativo(lista, periodo, regra, 'cheio')).toEqual({ receita: 300, despesa: 300 })
+    expect(totaisDoDemonstrativo(lista, periodo, regra, 'liquido')).toEqual({ receita: 0, despesa: 0 })
+    expect(despesaPorCategoria(lista, periodo, regra, 'cheio').cat_x).toBe(300)
+    expect(despesaPorCategoria(lista, periodo, regra, 'liquido').cat_x).toBe(0)
   })
 })
 
@@ -75,19 +79,19 @@ describe('parcela de bem paga com resgate de reserva: a despesa aparece uma vez'
     { ...sombra('tx_rsg_b_r', 'income', 1000, 'f_bem', 'cat_bem', 'Resgate Reserva: CA'), parentTxId: 'rsg', date: '2026-10-21' },
     { ...sombra('tx_rsg_b_d', 'expense', 1000, 'f_bem', 'cat_bem', 'Resgate Reserva: CA'), parentTxId: 'rsg', date: '2026-10-21' },
   ]
-  const calc = (txs, ids) => despesaPorCategoria(
-    filtrarPerfilDemonstrativo(txs, funcoes, ids), periodo, criarRegraDemonstrativo(funcoes, contas, txs),
+  const calc = (txs, ids, modo) => despesaPorCategoria(
+    filtrarPerfilDemonstrativo(txs, funcoes, ids), periodo, criarRegraDemonstrativo(funcoes, contas), modo,
   ).cat_bem
 
-  it('função sem depósito: o resgate não abate, em Todos e no perfil', () => {
-    expect(calc(lista(), null)).toBe(1000)
-    expect(calc(lista(), new Set(['itau', 'ca', 'bem']))).toBe(1000)
+  it('bruto mostra a despesa inteira; líquido abate o resgate, em Todos e no perfil', () => {
+    for (const ids of [null, new Set(['itau', 'ca', 'bem'])]) {
+      expect(calc(lista(), ids, 'cheio')).toBe(1000)
+      expect(calc(lista(), ids, 'liquido')).toBe(0)
+    }
   })
-  it('função com depósito antes do resgate: o modelo de sempre (depósito + gasto − resgate)', () => {
-    expect(calc(lista('2026-10-16'), null)).toBe(900)
-  })
-  it('depósito só depois do resgate não muda o mês do resgate', () => {
-    expect(calc(lista('2026-11-20'), null)).toBe(1000)
+  it('com depósito: depósito + gasto − resgate no líquido', () => {
+    expect(calc(lista('2026-10-16'), null, 'liquido')).toBe(900)
+    expect(calc(lista('2026-10-16'), null, 'cheio')).toBe(1900)
   })
   it('espelho de investimento fica no perfil dono do bem, não vaza para outro', () => {
     const r = filtrarPerfilDemonstrativo(lista(), funcoes, new Set(['outro']))
@@ -106,6 +110,34 @@ describe('parcela de bem paga com resgate de reserva: a despesa aparece uma vez'
       { id: 'tx_inv_3', type: 'expense', amount: 500, accountId: null, date: '2026-10-20', reservaAuto: true, categoryId: 'cat_bem', parentTxId: 'trf' },
     ]
     expect(despesaPorCategoria(txs, periodo, criarRegraDemonstrativo([], aplic, txs)).cat_bem).toBe(500)
+  })
+  it('entrada em dinheiro de bem sem espelho é despesa, uma vez, no mês do pagamento', () => {
+    const contasBem = [{ id: 'itau', type: 'checking' }, { id: 'carro', type: 'asset', tipoBem: 'bem_imobilizado' }, { id: 'velho', type: 'asset', tipoBem: 'bem_imobilizado' }]
+    const txs = [
+      { id: 'ent', type: 'transfer', accountId: 'itau', toAccountId: 'carro', bemId: 'carro', amount: 1000, date: '2026-10-20', categoryId: 'cat_car' },
+      { id: 'sem', type: 'transfer', accountId: 'itau', toAccountId: 'carro', amount: 70, date: '2026-10-21', categoryId: 'cat_car' },
+      { id: 'bem', type: 'transfer', accountId: 'velho', toAccountId: 'carro', bemId: 'carro', amount: 60000, date: '2026-10-22', categoryId: 'cat_car' },
+    ]
+    expect(despesaPorCategoria(txs, periodo, criarRegraDemonstrativo([], contasBem, txs)).cat_car).toBe(1000)
+  })
+  it('entrada paga com resgate: bruto mostra a entrada; líquido abate o resgate', () => {
+    const contasBem = [{ id: 'itau', type: 'checking' }, { id: 'ca', type: 'savings', isReserva: true }, { id: 'carro', type: 'asset', tipoBem: 'bem_imobilizado' }]
+    const f = [{ id: 'f', accountId: 'ca', categoryId: 'cat_car', exibirComoDespesa: true }]
+    const txs = [
+      { id: 'ent', type: 'transfer', accountId: 'itau', toAccountId: 'carro', bemId: 'carro', amount: 1000, date: '2026-10-20', categoryId: 'cat_car' },
+      sombra('tx_rsg_8_r', 'income', 1000, 'f', 'cat_car', 'Resgate Reserva: CA'),
+    ]
+    const regra = criarRegraDemonstrativo(f, contasBem)
+    expect(despesaPorCategoria(txs, periodo, regra, 'cheio').cat_car).toBe(1000)
+    expect(despesaPorCategoria(txs, periodo, regra, 'liquido').cat_car).toBe(0)
+  })
+  it('bem com espelho não conta a entrada de novo', () => {
+    const contasBem = [{ id: 'bem', type: 'asset', tipoBem: 'consorcio', isInvestimento: true, investmentCategoryId: 'cat_c' }]
+    const txs = [
+      { id: 'trf', type: 'transfer', accountId: 'itau', toAccountId: 'bem', bemId: 'bem', amount: 500, date: '2026-10-20', categoryId: 'cat_c' },
+      { id: 'tx_inv_9', type: 'expense', amount: 500, accountId: null, date: '2026-10-20', reservaAuto: true, categoryId: 'cat_c', parentTxId: 'trf' },
+    ]
+    expect(despesaPorCategoria(txs, periodo, criarRegraDemonstrativo([], contasBem, txs)).cat_c).toBe(500)
   })
   it('conta de aplicação sem espelho continua contando o aporte categorizado', () => {
     const aplic = [{ id: 'cdb', contaAplicacao: true }]

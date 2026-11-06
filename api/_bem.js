@@ -555,6 +555,39 @@ export async function registrarMovimentacao(q, {
   return id
 }
 
+// Dados brutos do Extrato do bem (src/lib/extratoBem.js), para a Visão Bem, a Visão Caixa e a venda.
+export async function dadosDoExtrato(q, ids) {
+  if (!ids.length) return { lancamentos: [], trocas: [], parcelas: [] }
+  const lancamentos = await q(
+    `SELECT l.id, l.type, l.date, l.amount, l.account_id, l.to_account_id, l.bem_id, l.bem_papel, l.category_id,
+            l.description, l.payee, l.origin, l.reserva_auto, o.type AS origem_tipo, d.type AS destino_tipo
+       FROM lancamentos l
+       LEFT JOIN contas o ON o.id = l.account_id
+       LEFT JOIN contas d ON d.id = l.to_account_id
+      WHERE (l.bem_id = ANY($1) OR l.to_account_id = ANY($1) OR l.account_id = ANY($1))
+        AND COALESCE(l.reserva_auto, false) = false
+      ORDER BY l.date, l.created_at`,
+    [ids],
+  )
+  const trocas = await q(
+    `SELECT id, bem_id, valor, descricao, to_char(data::date, 'YYYY-MM-DD') AS data
+       FROM bem_movimentacoes
+      WHERE tipo = 'entrada_trade_in' AND bem_id = ANY($1)`,
+    [ids],
+  )
+  const financiamentos = await q(`SELECT id, bem_id FROM financing WHERE bem_id = ANY($1)`, [ids])
+  const bemDoFinanciamento = new Map(financiamentos.map(f => [f.id, f.bem_id]))
+  const parcelas = financiamentos.length === 0 ? [] : await q(
+    `${SELECT_PARCELAS} WHERE financing_id = ANY($1) ORDER BY numero_parcela`,
+    [financiamentos.map(f => f.id)],
+  )
+  return {
+    lancamentos: lancamentos.map(l => ({ ...l, amount: num(l.amount) })),
+    trocas: trocas.map(t => ({ ...t, valor: num(t.valor) })),
+    parcelas: parcelas.map(p => ({ ...serializarParcela(p), bem_id: bemDoFinanciamento.get(p.financing_id) })),
+  }
+}
+
 // Histórico do bem acompanha o sync de lançamentos: transferência vinculada sem movimentação ganha a
 // sua (com a data REAL do pagamento) e a que mudou de valor é corrigida. Idempotente: o sync reenvia
 // as mesmas linhas e uma linha repetida não cria nada.
@@ -678,8 +711,10 @@ export async function montarComposicaoBem(q, conta, fin) {
   // Entra no pago: o bem está pago, mesmo que o dinheiro não tenha saído das contas do usuário.
   const [{ total: somaTerceiros }] = await q(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM lancamentos
-      WHERE account_id = $1 AND type = 'income' AND COALESCE(reserva_auto, false) = false
-        AND COALESCE(origin, '') NOT IN ('rendimento_manual', 'patrimonio_auto')`,
+      WHERE type = 'income' AND COALESCE(reserva_auto, false) = false
+        AND COALESCE(origin, '') NOT IN ('rendimento_manual', 'patrimonio_auto')
+        AND ((account_id = $1 AND COALESCE(bem_papel, 'terceiro') = 'terceiro')
+          OR (bem_id = $1 AND bem_papel = 'terceiro'))`,
     [conta.id],
   )
   const terceiros = round2(num(somaTerceiros))

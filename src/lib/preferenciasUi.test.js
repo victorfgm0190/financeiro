@@ -3,10 +3,10 @@ import { lerPreferencias, gravarPreferencias } from './preferenciasUi'
 
 describe('preferências de interface (mobile_home_cards)', () => {
   it('lê vazio, formato antigo (array) e formato novo', () => {
-    expect(lerPreferencias(null)).toEqual({ cards: null, despesasModo: 'cheio' })
-    expect(lerPreferencias([{ id: 'a', on: false }])).toEqual({ cards: [{ id: 'a', on: false }], despesasModo: 'cheio' })
+    expect(lerPreferencias(null)).toEqual({ cards: null, despesasModo: 'liquido' })
+    expect(lerPreferencias([{ id: 'a', on: false }])).toEqual({ cards: [{ id: 'a', on: false }], despesasModo: 'liquido' })
     expect(lerPreferencias({ cards: [], despesasModo: 'liquido' })).toEqual({ cards: [], despesasModo: 'liquido' })
-    expect(lerPreferencias({ despesasModo: 'xyz' }).despesasModo).toBe('cheio')
+    expect(lerPreferencias({ despesasModo: 'xyz' }).despesasModo).toBe('liquido')
   })
 
   it('gravar preserva o que não mudou', () => {

@@ -1,14 +1,17 @@
 import { contaCentralPara } from '../../lib/contaCentral'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, Info, ListOrdered, History, Settings2, Wallet, Scale } from 'lucide-react'
+import { Loader2, Info, ListOrdered, History, Settings2, Wallet, Scale, Landmark, Calculator } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import {
   getBem, getFinanciamento, getParcelas, getMovimentacoes, estornarEntrada, atualizarValoresBem,
-  popularRateiosParcelas,
+  popularRateiosParcelas, getConsorcio,
 } from '../../lib/bemApi'
+import ConsorcioTab from './ConsorcioTab'
+import ConsorcioModal from './ConsorcioModal'
+import SimulacaoTab from './SimulacaoTab'
 import BemInfoTab from './BemInfoTab'
 import BemResumoTab from './BemResumoTab'
 import BemParcelasTab from './BemParcelasTab'
@@ -67,11 +70,28 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
   const [confirmandoEstorno, setConfirmandoEstorno] = useState(false)
   const [estornando, setEstornando] = useState(false)
 
-  const [modal, setModal] = useState(null) // 'financiamento' | 'entrada' | 'parametrizar' | 'favorecido' | { parcela }
+  const [modal, setModal] = useState(null) // 'financiamento' | 'entrada' | 'parametrizar' | 'favorecido' | 'consorcio' | { parcela }
 
   const avisar = useCallback((mensagem, variante = 'success') => {
     setToast({ mensagem, variante })
   }, [])
+
+  // Consórcio (null = o bem não é consórcio): abas próprias, cadastro e eventos.
+  const [consorcio, setConsorcio] = useState(null)
+  const carregarConsorcio = useCallback(() => getConsorcio(conta.id)
+    .then(r => setConsorcio(r.consorcio || null))
+    .catch(() => setConsorcio(null)), [conta.id])
+  useEffect(() => {
+    let vivo = true
+    getConsorcio(conta.id).then(r => { if (vivo) setConsorcio(r.consorcio || null) }).catch(() => {})
+    return () => { vivo = false }
+  }, [conta.id])
+  const abas = useMemo(() => (consorcio ? [
+    ...ABAS.slice(0, 2),
+    { id: 'consorcio', label: 'Consórcio', icone: Landmark },
+    { id: 'simulacao', label: 'Simulação', icone: Calculator },
+    ...ABAS.slice(2),
+  ] : ABAS), [consorcio])
 
   // `accounts` é lido por ref, não por dependência: updateAccount refaz o array
   // incondicionalmente (AppContext.jsx:1271, `.map()` sem comparar valor), então usá-lo como
@@ -389,7 +409,21 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
     return [...new Set(payees)].sort((a, b) => (usos[b] || 0) - (usos[a] || 0))
   }, [profileTransactions, payees])
 
-  const naoParametrizado = bem && !bem.valor_nota_fiscal && !bem.categorias?.prestacao?.id
+  const naoParametrizado = bem && !consorcio && !bem.valor_nota_fiscal && !bem.categorias?.prestacao?.id
+
+  const aposConsorcio = async () => {
+    setModal(null)
+    updateAccount(conta.id, { tipoBem: 'consorcio' })
+    avisar('Consórcio salvo.')
+    await carregar()
+    await carregarConsorcio()
+  }
+  // Evento do consórcio: pode ter mudado saldo, tipo e valor do bem.
+  const aposEventoConsorcio = async () => {
+    setMovimentacoes(null)
+    await carregar()
+    await carregarConsorcio()
+  }
 
   const temEntrada = (movimentacoes || []).some(
     m => m.tipo === 'entrada_venda' || m.tipo === 'entrada_trade_in',
@@ -463,8 +497,8 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
               </div>
             )}
 
-            <div className="flex gap-1 border-b border-borda">
-              {ABAS.map(aba => {
+            <div className="flex gap-1 border-b border-borda overflow-x-auto">
+              {abas.map(aba => {
                 const Icone = aba.icone
                 const ativa = abaAtiva === aba.id
                 return (
@@ -502,10 +536,24 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
                 temMovimentacoes={valoresTravados}
                 onSalvarValores={podeEditarPat ? salvarValores : null}
                 onErro={(m) => avisar(m, 'error')}
+                onConverterConsorcio={podeEditarPat && !consorcio ? () => setModal('consorcio') : null}
               />
             )}
 
             {abaAtiva === 'resumo' && <BemResumoTab bemId={conta.id} />}
+
+            {abaAtiva === 'consorcio' && consorcio && (
+              <ConsorcioTab
+                bemId={conta.id}
+                consorcio={consorcio}
+                tipoBem={bem.tipo}
+                onEditar={() => setModal('consorcio')}
+                onMudou={aposEventoConsorcio}
+                avisar={avisar}
+              />
+            )}
+
+            {abaAtiva === 'simulacao' && consorcio && <SimulacaoTab bemId={conta.id} cotas={consorcio.cotas} />}
 
             {abaAtiva === 'parcelas' && (
               <BemParcelasTab
@@ -538,6 +586,20 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
             categorias={categories}
             onCancel={() => setModal(null)}
             onSuccess={aposParametrizar}
+            onErro={(m) => avisar(m, 'error')}
+          />
+        )}
+      </Modal>
+
+      <Modal open={modal === 'consorcio'} onClose={() => setModal(null)} title="Dados do consórcio" size="lg">
+        {modal === 'consorcio' && (
+          <ConsorcioModal
+            bemId={conta.id}
+            consorcio={consorcio}
+            favorecidos={favorecidosOrdenados}
+            contas={contasCorrentes}
+            onCancel={() => setModal(null)}
+            onSuccess={aposConsorcio}
             onErro={(m) => avisar(m, 'error')}
           />
         )}

@@ -74,7 +74,7 @@ export default function CategoriaLancamentos({ categoriaId, periodo, modo }) {
       {dados.resgates.length > 0 && (
         <div>
           <p className="text-[11px] uppercase tracking-wide text-texto-3 mb-1">
-            Resgates da reserva{modo === 'cheio' ? ' (não abatem no modo Cheio)' : ''}
+            Resgates da reserva{modo === 'cheio' ? ' (não abatem no modo Bruto)' : ''}
           </p>
           <ul className="divide-y divide-borda/70">
             {dados.resgates.map(tx => (

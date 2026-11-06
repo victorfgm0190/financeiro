@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  extratoDoBem, resumoDoBem, linhaDoTempo, saidasPorMes, totaisDeSaidas, faltaPagar, CLASSE,
+  extratoDoBem, resumoDoBem, linhaDoTempo, saidasPorMes, totaisDeSaidas, faltaPagar, historicoDePagamentos, CLASSE,
 } from './extratoBem.js'
 
 const bem = { id: 'bem', nome: 'Carro', valor_nota_fiscal: 150000, categoria_prestacao_id: 'cat_p', categoria_taxa_id: 'cat_j' }
@@ -121,6 +121,61 @@ describe('terceiros, devoluções e troca', () => {
     const linhas = extratoDoBem(bem, d)
     expect(resumoDoBem(bem, linhas, []).pagoSemJuros).toBe(500)
     expect(saidasPorMes([{ bem, linhas }])).toEqual([])
+  })
+})
+
+describe('marcação explícita de receita', () => {
+  const classe = (l) => extratoDoBem(bem, { lancamentos: [{ id: 'x', date: '2026-04-25', amount: 100, type: 'income', ...l }] })[0]
+  it('sem marcação, a regra é só sugestão', () => {
+    expect(classe({ account_id: 'bem' })).toMatchObject({ classe: CLASSE.TERCEIRO, sugerida: true, receita: true })
+    expect(classe({ account_id: 'itau', bem_id: 'bem' })).toMatchObject({ classe: CLASSE.DEVOLUCAO, sugerida: true })
+  })
+  it('a marcação do usuário vence a regra', () => {
+    expect(classe({ account_id: 'bem', bem_papel: 'devolucao' })).toMatchObject({ classe: CLASSE.DEVOLUCAO, sugerida: false })
+    expect(classe({ account_id: 'itau', bem_id: 'bem', bem_papel: 'terceiro' })).toMatchObject({ classe: CLASSE.TERCEIRO, sugerida: false, caixa: false })
+  })
+})
+
+describe('bem sem lançamentos', () => {
+  const manual = { ...bem, valor_nota_fiscal: 160000, valor_pago_manual: 190904.63 }
+  it('usa o valor informado e avisa', () => {
+    expect(resumoDoBem(manual, [], [])).toMatchObject({ pagoSemJuros: 190904.63, pagoComJuros: 190904.63, proprios: 190904.63, valorInformado: true })
+  })
+  it('com pagamento lançado, o informado não vale', () => {
+    const linhas = extratoDoBem(manual, { lancamentos: [{ id: 'a', type: 'transfer', date: '2026-01-01', amount: 10, account_id: 'i', to_account_id: 'bem' }] })
+    expect(resumoDoBem(manual, linhas, [])).toMatchObject({ pagoSemJuros: 10, valorInformado: false })
+  })
+  it('sem lançamentos e sem valor informado, fica em zero, sem aviso', () => {
+    expect(resumoDoBem(bem, [], [])).toMatchObject({ pagoSemJuros: 0, valorInformado: false })
+  })
+})
+
+describe('consórcio', () => {
+  const c = { ...bem, tipo_bem: 'consorcio', valor_nota_fiscal: 6143.4 }
+  const cotas = [{ bem_id: 'bem', valor_carta: 100000, saldo_devedor_informado: 120949.8 }, { bem_id: 'bem', valor_carta: 100000, saldo_devedor_informado: 120949.8 }, { bem_id: 'outro', valor_carta: 1, saldo_devedor_informado: 1 }]
+  const dados = { lancamentos: [
+    { id: 't', type: 'transfer', date: '2026-06-08', amount: 1000, account_id: 'i', to_account_id: 'bem' },
+    { id: 'b', type: 'income', date: '2026-04-25', amount: 200, account_id: 'bem' },
+    { id: 'r', type: 'income', date: '2026-06-12', amount: 50, account_id: 'i', bem_id: 'bem' },
+  ] }
+  it('valor é a carta e falta é o saldo informado', () => {
+    expect(resumoDoBem(c, extratoDoBem(c, dados), [], cotas)).toMatchObject({
+      valorBem: 200000, faltaPagar: 241899.6, pagoComJuros: 1200, custoFinalRealizado: 1200, custoFinalProjetado: 243099.6, custoProprioLiquido: 950, ehConsorcio: true,
+    })
+  })
+  it('histórico por mês separa o que saiu do bolso', () => {
+    expect(historicoDePagamentos(extratoDoBem(c, dados))).toEqual([
+      { mes: '2026-04', total: 200, proprio: 0 },
+      { mes: '2026-05', total: 0, proprio: 0 },
+      { mes: '2026-06', total: 1000, proprio: 950 },
+    ])
+  })
+  it('venda não conta como devolução nem como pagamento', () => {
+    const venda = { lancamentos: [...dados.lancamentos, { id: 'v', type: 'transfer', date: '2026-07-01', amount: 23000, account_id: 'bem', to_account_id: 'i', origin: 'venda_bem' }] }
+    const linhas = extratoDoBem(c, venda)
+    expect(linhas.find(l => l.id === 'v').classe).toBe(CLASSE.VENDA)
+    expect(resumoDoBem(c, linhas, [], cotas).devolucoes).toBe(50)
+    expect(saidasPorMes([{ bem: c, linhas }]).find(l => l.mes === '2026-07')).toBeUndefined()
   })
 })
 

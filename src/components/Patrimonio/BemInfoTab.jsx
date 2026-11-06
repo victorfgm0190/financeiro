@@ -25,8 +25,9 @@ function Categoria({ label, categoria }) {
 
 export default function BemInfoTab({
   bem, financiamento, parcelasResumo, onCriarFinanciamento, onRegistrarEntrada,
-  temMovimentacoes = false, onSalvarValores, onErro,
+  temMovimentacoes = false, onSalvarValores, onErro, onConverterConsorcio,
 }) {
+  const ehConsorcio = bem.tipo === 'consorcio'
   const categorias = bem.categorias || {}
   const semCategorias = !categorias.perda?.nome && !categorias.ganho?.nome
     && !categorias.prestacao?.nome && !categorias.taxa_finan?.nome
@@ -38,7 +39,7 @@ export default function BemInfoTab({
           <Landmark size={14} className="text-receita" /> Bem (Ativo)
         </h3>
         <Linha label="Nome">{bem.nome}</Linha>
-        <Linha label="Valor da Nota Fiscal">{fmt(bem.valor_nota_fiscal)}</Linha>
+        {!ehConsorcio && <Linha label="Valor da Nota Fiscal">{fmt(bem.valor_nota_fiscal)}</Linha>}
         <Linha label="Saldo contábil da conta (não é o valor pago)">{fmt(bem.saldo)}</Linha>
         <Linha label="Status">
           {bem.foi_vendido
@@ -51,7 +52,7 @@ export default function BemInfoTab({
 
       <BemComposicao composicao={bem.composicao} />
 
-      {onSalvarValores && (
+      {onSalvarValores && !ehConsorcio && (
         <PatrimonioEditavel
           bem={bem}
           temMovimentacoes={temMovimentacoes}
@@ -92,10 +93,16 @@ export default function BemInfoTab({
         </div>
       ) : (
         <div className="card">
-          <p className="text-sm text-texto-2">Este bem ainda não tem financiamento.</p>
-          <p className="text-xs text-texto-3 mt-1">
-            Registre a entrada à vista e depois crie o financiamento do saldo restante.
-          </p>
+          {ehConsorcio ? (
+            <p className="text-sm text-texto-2">Consórcio: os dados do contrato estão na aba Consórcio. O financiamento só existe depois de usar a carta.</p>
+          ) : (
+            <>
+              <p className="text-sm text-texto-2">Este bem ainda não tem financiamento.</p>
+              <p className="text-xs text-texto-3 mt-1">
+                Registre a entrada à vista e depois crie o financiamento do saldo restante.
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -121,9 +128,14 @@ export default function BemInfoTab({
             <Wallet size={14} /> Registrar Entrada à Vista
           </button>
         )}
-        {!financiamento && onCriarFinanciamento && (
+        {!financiamento && onCriarFinanciamento && !ehConsorcio && (
           <button className="btn-primary flex-1" onClick={onCriarFinanciamento}>
             Criar Financiamento
+          </button>
+        )}
+        {!financiamento && onConverterConsorcio && (
+          <button className="btn-secondary flex-1" onClick={onConverterConsorcio}>
+            Converter em consórcio
           </button>
         )}
       </div>
