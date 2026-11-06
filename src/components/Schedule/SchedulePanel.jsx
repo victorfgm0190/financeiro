@@ -22,7 +22,7 @@ import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { PERIODOS, scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba, periodoPadrao, AVANCADOS_VAZIOS, etiquetasFiltros } from '../../lib/agendamentosFiltro'
 import { buildScheduleGroups, rotuloFaturasSeguintes } from '../../lib/agendamentosGrupos'
 import { exportarExcel } from '../../lib/exportExcel'
-import { TIPOS_AGENDAMENTO, filtrarPorTipo, contarPorTipo, lerTipoAgendamento, salvarTipoAgendamento } from '../../lib/agendamentosTipo'
+import { totaisPorTipo, TIPOS_AGENDAMENTO, filtrarPorTipo, contarPorTipo, lerTipoAgendamento, salvarTipoAgendamento } from '../../lib/agendamentosTipo'
 import { linhasDosAgendamentos, linhasDosPagos, linhasDasFaturas, specAgendamentos, periodoDoArquivo } from '../../lib/exportarAgendamentos'
 import SeloContrato from '../Contratos/SeloContrato'
 import BotaoComposicaoParcela from '../Contratos/BotaoComposicaoParcela'
@@ -2643,7 +2643,7 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
 
 // Aba "Pagos": uma linha por pagamento (dados do lançamento). Linha sem agendamento abre a edição dele;
 // a que veio de agendamento é só leitura.
-function PagamentosTable({ linhas, categories, accounts, tiposDocumento, onAbrirAvulso }) {
+function PagamentosTable({ linhas, categories, accounts, tiposDocumento, onAbrirAvulso, tipoMov = 'todos' }) {
   if (linhas.length === 0) {
     return (
       <div className="card text-center py-12">
@@ -2654,8 +2654,12 @@ function PagamentosTable({ linhas, categories, accounts, tiposDocumento, onAbrir
   }
   const cat = (id) => { const c = categories.find(x => x.id === id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : '—' }
   const conta = (id) => { const a = accounts.find(x => x.id === id); return a ? (a.apelido || a.name) : '—' }
-  // Rodapé: "sem lançamento" não soma no total — só é contado à parte.
+  // Rodapé: total por tipo; "sem lançamento" não soma, só é contado à parte. Com um tipo escolhido, só ele.
   const tot = totaisPagamentos(linhas)
+  const porTipo = totaisPorTipo(linhas, accounts)
+  const itensRodape = tipoMov === 'todos'
+    ? [...TIPOS_AGENDAMENTO.filter(t => t.id !== 'todos').map(t => [t.id, t.label]), ['liquido', 'Líquido']]
+    : TIPOS_AGENDAMENTO.filter(t => t.id === tipoMov).map(t => [t.id, t.label])
   return (
     <div className="card p-0 overflow-x-auto">
       <table className="w-full text-xs">
@@ -2706,12 +2710,19 @@ function PagamentosTable({ linhas, categories, accounts, tiposDocumento, onAbrir
         </tbody>
         <tfoot>
           <tr className="border-t border-borda text-texto-2">
-            <td colSpan={7} className="px-3 py-2">
-              {tot.nPagos} pago{tot.nPagos !== 1 ? 's' : ''} · {fmt(tot.totalPago)}
-              {tot.nSemLancamento > 0 && <span className="text-texto-3"> | {tot.nSemLancamento} sem lançamento</span>}
+            <td colSpan={9} className="px-3 py-2" data-testid="pagos-rodape">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span>
+                  {tot.nPagos} pago{tot.nPagos !== 1 ? 's' : ''}
+                  {tot.nSemLancamento > 0 && <span className="text-texto-3"> | {tot.nSemLancamento} sem lançamento</span>}
+                </span>
+                {itensRodape.map(([id, rotulo]) => (
+                  <span key={id} className="whitespace-nowrap" data-testid={`pagos-total-${id}`}>
+                    {rotulo}: <b className="text-texto-1">{id === 'liquido' ? fmtSinal(porTipo[id]) : fmt(porTipo[id])}</b>
+                  </span>
+                ))}
+              </div>
             </td>
-            <td className="px-3 py-2 text-right font-semibold text-texto-1 whitespace-nowrap">{fmt(tot.totalPago)}</td>
-            <td />
           </tr>
         </tfoot>
       </table>
@@ -3109,9 +3120,10 @@ export default function SchedulePanel() {
   // agendamentos delas. Os lançamentos já vêm recortados pelos perfis permitidos (/api/load).
   const pagosLinhasTodas = useMemo(() => {
     if (activeTab !== 'conta') return pagamentosDosAgendamentos(basePagos, transactions)
-    const linhas = pagosEmConta({ transactions: profileTransactions, todasTransactions: transactions, schedules: allSchedules, accounts: allAccounts })
+    const contasDoPerfil = activeProfileId ? new Set(accounts.map(a => a.id)) : null
+    const linhas = pagosEmConta({ transactions: profileTransactions, todasTransactions: transactions, schedules: allSchedules, accounts: allAccounts, contasDoPerfil })
     return showZeroed ? linhas : linhas.filter(l => Number(l.amount) !== 0)
-  }, [activeTab, basePagos, transactions, profileTransactions, allSchedules, allAccounts, showZeroed])
+  }, [activeTab, basePagos, transactions, profileTransactions, allSchedules, allAccounts, showZeroed, activeProfileId, accounts])
   const pagosLinhas = useMemo(
     () => filtrarPorContaReserva(pagosLinhasTodas, contaReserva, l => l.schedule),
     [pagosLinhasTodas, contaReserva]
@@ -3298,7 +3310,7 @@ export default function SchedulePanel() {
     ]
     setExportando(true)
     exportarExcel(specAgendamentos(linhas, {
-      tipo: tipoMov, filtros, periodo: periodoDoArquivo(periodoAtual, { de: dataDe, ate: dataAte, hoje: hojeStr }),
+      tipo: tipoMov, filtros, pagos: abaPagos, periodo: periodoDoArquivo(periodoAtual, { de: dataDe, ate: dataAte, hoje: hojeStr }),
     }))
       .catch(err => setAvisoForm({ mensagem: `Não consegui exportar: ${err?.message || err}`, variante: 'error' }))
       .finally(() => setExportando(false))
@@ -3616,6 +3628,7 @@ export default function SchedulePanel() {
           accounts={allAccounts}
           tiposDocumento={tiposDocumento}
           onAbrirAvulso={setEditandoLancamento}
+          tipoMov={tipoMov}
         />
       ) : abaSemNada && vazioDaAba ? (
         <div className="card text-center py-12">

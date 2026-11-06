@@ -1,17 +1,21 @@
 import { describe, it, expect } from 'vitest'
 import { pagosEmConta, lancamentoPagoEmConta } from './pagosEmConta.js'
 import { filtrarPagamentos } from './ocorrenciasRegistradas.js'
-import { filtrarPorTipo, contarPorTipo } from './agendamentosTipo.js'
+import { filtrarPorTipo, contarPorTipo, totaisPorTipo } from './agendamentosTipo.js'
 import { SEM_CATEGORIA, casaCategoria } from './filtroCategoria.js'
 import { filtrarAgendamentos } from './agendamentosFiltro.js'
 import { lancamentoNasContas } from './origins.js'
-import { linhasDosPagos } from './exportarAgendamentos.js'
+import { linhasDosPagos, specAgendamentos } from './exportarAgendamentos.js'
 
 const accounts = [
   { id: 'banco', name: 'Banco A', type: 'checking', profileId: 'pa' },
   { id: 'banco2', name: 'Banco B', type: 'checking', profileId: 'pb' },
   { id: 'cartao', name: 'Cartão qualquer', type: 'credit', profileId: 'pa' },
   { id: 'bem', name: 'Consórcio', type: 'asset', profileId: 'pa' },
+  { id: 'bem_b', name: 'Bem do outro perfil', type: 'asset', profileId: 'pb' },
+  { id: 'divida', name: 'Financiamento', type: 'liability', profileId: 'pa' },
+  { id: 'res', name: 'Reserva', type: 'savings', profileId: 'pa' },
+  { id: 'ger', name: 'Gerencial', type: 'gerencial', profileId: 'pa' },
 ]
 const tx = (id, type, amount, extra = {}) => ({ id, type, amount, date: '2026-06-12', accountId: 'banco', description: id, payee: '', ...extra })
 const reembolso = tx('reembolso', 'income', 341.5, { categoryId: 'cat_reembolso' })
@@ -69,7 +73,8 @@ describe('sem duplicidade', () => {
 })
 
 describe('transferências', () => {
-  const entrePerfis = tx('t', 'transfer', 100, { accountId: 'banco', toAccountId: 'banco2' })
+  const entreContas = tx('t', 'transfer', 100, { accountId: 'banco', toAccountId: 'banco2' })
+  const paraBem = tx('pb', 'transfer', 100, { accountId: 'banco', toAccountId: 'bem_b' })
   const fatura = tx('f', 'transfer', 900, { toAccountId: 'cartao' })
   const devolvido = tx('g', 'transfer', 30, { accountId: 'cartao', toAccountId: 'banco' })
 
@@ -89,26 +94,47 @@ describe('transferências', () => {
     expect(filtrarPorTipo([l], 'pagamentos_cartao', undefined, accounts)).toHaveLength(1)
     expect(montar([{ ...pago, fromAccountId: null }])).toEqual([])
   })
-  it('entre contas: em Transferências, uma linha com origem e destino', () => {
-    const linhas = montar([entrePerfis])
-    expect(linhas).toHaveLength(1)
-    expect(linhas[0]).toMatchObject({ accountId: 'banco', toAccountId: 'banco2' })
-    expect(contarPorTipo(linhas, undefined, accounts)).toMatchObject({ todos: 1, transferencias: 1 })
+  it('entre contas não entra: bancária, reserva, gerencial, etapa A, automática', () => {
+    expect(montar([
+      entreContas,
+      tx('t2', 'transfer', 10, { toAccountId: 'res' }),
+      tx('t3', 'transfer', 10, { accountId: 'res', toAccountId: 'banco' }),
+      tx('t4', 'transfer', 10, { toAccountId: 'ger', origin: 'etapa_a' }),
+      tx('t5', 'transfer', 10, { toAccountId: 'ger', origin: 'gerencial_auto' }),
+    ])).toEqual([])
   })
-  it('entre perfis: aparece filtrando por qualquer um deles e uma vez em Tudo', () => {
-    const doPerfil = (contas) => montar([entrePerfis].filter(t => lancamentoNasContas(t, new Set(contas))))
-    expect(doPerfil(['banco', 'cartao', 'bem'])).toHaveLength(1)
-    expect(doPerfil(['banco2'])).toHaveLength(1)
+  it('bem ou dívida entra em Transferências, uma linha origem → destino, em qualquer sentido', () => {
+    const linhas = montar([paraBem, tx('d', 'transfer', 20, { toAccountId: 'divida' }), tx('v', 'transfer', 30, { accountId: 'bem', toAccountId: 'banco' })])
+    expect(linhas).toHaveLength(3)
+    expect(contarPorTipo(linhas, undefined, accounts)).toMatchObject({ todos: 3, transferencias: 3, pagamentos_cartao: 0 })
+    expect(linhas.find(l => l.txId === 'pb')).toMatchObject({ accountId: 'banco', toAccountId: 'bem_b' })
+  })
+  it('o tipo da conta decide, nunca o nome', () => {
+    const contas = [{ id: 'a', name: 'Banco', type: 'checking' }, { id: 'b', name: 'Consórcio e financiamento', type: 'checking' }]
+    expect(pagosEmConta({ transactions: [tx('x', 'transfer', 1, { accountId: 'a', toAccountId: 'b' })], accounts: contas })).toEqual([])
+  })
+  it('bem de outro perfil: aparece filtrando por qualquer um dos dois e uma vez em Tudo', () => {
+    const doPerfil = (contas) => montar([paraBem].filter(t => lancamentoNasContas(t, new Set(contas))))
+    expect(doPerfil(['banco'])).toHaveLength(1)
+    expect(doPerfil(['bem_b'])).toHaveLength(1)
     expect(doPerfil(['outra'])).toHaveLength(0)
-    expect(montar([entrePerfis])).toHaveLength(1)
+    expect(montar([paraBem])).toHaveLength(1)
+  })
+  it('credit_payment com perfil: entra pela pagadora OU pelo cartão, sem duplicar', () => {
+    const cp = tx('cp2', 'credit_payment', 500, { accountId: 'cartao', fromAccountId: 'banco2' })
+    const pelo = (doPerfil, contas) => pagosEmConta({ transactions: doPerfil, todasTransactions: [cp], accounts, contasDoPerfil: new Set(contas) })
+    expect(pelo([], ['banco2'])).toHaveLength(1)
+    expect(pelo([cp], ['cartao'])).toHaveLength(1)
+    expect(pelo([cp], ['banco2', 'cartao'])).toHaveLength(1)
+    expect(pelo([], ['banco'])).toHaveLength(0)
   })
   it('o vínculo é achado mesmo com a lista do perfil recortada', () => {
     const linhas = pagosEmConta({ transactions: [paga], todasTransactions: [paga, reembolso], schedules: [parcela], accounts })
     expect(linhas[0].scheduleId).toBe('ag')
   })
   it('exportação mostra origem → destino', () => {
-    const [l] = linhasDosPagos(montar([entrePerfis]), { accounts, categories: [] })
-    expect(l.conta).toBe('Banco A → Banco B')
+    const [l] = linhasDosPagos(montar([paraBem]), { accounts, categories: [] })
+    expect(l.conta).toBe('Banco A → Bem do outro perfil')
   })
 })
 
@@ -148,5 +174,34 @@ describe('filtro de categoria das listas', () => {
     const prox = () => []
     expect(filtrarAgendamentos(lista, { categoryId: SEM_CATEGORIA }, prox, '2026-06-01').map(s => s.id)).toEqual(['b'])
     expect(filtrarAgendamentos(lista, { categoryId: '' }, prox, '2026-06-01')).toHaveLength(2)
+  })
+})
+
+describe('totais por tipo', () => {
+  const linhas = montar([
+    tx('e1', 'income', 1000), tx('e2', 'income', 50.5),
+    tx('s1', 'expense', 200.25),
+    tx('t1', 'transfer', 300, { toAccountId: 'bem' }),
+    tx('f1', 'transfer', 100, { toAccountId: 'cartao' }),
+  ])
+  const somaDe = (tipo) => filtrarPorTipo(linhas, tipo, undefined, accounts).reduce((a, l) => a + l.amount, 0)
+
+  it('batem com as linhas de cada tipo, e o Líquido desconta o resto', () => {
+    const t = totaisPorTipo(linhas, accounts)
+    expect(t).toEqual({ entradas: 1050.5, saidas: 200.25, transferencias: 300, pagamentos_cartao: 100, liquido: 450.25 })
+    for (const id of ['entradas', 'saidas', 'transferencias', 'pagamentos_cartao']) expect(t[id]).toBeCloseTo(somaDe(id), 2)
+  })
+  it('baixa sem lançamento não soma', () => {
+    expect(totaisPorTipo([{ semLancamento: true, amount: 99, transactionType: 'income' }], accounts).entradas).toBe(0)
+  })
+  it('Excel: mesmo resumo da tela, nos dois modos', () => {
+    const todos = specAgendamentos([], { tipo: 'todos', pagos: true }).resumo
+    expect(todos.map(r => r.rotulo)).toEqual(['Entradas', 'Saídas', 'Transferências', 'Pagamento de cartão', 'Líquido'].map((n, i) => (i === 3 ? todos[3].rotulo : n)))
+    const exp = linhasDosPagos(linhas, { accounts, categories: [] })
+    for (const r of todos.slice(0, 4)) expect(exp.some(l => l.tipo === r.onde[0].valor)).toBe(true)
+    expect(todos[4].partes.map(p => p.sinal)).toEqual([1, -1, -1, -1])
+    const so = specAgendamentos([], { tipo: 'saidas', pagos: true }).resumo
+    expect(so).toEqual([{ rotulo: 'Saídas', soma: 'valor', cor: 'vermelho' }])
+    expect(specAgendamentos([], { tipo: 'saidas' }).resumo.length).toBeGreaterThan(1) // A pagar segue igual
   })
 })

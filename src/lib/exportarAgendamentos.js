@@ -143,6 +143,24 @@ export function resumoAgendamentos(tipo) {
   ]
 }
 
+// Resumo da aba Pagos: mesmo rodapé da tela. Com "Todos", um total por tipo e o Líquido; com um tipo
+// selecionado (a coluna Tipo some), só o total dele.
+export function resumoPagos(tipo) {
+  const ROTULOS = [
+    ['entradas', 'Entradas', 'verde'], ['saidas', 'Saídas', 'vermelho'],
+    ['transferencias', 'Transferências', null], ['pagamentos_cartao', ROTULO_PAGAMENTO_CARTAO, null],
+  ]
+  if (tipo && tipo !== 'todos') {
+    const [, rotulo, cor] = ROTULOS.find(([id]) => id === tipo) || [null, 'Total', null]
+    return [{ rotulo, soma: 'valor', ...(cor ? { cor } : {}) }]
+  }
+  const onde = (id) => [{ coluna: 'tipo', valor: id === 'pagamentos_cartao' ? ROTULO_PAGAMENTO_CARTAO : ROTULO_TIPO[id] }]
+  return [
+    ...ROTULOS.map(([id, rotulo, cor]) => ({ rotulo, soma: 'valor', onde: onde(id), ...(cor ? { cor } : {}) })),
+    { rotulo: 'Líquido', partes: ROTULOS.map(([id], i) => ({ sinal: i === 0 ? 1 : -1, soma: 'valor', onde: onde(id) })) },
+  ]
+}
+
 // Período para o nome do arquivo: mês "AAAA-MM", intervalo "AAAAMMDD-AAAAMMDD" ou o nome do período.
 const compacta = (d) => String(d || '').replace(/-/g, '')
 export function periodoDoArquivo(periodo, { de = '', ate = '', hoje }) {
@@ -155,12 +173,12 @@ export function periodoDoArquivo(periodo, { de = '', ate = '', hoje }) {
 }
 
 // Spec para exportarExcel.
-export function specAgendamentos(linhas, { tipo = 'todos', filtros = [], periodo = 'tudo' } = {}) {
+export function specAgendamentos(linhas, { tipo = 'todos', filtros = [], periodo = 'tudo', pagos = false } = {}) {
   return {
     titulo: TITULO_RELATORIO_TIPO[tipo] || TITULO_RELATORIO_TIPO.todos,
     nome: 'Agendamentos',
     filtros,
-    resumo: resumoAgendamentos(tipo),
+    resumo: pagos ? resumoPagos(tipo) : resumoAgendamentos(tipo),
     colunas: colunasAgendamentos(tipo),
     linhas,
     totais: { somar: ['valor'] },

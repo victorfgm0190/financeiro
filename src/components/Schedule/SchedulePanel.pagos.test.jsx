@@ -16,14 +16,15 @@ vi.mock('../Transactions/TransactionForm', () => ({ default: ({ initial }) => <d
 const { default: SchedulePanel } = await import('./SchedulePanel.jsx')
 
 const accounts = [
-  { id: 'banco', name: 'Banco', type: 'checking' }, { id: 'res', name: 'Reserva', type: 'savings' }, { id: 'cartao', name: 'Visa', type: 'credit' },
+  { id: 'banco', name: 'Banco', type: 'checking' }, { id: 'res', name: 'Reserva', type: 'savings' }, { id: 'cartao', name: 'Visa', type: 'credit' }, { id: 'cons', name: 'Consórcio', type: 'asset' },
 ]
 const tx = (id, type, amount, extra = {}) => ({ id, type, amount, date: '2026-06-12', accountId: 'banco', description: id.toUpperCase(), payee: '', ...extra })
 const agendamento = { id: 'ag', description: 'ALUGUEL', transactionType: 'expense', accountId: 'banco', amount: 900, frequency: 'monthly', startDate: '2026-06-05', occurrenceType: 'continuous', registered: ['2026-06-05'], skipped: [], overrides: {} }
 const transactions = [
   tx('reembolso', 'income', 341.5, { categoryId: 'cat' }),
   tx('aluguel', 'expense', 900, { date: '2026-06-05', scheduleId: 'ag', description: 'ALUGUEL' }),
-  tx('transf', 'transfer', 50, { toAccountId: 'res' }),
+  tx('transf', 'transfer', 50, { toAccountId: 'cons' }),
+  tx('entrecontas', 'transfer', 77, { toAccountId: 'res' }),
   tx('fatura', 'transfer', 700, { toAccountId: 'cartao' }),
   tx('compra', 'expense', 80, { accountId: 'cartao' }),
 ]
@@ -60,8 +61,9 @@ describe('aba Pagos', () => {
     expect(celulas[8].textContent).toBe('')
     expect(screen.getAllByText('ALUGUEL').length).toBe(1)
     expect(within(linhaDe('ALUGUEL')).queryByText('Avulso')).toBeNull()
-    expect(within(linhaDe('TRANSF')).getByText('Banco → Reserva')).toBeTruthy()
+    expect(within(linhaDe('TRANSF')).getByText('Banco → Consórcio')).toBeTruthy()
     expect(screen.queryByText('COMPRA')).toBeNull()
+    expect(screen.queryByText('ENTRECONTAS')).toBeNull()
   })
   it('clicar no avulso abre Editar Lançamento; linha de agendamento não abre', () => {
     abrirPagos()
@@ -76,6 +78,19 @@ describe('aba Pagos', () => {
     fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Tipo' })).getByRole('radio', { name: /^Pagamentos de cartão/ }))
     expect(screen.getByText('FATURA')).toBeTruthy()
     expect(screen.queryByText('TRANSF')).toBeNull()
+  })
+  it('rodapé: um total por tipo e o Líquido; com um tipo escolhido, só ele', () => {
+    abrirPagos()
+    const valor = (id) => screen.getByTestId(`pagos-total-${id}`).textContent.replace(/\s/g, ' ')
+    expect(valor('entradas')).toContain('341,50')
+    expect(valor('saidas')).toContain('900,00')
+    expect(valor('transferencias')).toContain('50,00')
+    expect(valor('pagamentos_cartao')).toContain('700,00')
+    expect(valor('liquido')).toContain('1.308,50') // 341,50 − 900 − 50 − 700
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Tipo' })).getByRole('radio', { name: /^Saídas/ }))
+    expect(valor('saidas')).toContain('900,00')
+    expect(screen.queryByTestId('pagos-total-entradas')).toBeNull()
+    expect(screen.queryByTestId('pagos-total-liquido')).toBeNull()
   })
   it('filtro de categoria abre em Todas; Sem categoria deixa só os sem categoria', () => {
     abrirPagos()

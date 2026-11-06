@@ -49,6 +49,20 @@ export function contarPorTipo(lista, tipoDe = tipoDoItem, contas = []) {
   return c
 }
 
+// Totais da aba Pagos por tipo. Baixa sem lançamento não soma. Líquido = entradas − o resto.
+export function totaisPorTipo(lista, contas = []) {
+  const t = { entradas: 0, saidas: 0, transferencias: 0, pagamentos_cartao: 0 }
+  for (const i of lista || []) {
+    if (i?.semLancamento) continue
+    t[tipoNaTela(i, tipoDoItem, contas)] += Number(i?.amount) || 0
+  }
+  const c = (v) => Math.round(v * 100) / 100
+  return {
+    entradas: c(t.entradas), saidas: c(t.saidas), transferencias: c(t.transferencias), pagamentos_cartao: c(t.pagamentos_cartao),
+    liquido: c(t.entradas - t.saidas - t.transferencias - t.pagamentos_cartao),
+  }
+}
+
 export function lerTipoAgendamento() {
   try {
     const v = globalThis.localStorage?.getItem(CHAVE)
