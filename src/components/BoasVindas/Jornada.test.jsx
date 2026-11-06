@@ -250,14 +250,25 @@ describe('aviso de pré-requisito (fora da jornada)', () => {
   })
 
   it('parte feita: ✅ no que já existe e botão só no que falta; com tudo, não aparece', () => {
-    app({ profiles: [{ id: 'p' }] })
+    const a = app({ profiles: [{ id: 'p' }] })
+    a.categories = [{ id: 'cat_1' }]
     const { unmount } = render(<AvisoPrerequisitos funcao="contrato" />)
     expect(screen.getAllByRole('button', { name: 'Fazer agora' })).toHaveLength(1)
-    expect(screen.getByLabelText('já feito')).toBeTruthy()
+    expect(screen.getAllByLabelText('já feito')).toHaveLength(2)
     unmount()
-    app(COM_CONTA)
+    const b = app(COM_CONTA)
+    b.categories = [{ id: 'cat_1' }]
     render(<AvisoPrerequisitos funcao="contrato" />)
     expect(screen.queryByTestId('aviso-prerequisitos')).toBeNull()
+  })
+
+  it('ambiente sem categoria (só a do sistema): Novo Contrato avisa e "Fazer agora" abre o "Faça comigo" de categoria', () => {
+    const a = app(COM_CONTA)
+    a.categories = [{ id: 'cat_res_ger' }]
+    render(<AvisoPrerequisitos funcao="contrato" />)
+    expect(screen.getByTestId('aviso-prerequisitos').textContent).toMatch(/Criar uma categoria/)
+    fireEvent.click(screen.getByRole('button', { name: 'Fazer agora' }))
+    expect(tourAtivo()).toMatchObject({ tipo: 'tarefa', tarefaId: 'settings.categoria' })
   })
 
   it('lançamento aceita conta ou cartão; não aparece enquanto os dados não carregaram', () => {

@@ -123,18 +123,20 @@ describe('atalho por objetivo', () => {
 })
 
 describe('pré-requisitos', () => {
-  it('apontam para passos que existem e têm "Faça comigo" ou tela', () => {
+  it('apontam para destinos que existem e têm tela e "Faça comigo"', () => {
     for (const def of Object.values(PREREQUISITOS)) {
       for (const e of def.exige) {
-        const p = PASSOS_JORNADA.find(x => x.id === e.passo)
+        const p = e.destino || PASSOS_JORNADA.find(x => x.id === e.passo)
         expect(p, e.passo).toBeTruthy()
-        expect(p.tela && p.tarefa, e.passo).toBeTruthy()
+        expect(p.tela && tarefaPorId(p.tarefa), e.passo).toBeTruthy()
       }
     }
   })
-  it('contrato exige perfil e conta; importar exige cartão; lançamento aceita cartão', () => {
-    expect(prerequisitosDe('contrato', {}).itens.map(i => [i.passo.id, i.ok])).toEqual([['perfil', false], ['conta', false]])
-    expect(prerequisitosDe('contrato', { profiles: [{ id: 'p' }], accounts: [{ id: 'a', type: 'checking', profileId: 'p' }] }).faltam).toBe(false)
+  it('contrato exige perfil, conta e categoria (a do sistema não conta); importar exige cartão; lançamento aceita cartão', () => {
+    expect(prerequisitosDe('contrato', {}).itens.map(i => [i.passo.id, i.ok])).toEqual([['perfil', false], ['conta', false], ['categoria', false]])
+    const base = { profiles: [{ id: 'p' }], accounts: [{ id: 'a', type: 'checking', profileId: 'p' }] }
+    expect(prerequisitosDe('contrato', { ...base, categories: [{ id: 'cat_res_ger' }] }).faltam).toBe(true)
+    expect(prerequisitosDe('contrato', { ...base, categories: [{ id: 'cat_1' }] }).faltam).toBe(false)
     expect(prerequisitosDe('importar-fatura', { accounts: [{ id: 'a', type: 'checking' }] }).faltam).toBe(true)
     expect(prerequisitosDe('lancamento', { accounts: [{ id: 'c', type: 'credit' }] }).faltam).toBe(false)
     expect(prerequisitosDe('nao-existe', {})).toBeNull()

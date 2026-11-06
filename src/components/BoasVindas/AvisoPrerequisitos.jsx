@@ -42,9 +42,9 @@ function Lista({ pre, onIr }) {
 }
 
 export default function AvisoPrerequisitos({ funcao, onIr }) {
-  const { profiles, accounts, dbStatus } = useApp()
+  const { profiles, accounts, categories, dbStatus } = useApp()
   if (dbStatus !== 'connected' || !Array.isArray(accounts)) return null
-  const pre = prerequisitosDe(funcao, { profiles, accounts })
+  const pre = prerequisitosDe(funcao, { profiles, accounts, categories })
   if (!pre?.faltam) return null
   return <Lista pre={pre} onIr={onIr} />
 }
