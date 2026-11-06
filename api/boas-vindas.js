@@ -4,12 +4,18 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { TELAS_COM_GUIA, ETAPAS_CHECKLIST } from '../src/lib/ajudaTelas.js'
 import { TODAS_AS_TAREFAS } from '../src/lib/tarefasGuiadas.js'
+import { ETAPAS_JORNADA, ETAPAS_REFAZER_JORNADA } from '../src/lib/onboardingSteps.js'
+
+// Etapas que aceitam estado: as do checklist e as da jornada guiada (src/lib/onboardingSteps.js).
+const ETAPAS_ACEITAS = new Set([...ETAPAS_CHECKLIST, ...ETAPAS_JORNADA])
 
 // BOAS-VINDAS e GUIA DA TELA do usuário logado (preferências pessoais, no banco do ambiente — não no
 // navegador, para valerem em todos os aparelhos). O user_id vem SEMPRE da sessão, nunca do corpo.
 //   GET                                   → { tourVistoEm, checklistOcultoEm, guiasLigados, guiasOcultos: [telaId] }
 //   POST { guiasLigados: true|false }     → interruptor geral dos guias (desligado: nada abre sozinho)
 //   POST { ajudaCampos: true|false }      → mostrar os ícones ⓘ de ajuda nos campos (padrão: ligados)
+//   POST { jornadaLigada: true|false }    → jornada guiada (boas-vindas + painel); religar retoma
+//   POST { jornadaRefazer: true }         → zera só as etapas da jornada (os dados não mudam)
 //   POST { guiaReativar: '<tela>' }       → o tour desta tela volta a abrir sozinho
 //   POST { etapa: '<id>', estado }        → checklist "Primeiros passos": 'pulada' | 'nao-se-aplica' |
 //                                           'feita' (etapas sem dado próprio, ex.: usou o Assistente) |
@@ -32,6 +38,9 @@ export const DDL_BOAS_VINDAS = `CREATE TABLE IF NOT EXISTS boas_vindas_usuario (
 export const DDL_GUIAS_LIGADOS = 'ALTER TABLE boas_vindas_usuario ADD COLUMN IF NOT EXISTS guias_ligados BOOLEAN NOT NULL DEFAULT true'
 // Ícones ⓘ de ajuda nos campos (por usuário, padrão ligado). Desligado: o HelpCampo não aparece.
 export const DDL_AJUDA_CAMPOS = 'ALTER TABLE boas_vindas_usuario ADD COLUMN IF NOT EXISTS ajuda_campos BOOLEAN NOT NULL DEFAULT true'
+// Jornada guiada (por usuário, padrão ligada). Desligada: sem boas-vindas nem painel da jornada; as
+// marcações ficam guardadas em `progresso` para quando religar.
+export const DDL_JORNADA = 'ALTER TABLE boas_vindas_usuario ADD COLUMN IF NOT EXISTS jornada_ligada BOOLEAN NOT NULL DEFAULT true'
 // Progresso dos Primeiros passos (e, depois, das tarefas guiadas): { etapas: { <id>: { estado, em } } }.
 export const DDL_PROGRESSO = "ALTER TABLE boas_vindas_usuario ADD COLUMN IF NOT EXISTS progresso JSONB NOT NULL DEFAULT '{}'::jsonb"
 export const ESTADOS_ETAPA = ['pulada', 'nao-se-aplica', 'feita']
@@ -50,13 +59,14 @@ export async function ensureBoasVindasSchema() {
   await query(DDL_BOAS_VINDAS)
   await query(DDL_GUIAS_LIGADOS)
   await query(DDL_AJUDA_CAMPOS)
+  await query(DDL_JORNADA)
   await query(DDL_PROGRESSO)
   await query(DDL_GUIAS)
   pronto.marcar()
 }
 
 const linhaParaJson = (r) => ({
-  tourVistoEm: r?.tour_visto_em || null, checklistOcultoEm: r?.checklist_oculto_em || null, guiasLigados: r?.guias_ligados !== false, ajudaCampos: r?.ajuda_campos !== false,
+  tourVistoEm: r?.tour_visto_em || null, checklistOcultoEm: r?.checklist_oculto_em || null, guiasLigados: r?.guias_ligados !== false, ajudaCampos: r?.ajuda_campos !== false, jornadaLigada: r?.jornada_ligada !== false,
   progresso: r?.progresso && typeof r.progresso === 'object' ? r.progresso : {},
 })
 
@@ -70,7 +80,7 @@ export async function gravarTarefaConcluida(q, userId, tarefaId) {
          WHEN boas_vindas_usuario.progresso->'tarefas' ? $2::text THEN boas_vindas_usuario.progresso
          ELSE jsonb_set(jsonb_set(boas_vindas_usuario.progresso, '{tarefas}', COALESCE(boas_vindas_usuario.progresso->'tarefas', '{}'::jsonb)), ARRAY['tarefas', $2::text], to_jsonb(now()))
        END, updated_at = now()
-     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, progresso`,
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
     [userId, tarefaId],
   )
   return linhaParaJson(r)
@@ -78,7 +88,7 @@ export async function gravarTarefaConcluida(q, userId, tarefaId) {
 
 // Estado de UMA etapa do checklist (null = volta a pendente). Etapa/estado desconhecidos → null.
 export async function gravarEtapa(q, userId, etapa, estado) {
-  if (!ETAPAS_CHECKLIST.includes(etapa)) return null
+  if (!ETAPAS_ACEITAS.has(etapa)) return null
   if (estado !== null && !ESTADOS_ETAPA.includes(estado)) return null
   const valor = estado === null ? null : JSON.stringify({ estado, em: new Date().toISOString() })
   const [r] = await q(
@@ -88,8 +98,32 @@ export async function gravarEtapa(q, userId, etapa, estado) {
          WHEN $3::jsonb IS NULL THEN boas_vindas_usuario.progresso #- ARRAY['etapas', $2::text]
          ELSE jsonb_set(jsonb_set(boas_vindas_usuario.progresso, '{etapas}', COALESCE(boas_vindas_usuario.progresso->'etapas', '{}'::jsonb)), ARRAY['etapas', $2::text], $3::jsonb)
        END, updated_at = now()
-     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, progresso`,
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
     [userId, etapa, valor],
+  )
+  return linhaParaJson(r)
+}
+
+export async function gravarJornadaLigada(q, userId, ligada) {
+  const [r] = await q(
+    `INSERT INTO boas_vindas_usuario (user_id, jornada_ligada) VALUES ($1, $2)
+     ON CONFLICT (user_id) DO UPDATE SET jornada_ligada = EXCLUDED.jornada_ligada, updated_at = now()
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
+    [userId, !!ligada],
+  )
+  return linhaParaJson(r)
+}
+
+// "Refazer jornada": tira de progresso.etapas só as etapas da jornada, e volta a mostrar o painel.
+export async function refazerJornada(q, userId) {
+  const [r] = await q(
+    `INSERT INTO boas_vindas_usuario (user_id) VALUES ($1)
+     ON CONFLICT (user_id) DO UPDATE SET
+       progresso = jsonb_set(COALESCE(boas_vindas_usuario.progresso, '{}'::jsonb), '{etapas}',
+                             COALESCE(boas_vindas_usuario.progresso->'etapas', '{}'::jsonb) - $2::text[]),
+       checklist_oculto_em = NULL, updated_at = now()
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
+    [userId, ETAPAS_REFAZER_JORNADA],
   )
   return linhaParaJson(r)
 }
@@ -98,7 +132,7 @@ export async function gravarAjudaCampos(q, userId, ligada) {
   const [r] = await q(
     `INSERT INTO boas_vindas_usuario (user_id, ajuda_campos) VALUES ($1, $2)
      ON CONFLICT (user_id) DO UPDATE SET ajuda_campos = EXCLUDED.ajuda_campos, updated_at = now()
-     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, progresso`,
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
     [userId, !!ligada],
   )
   return linhaParaJson(r)
@@ -108,7 +142,7 @@ export async function gravarGuiasLigados(q, userId, ligados) {
   const [r] = await q(
     `INSERT INTO boas_vindas_usuario (user_id, guias_ligados) VALUES ($1, $2)
      ON CONFLICT (user_id) DO UPDATE SET guias_ligados = EXCLUDED.guias_ligados, updated_at = now()
-     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, progresso`,
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
     [userId, !!ligados],
   )
   return linhaParaJson(r)
@@ -125,7 +159,7 @@ export async function gravarBoasVindas(q, userId, { tourVisto, checklistOculto }
     `INSERT INTO boas_vindas_usuario (user_id, tour_visto_em, checklist_oculto_em)
        VALUES ($1, ${tourVisto === true ? 'now()' : 'NULL'}, ${checklistOculto === true ? 'now()' : 'NULL'})
      ON CONFLICT (user_id) DO UPDATE SET ${sets.join(', ')}, updated_at = now()
-     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, progresso`,
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
     [userId],
   )
   return linhaParaJson(r)
@@ -155,7 +189,7 @@ async function handler(req, res) {
   try {
     await ensureBoasVindasSchema()
     const resposta = async () => {
-      const [r] = await query('SELECT tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, progresso FROM boas_vindas_usuario WHERE user_id = $1', [userId])
+      const [r] = await query('SELECT tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso FROM boas_vindas_usuario WHERE user_id = $1', [userId])
       return { ...linhaParaJson(r), guiasOcultos: await listarGuiasOcultos(query, userId) }
     }
     if (req.method === 'GET') return res.json(await resposta())
@@ -173,6 +207,8 @@ async function handler(req, res) {
       if (typeof body?.guiaReativar === 'string') { await reativarGuia(query, userId, body.guiaReativar); fez = true }
       if (typeof body?.guiasLigados === 'boolean') { await gravarGuiasLigados(query, userId, body.guiasLigados); fez = true }
       if (typeof body?.ajudaCampos === 'boolean') { await gravarAjudaCampos(query, userId, body.ajudaCampos); fez = true }
+      if (typeof body?.jornadaLigada === 'boolean') { await gravarJornadaLigada(query, userId, body.jornadaLigada); fez = true }
+      if (body?.jornadaRefazer === true) { await refazerJornada(query, userId); fez = true }
       if (typeof body?.tarefaConcluida === 'string') {
         if (!(await gravarTarefaConcluida(query, userId, body.tarefaConcluida))) return res.status(400).json({ error: 'Tarefa desconhecida' })
         fez = true

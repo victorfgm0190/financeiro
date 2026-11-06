@@ -5,10 +5,21 @@
 //     tudo como estava (as marcações de cada tela ficam guardadas);
 //   • "Reativar todos" / "Desativar todos" e a lista de telas com o estado de cada uma.
 import { useEffect, useState } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Compass, RotateCcw } from 'lucide-react'
 import { AJUDA_TELAS, TELAS_COM_GUIA } from '../../lib/ajudaTelas'
-import { carregarBoasVindas, definirAjudaCampos, definirGuiasLigados, ocultarGuia, ocultarTodosGuias, reativarGuia, reativarTodosGuias } from '../../lib/boasVindasApi'
+import { carregarBoasVindas, definirAjudaCampos, definirGuiasLigados, definirJornadaLigada, refazerJornada, mostrarChecklist, ocultarGuia, ocultarTodosGuias, reativarGuia, reativarTodosGuias } from '../../lib/boasVindasApi'
 import { useEstadoBoasVindas } from './useGuiaTela'
+import ConfirmDialog from '../shared/ConfirmDialog'
+import { ETAPAS_REFAZER_JORNADA } from '../../lib/onboardingSteps'
+import { navegarPara } from '../../lib/abrirTela'
+
+// "Abrir jornada": liga (se estava desligada), volta a mostrar o painel e leva ao Painel.
+async function abrirJornada(estado) {
+  if (estado?.jornadaLigada === false) await definirJornadaLigada(true)
+  if (estado?.checklistOcultoEm) await mostrarChecklist()
+  navegarPara('dashboard')
+  setTimeout(() => document.querySelector('[data-testid="primeiros-passos"]')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 600)
+}
 
 // Nome da tela na lista: subtela vira "Tela › Subtela".
 const nomeDaTela = (id) => {
@@ -25,6 +36,8 @@ export default function GuiasTelasPanel() {
   const ocultas = new Set(estado?.guiasOcultos || [])
   const ligados = estado ? estado.guiasLigados !== false : true
   const ajudaCampos = estado ? estado.ajudaCampos !== false : true
+  const jornada = estado ? estado.jornadaLigada !== false : true
+  const [confirmarRefazer, setConfirmarRefazer] = useState(false)
   const executar = async (fn, ok) => {
     setAviso(null)
     setAviso((await fn()) ? ok : 'Não foi possível gravar agora. Verifique a conexão e tente de novo.')
@@ -51,6 +64,38 @@ export default function GuiasTelasPanel() {
       {!ligados && (
         <p className="text-xs text-texto-2">Desligados: nenhum tour abre sozinho e o "?" não aparece nas telas. As escolhas de cada tela ficam guardadas para quando religar.</p>
       )}
+
+      {/* Jornada guiada (src/lib/onboardingSteps.js): boas-vindas + painel de progresso, por usuário. */}
+      <div className="space-y-2 rounded-xl border border-borda p-3" data-guia="settings:guias.jornada">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <span className="relative shrink-0">
+            <input type="checkbox" role="switch" className="sr-only peer" checked={jornada} disabled={!estado}
+              aria-label="Jornada guiada"
+              onChange={e => executar(() => definirJornadaLigada(e.target.checked), e.target.checked ? 'Jornada ligada: o painel volta de onde você parou.' : 'Jornada desligada. Seus passos ficam guardados para quando religar.')} />
+            <span className="block w-11 h-6 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
+            <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5" />
+          </span>
+          <span className="text-sm text-texto-1">
+            Jornada guiada: <strong>{jornada ? 'Ligada' : 'Desligada'}</strong>
+            <span className="block text-xs text-texto-2">Passo a passo para conhecer o Finup, com o progresso no Painel. Desligada, não aparecem as boas-vindas nem o painel.</span>
+          </span>
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn-secondary flex items-center gap-1.5 min-h-[44px]" disabled={!estado} onClick={() => abrirJornada(estado)}>
+            <Compass size={15} /> Abrir jornada
+          </button>
+          <button type="button" className="btn-secondary flex items-center gap-1.5 min-h-[44px]" disabled={!estado} onClick={() => setConfirmarRefazer(true)}>
+            <RotateCcw size={15} /> Refazer jornada
+          </button>
+        </div>
+      </div>
+      <ConfirmDialog
+        open={confirmarRefazer}
+        onClose={() => setConfirmarRefazer(false)}
+        onConfirm={() => { setConfirmarRefazer(false); executar(() => refazerJornada(ETAPAS_REFAZER_JORNADA), 'Jornada reiniciada. Os passos que dependem de dados já cadastrados continuam concluídos.') }}
+        title="Refazer jornada"
+        message="Os passos da jornada voltam a ficar pendentes (os que dependem de dados que você já cadastrou continuam concluídos). Nenhum dado é apagado."
+      />
 
       {/* Help de campo (src/components/shared/HelpCampo.jsx): preferência do usuário, no banco. */}
       <label className="flex items-center gap-3 cursor-pointer" data-guia="settings:guias.ajuda-campos">

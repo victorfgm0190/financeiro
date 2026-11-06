@@ -203,10 +203,11 @@ describe('onde as tarefas aparecem', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(tarefaPorId('schedule.conta-receber').titulo) }))
     expect(tourAtivo()).toMatchObject({ tipo: 'tarefa', tarefaId: 'schedule.conta-receber' })
   })
-  it('checklist: "Fazer agora" inicia a tarefa guiada da etapa', async () => {
+  it('jornada: "Fazer comigo" inicia a tarefa guiada do passo', async () => {
+    banco.progresso = { etapas: { 'j-configuracoes': { estado: 'feita' }, 'j-categorias': { estado: 'feita' } } }
     render(<><PrimeirosPassos /><GuiaInterativo /></>)
     await screen.findByTestId('primeiros-passos')
-    fireEvent.click(screen.getAllByRole('button', { name: 'Fazer agora' })[0]) // perfil
+    fireEvent.click(screen.getAllByRole('button', { name: 'Fazer comigo' })[0]) // perfil
     expect(tourAtivo()).toMatchObject({ tipo: 'tarefa', tarefaId: 'settings.perfil-cpf' })
     expect(navegarPara).toHaveBeenCalledWith('settings', { hash: '#config/geral/perfis' })
   })

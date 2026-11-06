@@ -35,7 +35,8 @@ export default function BoasVindasTour() {
     if (dbStatus !== 'connected' || !getSessao()) return
     let vivo = true
     // Guias desligados (Configurações › Geral › Guias das telas): não abre sozinho; "Rever tour" ainda abre.
-    carregarBoasVindas().then(e => { if (vivo && e && !e.tourVistoEm && e.guiasLigados !== false) { setI(0); setAberto(true) } })
+    // Jornada guiada ligada: o primeiro acesso é o dela (JornadaBoasVindas); este resumo fica para o "Rever tour".
+    carregarBoasVindas().then(e => { if (vivo && e && !e.tourVistoEm && e.guiasLigados !== false && e.jornadaLigada === false) { setI(0); setAberto(true) } })
     return () => { vivo = false }
   }, [dbStatus])
   // O Guia da Tela espera o tour fechar.

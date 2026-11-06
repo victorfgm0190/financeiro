@@ -41,6 +41,8 @@ import { ehHashAjuda } from './lib/ajudaRota'
 import CentralAjuda from './components/Ajuda/CentralAjuda'
 import { EVENTO_NAVEGAR, EVENTO_ABRIR_BUSCA } from './lib/abrirTela'
 import BoasVindasTour from './components/BoasVindas/BoasVindasTour'
+import JornadaBoasVindas from './components/BoasVindas/JornadaBoasVindas'
+import JornadaBarra from './components/BoasVindas/JornadaBarra'
 import GuiaInterativo from './components/BoasVindas/GuiaInterativo'
 import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
 import ContratosPanel from './components/Contratos/ContratosPanel'
@@ -275,6 +277,8 @@ function AppContent() {
       <AtalhosAjudaModal />
       <ModoAltAtalhos />
       <BoasVindasTour />
+      <JornadaBoasVindas />
+      <JornadaBarra />
       <GuiaInterativo />
     </>
   )

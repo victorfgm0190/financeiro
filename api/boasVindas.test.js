@@ -1,6 +1,7 @@
 // /api/boas-vindas: gravação só dos campos pedidos (tour visto não volta a ficar vazio). Sem banco.
 import { describe, it, expect } from 'vitest'
-import { DDL_BOAS_VINDAS, DDL_AJUDA_CAMPOS, gravarBoasVindas, gravarAjudaCampos } from './boas-vindas.js'
+import { DDL_BOAS_VINDAS, DDL_AJUDA_CAMPOS, DDL_JORNADA, gravarBoasVindas, gravarAjudaCampos, gravarJornadaLigada, refazerJornada, gravarEtapa } from './boas-vindas.js'
+import { ETAPAS_JORNADA } from '../src/lib/onboardingSteps.js'
 
 const fakeQ = () => {
   const chamadas = []
@@ -16,7 +17,7 @@ describe('/api/boas-vindas', () => {
   })
   it('tour visto: upsert que preserva a primeira data', async () => {
     const { q, chamadas } = fakeQ()
-    expect(await gravarBoasVindas(q, 'u1', { tourVisto: true })).toEqual({ tourVistoEm: 't', checklistOcultoEm: null, guiasLigados: true, ajudaCampos: true, progresso: {} })
+    expect(await gravarBoasVindas(q, 'u1', { tourVisto: true })).toEqual({ tourVistoEm: 't', checklistOcultoEm: null, guiasLigados: true, ajudaCampos: true, jornadaLigada: true, progresso: {} })
     expect(chamadas[0].sql).toMatch(/ON CONFLICT \(user_id\) DO UPDATE SET tour_visto_em = COALESCE\(boas_vindas_usuario.tour_visto_em, now\(\)\)/)
     expect(chamadas[0].sql).not.toMatch(/checklist_oculto_em = /)
     expect(chamadas[0].params).toEqual(['u1'])
@@ -37,5 +38,25 @@ describe('/api/boas-vindas', () => {
     expect(chamadas[0].sql).toMatch(/SET ajuda_campos = EXCLUDED.ajuda_campos/)
     expect(chamadas[0].sql).not.toMatch(/guias_ligados = /)
     expect(chamadas[0].params).toEqual(['u1', false])
+  })
+
+  it('jornada: coluna por usuário (ligada por padrão); liga/desliga só mexe nela', async () => {
+    expect(DDL_JORNADA).toMatch(/ADD COLUMN IF NOT EXISTS jornada_ligada BOOLEAN NOT NULL DEFAULT true/)
+    const chamadas = []
+    const q = async (sql, params) => { chamadas.push({ sql, params }); return [{ jornada_ligada: false }] }
+    expect((await gravarJornadaLigada(q, 'u1', false)).jornadaLigada).toBe(false)
+    expect(chamadas[0].sql).toMatch(/SET jornada_ligada = EXCLUDED.jornada_ligada/)
+    expect(chamadas[0].sql).not.toMatch(/guias_ligados = |ajuda_campos = /)
+  })
+  it('jornada: etapas dela são aceitas; "Refazer" tira só as etapas da jornada e volta a mostrar o painel', async () => {
+    const chamadas = []
+    const q = async (sql, params) => { chamadas.push({ sql, params }); return [{ progresso: {} }] }
+    expect(await gravarEtapa(q, 'u1', 'j-painel', 'feita')).not.toBeNull()
+    expect(await gravarEtapa(q, 'u1', 'nao-existe', 'feita')).toBeNull()
+    await refazerJornada(q, 'u1')
+    const ultima = chamadas.at(-1)
+    expect(ultima.sql).toContain("- $2::text[]")
+    expect(ultima.sql).toContain('checklist_oculto_em = NULL')
+    expect(ultima.params).toEqual(['u1', ETAPAS_JORNADA])
   })
 })

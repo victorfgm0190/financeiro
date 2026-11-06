@@ -31,6 +31,8 @@ const doServidor = (r) => ({
   guiasLigados: r.guiasLigados !== false,
   // Ícones ⓘ de ajuda nos campos (HelpCampo). Ligados por padrão.
   ajudaCampos: r.ajudaCampos !== false,
+  // Jornada guiada (boas-vindas + painel). Ligada por padrão; desligada guarda as marcações.
+  jornadaLigada: r.jornadaLigada !== false,
   progresso: r.progresso && typeof r.progresso === 'object' ? r.progresso : {},
 })
 
@@ -82,6 +84,13 @@ export const reativarGuia = (tela) => gravar('POST', { guiaReativar: tela }, (e)
 // Interruptor geral (Configurações › Geral › Guias das telas). Desligado: nada abre sozinho e o "?" some.
 export const definirGuiasLigados = (ligados) => gravar('POST', { guiasLigados: !!ligados }, () => ({ guiasLigados: !!ligados }))
 export const definirAjudaCampos = (ligada) => gravar('POST', { ajudaCampos: !!ligada }, () => ({ ajudaCampos: !!ligada }))
+export const definirJornadaLigada = (ligada) => gravar('POST', { jornadaLigada: !!ligada }, () => ({ jornadaLigada: !!ligada }))
+// Zera só as etapas da jornada (`ids`), localmente igual ao servidor.
+export const refazerJornada = (ids = []) => gravar('POST', { jornadaRefazer: true }, (e) => {
+  const etapas = { ...(e.progresso?.etapas || {}) }
+  for (const id of ids) delete etapas[id]
+  return { progresso: { ...(e.progresso || {}), etapas }, checklistOcultoEm: null }
+})
 
 // O tour avisa quando abre e fecha: o Guia da Tela espera ele fechar.
 export function definirTourAberto(v) {

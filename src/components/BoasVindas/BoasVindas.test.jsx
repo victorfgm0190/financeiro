@@ -5,7 +5,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { useApp } from '../../context/AppContext'
 import BoasVindasTour from './BoasVindasTour'
-import PrimeirosPassos from './PrimeirosPassos'
 import AjudaTela from './AjudaTela'
 import { passosVisiveis, checklistComStatus, AJUDA_TELAS, PASSOS_BOAS_VINDAS, opcoesFinaisBoasVindas } from '../../lib/ajudaTelas'
 import { montarContextoAjuda } from './contextoAjuda'
@@ -37,13 +36,15 @@ function app({ ia = true, gerencial = true, paginas = PAGINAS, profiles = [], ac
 let banco
 beforeEach(() => {
   _reiniciarBoasVindas()
-  banco = { tourVistoEm: null, checklistOcultoEm: null, guiasLigados: true, guiasOcultos: [], progresso: {} }
+  // jornadaLigada false: aqui o primeiro acesso é o resumo antigo (a jornada tem os testes dela).
+  banco = { tourVistoEm: null, checklistOcultoEm: null, guiasLigados: true, jornadaLigada: false, guiasOcultos: [], progresso: {} }
   vi.stubGlobal('fetch', vi.fn(async (url, opts = {}) => {
     if (opts.method === 'POST') {
       const b = JSON.parse(opts.body)
       if (b.tourVisto) banco.tourVistoEm = banco.tourVistoEm || '2026-11-01T12:00:00Z'
       if (b.checklistOculto === true) banco.checklistOcultoEm = '2026-11-01T12:00:00Z'
       if (b.checklistOculto === false) banco.checklistOcultoEm = null
+      if ('jornadaLigada' in b) banco.jornadaLigada = b.jornadaLigada
       if ('etapa' in b) {
         const etapas = { ...(banco.progresso.etapas || {}) }
         if (b.estado) etapas[b.etapa] = { estado: b.estado, em: 'x' }; else delete etapas[b.etapa]
@@ -144,61 +145,6 @@ describe('primeiros passos: estados', () => {
     })
     const est = Object.fromEntries(r.itens.map(i => [i.id, i.estado]))
     expect(est).toMatchObject({ conta: 'pendente', agendamento: 'pendente', provisao: 'feita', reserva: 'feita', 'importar-fatura': 'feita', contrato: 'feita', assistente: 'feita' })
-  })
-  it('na tela: progresso; "Não tenho cartão de crédito" sai do progresso; "Ver etapas puladas" desfaz', async () => {
-    app({ ia: false, profiles: [{ id: 'p' }], accounts: [{ id: 'a', type: 'checking', profileId: 'p' }], schedules: [{ id: 's' }] })
-    render(<PrimeirosPassos />)
-    expect((await screen.findByTestId('progresso-checklist')).textContent).toMatch(/3 de 8 concluídas/)
-    fireEvent.click(screen.getByRole('button', { name: 'Não tenho cartão de crédito' }))
-    await waitFor(() => expect(banco.progresso.etapas.cartao.estado).toBe('nao-se-aplica'))
-    await waitFor(() => expect(screen.getByTestId('progresso-checklist').textContent).toMatch(/3 de 6 concluídas/)) // cartão e importar fatura saem
-    fireEvent.click(screen.getByRole('button', { name: /Ver etapas puladas \(1\)/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Desfazer' }))
-    await waitFor(() => expect(banco.progresso.etapas.cartao).toBeUndefined())
-  })
-  it('perfil não tem "não se aplica": "Pular por enquanto" mostra o aviso de "Sem vínculo" antes', async () => {
-    app()
-    render(<PrimeirosPassos />)
-    await screen.findByTestId('primeiros-passos')
-    const linha = screen.getByText('Criar o seu perfil (CPF ou CNPJ)').closest('li')
-    expect(linha.textContent).not.toMatch(/Não tenho/)
-    fireEvent.click(Array.from(linha.querySelectorAll('button')).find(b => b.textContent === 'Pular por enquanto'))
-    expect(screen.getByRole('alert').textContent).toMatch(/Sem vínculo/)
-    fireEvent.click(screen.getByRole('button', { name: 'Pular mesmo assim' }))
-    await waitFor(() => expect(banco.progresso.etapas.perfil.estado).toBe('pulada'))
-    fireEvent.click(screen.getByRole('button', { name: /Ver etapas puladas/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Retomar' }))
-    await waitFor(() => expect(banco.progresso.etapas.perfil).toBeUndefined())
-  })
-  it('"Ocultar" grava e some; tudo pulado: não aparece; guias desligados: não aparece', async () => {
-    app()
-    render(<PrimeirosPassos />)
-    await screen.findByTestId('primeiros-passos')
-    fireEvent.click(screen.getByRole('button', { name: 'Ocultar' }))
-    await waitFor(() => expect(screen.queryByTestId('primeiros-passos')).toBeNull())
-    cleanup(); _reiniciarBoasVindas()
-    banco.checklistOcultoEm = null
-    banco.progresso = { etapas: Object.fromEntries(['perfil', 'conta', 'cartao', 'agendamento', 'provisao', 'reserva', 'importar-fatura', 'contrato', 'assistente'].map(id => [id, { estado: 'pulada' }])) }
-    app()
-    render(<PrimeirosPassos />)
-    await waitFor(() => expect(fetch).toHaveBeenCalled())
-    expect(screen.queryByTestId('primeiros-passos')).toBeNull()
-    cleanup(); _reiniciarBoasVindas()
-    banco.progresso = {}; banco.guiasLigados = false
-    app()
-    render(<PrimeirosPassos />)
-    await waitFor(() => expect(fetch).toHaveBeenCalled())
-    expect(screen.queryByTestId('primeiros-passos')).toBeNull()
-  })
-  it('"Fazer agora" sem tarefa guiada disponível abre o formulário (perfil sem nenhum perfil: cadastro rápido)', async () => {
-    const a = app()
-    a.pode = (m) => m !== 'configuracoes' // sem permissão na tarefa de perfil (Configurações)
-    render(<PrimeirosPassos />)
-    await screen.findByTestId('primeiros-passos')
-    fireEvent.click(screen.getAllByRole('button', { name: 'Fazer agora' })[0])
-    fireEvent.change(screen.getByPlaceholderText('Nome da pessoa'), { target: { value: 'Pessoa' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Criar perfil' }))
-    expect(a.addProfile).toHaveBeenCalled()
   })
 })
 
