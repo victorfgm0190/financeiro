@@ -42,10 +42,12 @@ const RESERVA_SHADOW_ORIGINS = new Set(['reserva_auto', 'reservaAuto'])
 export const isInvestAutoOrigin = (tx) => INVEST_ORIGINS.has(tx?.origin)
 export const isPatrimonioOrigin = (tx) => PATRIMONIO_ORIGINS.has(tx?.origin)
 
-// Ganho/perda de venda de bem não tem conta: o dono é o bem ligado (o bem é uma conta, com perfil).
-// Calculado pelo vínculo, sem gravar nada. Sem bem ligado → null (fica só em "Tudo").
+// Ganho/perda de venda de bem não tem conta: o dono é o bem VENDIDO, o que saiu do patrimônio (o bem é
+// uma conta, com perfil). Na troca, bem_id aponta o bem novo; o vendido vem da movimentação do bem
+// (bemVendidoId, calculado na leitura pelo /api/load). Sem movimentação, vale o bem ligado; sem nenhum
+// dos dois → null (fica só em "Tudo").
 export const bemDonoDoLancamento = (tx) =>
-  (isPatrimonioOrigin(tx) && !tx?.accountId && !tx?.toAccountId && tx?.bemId) || null
+  (isPatrimonioOrigin(tx) && !tx?.accountId && !tx?.toAccountId && (tx?.bemVendidoId || tx?.bemId)) || null
 
 // O lançamento pertence a este conjunto de contas (as do perfil)? Por qualquer ponta ou pelo bem dono.
 export const lancamentoNasContas = (tx, contas) =>

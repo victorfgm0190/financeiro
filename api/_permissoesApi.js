@@ -27,9 +27,24 @@ export function linhaPermitida(tabela, r, contas, funcoes = new Set(), perfis = 
   if (tabela === 'cartoes') return contas.has(r.id)
   const temConta = r.account_id || r.to_account_id
   if (temConta) return contas.has(r.account_id) || contas.has(r.to_account_id)
-  // Ganho/perda de venda de bem (sem conta): segue o perfil do bem, que também é uma conta.
-  if (r.origin === 'patrimonio_auto' && r.bem_id) return contas.has(r.bem_id)
+  // Ganho/perda de venda de bem (sem conta): segue o perfil do bem vendido (comBemVendido); sem
+  // movimentação, o bem ligado. O bem também é uma conta.
+  if (r.origin === 'patrimonio_auto' && (r.bem_vendido_id || r.bem_id)) return contas.has(r.bem_vendido_id || r.bem_id)
   return !!r.reserva_funcao_id && funcoes.has(r.reserva_funcao_id)
+}
+
+// Acrescenta `bem_vendido_id` às linhas de ganho/perda de venda de bem, pela movimentação do bem (o bem
+// baixado, bem_origem_id). Só na leitura: nada é gravado, vale para lançamentos novos e antigos.
+export async function comBemVendido(q, rows) {
+  const ids = rows.filter(r => r.origin === 'patrimonio_auto' && !r.account_id && !r.to_account_id).map(r => r.id)
+  if (!ids.length) return rows
+  const movs = await q(
+    'SELECT lancamento_id, bem_origem_id FROM bem_movimentacoes WHERE lancamento_id = ANY($1) AND bem_origem_id IS NOT NULL',
+    [ids],
+  )
+  const porLanc = new Map(movs.map(m => [m.lancamento_id, m.bem_origem_id]))
+  for (const r of rows) if (porLanc.has(r.id)) r.bem_vendido_id = porLanc.get(r.id)
+  return rows
 }
 
 // Recorta as linhas de LEITURA de uma tabela pelos perfis permitidos (null = sem recorte).
@@ -145,7 +160,9 @@ export async function exigirDonoDoRateio(q, user, id) {
 
 // Leitura de lançamentos (rows com account_id/to_account_id/reserva_funcao_id): só os dos perfis.
 export async function recortarLancamentos(q, user, rows) {
-  return recortarLeitura('lancamentos', rows, await contextoPerfis(q, user))
+  const ctx = await contextoPerfis(q, user)
+  if (ctx) await comBemVendido(q, rows)
+  return recortarLeitura('lancamentos', rows, ctx)
 }
 
 // Leitura por conta (ex.: conferência de fatura do cartão): conta fora dos perfis → 403.

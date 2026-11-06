@@ -26,6 +26,12 @@ describe('dono do lançamento', () => {
     expect(lancamentoNasContas(comum, PERFIL_A)).toBe(true)
     expect(lancamentoNasContas(comum, PERFIL_B)).toBe(false)
   })
+  it('troca entre perfis: vale o bem VENDIDO, não o bem novo', () => {
+    const troca = { ...perda, bemId: 'bem_b', bemVendidoId: 'bem_a' }
+    expect(bemDonoDoLancamento(troca)).toBe('bem_a')
+    expect(lancamentoNasContas(troca, PERFIL_A)).toBe(true)
+    expect(lancamentoNasContas(troca, PERFIL_B)).toBe(false)
+  })
   it('uma conta qualquer com bem_id continua pela conta, não pelo bem', () => {
     const comConta = { ...perda, accountId: 'conta_b' }
     expect(lancamentoNasContas(comConta, PERFIL_B)).toBe(true)
@@ -55,6 +61,9 @@ describe('usuário restrito a alguns perfis (servidor)', () => {
     expect(linhaPermitida('lancamentos', linha, PERFIL_B)).toBe(false)
     expect(linhaPermitida('lancamentos', { ...linha, bem_id: null }, PERFIL_A)).toBe(false)
     expect(linhaPermitida('lancamentos', { ...linha, origin: 'manual' }, PERFIL_A)).toBe(false)
+    const troca = { ...linha, bem_id: 'bem_b', bem_vendido_id: 'bem_a' }
+    expect(linhaPermitida('lancamentos', troca, PERFIL_A)).toBe(true)
+    expect(linhaPermitida('lancamentos', troca, PERFIL_B)).toBe(false)
   })
   it('recorte da leitura usa a mesma regra', () => {
     const ctx = { contas: PERFIL_B, funcoes: new Set(), perfis: ['b'] }

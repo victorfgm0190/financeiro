@@ -647,6 +647,8 @@ export const rowToTx = (r) => ({
   // produzida por txToRow, incluir bem_id LÁ apagaria o vínculo do banco a cada sync.
   // Serve para o modal de entrada à vista não reoferecer transferências já vinculadas.
   bemId: r.bem_id || null,
+  // Bem vendido (ganho/perda de venda de bem): calculado no /api/load pela movimentação, não é coluna.
+  bemVendidoId: r.bem_vendido_id || null,
   payee: r.payee || '',
   costCenter: r.cost_center || '',
   notes: r.notes || '',

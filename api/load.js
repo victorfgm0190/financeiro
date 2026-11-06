@@ -3,7 +3,7 @@ import { requireAuth } from './_auth.js'
 import { ensureBemSchema } from './_bem.js'
 import { ensureTiposDocumentoSchema } from './_tiposDocumento.js'
 import { ensureHistoricoSchema } from './_historico.js'
-import { contextoPerfis, recortarLeitura } from './_permissoesApi.js'
+import { contextoPerfis, recortarLeitura, comBemVendido } from './_permissoesApi.js'
 import { comAmbiente } from './_ambiente.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 import { lerAssinatura } from './last-change.js'
@@ -497,6 +497,9 @@ async function handler(req, res) {
         query('SELECT * FROM favorecido_alias ORDER BY created_at'),
         query('SELECT * FROM tipos_documento ORDER BY ordem, nome'),
       ])
+
+    // Ganho/perda de venda de bem: qual bem saiu do patrimônio (define o perfil do lançamento).
+    await comBemVendido(query, txs)
 
     // Perfis permitidos (usuário restrito a alguns perfis): só as contas desses perfis e o que
     // pertence a elas — lançamentos, agendamentos, funções de reserva, rateios, detalhamentos.
