@@ -29,6 +29,8 @@ const doServidor = (r) => ({
   checklistOcultoEm: r.checklistOcultoEm || null,
   guiasOcultos: Array.isArray(r.guiasOcultos) ? r.guiasOcultos : [],
   guiasLigados: r.guiasLigados !== false,
+  // Ícones ⓘ de ajuda nos campos (HelpCampo). Ligados por padrão.
+  ajudaCampos: r.ajudaCampos !== false,
   progresso: r.progresso && typeof r.progresso === 'object' ? r.progresso : {},
 })
 
@@ -79,6 +81,7 @@ export const reativarTodosGuias = () => gravar('DELETE', null, () => ({ guiasOcu
 export const reativarGuia = (tela) => gravar('POST', { guiaReativar: tela }, (e) => ({ guiasOcultos: (e.guiasOcultos || []).filter(t => t !== tela) }))
 // Interruptor geral (Configurações › Geral › Guias das telas). Desligado: nada abre sozinho e o "?" some.
 export const definirGuiasLigados = (ligados) => gravar('POST', { guiasLigados: !!ligados }, () => ({ guiasLigados: !!ligados }))
+export const definirAjudaCampos = (ligada) => gravar('POST', { ajudaCampos: !!ligada }, () => ({ ajudaCampos: !!ligada }))
 
 // O tour avisa quando abre e fecha: o Guia da Tela espera ele fechar.
 export function definirTourAberto(v) {

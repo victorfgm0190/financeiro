@@ -1005,6 +1005,7 @@ CREATE TABLE IF NOT EXISTS boas_vindas_usuario (
 ALTER TABLE boas_vindas_usuario DISABLE ROW LEVEL SECURITY;
 -- Interruptor geral dos guias (Configurações › Geral › Guias das telas). Também criada pela API.
 ALTER TABLE boas_vindas_usuario ADD COLUMN IF NOT EXISTS guias_ligados BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE boas_vindas_usuario ADD COLUMN IF NOT EXISTS ajuda_campos BOOLEAN NOT NULL DEFAULT true;
 -- Primeiros passos: estado de cada etapa ({ etapas: { <id>: { estado, em } } }). Também criada pela API.
 ALTER TABLE boas_vindas_usuario ADD COLUMN IF NOT EXISTS progresso JSONB NOT NULL DEFAULT '{}'::jsonb;
 

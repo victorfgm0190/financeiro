@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Check, Plus, Trash2 } from 'lucide-react'
+import HelpCampo from '../shared/HelpCampo'
 import { useApp } from '../../context/AppContext'
 import CategorySelect from '../shared/CategorySelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
@@ -115,8 +116,9 @@ function MesesSemCobranca({ valor = [], onChange, inicio, fim }) {
   )
 }
 
-const Campo = ({ label, children, className = '' }) => (
-  <div className={className}><label className="label">{label}</label>{children}</div>
+// `help`: chave do ⓘ do campo (src/lib/helpCampos.js).
+const Campo = ({ label, children, className = '', help }) => (
+  <div className={className}><label className="label">{label}{help && <HelpCampo campo={help} />}</label>{children}</div>
 )
 
 // Cadastro em etapas (novo) e Aditivo (edição com prévia do que muda nas parcelas pendentes).
@@ -307,7 +309,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
       {etapa === 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Campo label="Modalidade">
+          <Campo label="Modalidade" help="contrato.modalidade">
             <select data-guia="contrato-form.modalidade" className="input" value={f.modalidade} onChange={e => trocarModalidade(e.target.value)}>
               <option value="">Escolha a finalidade do contrato…</option>
               {Object.entries(MODALIDADES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -353,10 +355,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               Sem data de fim (gera 12 meses à frente e estende sozinho)
             </label>
           </Campo>
-          <Campo label="Aviso prévio (dias)">
+          <Campo label="Aviso prévio (dias)" help="contrato.avisoPrevio">
             <input autoComplete="off" type="number" min="0" max="365" className="input" value={f.aviso_previo_dias} onChange={e => set('aviso_previo_dias', e.target.value)} />
           </Campo>
-          <Campo label="Renovação">
+          <Campo label="Renovação" help="contrato.renovacao">
             <label className="flex items-center gap-2 text-sm text-texto-2 mt-2">
               <input autoComplete="off" type="checkbox" className="accent-primary" checked={!!f.renovacao_automatica} onChange={e => set('renovacao_automatica', e.target.checked)} />
               Renovação automática
@@ -373,7 +375,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
       {etapa === 1 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Campo label="Conta de pagamento">
+          <Campo label="Conta de pagamento" help="contrato.contaPagamento">
             <select data-guia="contrato-form.conta" className="input" value={f.conta_id} onChange={e => set('conta_id', e.target.value)}>
               <option value="">Escolha…</option>
               {contas.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
@@ -383,19 +385,19 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           <Campo label={rot.categoria}>
             <CategorySelect categories={categories} value={f.categoria_id} onChange={e => set('categoria_id', e.target.value)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
           </Campo>
-          <Campo label={rot.valorPrincipal}>
+          <Campo label={rot.valorPrincipal} help="contrato.valorPrincipal">
             <CampoValor data-guia="contrato-form.valor" value={f.valor_base} onChange={v => set('valor_base', v)} placeholder="0,00" />
           </Campo>
-          <Campo label="Periodicidade">
+          <Campo label="Periodicidade" help="contrato.periodicidade">
             <select className="input" value={f.periodicidade} onChange={e => set('periodicidade', e.target.value)}>
               <option value="mensal">Mensal</option><option value="trimestral">Trimestral</option>
               <option value="semestral">Semestral</option><option value="anual">Anual</option><option value="unica">Única</option>
             </select>
           </Campo>
-          <Campo label="Dia de vencimento">
+          <Campo label="Dia de vencimento" help="contrato.diaVencimento">
             <input autoComplete="off" type="number" min="1" max="31" data-guia="contrato-form.dia-vencimento" className="input" value={f.dia_vencimento} onChange={e => set('dia_vencimento', e.target.value)} />
           </Campo>
-          <Campo label="Tipo de documento">
+          <Campo label="Tipo de documento" help="contrato.tipoDocumento">
             <select className="input" value={f.tipo_documento_id} onChange={e => set('tipo_documento_id', e.target.value)}>
               <option value="">Sem tipo</option>
               {tiposDocumento.filter(t => t.ativo !== false).map(t => <option key={t.id} value={t.id}>{t.sigla} — {t.nome}</option>)}
@@ -408,10 +410,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </select>
           </Campo>
           <div />
-          <Campo label={`${rot.desconto} por mês (desconto)`}>
+          <Campo label={`${rot.desconto} por mês (desconto)`} help="contrato.desconto">
             <CampoValor value={f.bonificacao_valor} onChange={v => set('bonificacao_valor', v)} placeholder="Desconto em cada parcela (opcional)" />
           </Campo>
-          <Campo label={`${rot.desconto} nas primeiras (parcelas cobradas)`}>
+          <Campo label={`${rot.desconto} nas primeiras (parcelas cobradas)`} help="contrato.desconto">
             <input autoComplete="off" type="number" min="0" className="input" value={f.bonificacao_meses} onChange={e => set('bonificacao_meses', e.target.value)} placeholder="Quantas parcelas têm o desconto" />
           </Campo>
           {num(f.bonificacao_valor) > 0 && num(f.valor_base) > 0 && (
@@ -420,7 +422,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </p>
           )}
           <EncargosNaParcela linhas={encargosForm} onChange={(v) => { setErro(''); setEncargosForm(v) }} proxima={numeroProxima} />
-          <Campo label="Meses sem cobrança" className="sm:col-span-2">
+          <Campo label="Meses sem cobrança" className="sm:col-span-2" help="contrato.mesesSemCobranca">
             <div data-guia="contrato-form.meses-sem-cobranca">
               <MesesSemCobranca valor={f.meses_sem_cobranca || []} onChange={v => set('meses_sem_cobranca', v)} inicio={f.data_inicio} fim={f.sem_fim ? null : f.data_fim} />
             </div>
@@ -430,7 +432,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
       {etapa === 2 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Campo label="Índice de reajuste">
+          <Campo label="Índice de reajuste" help="contrato.indiceReajuste">
             <select data-guia="contrato-form.reajuste" className="input" value={f.indice_reajuste} onChange={e => set('indice_reajuste', e.target.value)}>
               <option value="IPCA">IPCA</option><option value="IGPM">IGP-M</option>
               <option value="FIXO">Percentual fixo</option><option value="NENHUM">Sem reajuste</option>
@@ -454,7 +456,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </Campo>
           )}
           {f.indice_reajuste !== 'NENHUM' && (
-            <Campo label="Mês-base do reajuste">
+            <Campo label="Mês-base do reajuste" help="contrato.mesBase">
               <select className="input" value={f.mes_base_reajuste} onChange={e => set('mes_base_reajuste', e.target.value)}>
                 <option value="">Aniversário do contrato</option>
                 {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}

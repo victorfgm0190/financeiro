@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { RefreshCw, Search, Pencil, Merge } from 'lucide-react'
+import HelpCampo from '../shared/HelpCampo'
 import { useApp } from '../../context/AppContext'
 import RenomearFavorecidoModal from '../shared/RenomearFavorecidoModal'
 import Toast from '../shared/Toast'
@@ -112,7 +113,7 @@ export default function FavorecidosPanel() {
         <div data-guia="settings:favorecidos.mesclar" className="rounded-xl border border-primary/30 bg-primary/10 p-3 space-y-3">
           <p className="text-sm text-texto-1 flex items-center gap-2"><Merge size={14} /> Mesclar {selecionados.length} nomes em um só</p>
           <div>
-            <label className="label" htmlFor="fav-mescla-nome">Novo nome</label>
+            <label className="label" htmlFor="fav-mescla-nome">Novo nome<HelpCampo campo="favorecido.novoNome" /></label>
             <input id="fav-mescla-nome" className="input min-h-[44px]" value={novoNomeMescla || sugestaoMescla}
               onChange={e => setNovoNomeMescla(e.target.value)} />
           </div>

@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import ComposicaoCard from '../Contratos/ComposicaoCard'
 import { PiggyBank, Repeat, Pencil, Check, X, History, Link2 } from 'lucide-react'
+import HelpCampo from '../shared/HelpCampo'
 import VinculoPainel from '../shared/VinculoPainel'
 import SeloVinculo from '../shared/SeloVinculo'
 import DesfazerMesclagem from '../shared/DesfazerMesclagem'
@@ -1567,7 +1568,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         />
       )}
       <div data-guia="lancamento-form.tipo">
-        <label className="label">Tipo</label>
+        <label className="label">Tipo<HelpCampo campo="lancamento.tipo" /></label>
         <div className="flex rounded-lg overflow-hidden border border-borda-forte">
           {TYPE_OPTIONS.map(t => (
             <button
@@ -1643,7 +1644,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           </div>
           {transferToAcc?.type === 'credit' && (
             <div>
-              <label className="label">Fatura de referência</label>
+              <label className="label">Fatura de referência<HelpCampo campo="lancamento.faturaReferencia" /></label>
               <select className="input" value={form.faturaMonthYear} onChange={e => set('faturaMonthYear', e.target.value)}>
                 <option value="">Sem vínculo (transferência comum)</option>
                 {faturaCardOpts.map(o => {
@@ -1711,7 +1712,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           )}
           {showReservaFuncao && (
             <div>
-              <label className="label">Função de Reserva</label>
+              <label className="label">Função de Reserva<HelpCampo campo="lancamento.funcaoReserva" /></label>
               <select
                 className="input"
                 value={form.reservaFuncaoId}
@@ -1800,7 +1801,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {isCredit && form.type === 'expense' && (
         <div>
-          <label className="label">Data Banco</label>
+          <label className="label">Data Banco<HelpCampo campo="lancamento.dataBanco" /></label>
           <DateInput className="input" value={form.dateCartao} onChange={e => set('dateCartao', e.target.value)} disabled={!!trava} />
           <p className="text-xs text-texto-3 mt-1.5 leading-relaxed">
             Data original do extrato do cartão. Em branco para lançamentos manuais — preencha
@@ -1867,7 +1868,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           )}
 
           <div>
-            <label className="label">Centro de Custo{confira('costCenter')}</label>
+            <label className="label">Centro de Custo{confira('costCenter')}<HelpCampo campo="lancamento.centroCusto" /></label>
             <select className="input" value={form.costCenter} onChange={e => set('costCenter', e.target.value)}>
               <option value="">Sem centro de custo</option>
               {costCenters.map(cc => <option key={cc} value={cc}>{cc}</option>)}
@@ -1883,7 +1884,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {showFaturaRef && (
         <div>
-          <label className="label">Fatura de Referência</label>
+          <label className="label">Fatura de Referência<HelpCampo campo="lancamento.faturaReferencia" /></label>
           <input
             className="input"
             value={form.faturaRef}
@@ -1972,7 +1973,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {form.type !== 'transfer' && (mostrarNumeroContrato({ tipoDocumentoId: form.tipoDocumentoId, numeroContrato: form.numeroContrato, tipos: tiposDocumento, pedido: pedeNumeroContrato }) ? (
         <div>
-          <label className="label" htmlFor="tx-numero-contrato">Nº do contrato{confira('numeroContrato')}</label>
+          <label className="label" htmlFor="tx-numero-contrato">Nº do contrato{confira('numeroContrato')}<HelpCampo campo="lancamento.numeroContrato" /></label>
           <input id="tx-numero-contrato" className="input" value={form.numeroContrato} maxLength={40} onChange={e => set('numeroContrato', e.target.value)} placeholder="Número do contrato do documento (opcional)" />
         </div>
       ) : (
@@ -2009,7 +2010,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           </label>
           {form.useReserva && (
             <div className="space-y-2">
-              <label className="label" style={{ marginBottom: 0 }}>Conta de Reserva{confira('reservaAccountId')}</label>
+              <label className="label" style={{ marginBottom: 0 }}>Conta de Reserva{confira('reservaAccountId')}<HelpCampo campo="lancamento.contaReserva" /></label>
               <select
                 className="input"
                 value={form.reservaAccountId}
@@ -2027,7 +2028,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               </select>
               {form.reservaAccountId && (reservaContaFuncs.length > 0 || funcaoForaDaConta) && (
                 <>
-                  <label className="label" style={{ marginBottom: 0 }}>Função de Reserva{confira('reservaFuncaoId')}</label>
+                  <label className="label" style={{ marginBottom: 0 }}>Função de Reserva{confira('reservaFuncaoId')}<HelpCampo campo="lancamento.funcaoReserva" /></label>
                   <select
                     className="input"
                     value={form.reservaFuncaoId}
@@ -2104,7 +2105,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {isCredit && form.type === 'expense' && (
         <div data-guia="lancamento-form.fatura">
-          <label className="label">Fatura de referência{confira('faturaMonthYear')}</label>
+          <label className="label">Fatura de referência{confira('faturaMonthYear')}<HelpCampo campo="lancamento.faturaReferencia" /></label>
           <select
             className="input disabled:opacity-60"
             value={form.faturaMonthYear}
@@ -2134,7 +2135,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {showGerencial && (
         <div className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">
-          <label className="label" style={{ marginBottom: 0 }}>Classificação Gerencial{confira('grupoGerencial')}</label>
+          <label className="label" style={{ marginBottom: 0 }}>Classificação Gerencial{confira('grupoGerencial')}<HelpCampo campo="lancamento.classificacaoGerencial" /></label>
           {grupoTravado ? (
             <div className="input flex flex-wrap items-center gap-x-2 gap-y-0.5 opacity-90 cursor-default" aria-readonly="true">
               <span className="text-texto-1">{selectedGerencialGroup?.number} · {selectedGerencialGroup?.name}</span>

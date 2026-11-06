@@ -1,6 +1,8 @@
 import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { Info, X, History, AlertTriangle } from 'lucide-react'
+import HelpCampo from '../shared/HelpCampo'
+import { HELP_CAMPOS } from '../../lib/helpCampos'
 import { publicarAgendaJa } from '../../lib/agendaFeedApi'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
@@ -56,55 +58,11 @@ const FREQUENCIES = [
 
 const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
 
-const TIPS = {
-  description: 'Nome ou identificação do lançamento recorrente. Ex: Aluguel, Salário, Parcela do carro.',
-  transactionType: 'Define se é uma entrada de dinheiro (Receita) ou uma saída (Despesa).',
-  account: 'Conta que será debitada ou creditada a cada ocorrência deste agendamento.',
-  amount: 'Valor padrão por ocorrência. Cada data na prévia pode ter um valor diferente — clique para editar.',
-  category: 'Classifica o tipo de gasto ou receita para relatórios e controle de orçamento.',
-  payee: 'Pessoa ou empresa beneficiária do pagamento. Ex: Locadora, Empresa, Fornecedor.',
-  frequency: 'Intervalo de repetição entre ocorrências: diário, semanal, mensal, anual etc.',
-  startDate: 'Data da primeira ocorrência. As seguintes são calculadas automaticamente conforme a frequência.',
-  nextOccurrence: 'Data da próxima ocorrência. Ao alterar, o sistema pergunta se vale só para esta ou também para as próximas.',
-  occurrence: 'Contínua: repete indefinidamente. Parcelada: encerra após número fixo de vezes.',
-  installments: 'Total de vezes que este lançamento se repetirá antes de ser encerrado automaticamente.',
-  remindDaysBefore: 'Exibe um alerta no painel X dias antes do vencimento para que você não se esqueça.',
-  autoRegister: 'Registra o lançamento automaticamente na data agendada, sem precisar confirmar manualmente.',
-  sincronizarAgenda: 'Envia as ocorrências deste agendamento para a agenda assinada no celular (Agenda no celular). O calendário dentro do app mostra todos.',
-  gerencial: 'Define como o dinheiro se move ao efetivar: G=débito direto; 1=reserva em poupança; 2..N=resgate de conta específica; D=só registra (já debitado).',
-}
+// Textos do ⓘ de cada campo: src/lib/helpCampos.js (help de campo, centralizado).
+const TIPS = HELP_CAMPOS.agendamento
 
-function Tooltip({ text }) {
-  const [show, setShow] = useState(false)
-  const [rect, setRect] = useState(null)
-  const ref = useRef(null)
-
-  const handleEnter = () => {
-    if (ref.current) setRect(ref.current.getBoundingClientRect())
-    setShow(true)
-  }
-
-  return (
-    <>
-      <span
-        ref={ref}
-        className="ml-1.5 inline-flex items-center cursor-help"
-        onMouseEnter={handleEnter}
-        onMouseLeave={() => setShow(false)}
-      >
-        <Info size={12} className="text-texto-3 hover:text-texto-2 transition-colors" />
-      </span>
-      {show && rect && (
-        <div
-          style={{ position: 'fixed', left: rect.right + 8, top: rect.top - 6, zIndex: 9999 }}
-          className="bg-surface border border-borda-forte text-texto-2 text-xs rounded-lg px-2.5 py-1.5 w-52 leading-snug shadow-2xl pointer-events-none"
-        >
-          {text}
-        </div>
-      )}
-    </>
-  )
-}
+// Ícone ⓘ do campo: componente único do app (src/components/shared/HelpCampo.jsx).
+const Tooltip = ({ text }) => <HelpCampo texto={text} />
 
 // `confira`: campo sugerido pelo Assistente IA com confiança baixa (ou vazio) — destaque na prévia.
 function LabelTip({ children, tip, required, confira = false }) {
@@ -1079,7 +1037,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         {/* Conta Destino (apenas para transferências) */}
         {form.transactionType === 'transfer' && (
           <div data-guia="agendamento-form.conta-destino" className="sm:col-span-2">
-            <LabelTip tip="Conta que receberá a transferência" required confira={!!destaques?.includes('toAccountId')}>Conta Destino</LabelTip>
+            <LabelTip tip={TIPS.toAccount} required confira={!!destaques?.includes('toAccountId')}>Conta Destino</LabelTip>
             <SearchableSelect
               options={destAccountOpts}
               value={form.toAccountId}
@@ -1274,11 +1232,11 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         {ehParcelaContrato ? (
           <>
             <div>
-              <LabelTip tip="Mês da parcela no contrato (chave da baixa). Definido pelo contrato.">Data-base (competência)</LabelTip>
+              <LabelTip tip={TIPS.dataBase}>Data-base (competência)</LabelTip>
               <DateInput className="input opacity-60 cursor-not-allowed" value={form.startDate} onChange={() => {}} disabled />
             </div>
             <div>
-              <LabelTip tip="Quando esta parcela vence. Muda só esta parcela; a data-base continua a mesma.">Data de vencimento</LabelTip>
+              <LabelTip tip={TIPS.dataVencimento}>Data de vencimento</LabelTip>
               <DateInput
                 className="input"
                 value={form.overrides?.[form.startDate]?.date || form.startDate}

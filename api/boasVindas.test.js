@@ -1,6 +1,6 @@
 // /api/boas-vindas: gravação só dos campos pedidos (tour visto não volta a ficar vazio). Sem banco.
 import { describe, it, expect } from 'vitest'
-import { DDL_BOAS_VINDAS, gravarBoasVindas } from './boas-vindas.js'
+import { DDL_BOAS_VINDAS, DDL_AJUDA_CAMPOS, gravarBoasVindas, gravarAjudaCampos } from './boas-vindas.js'
 
 const fakeQ = () => {
   const chamadas = []
@@ -16,7 +16,7 @@ describe('/api/boas-vindas', () => {
   })
   it('tour visto: upsert que preserva a primeira data', async () => {
     const { q, chamadas } = fakeQ()
-    expect(await gravarBoasVindas(q, 'u1', { tourVisto: true })).toEqual({ tourVistoEm: 't', checklistOcultoEm: null, guiasLigados: true, progresso: {} })
+    expect(await gravarBoasVindas(q, 'u1', { tourVisto: true })).toEqual({ tourVistoEm: 't', checklistOcultoEm: null, guiasLigados: true, ajudaCampos: true, progresso: {} })
     expect(chamadas[0].sql).toMatch(/ON CONFLICT \(user_id\) DO UPDATE SET tour_visto_em = COALESCE\(boas_vindas_usuario.tour_visto_em, now\(\)\)/)
     expect(chamadas[0].sql).not.toMatch(/checklist_oculto_em = /)
     expect(chamadas[0].params).toEqual(['u1'])
@@ -27,5 +27,15 @@ describe('/api/boas-vindas', () => {
     expect(chamadas[0].sql).toMatch(/SET checklist_oculto_em = now\(\)/)
     expect(chamadas[0].sql).not.toMatch(/SET tour_visto_em/)
     expect(await gravarBoasVindas(q, 'u1', {})).toBeNull()
+  })
+
+  it('ícones de ajuda nos campos: coluna por usuário, ligada por padrão; gravar só mexe nela', async () => {
+    expect(DDL_AJUDA_CAMPOS).toMatch(/ADD COLUMN IF NOT EXISTS ajuda_campos BOOLEAN NOT NULL DEFAULT true/)
+    const chamadas = []
+    const q = async (sql, params) => { chamadas.push({ sql, params }); return [{ ajuda_campos: false }] }
+    expect((await gravarAjudaCampos(q, 'u1', false)).ajudaCampos).toBe(false)
+    expect(chamadas[0].sql).toMatch(/SET ajuda_campos = EXCLUDED.ajuda_campos/)
+    expect(chamadas[0].sql).not.toMatch(/guias_ligados = /)
+    expect(chamadas[0].params).toEqual(['u1', false])
   })
 })

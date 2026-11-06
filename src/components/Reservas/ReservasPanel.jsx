@@ -18,6 +18,7 @@ import ResgateBreakdownModal from '../Schedule/ResgateBreakdownModal'
 import { itemSaidaFluxo, itemAbreComposicao, parteDaFuncao, parteDaFuncaoNaOcorrencia } from '../../lib/resgateComposicao'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import ViradaAssistidaModal from './ViradaAssistidaModal'
+import HelpCampo from '../shared/HelpCampo'
 import RazaoDiarioTab from './RazaoDiarioTab'
 import InputMoeda from '../shared/InputMoeda'
 import { isoLocal } from '../../lib/hoje'
@@ -238,19 +239,19 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
         <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Digite o nome da função" />
       </div>
       <div data-guia="reserva-form.conta">
-        <label className="label">Conta Vinculada</label>
+        <label className="label">Conta Vinculada<HelpCampo campo="reserva.conta" /></label>
         <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)}>
           <option value="">— Sem conta —</option>
           {accountsForView(accounts.filter(a => a.active !== false), isMobile).map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
         </select>
       </div>
       <div data-guia="reserva-form.saldo-inicial">
-        <label className="label">Saldo Inicial (R$)</label>
+        <label className="label">Saldo Inicial (R$)<HelpCampo campo="reserva.saldoInicial" /></label>
         <InputMoeda negativo className="input" value={form.saldoInicial} onChange={e => set('saldoInicial', e.target.value)} placeholder="0,00 (aceita negativo)" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div data-guia="reserva-form.despesa-anual">
-          <label className="label">Despesa Anual (R$)</label>
+          <label className="label">Despesa Anual (R$)<HelpCampo campo="reserva.despesaAnual" /></label>
           <InputMoeda negativo className="input" value={form.despesaAnual} onChange={e => set('despesaAnual', e.target.value)} placeholder="0,00" />
           {suggestions && (suggestions.enough
             ? <p className="text-xs text-texto-3 mt-1">Calculado dos lançamentos: {fmt(suggestions.despesaAnual)}
@@ -260,7 +261,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
           )}
         </div>
         <div data-guia="reserva-form.deposito-mensal">
-          <label className="label">Depósito Mensal (R$)</label>
+          <label className="label">Depósito Mensal (R$)<HelpCampo campo="reserva.depositoMensal" /></label>
           <InputMoeda negativo className="input" value={form.depositoMensal} onChange={e => set('depositoMensal', e.target.value)} placeholder="0,00" />
           {suggestions && (suggestions.enough
             ? <p className="text-xs text-texto-3 mt-1">Calculado dos lançamentos: {fmt(suggestions.depositoMensal)} / mês
@@ -271,7 +272,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
         </div>
       </div>
       <div data-guia="reserva-form.mes-vencimento">
-        <label className="label">Mês de Vencimento da Despesa</label>
+        <label className="label">Mês de Vencimento da Despesa<HelpCampo campo="reserva.mesVencimento" /></label>
         <select className="input" value={form.mesVencimento} onChange={e => set('mesVencimento', e.target.value)}>
           <option value="">Rateio mensal (÷ 12)</option>
           {MONTH_LABELS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
@@ -284,7 +285,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
         )}
       </div>
       <div data-guia="reserva-form.categoria">
-        <label className="label">Categoria da Despesa</label>
+        <label className="label">Categoria da Despesa<HelpCampo campo="reserva.categoria" /></label>
         <select className="input" value={form.categoryId} onChange={e => set('categoryId', e.target.value)}>
           <option value="">Sem categoria vinculada</option>
           {categoryOpts.map(c => <option key={c.id} value={c.id}>{`${c.icon || ''} ${c.name}`.trim()}</option>)}

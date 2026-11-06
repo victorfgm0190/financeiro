@@ -1,3 +1,4 @@
+import HelpCampo from '../shared/HelpCampo'
 import { useState, useRef, useEffect } from 'react'
 import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator, ChevronRight, Smartphone } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
@@ -898,7 +899,7 @@ export default function SettingsPanel() {
 
             <div className="grid grid-cols-2 gap-3">
               <div data-guia="perfil-form.tipo">
-                <label className="label">Tipo</label>
+                <label className="label">Tipo<HelpCampo campo="perfil.tipo" /></label>
                 <div className="flex rounded-lg overflow-hidden border border-borda-forte">
                   {[['pf', 'Pessoa Física'], ['pj', 'Pessoa Jurídica']].map(([v, l]) => (
                     <button type="button" key={v} onClick={() => setProfileField('type', v)}
@@ -915,7 +916,7 @@ export default function SettingsPanel() {
             </div>
 
             <div data-guia="perfil-form.documento">
-              <label className="label">{profileForm.type === 'pf' ? 'CPF' : 'CNPJ'}</label>
+              <label className="label">{profileForm.type === 'pf' ? 'CPF' : 'CNPJ'}<HelpCampo campo="perfil.documento" /></label>
               <input
                 className="input"
                 value={maskDoc(profileForm.document, profileForm.type)}
@@ -926,7 +927,7 @@ export default function SettingsPanel() {
             </div>
 
             <div data-guia="perfil-form.cor">
-              <label className="label">Cor de identificação</label>
+              <label className="label">Cor de identificação<HelpCampo campo="perfil.cor" /></label>
               <div className="flex gap-2 flex-wrap">
                 {PROFILE_COLORS.map(c => (
                   <button type="button" key={c} onClick={() => setProfileField('color', c)}
@@ -1124,7 +1125,7 @@ export default function SettingsPanel() {
           />
           <button type="submit" data-guia="categoria-form.salvar" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
         </form>
-        <p className="text-[11px] text-texto-3 mt-1.5">O campo <span className="text-texto-2">Grupo</span> é obrigatório — selecione um existente ou digite um novo para criá-lo junto.</p>
+        <p className="text-[11px] text-texto-3 mt-1.5">O campo <span className="text-texto-2">Grupo</span><HelpCampo campo="categoria.grupo" /> é obrigatório — selecione um existente ou digite um novo para criá-lo junto. Tipo<HelpCampo campo="categoria.tipo" /> · Perfis<HelpCampo campo="categoria.perfis" /></p>
       </div>
       )}
 

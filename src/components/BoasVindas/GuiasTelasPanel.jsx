@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { AJUDA_TELAS, TELAS_COM_GUIA } from '../../lib/ajudaTelas'
-import { carregarBoasVindas, definirGuiasLigados, ocultarGuia, ocultarTodosGuias, reativarGuia, reativarTodosGuias } from '../../lib/boasVindasApi'
+import { carregarBoasVindas, definirAjudaCampos, definirGuiasLigados, ocultarGuia, ocultarTodosGuias, reativarGuia, reativarTodosGuias } from '../../lib/boasVindasApi'
 import { useEstadoBoasVindas } from './useGuiaTela'
 
 // Nome da tela na lista: subtela vira "Tela › Subtela".
@@ -24,6 +24,7 @@ export default function GuiasTelasPanel() {
   useEffect(() => { carregarBoasVindas() }, [])
   const ocultas = new Set(estado?.guiasOcultos || [])
   const ligados = estado ? estado.guiasLigados !== false : true
+  const ajudaCampos = estado ? estado.ajudaCampos !== false : true
   const executar = async (fn, ok) => {
     setAviso(null)
     setAviso((await fn()) ? ok : 'Não foi possível gravar agora. Verifique a conexão e tente de novo.')
@@ -50,6 +51,21 @@ export default function GuiasTelasPanel() {
       {!ligados && (
         <p className="text-xs text-texto-2">Desligados: nenhum tour abre sozinho e o "?" não aparece nas telas. As escolhas de cada tela ficam guardadas para quando religar.</p>
       )}
+
+      {/* Help de campo (src/components/shared/HelpCampo.jsx): preferência do usuário, no banco. */}
+      <label className="flex items-center gap-3 cursor-pointer" data-guia="settings:guias.ajuda-campos">
+        <span className="relative shrink-0">
+          <input type="checkbox" role="switch" className="sr-only peer" checked={ajudaCampos} disabled={!estado}
+            aria-label="Mostrar ícones de ajuda nos campos"
+            onChange={e => executar(() => definirAjudaCampos(e.target.checked), e.target.checked ? 'Ícones de ajuda ligados.' : 'Ícones de ajuda desligados. Você pode religar aqui quando quiser.')} />
+          <span className="block w-11 h-6 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
+          <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5" />
+        </span>
+        <span className="text-sm text-texto-1">
+          Mostrar ícones de ajuda nos campos
+          <span className="block text-xs text-texto-2">O ícone ⓘ ao lado do nome de um campo explica para que ele serve.</span>
+        </span>
+      </label>
 
       <div className="flex flex-wrap gap-2">
         <button type="button" data-guia="settings:guias.reativar" className="btn-secondary flex items-center gap-1.5 min-h-[44px]" disabled={!estado}
