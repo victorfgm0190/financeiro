@@ -72,6 +72,7 @@ import { pode as podeNivel, podeVerPagina } from '../lib/permissoes'
 import {
   ORIGIN, isAutomacaoOrigin, isInvestAutoOrigin, isPatrimonioOrigin,
   isGerencialAutoOrigin, isParcelaGeradaOrigin, isReservaShadowOrigin,
+  lancamentoNasContas,
 } from '../lib/origins'
 import { hojeSP, isoLocal } from '../lib/hoje'
 
@@ -1555,7 +1556,7 @@ export function AppProvider({ children }) {
     return data.transactions.filter(t =>
       t.reservaAuto === true
         ? espelhoNoPerfil(t, ctx)
-        : profileAccountIds.has(t.accountId) || profileAccountIds.has(t.toAccountId)
+        : lancamentoNasContas(t, profileAccountIds)
     )
   }, [data.transactions, data.reserveFunctions, data.accounts, profileAccountIds, activeProfileId])
 

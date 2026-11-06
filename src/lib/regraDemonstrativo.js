@@ -9,10 +9,11 @@
 import {
   aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, isResgateReservaSombra, reservaDespesaFuncIds,
 } from '../components/shared/utils.js'
-import { isInvestAutoOrigin } from './origins.js'
+import { isInvestAutoOrigin, lancamentoNasContas } from './origins.js'
 
 // Perfil ativo: espelhos de reserva (reservaAuto) ficam só quando a conta da FUNÇÃO é do perfil;
-// os demais, quando uma das contas é do perfil. profileAccountIds null ("Todos") → todos.
+// os demais, quando uma das contas é do perfil (ganho/perda de venda de bem: a conta do bem).
+// profileAccountIds null ("Todos") → todos.
 export function filtrarPerfilDemonstrativo(transactions, reserveFunctions, profileAccountIds) {
   if (!profileAccountIds) return transactions
   const funcAccById = new Map((reserveFunctions || []).map(f => [f.id, f.accountId]))
@@ -21,7 +22,7 @@ export function filtrarPerfilDemonstrativo(transactions, reserveFunctions, profi
       const fAcc = funcAccById.get(tx.reservaFuncaoId)
       return fAcc != null && profileAccountIds.has(fAcc)
     }
-    return profileAccountIds.has(tx.accountId) || profileAccountIds.has(tx.toAccountId)
+    return lancamentoNasContas(tx, profileAccountIds)
   })
 }
 

@@ -27,6 +27,8 @@ export function linhaPermitida(tabela, r, contas, funcoes = new Set(), perfis = 
   if (tabela === 'cartoes') return contas.has(r.id)
   const temConta = r.account_id || r.to_account_id
   if (temConta) return contas.has(r.account_id) || contas.has(r.to_account_id)
+  // Ganho/perda de venda de bem (sem conta): segue o perfil do bem, que também é uma conta.
+  if (r.origin === 'patrimonio_auto' && r.bem_id) return contas.has(r.bem_id)
   return !!r.reserva_funcao_id && funcoes.has(r.reserva_funcao_id)
 }
 
