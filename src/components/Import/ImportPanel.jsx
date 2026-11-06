@@ -1,3 +1,4 @@
+import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
 import { Fragment, useState, useRef, useMemo, useEffect } from 'react'
 import {
   Upload, Check, AlertCircle, Wand2, Save,
@@ -4819,6 +4820,7 @@ export default function ImportPanel() {
       </div>
 
       {tab === 'corrente' && comDindin && <ContaCorrenteTab accounts={accounts} accountGroups={accountGroups} transactions={transactions} />}
+      {tab === 'cartao' && <AvisoPrerequisitos funcao="importar-fatura" />}
       {tab === 'cartao' && <CartaoCreditoTab accounts={accounts} accountGroups={accountGroups} transactions={transactions} />}
     </div>
   )

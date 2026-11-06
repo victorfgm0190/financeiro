@@ -19,6 +19,7 @@ import { itemSaidaFluxo, itemAbreComposicao, parteDaFuncao, parteDaFuncaoNaOcorr
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import ViradaAssistidaModal from './ViradaAssistidaModal'
 import HelpCampo from '../shared/HelpCampo'
+import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
 import RazaoDiarioTab from './RazaoDiarioTab'
 import InputMoeda from '../shared/InputMoeda'
 import { isoLocal } from '../../lib/hoje'
@@ -234,6 +235,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
       categoryId: form.categoryId || null,
       exibirComoDespesa: !!form.exibirComoDespesa,
     }) }} className="space-y-4">
+      {!initial && <AvisoPrerequisitos funcao="funcao-reserva" onIr={onClose} />}
       <div data-guia="reserva-form.nome">
         <label className="label">Nome da Função *</label>
         <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Digite o nome da função" />

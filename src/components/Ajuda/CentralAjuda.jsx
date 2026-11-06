@@ -146,7 +146,7 @@ export default function CentralAjuda() {
           </li>
         ))}
       </ul>
-      <PrimeirosPassos className="!p-3 border border-borda shadow-none" />
+      <PrimeirosPassos expandido className="!p-3 border border-borda shadow-none" />
     </section>
   )
 

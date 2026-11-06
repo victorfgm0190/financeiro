@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Check, Plus, Trash2 } from 'lucide-react'
 import HelpCampo from '../shared/HelpCampo'
+import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
 import { useApp } from '../../context/AppContext'
 import CategorySelect from '../shared/CategorySelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
@@ -296,6 +297,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   const proxReaj = proximoReajuste(dados, hoje)
   return (
     <div className="space-y-4">
+      {!contrato && <AvisoPrerequisitos funcao="contrato" onIr={onClose} />}
       <ol data-guia="contrato-form.etapas" className="flex flex-wrap gap-1.5 text-[11px]">
         {etapasVisiveis.map((e, pos) => (
           <li key={e.i}>

@@ -10,14 +10,15 @@ let seq = 0
 const ouvintes = new Set()
 const avisar = () => { for (const f of ouvintes) f() }
 
-export function iniciarTour(tela, { chave = null } = {}) {
+// `jornada`: aberto pela jornada guiada — sem os links de desligar guias e sem gravar preferências.
+export function iniciarTour(tela, { chave = null, jornada = false } = {}) {
   if (!tela) return
-  ativo = { tipo: 'tour', tela, chave, id: ++seq }
+  ativo = { tipo: 'tour', tela, chave, jornada, id: ++seq }
   avisar()
 }
-export function iniciarTarefa(tarefaId, { tela = null } = {}) {
+export function iniciarTarefa(tarefaId, { tela = null, jornada = false } = {}) {
   if (!tarefaId) return
-  ativo = { tipo: 'tarefa', tarefaId, tela, id: ++seq }
+  ativo = { tipo: 'tarefa', tarefaId, tela, jornada, id: ++seq }
   avisar()
 }
 export function encerrarTour() {
@@ -30,8 +31,12 @@ export function encerrarTourDaTela(tela) {
   if (ativo?.tipo === 'tour' && ativo.tela === tela) encerrarTour()
 }
 export const tourAtivo = () => ativo
+// Com um passo da jornada em andamento, o tour automático da tela não abre por cima dele.
+let autoSuprimido = false
+export const suprimirTourAutomatico = (v) => { autoSuprimido = !!v }
+export const tourAutomaticoSuprimido = () => autoSuprimido
 const assinar = (f) => { ouvintes.add(f); return () => ouvintes.delete(f) }
 export function useTourAtivo() {
   return useSyncExternalStore(assinar, tourAtivo, () => null)
 }
-export function _reiniciarTour() { ativo = null; avisar() }
+export function _reiniciarTour() { ativo = null; autoSuprimido = false; avisar() }

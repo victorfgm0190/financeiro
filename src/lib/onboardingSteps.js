@@ -10,8 +10,8 @@
 //
 // Passo: { id, fase, tipo, titulo, descricao, tela (página), hash? (seção de Configurações),
 //   guia? (tela do tour), guiaChave? (item do tour onde começa), tarefa? (Faça comigo), etapa?
-//   (item do CHECKLIST reaproveitado), mostrar(ctx), dependsOn: [ids] (pronto para uso futuro;
-//   a jornada só mostra a ordem — não bloqueia) }.
+//   (item do CHECKLIST reaproveitado), mostrar(ctx), dependsOn: [ids] (ordem dos passos e do atalho
+//   por objetivo; o que uma função EXIGE de verdade está em src/lib/prerequisitos.js) }.
 import { CHECKLIST } from './ajudaTelas.js'
 
 const sempre = () => true
@@ -22,7 +22,7 @@ export const FASES_JORNADA = [
   { id: 'cadastros', titulo: 'Cadastros' },
   { id: 'movimento', titulo: 'Primeiro movimento' },
   { id: 'resultados', titulo: 'Ver resultados' },
-  { id: 'avancado', titulo: 'Avançado', opcional: true },
+  { id: 'extras', titulo: 'Extras', opcional: true },
 ]
 
 // Passo 'fazer' que reaproveita uma etapa do checklist (texto próprio da jornada).
@@ -79,10 +79,16 @@ export const PASSOS_JORNADA = [
     titulo: 'Relatórios', descricao: 'Os relatórios disponíveis e como exportar.',
     tela: 'reports', guia: 'reports', dependsOn: [],
   },
-  // Fase 5 — opcional, só com o módulo ativo e permissão
-  fazer('reserva', { fase: 'avancado', titulo: 'Reservas', descricao: 'Separe dinheiro para objetivos numa conta de reserva.', tela: 'accounts', tarefa: 'accounts.conta-reserva' }),
-  fazer('contrato', { fase: 'avancado', titulo: 'Contratos', descricao: 'Contratos com cobrança que se repete geram as parcelas sozinhos.', tela: 'contratos', tarefa: 'contratos.primeiro-contrato' }),
-  fazer('importar-fatura', { fase: 'avancado', titulo: 'Importar fatura', descricao: 'Traga as compras do cartão pelo arquivo da fatura.', tela: 'import', tarefa: 'import.fatura', dependsOn: ['cartao'] }),
+  // Extras — opcional, fora do contador, só com o módulo ativo e permissão
+  fazer('reserva', { fase: 'extras', titulo: 'Conta de reserva', descricao: 'Uma conta para guardar dinheiro com destino certo.', tela: 'accounts', tarefa: 'accounts.conta-reserva', dependsOn: ['perfil'] }),
+  {
+    id: 'funcao-reserva', fase: 'extras', tipo: 'fazer', mostrar: (c) => c.podeVer('reservas') && c.podeIncluir('reservas'),
+    titulo: 'Função de reserva', descricao: 'Cada objetivo do dinheiro guardado na conta de reserva.',
+    tela: 'reservas', tarefa: 'reservas.primeira-funcao', acao: 'funcao-reserva', dependsOn: ['reserva'],
+    feito: (d) => (d.reserveFunctions || []).length > 0,
+  },
+  fazer('contrato', { fase: 'extras', titulo: 'Contratos', descricao: 'Contratos com cobrança que se repete geram as parcelas sozinhos.', tela: 'contratos', tarefa: 'contratos.primeiro-contrato', dependsOn: ['perfil', 'conta'] }),
+  fazer('importar-fatura', { fase: 'extras', titulo: 'Importar fatura', descricao: 'Traga as compras do cartão pelo arquivo da fatura.', tela: 'import', tarefa: 'import.fatura', dependsOn: ['cartao'] }),
 ]
 
 // Ids aceitos pela API para gravar estado de etapa (os da jornada; os do checklist já são aceitos).
@@ -90,9 +96,38 @@ export const ETAPAS_JORNADA = PASSOS_JORNADA.map(p => p.id)
 // "Refazer jornada" zera só estes (os 'fazer' feitos pelos dados continuam feitos).
 export const ETAPAS_REFAZER_JORNADA = ETAPAS_JORNADA
 
+// ── Atalho por objetivo ("Quero ir direto para…") ───────────────────────────────────────────────
+// `alvos`: o primeiro passo visível neste ambiente é o destino. Monta só os passos pendentes
+// necessários, na ordem das dependências; ao concluir, a jornada volta ao normal.
+export const OBJETIVOS = [
+  { id: 'contrato', titulo: 'Cadastrar um contrato', alvos: ['contrato'] },
+  { id: 'cartao', titulo: 'Controlar meu cartão', alvos: ['importar-fatura', 'cartao'] },
+  { id: 'contas-pagar', titulo: 'Organizar contas a pagar', alvos: ['agendamento'] },
+  { id: 'reservas', titulo: 'Montar reservas', alvos: ['funcao-reserva', 'reserva'] },
+]
+export const IDS_OBJETIVOS = OBJETIVOS.map(o => o.id)
+
+// Passos que ainda faltam para chegar em `alvoId`, dependências primeiro (sem repetir).
+function faltamPara(alvoId, porId, vistos = new Set()) {
+  if (vistos.has(alvoId)) return []
+  vistos.add(alvoId)
+  const p = porId.get(alvoId)
+  if (!p) return []
+  const antes = (p.dependsOn || []).flatMap(d => faltamPara(d, porId, vistos))
+  return p.feito || p.estado === 'nao-se-aplica' ? antes : [...antes, p]
+}
+
+function passosDoObjetivo(obj, passos) {
+  const porId = new Map(passos.map(p => [p.id, p]))
+  const alvo = obj.alvos.find(id => porId.has(id) && porId.get(id).estado !== 'nao-se-aplica')
+  return alvo ? { alvo, passos: faltamPara(alvo, porId) } : null
+}
+
 // Jornada com o estado de cada passo e o progresso.
 //   ctx = contexto de ajuda (podeVer, podeIncluir…); dados = { profiles, accounts, transactions,
-//   schedules, cardImports, contratos, progresso }.
+//   schedules, cardImports, contratos, reserveFunctions, progresso }.
+// Contador e parabéns só com as fases principais: Extras tem o próprio x/y e não bloqueia a conclusão.
+// Pulado e "não se aplica" contam como resolvidos para concluir; o contador mostra só os feitos.
 export function jornadaComStatus(ctx, dados = {}) {
   const etapas = dados.progresso?.etapas || {}
   const marcada = (id) => etapas[id]?.estado
@@ -106,29 +141,50 @@ export function jornadaComStatus(ctx, dados = {}) {
       const estado = feito ? 'feita' : m === 'nao-se-aplica' ? 'nao-se-aplica' : m === 'pulada' ? 'pulada' : 'pendente'
       return { ...p, estado, feito: estado === 'feita' }
     })
-  const contaveis = passos.filter(p => p.estado !== 'nao-se-aplica')
-  const fases = FASES_JORNADA
-    .map(f => {
-      const ps = passos.filter(p => p.fase === f.id)
-      const cont = ps.filter(p => p.estado !== 'nao-se-aplica')
-      const feitas = cont.filter(p => p.feito).length
-      return { ...f, passos: ps, feitas, total: cont.length, completa: cont.every(p => p.feito) }
-    })
-    .filter(f => f.passos.length > 0)
-  const pendentes = passos.filter(p => p.estado === 'pendente')
+  const montarFase = (f) => {
+    const ps = passos.filter(p => p.fase === f.id)
+    const cont = ps.filter(p => p.estado !== 'nao-se-aplica')
+    return { ...f, passos: ps, feitas: cont.filter(p => p.feito).length, total: cont.length, completa: cont.every(p => p.feito) }
+  }
+  const fases = FASES_JORNADA.filter(f => !f.opcional).map(montarFase).filter(f => f.passos.length > 0)
+  const extrasFase = FASES_JORNADA.filter(f => f.opcional).map(montarFase).find(f => f.passos.length > 0) || null
+  const principais = fases.flatMap(f => f.passos)
+  const contaveis = principais.filter(p => p.estado !== 'nao-se-aplica')
+  const pendentes = principais.filter(p => p.estado === 'pendente')
+
+  // Objetivo escolhido (progresso.objetivo): os próximos passos saem dele até concluir.
+  const objetivosDisponiveis = OBJETIVOS
+    .map(o => ({ ...o, ...passosDoObjetivo(o, passos) }))
+    .filter(o => o.alvo && o.passos.length > 0)
+  const escolhido = OBJETIVOS.find(o => o.id === dados.progresso?.objetivo) || null
+  const doEscolhido = escolhido ? passosDoObjetivo(escolhido, passos) : null
+  const objetivo = doEscolhido?.passos.length ? { ...escolhido, ...doEscolhido } : null
+
   return {
     fases,
+    extras: extrasFase,
     passos,
     pendentes,
     puladas: passos.filter(p => p.estado === 'pulada' || p.estado === 'nao-se-aplica'),
     feitas: contaveis.filter(p => p.feito).length,
     total: contaveis.length,
-    proximo: pendentes[0] || null,
-    completo: pendentes.length === 0 && passos.filter(p => p.estado === 'pulada').length === 0,
+    pulados: contaveis.filter(p => p.estado === 'pulada').length,
+    proximo: objetivo ? objetivo.passos[0] : (pendentes[0] || null),
+    completo: principais.length > 0 && pendentes.length === 0,
+    objetivo,
+    objetivoConcluido: escolhido && !objetivo ? escolhido.id : null,
+    objetivosDisponiveis,
   }
 }
 
-// O passo pode abrir o "Faça comigo" neste ambiente? (módulos/permissões; o aparelho fica com quem chama)
-export const passoComTarefa = (p, ctx, tarefaDisponivel, tarefaPorId, opcoes) =>
-  p.tipo === 'fazer' && !!p.tarefa && tarefaDisponivel(tarefaPorId(p.tarefa), ctx, opcoes)
+// Próximo passo depois de `id` (objetivo primeiro; a barra usa para o botão "Próximo").
+export function proximoDepois(st, id) {
+  return st.objetivo?.passos.find(p => p.id !== id) || st.pendentes.find(p => p.id !== id) || null
+}
 
+// A tela já foi vista pela jornada ("Entendi")? O tour dela não abre mais sozinho, sem gravar nada
+// nas preferências dos guias.
+export function telaConcluidaNaJornada(tela, progresso) {
+  const etapas = progresso?.etapas || {}
+  return PASSOS_JORNADA.some(p => p.guia === tela && etapas[p.id]?.estado === 'feita')
+}

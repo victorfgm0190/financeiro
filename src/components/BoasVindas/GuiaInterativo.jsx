@@ -17,6 +17,7 @@ import { ocultarGuia, definirGuiasLigados } from '../../lib/boasVindasApi'
 import { useContextoAjuda } from './contextoAjuda'
 import { elementoDoItem } from './guiaElementos'
 import { useTourAtivo, encerrarTour, iniciarTarefa } from './tourEstado'
+import { registrarFimTourJornada } from './jornadaEstado'
 import TarefaGuiada from './TarefaGuiada'
 import { tarefasDaTela } from '../../lib/tarefasGuiadas'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -28,10 +29,12 @@ export default function GuiaInterativo() {
   const ativo = useTourAtivo()
   if (!ativo) return null
   if (ativo.tipo === 'tarefa') return <TarefaGuiada key={ativo.id} tarefaId={ativo.tarefaId} />
-  return <Tour key={ativo.id} tela={ativo.tela} chaveInicial={ativo.chave} />
+  return <Tour key={ativo.id} tela={ativo.tela} chaveInicial={ativo.chave} jornada={!!ativo.jornada} />
 }
 
-function Tour({ tela, chaveInicial }) {
+// `jornada`: aberto pela jornada guiada. Não grava nada nas preferências dos guias, não oferece os links
+// de desligar e avisa a jornada como terminou (até o fim, ou fechado no meio).
+function Tour({ tela, chaveInicial, jornada = false }) {
   const ctx = useContextoAjuda()
   const isMobile = useIsMobile()
   const guia = useMemo(() => guiaDaTela(tela, ctx), [tela, ctx])
@@ -90,19 +93,22 @@ function Tour({ tela, chaveInicial }) {
   }, [])
   useEffect(() => { balao.current?.focus({ preventScroll: true }) }, [i])
 
-  const fecharMarcando = useCallback(() => { ocultarGuia(tela); encerrarTour() }, [tela])
-  const proximo = useCallback(() => { if (i >= total - 1) fecharMarcando(); else setI(i + 1) }, [i, total, fecharMarcando])
+  const fecharMarcando = useCallback((resultado = 'fechado') => {
+    if (jornada) registrarFimTourJornada(resultado)
+    else ocultarGuia(tela)
+    encerrarTour()
+  }, [tela, jornada])
+  const proximo = useCallback(() => { if (i >= total - 1) fecharMarcando('concluido'); else setI(i + 1) }, [i, total, fecharMarcando])
   const voltar = () => setI(v => Math.max(0, v - 1))
   // "Ver com exemplos": fecha o tour e abre a Central de Ajuda no item da vez (ou na tela).
   const verComExemplos = () => {
-    ocultarGuia(tela)
-    encerrarTour()
+    fecharMarcando('fechado')
     navegarPara('ajuda', { hash: ajudaHash(tela, passos[i]?.tipo === 'item' ? passos[i].item.chave : null) })
   }
 
   useEffect(() => {
     const tecla = (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fecharMarcando() }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fecharMarcando('fechado') }
       else if (e.key === 'Enter' && !e.target.closest?.('button,a,input,textarea,select')) { e.preventDefault(); proximo() }
       else if (e.key === 'ArrowRight') proximo()
       else if (e.key === 'ArrowLeft') voltar()
@@ -117,7 +123,7 @@ function Tour({ tela, chaveInicial }) {
   const vh = typeof window !== 'undefined' ? window.innerHeight : 768
   const pos = posicaoBalao(comAlvo ? rect : null, tamBalao, { vw, vh })
   // Fim do tour: as tarefas "Faça comigo" desta tela, para praticar.
-  const praticar = passo.tipo === 'fim' ? tarefasDaTela(tela, ctx, { celular: isMobile }) : []
+  const praticar = passo.tipo === 'fim' && !jornada ? tarefasDaTela(tela, ctx, { celular: isMobile }) : []
   const titulo = passo.tipo === 'intro' ? guia.titulo : passo.tipo === 'fim' ? (praticar.length ? 'Pronto! Quer praticar?' : 'Pronto!')
     : passo.tipo === 'linhas' ? 'Em cada linha da lista' : passo.item.rotulo
   const texto = passo.tipo === 'intro' ? guia.descricao
@@ -146,11 +152,11 @@ function Tour({ tela, chaveInicial }) {
             <h2 className="text-sm font-semibold text-texto-1">{titulo}</h2>
             <p className="text-sm text-texto-1 mt-1 leading-relaxed">{texto}</p>
           </div>
-          <button type="button" onClick={fecharMarcando} aria-label="Fechar tour" title="Pular tour (Esc)"
+          <button type="button" onClick={() => fecharMarcando('fechado')} aria-label="Fechar tour" title="Pular tour (Esc)"
             className="w-9 h-9 -mr-2 -mt-2 flex items-center justify-center text-texto-2 hover:text-texto-1 shrink-0"><X size={16} /></button>
         </div>
 
-        {passo.tipo === 'intro' && (confirmarDesligar ? (
+        {passo.tipo === 'intro' && !jornada && (confirmarDesligar ? (
           <div className="mt-3 rounded-lg border border-borda bg-surface-2 p-2.5 text-xs text-texto-1 space-y-2" role="alert">
             <p>Você pode religar em Configurações › Geral › Guias das telas. A Ajuda continua disponível no menu.</p>
             <div className="flex gap-2">
@@ -181,14 +187,14 @@ function Tour({ tela, chaveInicial }) {
         )}
         <div className="flex items-center gap-2 mt-3">
           {i > 0 && <button type="button" className="btn-secondary text-sm min-h-[40px]" onClick={voltar}>Voltar</button>}
-          {passo.tipo !== 'fim' && <button type="button" className="btn-secondary text-sm min-h-[40px]" onClick={fecharMarcando}>Pular tour</button>}
+          {passo.tipo !== 'fim' && <button type="button" className="btn-secondary text-sm min-h-[40px]" onClick={() => fecharMarcando('fechado')}>Pular tour</button>}
           <button type="button" className="btn-primary text-sm min-h-[40px] ml-auto" onClick={proximo}>
             {passo.tipo === 'fim' ? 'Concluir' : 'Próximo'}
           </button>
         </div>
         {passo.tipo !== 'fim' && (
           <div className="mt-2 pt-2 border-t border-borda flex items-center gap-3">
-            <button type="button" className="text-[11px] text-texto-2 hover:text-texto-1" onClick={fecharMarcando}>Não mostrar mais nesta tela</button>
+            {!jornada && <button type="button" className="text-[11px] text-texto-2 hover:text-texto-1" onClick={() => fecharMarcando('fechado')}>Não mostrar mais nesta tela</button>}
             <button type="button" className="text-[11px] text-primary-fg hover:underline ml-auto" onClick={verComExemplos}>Ver com exemplos</button>
           </div>
         )}

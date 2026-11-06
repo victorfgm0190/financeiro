@@ -4,7 +4,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { TELAS_COM_GUIA, ETAPAS_CHECKLIST } from '../src/lib/ajudaTelas.js'
 import { TODAS_AS_TAREFAS } from '../src/lib/tarefasGuiadas.js'
-import { ETAPAS_JORNADA, ETAPAS_REFAZER_JORNADA } from '../src/lib/onboardingSteps.js'
+import { ETAPAS_JORNADA, ETAPAS_REFAZER_JORNADA, IDS_OBJETIVOS } from '../src/lib/onboardingSteps.js'
 
 // Etapas que aceitam estado: as do checklist e as da jornada guiada (src/lib/onboardingSteps.js).
 const ETAPAS_ACEITAS = new Set([...ETAPAS_CHECKLIST, ...ETAPAS_JORNADA])
@@ -16,6 +16,8 @@ const ETAPAS_ACEITAS = new Set([...ETAPAS_CHECKLIST, ...ETAPAS_JORNADA])
 //   POST { ajudaCampos: true|false }      → mostrar os ícones ⓘ de ajuda nos campos (padrão: ligados)
 //   POST { jornadaLigada: true|false }    → jornada guiada (boas-vindas + painel); religar retoma
 //   POST { jornadaRefazer: true }         → zera só as etapas da jornada (os dados não mudam)
+//   POST { jornadaExpandida: true|false } → painel compacto ou com as fases (progresso.jornadaExpandida)
+//   POST { jornadaObjetivo: '<id>'|null } → atalho por objetivo (progresso.objetivo)
 //   POST { guiaReativar: '<tela>' }       → o tour desta tela volta a abrir sozinho
 //   POST { etapa: '<id>', estado }        → checklist "Primeiros passos": 'pulada' | 'nao-se-aplica' |
 //                                           'feita' (etapas sem dado próprio, ex.: usou o Assistente) |
@@ -120,10 +122,28 @@ export async function refazerJornada(q, userId) {
     `INSERT INTO boas_vindas_usuario (user_id) VALUES ($1)
      ON CONFLICT (user_id) DO UPDATE SET
        progresso = jsonb_set(COALESCE(boas_vindas_usuario.progresso, '{}'::jsonb), '{etapas}',
-                             COALESCE(boas_vindas_usuario.progresso->'etapas', '{}'::jsonb) - $2::text[]),
+                             COALESCE(boas_vindas_usuario.progresso->'etapas', '{}'::jsonb) - $2::text[]) - 'objetivo',
        checklist_oculto_em = NULL, updated_at = now()
      RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
     [userId, ETAPAS_REFAZER_JORNADA],
+  )
+  return linhaParaJson(r)
+}
+
+// Preferência da jornada dentro de `progresso`: painel expandido e objetivo escolhido.
+export async function gravarPreferenciaJornada(q, userId, { expandida, objetivo } = {}) {
+  const novo = {}
+  if (typeof expandida === 'boolean') novo.jornadaExpandida = expandida
+  if (objetivo !== undefined) {
+    if (objetivo !== null && !IDS_OBJETIVOS.includes(objetivo)) return null
+    novo.objetivo = objetivo
+  }
+  if (!Object.keys(novo).length) return null
+  const [r] = await q(
+    `INSERT INTO boas_vindas_usuario (user_id, progresso) VALUES ($1, $2::jsonb)
+     ON CONFLICT (user_id) DO UPDATE SET progresso = COALESCE(boas_vindas_usuario.progresso, '{}'::jsonb) || $2::jsonb, updated_at = now()
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
+    [userId, JSON.stringify(novo)],
   )
   return linhaParaJson(r)
 }
@@ -209,6 +229,11 @@ async function handler(req, res) {
       if (typeof body?.ajudaCampos === 'boolean') { await gravarAjudaCampos(query, userId, body.ajudaCampos); fez = true }
       if (typeof body?.jornadaLigada === 'boolean') { await gravarJornadaLigada(query, userId, body.jornadaLigada); fez = true }
       if (body?.jornadaRefazer === true) { await refazerJornada(query, userId); fez = true }
+      if (typeof body?.jornadaExpandida === 'boolean' || 'jornadaObjetivo' in (body || {})) {
+        const r = await gravarPreferenciaJornada(query, userId, { expandida: body.jornadaExpandida, objetivo: body.jornadaObjetivo })
+        if (!r) return res.status(400).json({ error: 'Preferência da jornada inválida' })
+        fez = true
+      }
       if (typeof body?.tarefaConcluida === 'string') {
         if (!(await gravarTarefaConcluida(query, userId, body.tarefaConcluida))) return res.status(400).json({ error: 'Tarefa desconhecida' })
         fez = true

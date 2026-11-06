@@ -8,8 +8,8 @@ export const JORNADA_BOTOES = { verNaTela: 'Ver na tela', fazerComigo: 'Fazer co
 
 // Estado da jornada (do banco) + os dados que decidem os passos "fazer" (mesmos do checklist + lançamentos).
 export function useDadosJornada() {
-  const { profiles, accounts, transactions, schedules, cardImports, contratos } = useApp()
+  const { profiles, accounts, transactions, schedules, cardImports, contratos, reserveFunctions } = useApp()
   const [estado, setEstado] = useState(estadoBoasVindas)
   useEffect(() => assinarBoasVindas(setEstado), [])
-  return { estado, dados: { profiles, accounts, transactions, schedules, cardImports, contratos, progresso: estado?.progresso } }
+  return { estado, dados: { profiles, accounts, transactions, schedules, cardImports, contratos, reserveFunctions, progresso: estado?.progresso } }
 }

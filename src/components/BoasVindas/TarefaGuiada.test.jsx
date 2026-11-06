@@ -204,7 +204,7 @@ describe('onde as tarefas aparecem', () => {
     expect(tourAtivo()).toMatchObject({ tipo: 'tarefa', tarefaId: 'schedule.conta-receber' })
   })
   it('jornada: "Fazer comigo" inicia a tarefa guiada do passo', async () => {
-    banco.progresso = { etapas: { 'j-configuracoes': { estado: 'feita' }, 'j-categorias': { estado: 'feita' } } }
+    banco.progresso = { etapas: { 'j-configuracoes': { estado: 'feita' }, 'j-categorias': { estado: 'feita' } }, jornadaExpandida: true }
     render(<><PrimeirosPassos /><GuiaInterativo /></>)
     await screen.findByTestId('primeiros-passos')
     fireEvent.click(screen.getAllByRole('button', { name: 'Fazer comigo' })[0]) // perfil

@@ -84,6 +84,8 @@ export const reativarGuia = (tela) => gravar('POST', { guiaReativar: tela }, (e)
 // Interruptor geral (Configurações › Geral › Guias das telas). Desligado: nada abre sozinho e o "?" some.
 export const definirGuiasLigados = (ligados) => gravar('POST', { guiasLigados: !!ligados }, () => ({ guiasLigados: !!ligados }))
 export const definirAjudaCampos = (ligada) => gravar('POST', { ajudaCampos: !!ligada }, () => ({ ajudaCampos: !!ligada }))
+export const definirJornadaExpandida = (expandida) => gravar('POST', { jornadaExpandida: !!expandida }, (e) => ({ progresso: { ...(e.progresso || {}), jornadaExpandida: !!expandida } }))
+export const definirObjetivoJornada = (objetivo) => gravar('POST', { jornadaObjetivo: objetivo }, (e) => ({ progresso: { ...(e.progresso || {}), objetivo } }))
 export const definirJornadaLigada = (ligada) => gravar('POST', { jornadaLigada: !!ligada }, () => ({ jornadaLigada: !!ligada }))
 // Zera só as etapas da jornada (`ids`), localmente igual ao servidor.
 export const refazerJornada = (ids = []) => gravar('POST', { jornadaRefazer: true }, (e) => {

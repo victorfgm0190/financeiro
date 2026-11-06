@@ -1,6 +1,6 @@
 // /api/boas-vindas: gravação só dos campos pedidos (tour visto não volta a ficar vazio). Sem banco.
 import { describe, it, expect } from 'vitest'
-import { DDL_BOAS_VINDAS, DDL_AJUDA_CAMPOS, DDL_JORNADA, gravarBoasVindas, gravarAjudaCampos, gravarJornadaLigada, refazerJornada, gravarEtapa } from './boas-vindas.js'
+import { DDL_BOAS_VINDAS, DDL_AJUDA_CAMPOS, DDL_JORNADA, gravarBoasVindas, gravarAjudaCampos, gravarJornadaLigada, refazerJornada, gravarEtapa, gravarPreferenciaJornada } from './boas-vindas.js'
 import { ETAPAS_JORNADA } from '../src/lib/onboardingSteps.js'
 
 const fakeQ = () => {
@@ -58,5 +58,21 @@ describe('/api/boas-vindas', () => {
     expect(ultima.sql).toContain("- $2::text[]")
     expect(ultima.sql).toContain('checklist_oculto_em = NULL')
     expect(ultima.params).toEqual(['u1', ETAPAS_JORNADA])
+  })
+
+  it('jornada: painel expandido e objetivo ficam em progresso; objetivo desconhecido é recusado; refazer limpa o objetivo', async () => {
+    const chamadas = []
+    const q = async (sql, params) => { chamadas.push({ sql, params }); return [{ progresso: { jornadaExpandida: true } }] }
+    expect((await gravarPreferenciaJornada(q, 'u1', { expandida: true })).progresso.jornadaExpandida).toBe(true)
+    expect(JSON.parse(chamadas[0].params[1])).toEqual({ jornadaExpandida: true })
+    expect(chamadas[0].sql).toContain("|| $2::jsonb")
+    await gravarPreferenciaJornada(q, 'u1', { objetivo: 'contrato' })
+    expect(JSON.parse(chamadas[1].params[1])).toEqual({ objetivo: 'contrato' })
+    await gravarPreferenciaJornada(q, 'u1', { objetivo: null })
+    expect(JSON.parse(chamadas[2].params[1])).toEqual({ objetivo: null })
+    expect(await gravarPreferenciaJornada(q, 'u1', { objetivo: 'nao-existe' })).toBeNull()
+    expect(await gravarPreferenciaJornada(q, 'u1', {})).toBeNull()
+    await refazerJornada(q, 'u1')
+    expect(chamadas.at(-1).sql).toContain("- 'objetivo'")
   })
 })

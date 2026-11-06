@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import ComposicaoCard from '../Contratos/ComposicaoCard'
 import { PiggyBank, Repeat, Pencil, Check, X, History, Link2 } from 'lucide-react'
 import HelpCampo from '../shared/HelpCampo'
+import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
 import VinculoPainel from '../shared/VinculoPainel'
 import SeloVinculo from '../shared/SeloVinculo'
 import DesfazerMesclagem from '../shared/DesfazerMesclagem'
@@ -1519,6 +1520,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
   return (
     <>
+    {!initial?.id && <AvisoPrerequisitos funcao="lancamento" onIr={onClose} />}
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
       {initial?.id && (
         <div className="flex items-center justify-end gap-2 -mb-2">

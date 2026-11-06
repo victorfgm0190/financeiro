@@ -11,7 +11,7 @@ import { useApp } from '../../context/AppContext'
 import { getSessao } from '../../lib/api'
 import { passosVisiveis } from '../../lib/ajudaTelas'
 import { jornadaComStatus } from '../../lib/onboardingSteps'
-import { carregarBoasVindas, marcarTourVisto, definirJornadaLigada, definirTourAberto } from '../../lib/boasVindasApi'
+import { carregarBoasVindas, marcarTourVisto, definirJornadaLigada, definirObjetivoJornada, definirTourAberto } from '../../lib/boasVindasApi'
 import { useContextoAjuda } from './contextoAjuda'
 import { useAcoesPrimeirosPassos } from './AcoesPrimeirosPassos'
 import { abrirPassoJornada } from './jornadaEstado'
@@ -37,12 +37,20 @@ export default function JornadaBoasVindas() {
 
   const nome = String(usuario?.nome || '').trim().split(/\s+/)[0]
   const modulos = passosVisiveis(ctx)
+  const objetivos = jornadaComStatus(ctx, dados).objetivosDisponiveis
 
   const comecar = () => {
     setAberto(false)
     marcarTourVisto()
     const st = jornadaComStatus(ctx, dados)
     if (st.proximo) abrirPassoJornada(st.proximo, { ctx, celular: isMobile, executar })
+  }
+  // "Quero ir direto para…": só os passos que faltam para o objetivo; depois volta à jornada normal.
+  const irParaObjetivo = (o) => {
+    setAberto(false)
+    marcarTourVisto()
+    definirObjetivoJornada(o.id)
+    if (o.passos[0]) abrirPassoJornada(o.passos[0], { ctx, celular: isMobile, executar })
   }
   const pular = () => {
     setAberto(false)
@@ -75,6 +83,14 @@ export default function JornadaBoasVindas() {
               Começar <ArrowRight size={16} aria-hidden="true" />
             </button>
           </div>
+          {objetivos.length > 0 && (
+            <div data-testid="objetivos-boas-vindas" className="pt-3 border-t border-borda">
+              <p className="text-xs text-texto-2 mb-1.5">Quero ir direto para…</p>
+              <div className="flex flex-wrap gap-1.5">
+                {objetivos.map(o => <button key={o.id} type="button" className="btn-secondary text-xs py-1.5" onClick={() => irParaObjetivo(o)}>{o.titulo}</button>)}
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
       {modais}

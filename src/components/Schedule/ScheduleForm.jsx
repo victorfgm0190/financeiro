@@ -2,6 +2,7 @@ import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { Info, X, History, AlertTriangle } from 'lucide-react'
 import HelpCampo from '../shared/HelpCampo'
+import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
 import { HELP_CAMPOS } from '../../lib/helpCampos'
 import { publicarAgendaJa } from '../../lib/agendaFeedApi'
 import { useApp } from '../../context/AppContext'
@@ -870,6 +871,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       {/* Celular (< sm): 1 coluna. Os blocos com max-sm:-order-1 (até o Valor) sobem juntos, na
           ordem do código — assim o Valor vem logo após a Descrição e antes da Conta. No desktop
           a ordem e as 2 colunas são as de sempre. */}
+      {!initial?.id && <AvisoPrerequisitos funcao="agendamento" onIr={onClose} />}
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {initial?.id && (
           <div className="max-sm:-order-1 sm:col-span-2 flex items-center justify-end -mb-2">

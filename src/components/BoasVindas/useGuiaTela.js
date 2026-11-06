@@ -9,7 +9,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ajudaDaTela } from '../../lib/ajudaTelas'
 import { assinarBoasVindas, carregarBoasVindas, estadoBoasVindas, reativarGuia } from '../../lib/boasVindasApi'
 import { useApp } from '../../context/AppContext'
-import { iniciarTour, encerrarTourDaTela, tourAtivo, useTourAtivo } from './tourEstado'
+import { iniciarTour, encerrarTourDaTela, tourAtivo, tourAutomaticoSuprimido, useTourAtivo } from './tourEstado'
+import { telaConcluidaNaJornada } from '../../lib/onboardingSteps'
 
 // Espera a tela desenhar antes de montar os passos do tour.
 export const ESPERA_TOUR_MS = 700
@@ -36,14 +37,16 @@ export function useGuiaTela(tela, { primeiraTela = null } = {}) {
 
   // Qual tour abriria sozinho agora: o "primeiro" (se ainda não visto) ou o desta tela.
   const pronto = !!estado && ligados && !!estado.tourVistoEm && !estado.tourAberto && !tour
+  // Tela já vista pela jornada ("Entendi"): não abre de novo sozinha.
+  const pendente = (t) => !ocultas.includes(t) && !telaConcluidaNaJornada(t, estado?.progresso)
   const alvoAuto = !pronto ? null
-    : primeiraTela && ajudaDaTela(primeiraTela) && !ocultas.includes(primeiraTela) ? primeiraTela
-      : temGuia && !oculto ? tela : null
+    : primeiraTela && ajudaDaTela(primeiraTela) && pendente(primeiraTela) ? primeiraTela
+      : temGuia && pendente(tela) ? tela : null
   const iniciado = useRef(null)
   useEffect(() => {
     if (!alvoAuto || iniciado.current === alvoAuto) return
     const t = setTimeout(() => {
-      if (tourAtivo()) return
+      if (tourAtivo() || tourAutomaticoSuprimido()) return
       iniciado.current = alvoAuto
       iniciarTour(alvoAuto)
     }, ESPERA_TOUR_MS)
