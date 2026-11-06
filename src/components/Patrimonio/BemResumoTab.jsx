@@ -5,6 +5,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import Modal from '../shared/Modal'
 import { getExtratoBens, vincularReceita } from '../../lib/bemApi'
 import { extratoDoBem, resumoDoBem, linhaDoTempo, ROTULO_CLASSE, CLASSE } from '../../lib/extratoBem'
+import BaixasDoBem from './BaixasDoBem'
 import { isoLocal } from '../../lib/hoje'
 import { isInvestAutoOrigin, isPatrimonioOrigin } from '../../lib/origins'
 
@@ -108,7 +109,7 @@ function LigarReceitaModal({ bemId, onClose, onLigar }) {
 
 // Visão Bem: tudo sai do Extrato do bem (src/lib/extratoBem.js), a mesma leitura do relatório de caixa.
 // A aba é montada de novo a cada abertura, então uma baixa ou um estorno já aparecem.
-export default function BemResumoTab({ bemId }) {
+export default function BemResumoTab({ bemId, onMudou }) {
   const { pode, updateTransaction } = useApp()
   const podeEditar = pode?.('patrimonio', 'editar')
   const [dados, setDados] = useState(null)
@@ -189,8 +190,11 @@ export default function BemResumoTab({ bemId }) {
           </h3>
           <Linha label="Pago com recursos próprios" valor={r.proprios} />
           <Linha label="Pago por terceiros" valor={r.terceiros} />
+          {r.foraDoFinup > 0 && <Linha label="Pago fora do Finup" valor={r.foraDoFinup} dica="Conta não controlada, sem lançamento" />}
+          {r.abertura > 0 && <Linha label="Histórico de abertura" valor={r.abertura} dica="Pago antes de usar o Finup, sem lançamento" />}
+          {r.creditos > 0 && <Linha label="Créditos e rendimentos" valor={r.creditos} dica="Não saiu do seu bolso" />}
           <Linha label="Devoluções recebidas" valor={r.devolucoes} />
-          <Linha label="Custo próprio líquido" valor={r.custoProprioLiquido} destaque="font-semibold" dica="Recursos próprios menos devoluções" />
+          <Linha label="Custo próprio líquido" valor={r.custoProprioLiquido} destaque="font-semibold" dica="O que saiu do seu bolso, menos devoluções" />
           <Linha label="Juros pagos" valor={r.jurosPagos} />
           <Linha label="Descontos de antecipação" valor={r.descontos} />
           <Linha label="Custo final até hoje" valor={r.custoFinalRealizado} dica={r.ehConsorcio ? 'O que já foi pago' : 'Valor do bem + juros pagos'} />
@@ -274,6 +278,8 @@ export default function BemResumoTab({ bemId }) {
           )}
       </div>
 
+      <BaixasDoBem baixas={dados.baixas || []} onMudou={async (efeitos) => { await carregar(); await onMudou?.(efeitos) }} />
+
       {linhas.length > 0 && (
         <details className="card">
           <summary className="text-sm font-semibold text-texto-2 cursor-pointer flex items-center gap-2">
@@ -285,7 +291,10 @@ export default function BemResumoTab({ bemId }) {
                 {linhas.map(l => (
                   <tr key={l.id} className="border-b border-borda/60 last:border-0">
                     <td className="py-1.5 pr-3 text-texto-2 whitespace-nowrap">{fmtDate(l.data)}</td>
-                    <td className="py-1.5 px-2 text-texto-2 whitespace-nowrap">{ROTULO_CLASSE[l.classe]}</td>
+                    <td className="py-1.5 px-2 text-texto-2 whitespace-nowrap">
+                      {ROTULO_CLASSE[l.classe]}
+                      {l.selo && l.selo !== ROTULO_CLASSE[l.classe] && <span className="block text-[11px] text-texto-3">{l.selo}</span>}
+                    </td>
                     <td className="py-1.5 px-2 text-texto-3">{l.descricao}</td>
                     <td className="py-1.5 pl-2 text-right text-texto-1 whitespace-nowrap">{fmt(l.valor)}</td>
                   </tr>

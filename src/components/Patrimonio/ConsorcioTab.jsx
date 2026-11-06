@@ -7,6 +7,9 @@ import InputMoeda from '../shared/InputMoeda'
 import DateInput from '../shared/DateInput'
 import { getExtratoBens, registrarEventoConsorcio, estornarEventoConsorcio } from '../../lib/bemApi'
 import { extratoDoBem, resumoDoBem } from '../../lib/extratoBem'
+import { espelharRegistro } from '../../lib/baixaSemMovimento'
+import MarcarPagaModal from './MarcarPagaModal'
+import BaixasDoBem from './BaixasDoBem'
 import {
   agendamentosDoBem, batimento, encerramentoDaCota, fotoDosAgendamentos, parcelaDaCota, parcelasFinupPorCota, planoEncerrar, planoNovaParcela, prazoDaCota, rotuloSituacao, totaisDasCotas,
 } from '../../lib/consorcio'
@@ -84,11 +87,12 @@ function FormEvento({ tipo, contas, onCancel, onConfirmar }) {
 // Aba Consórcio: cotas, batimento com a administradora e eventos com estorno. Os agendamentos e o saldo
 // de conta corrente são do estado do app: o evento grava no servidor e o app espelha aqui.
 export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMudou, avisar }) {
-  const { pode, schedules, accounts, updateSchedule, getNextOccurrences, addTransaction, deleteTransaction, updateAccount } = useApp()
+  const { pode, schedules, accounts, updateSchedule, getNextOccurrences, addTransaction, deleteTransaction, updateAccount, markScheduleRegistered } = useApp()
   const podeEditar = pode?.('patrimonio', 'editar')
   const [extrato, setExtrato] = useState(null)
   const [evento, setEvento] = useState(null)
   const [estornando, setEstornando] = useState(false)
+  const [marcando, setMarcando] = useState(null) // { alvo, rotulo, valorSugerido, dataSugerida, soCredito }
 
   useEffect(() => {
     let vivo = true
@@ -102,8 +106,14 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
     const bem = extrato?.bens?.[0]
     return bem ? resumoDoBem(bem, extratoDoBem(bem, extrato), extrato.parcelas, extrato.cotas) : null
   }, [extrato])
-  const bate = resumo ? batimento(cotas, resumo.pagoSemJuros) : null
-  const pagasPorCota = resumo ? parcelasFinupPorCota(cotas, resumo.pagoSemJuros) : null
+  const baixas = useMemo(() => extrato?.baixas || [], [extrato])
+  const bate = resumo ? batimento(cotas, resumo.pagoSemJuros, baixas) : null
+  const pagasPorCota = resumo ? parcelasFinupPorCota(cotas, resumo.pagoSemJuros, baixas) : null
+  // Próximas parcelas a pagar: as ocorrências pendentes dos agendamentos deste bem.
+  const pendentes = useMemo(() => agendamentosDoBem(schedules, bemId)
+    .flatMap(s => (getNextOccurrences?.(s, 3) || []).map(ocorrencia => ({ schedule: s, ocorrencia })))
+    .sort((a, b) => String(a.ocorrencia).localeCompare(String(b.ocorrencia)))
+    .slice(0, 6), [schedules, bemId, getNextOccurrences])
   const prazos = cotas.map((c, i) => (pagasPorCota ? prazoDaCota(c, pagasPorCota[i]) : null))
   const somaPrazos = cotas.every(c => c.prazo_meses != null) ? cotas.reduce((s, c) => s + Number(c.prazo_meses), 0) : null
   const somaRestantes = pagasPorCota && prazos.every(p => p.restantes != null) ? prazos.reduce((s, p) => s + p.restantes, 0) : null
@@ -131,6 +141,15 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
     if (evento === 'vender') aplicar(planoEncerrar(doBem))
     setEvento(null)
     avisar(`${ROTULO_EVENTO[evento]} registrada.`)
+    onMudou()
+  }
+
+  const aposMarcar = async ({ efeitos }) => {
+    espelharRegistro(efeitos, {
+      addTransaction, markScheduleRegistered, atualizarSaldo: (id, saldo) => updateAccount(id, { balance: saldo }),
+    })
+    setMarcando(null)
+    avisar('Baixa registrada. Nenhum saldo de conta mudou.')
     onMudou()
   }
 
@@ -194,6 +213,7 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
                   <td className="py-1.5 px-2 text-right text-texto-1">{fmt(parcelaDaCota(c))} <span className="text-xs text-texto-3">({Number(c.percentual_parcela)}%)</span></td>
                   <td className="py-1.5 px-2 text-right text-texto-1">
                     {p ? `${p.pagas}/${p.prazo ?? '—'}` : '—'}
+                    {Number(c.abertura_parcelas) > 0 && <span className="block text-[11px] text-texto-3">{c.abertura_parcelas} de abertura</span>}
                     {p?.diverge && <span className="block text-[11px] text-aviso">administradora: {p.informadas}/{p.prazo ?? '—'}</span>}
                   </td>
                   <td className="py-1.5 px-2 text-right text-texto-1">
@@ -240,6 +260,20 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
         )}
       </div>
 
+      {resumo && (
+        <div className="card">
+          <h3 className="text-sm font-semibold text-texto-2 mb-3">De onde veio o que foi pago</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+            {[['Recursos próprios', resumo.proprios], ['Por terceiro', resumo.terceiros], ['Fora do Finup', resumo.foraDoFinup], ['Créditos e rendimentos', resumo.creditos], ['Histórico de abertura', resumo.abertura]].map(([rotulo, valor]) => (
+              <div key={rotulo}>
+                <p className="text-texto-3">{rotulo}</p>
+                <p className="text-sm text-texto-1">{fmt(valor)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <h3 className="text-sm font-semibold text-texto-2 mb-3">Batimento com a administradora</h3>
         {!bate
@@ -258,6 +292,32 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
             </div>
           )}
       </div>
+
+      {podeEditar && !vendida && (
+        <div className="card">
+          <h3 className="text-sm font-semibold text-texto-2 mb-3">Parcelas pendentes</h3>
+          {pendentes.length === 0 && <p className="text-xs text-texto-3 mb-2">Nenhum agendamento pendente neste consórcio.</p>}
+          <div className="space-y-2">
+            {pendentes.map(({ schedule: s, ocorrencia }) => (
+              <div key={`${s.id}:${ocorrencia}`} className="flex items-center justify-between gap-3 border-b border-borda/60 last:border-0 pb-2">
+                <p className="text-sm text-texto-1 min-w-0 truncate">{fmtDate(ocorrencia)} · {fmt(s.amount)} <span className="text-xs text-texto-3">{s.description}</span></p>
+                <button
+                  type="button" className="btn-secondary text-xs py-1 px-2 shrink-0"
+                  onClick={() => setMarcando({ alvo: { scheduleId: s.id, ocorrencia }, rotulo: `${s.description || 'Parcela'} de ${fmtDate(ocorrencia)}`, valorSugerido: s.amount, dataSugerida: ocorrencia })}
+                >
+                  Marcar como paga
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 mt-3">
+            <button type="button" className="btn-secondary text-xs py-1 px-2" onClick={() => setMarcando({ alvo: {}, rotulo: 'Parcela sem agendamento' })}>Marcar outra parcela como paga</button>
+            <button type="button" className="btn-secondary text-xs py-1 px-2" onClick={() => setMarcando({ alvo: {}, rotulo: 'Crédito que abate valor, sem quitar uma parcela', soCredito: true })}>Registrar crédito ou rendimento</button>
+          </div>
+        </div>
+      )}
+
+      <BaixasDoBem baixas={baixas} onMudou={onMudou} />
 
       {podeEditar && !vendida && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
@@ -294,6 +354,12 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
             </div>
           )}
       </div>
+
+      {marcando && (
+        <Modal open onClose={() => setMarcando(null)} title={marcando.soCredito ? 'Registrar crédito ou rendimento' : 'Marcar parcela como paga'}>
+          <MarcarPagaModal bemId={bemId} cotas={cotas} {...marcando} onCancel={() => setMarcando(null)} onSuccess={aposMarcar} />
+        </Modal>
+      )}
 
       {evento && (
         <Modal open onClose={() => setEvento(null)} title={ROTULO_EVENTO[evento]}>

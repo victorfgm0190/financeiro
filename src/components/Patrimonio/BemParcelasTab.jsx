@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, CheckCircle2, Clock, AlertTriangle, Loader2, Settings2, Building2, Split } from 'lucide-react'
 import { fmt } from '../shared/utils'
 import { fmtData, statusParcela, ESTILO_STATUS, textoFavorecido } from './bemUtils'
+import { SELO_BAIXA } from '../../lib/extratoBem'
 
 const ICONE = {
   paga: CheckCircle2,
@@ -9,7 +10,7 @@ const ICONE = {
   aberta: Clock,
 }
 
-function ParcelaCard({ parcela, numParcelas, onPagar }) {
+function ParcelaCard({ parcela, numParcelas, onPagar, onMarcarPaga }) {
   const status = statusParcela(parcela)
   const estilo = ESTILO_STATUS[status]
   const Icone = ICONE[status]
@@ -32,6 +33,7 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
       </div>
 
       <p className="text-xs text-texto-3 mt-1">Vence: {fmtData(parcela.data_vencimento)}</p>
+      {parcela.baixa_tipo && <p className="text-xs text-aviso mt-0.5">{SELO_BAIXA[parcela.baixa_tipo]}, sem lançamento em conta</p>}
 
       <div className="grid grid-cols-4 gap-2 mt-2.5 text-xs">
         <div>
@@ -86,20 +88,26 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
         </div>
       )}
 
-      {podePagar && onPagar && (
-        <button
-          className="btn-primary w-full mt-3 text-xs py-1.5"
-          onClick={() => onPagar(parcela)}
-        >
-          Pagar
-        </button>
+      {podePagar && (onPagar || onMarcarPaga) && (
+        <div className="flex gap-2 mt-3">
+          {onPagar && (
+            <button className="btn-primary flex-1 text-xs py-1.5" onClick={() => onPagar(parcela)}>
+              Pagar
+            </button>
+          )}
+          {onMarcarPaga && parcela.status === 'open' && (
+            <button className="btn-secondary flex-1 text-xs py-1.5" onClick={() => onMarcarPaga(parcela)}>
+              Marcar como paga
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
 }
 
 export default function BemParcelasTab({
-  financiamento, parcelas, page, totalPages, totalParcelas, loading, onPage, onPagar,
+  financiamento, parcelas, page, totalPages, totalParcelas, loading, onPage, onPagar, onMarcarPaga, onAbertura,
   onEditarFavorecido, onSepararJuros, separandoJuros = false, temCategoriaTaxa = true,
 }) {
   if (!financiamento) {
@@ -136,7 +144,12 @@ export default function BemParcelasTab({
             <p className="text-xs text-texto-3 mt-0.5 truncate">Conta vinculada: {contaVinculada}</p>
           )}
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex flex-wrap gap-2 shrink-0">
+          {onAbertura && (
+          <button className="btn-secondary text-xs py-1.5 px-3" onClick={onAbertura}>
+            Histórico de abertura
+          </button>
+          )}
           {onEditarFavorecido && (
           <button
             className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
@@ -201,7 +214,7 @@ export default function BemParcelasTab({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {parcelas.map(p => (
-            <ParcelaCard key={p.id} parcela={p} numParcelas={total} onPagar={onPagar} />
+            <ParcelaCard key={p.id} parcela={p} numParcelas={total} onPagar={onPagar} onMarcarPaga={onMarcarPaga} />
           ))}
         </div>
       )}

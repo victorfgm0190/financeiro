@@ -8,6 +8,7 @@ const COTA_VAZIA = {
   numero: '', data_adesao: '', valor_carta: '', prazo_meses: '', percentual_parcela: '100', valor_parcela_cheia: '',
   saldo_devedor_informado: '', saldo_devedor_data: '', parcelas_pagas_informadas: '', valor_pago_informado: '',
   previsao_encerramento: '', data_ultima_parcela: '',
+  abertura_parcelas: '', abertura_valor: '', abertura_data: '',
 }
 const paraForm = (c) => Object.fromEntries(Object.keys(COTA_VAZIA).map(k => [k, c?.[k] == null ? COTA_VAZIA[k] : String(c[k])]))
 
@@ -140,6 +141,18 @@ export default function ConsorcioModal({ bemId, consorcio, favorecidos = [], con
             <div>
               <label className="label">Valores pagos informados (R$)</label>
               <InputMoeda value={c.valor_pago_informado} onChange={campoCota(i, 'valor_pago_informado')} placeholder="Total pago nesta cota, segundo o extrato" />
+            </div>
+            <div>
+              <label className="label" htmlFor={`abertura-parcelas-${i}`}>Parcelas já pagas antes do Finup</label>
+              <input id={`abertura-parcelas-${i}`} className="input" type="number" min="1" step="1" value={c.abertura_parcelas} onChange={campoCota(i, 'abertura_parcelas')} placeholder="Quantidade paga antes de usar o Finup" />
+            </div>
+            <div>
+              <label className="label" htmlFor={`abertura-valor-${i}`}>Valor total pago até então (R$)</label>
+              <InputMoeda id={`abertura-valor-${i}`} value={c.abertura_valor} onChange={campoCota(i, 'abertura_valor')} placeholder="Soma no bem, sem lançamento em conta" />
+            </div>
+            <div>
+              <label className="label" htmlFor={`abertura-data-${i}`}>Data de referência</label>
+              <DateInput id={`abertura-data-${i}`} className="input" value={c.abertura_data} onChange={campoCota(i, 'abertura_data')} />
             </div>
           </div>
         </div>

@@ -21,6 +21,9 @@ export default function FinanciamentoModal({
     data_primeira_parcela: hojeIso(),
     // Conta central do perfil do bem (BemDetail); sem ela, vazio — o usuário escolhe à mão.
     conta_origem_id: contaCentralId || '',
+    abertura_parcelas: '',
+    abertura_valor: '',
+    abertura_data: '',
   })
   const [loading, setLoading] = useState(false)
   const [tocouFavorecido, setTocouFavorecido] = useState(false)
@@ -78,6 +81,9 @@ export default function FinanciamentoModal({
         banco_favorecido_id: form.banco_favorecido_id || null,
         data_primeira_parcela: form.data_primeira_parcela,
         conta_origem_id: form.conta_origem_id || null,
+        ...(form.abertura_parcelas || form.abertura_valor || form.abertura_data
+          ? { abertura: { parcelas: Number(form.abertura_parcelas), valor: Number(form.abertura_valor), data: form.abertura_data } }
+          : {}),
       })
       onSuccess(resposta)
     } catch (err) {
@@ -176,6 +182,21 @@ export default function FinanciamentoModal({
         </div>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label className="label" htmlFor="fin-abertura-parcelas">Parcelas já pagas antes do Finup</label>
+          <input id="fin-abertura-parcelas" className="input" type="number" step="1" min="1" value={form.abertura_parcelas} onChange={e => set('abertura_parcelas', e.target.value)} placeholder="Quantidade paga antes" />
+        </div>
+        <div>
+          <label className="label" htmlFor="fin-abertura-valor">Valor total pago até então (R$)</label>
+          <InputMoeda id="fin-abertura-valor" value={form.abertura_valor} onChange={e => set('abertura_valor', e.target.value)} placeholder="Sem lançamento em conta" />
+        </div>
+        <div>
+          <label className="label" htmlFor="fin-abertura-data">Data de referência</label>
+          <DateInput id="fin-abertura-data" className="input" value={form.abertura_data} onChange={e => set('abertura_data', e.target.value)} />
+        </div>
+      </div>
+
       {preview && (
         <div className={`p-3 rounded-lg text-xs space-y-1 border ${preview.invalido ? 'bg-perigo-bg border-perigo/40' : 'bg-surface-2/60 border-borda'}`}>
           <p className="text-texto-2 font-medium mb-1.5">Prévia</p>
@@ -192,7 +213,7 @@ export default function FinanciamentoModal({
       )}
 
       <p className="text-xs text-texto-3">
-        Serão criadas {form.num_parcelas || 0} parcelas e {form.num_parcelas || 0} agendamentos de
+        Serão criadas {form.num_parcelas || 0} parcelas e {Math.max(0, (Number(form.num_parcelas) || 0) - (Number(form.abertura_parcelas) || 0))} agendamentos de
         transferência para a conta de dívida, um por vencimento — cada um já rateado em Principal
         (categoria de prestação) e Juros (categoria de taxa de financiamento).
       </p>

@@ -557,7 +557,7 @@ export async function registrarMovimentacao(q, {
 
 // Dados brutos do Extrato do bem (src/lib/extratoBem.js), para a Visão Bem, a Visão Caixa e a venda.
 export async function dadosDoExtrato(q, ids) {
-  if (!ids.length) return { lancamentos: [], trocas: [], parcelas: [] }
+  if (!ids.length) return { lancamentos: [], trocas: [], parcelas: [], baixas: [] }
   const lancamentos = await q(
     `SELECT l.id, l.type, l.date, l.amount, l.account_id, l.to_account_id, l.bem_id, l.bem_papel, l.category_id,
             l.description, l.payee, l.origin, l.reserva_auto, o.type AS origem_tipo, d.type AS destino_tipo
@@ -581,7 +581,16 @@ export async function dadosDoExtrato(q, ids) {
     `${SELECT_PARCELAS} WHERE financing_id = ANY($1) ORDER BY numero_parcela`,
     [financiamentos.map(f => f.id)],
   )
+  const baixas = await q(
+    `SELECT id, bem_id, tipo, data, valor, quantidade_parcelas, cota_numero, parcela_id, schedule_id, ocorrencia,
+            favorecido, categoria_id, lancamento_id, descricao
+       FROM bem_baixas
+      WHERE bem_id = ANY($1) AND estornado_em IS NULL
+      ORDER BY data, created_at`,
+    [ids],
+  )
   return {
+    baixas: baixas.map(b => ({ ...b, valor: num(b.valor), quantidade_parcelas: num(b.quantidade_parcelas) })),
     lancamentos: lancamentos.map(l => ({ ...l, amount: num(l.amount) })),
     trocas: trocas.map(t => ({ ...t, valor: num(t.valor) })),
     parcelas: parcelas.map(p => ({ ...serializarParcela(p), bem_id: bemDoFinanciamento.get(p.financing_id) })),
@@ -795,7 +804,7 @@ export const SELECT_PARCELAS = `
   SELECT id, financing_id, numero_parcela,
          principal_provisioned, juros_provisioned, total_provisioned,
          principal_pago, juros_pago, total_pago, desvio_juros, status, schedule_id,
-         saldo_restante, desconto_antecipacao,
+         saldo_restante, desconto_antecipacao, baixa_tipo,
          to_char(data_vencimento::date, 'YYYY-MM-DD') AS data_vencimento,
          to_char(data_pagamento::date,  'YYYY-MM-DD') AS data_pagamento
     FROM financing_installments`
@@ -822,6 +831,8 @@ export function serializarParcela(p) {
     data_vencimento: p.data_vencimento,
     data_pagamento: p.data_pagamento,
     schedule_id: p.schedule_id ?? null,
+    // Quitada sem lançamento: 'abertura' | 'terceiro' | 'conta_externa' | 'credito'.
+    baixa_tipo: p.baixa_tipo ?? null,
   }
 }
 

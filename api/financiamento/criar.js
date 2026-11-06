@@ -5,6 +5,7 @@ import {
   montarProvisao, criarAgendamentosParcelas, criarRateiosParcela, ACCOUNT_TYPE_DIVIDA,
   explicarErro, ensureBemSchema,
 } from '../_bem.js'
+import { gravarAberturaDoFinanciamento } from '../_bemBaixas.js'
 import { comAmbiente } from '../_ambiente.js'
 
 // POST /api/financiamento/criar — provisiona o financiamento inteiro de uma vez:
@@ -201,7 +202,17 @@ async function handler(req, res) {
         })
       }
 
-      return { parcelas, scheduleIds, contaDivida }
+      // Histórico de abertura: as primeiras parcelas já nascem pagas, sem lançamento e sem agendamento.
+      let saldoDivida = contaDivida.balance
+      let semAgendamento = 0
+      if (body.abertura) {
+        const { efeitos } = await gravarAberturaDoFinanciamento(q, {
+          id: financingId, bem_id, num_parcelas: nParcelas, conta_divida_id: contaDividaId,
+        }, body.abertura)
+        saldoDivida = efeitos.divida.saldo
+        semAgendamento = efeitos.agendamentos_removidos.length
+      }
+      return { parcelas, scheduleIds, contaDivida: { ...contaDivida, balance: saldoDivida }, semAgendamento }
     })
 
     return res.json({
@@ -225,7 +236,7 @@ async function handler(req, res) {
         conta_origem_id: contaOrigem,
         data_primeira_parcela: String(data_primeira_parcela).slice(0, 10),
         parcelas_criadas: criado.parcelas.length,
-        agendamentos_criados: criado.scheduleIds.length,
+        agendamentos_criados: criado.scheduleIds.length - criado.semAgendamento,
       },
       // A conta de dívida sempre foi criada (é o primeiro INSERT da transação), mas só o id
       // dela saía daqui — e um id sozinho não dá para o frontend pôr a conta no estado React.

@@ -29,12 +29,20 @@ export function totaisDasCotas(cotas = []) {
   }
 }
 
-// Batimento com a administradora. Parcelas no Finup = pago acumulado ÷ parcela média por cota: um
-// lançamento pode pagar várias parcelas, então contar lançamentos erraria.
-export function batimento(cotas, pagoAcumulado) {
+// Batimento com a administradora. Parcelas no Finup = pago por lançamentos ÷ parcela média por cota (um
+// lançamento pode pagar várias parcelas, então contar lançamentos erraria) + as parcelas das baixas sem
+// movimento em conta, que dizem quantas quitam. Crédito avulso entra no valor, mas não quita parcela.
+function parcelasPeloValor(cotas, pagoAcumulado, baixas) {
   const t = totaisDasCotas(cotas)
   const parcelaPorCota = cotas.length ? t.parcelaMensal / cotas.length : 0
-  const parcelasFinup = parcelaPorCota > 0 ? Math.round(pagoAcumulado / parcelaPorCota) : 0
+  const valorBaixas = baixas.reduce((s, b) => s + (Number(b.valor) || 0), 0)
+  return parcelaPorCota > 0 ? Math.round((pagoAcumulado - valorBaixas) / parcelaPorCota) : 0
+}
+const parcelasDasBaixas = (baixas) => baixas.reduce((s, b) => s + (Number(b.quantidade_parcelas) || 0), 0)
+
+export function batimento(cotas, pagoAcumulado, baixas = []) {
+  const t = totaisDasCotas(cotas)
+  const parcelasFinup = parcelasPeloValor(cotas, pagoAcumulado, baixas) + parcelasDasBaixas(baixas)
   const difParcelas = t.parcelasInformadas == null ? null : parcelasFinup - t.parcelasInformadas
   const difValor = t.valorPagoInformado == null ? null : r2(pagoAcumulado - t.valorPagoInformado)
   return {
@@ -49,12 +57,13 @@ export function batimento(cotas, pagoAcumulado) {
 }
 
 // ─── Prazo e encerramento por cota ───────────────────────────────────────────────────────────────
-// O pagamento não é ligado a uma cota, então o total do batimento é dividido entre elas: na proporção
-// das parcelas informadas pela administradora ou, sem esse dado, por igual. A soma fecha com o batimento
-// (maior resto, com empate para a primeira cota).
-export function parcelasFinupPorCota(cotas = [], pagoAcumulado = 0) {
-  const total = batimento(cotas, pagoAcumulado).parcelasFinup
-  const informadas = cotas.map(c => Number(c.parcelas_pagas_informadas) || 0)
+// A baixa com cota informada é da cota. O pagamento não é ligado a uma cota, então o resto do batimento é
+// dividido entre elas: na proporção das parcelas informadas pela administradora que ainda faltam na cota
+// ou, sem esse dado, por igual. A soma fecha com o batimento (maior resto, com empate para a primeira cota).
+export function parcelasFinupPorCota(cotas = [], pagoAcumulado = 0, baixas = []) {
+  const proprias = cotas.map(c => parcelasDasBaixas(baixas.filter(b => b.cota_numero === c.numero)))
+  const total = batimento(cotas, pagoAcumulado, baixas).parcelasFinup - proprias.reduce((s, n) => s + n, 0)
+  const informadas = cotas.map((c, i) => Math.max(0, (Number(c.parcelas_pagas_informadas) || 0) - proprias[i]))
   const temInformadas = cotas.every(c => c.parcelas_pagas_informadas != null) && informadas.some(n => n > 0)
   const pesos = temInformadas ? informadas : cotas.map(() => 1)
   const somaPesos = pesos.reduce((s, p) => s + p, 0)
@@ -63,7 +72,7 @@ export function parcelasFinupPorCota(cotas = [], pagoAcumulado = 0) {
   let sobra = total - parcelas.reduce((s, p) => s + p, 0)
   const porResto = exatas.map((v, i) => ({ i, resto: v - Math.floor(v) })).sort((a, b) => b.resto - a.resto || a.i - b.i)
   for (let n = 0; sobra > 0 && n < porResto.length; n++, sobra--) parcelas[porResto[n].i] += 1
-  return parcelas
+  return parcelas.map((p, i) => p + proprias[i])
 }
 
 // Pagas, prazo e restantes de uma cota. Restantes usa as pagas no Finup; informadas fica para comparar.
@@ -91,12 +100,16 @@ export function somarMeses(iso, meses) {
   return `${ano}-${String(mes + 1).padStart(2, '0')}-${String(Math.min(d, ultimoDia)).padStart(2, '0')}`
 }
 
-// Data informada vale. Sem ela: adesão + prazo, marcada como estimada. Sem base: null.
+// Data informada vale. Sem ela: adesão + prazo, marcada como estimada. Sem adesão: a data de referência
+// do histórico de abertura + o que restava do prazo. Sem base: null.
 export function encerramentoDaCota(cota) {
   const informada = cota.previsao_encerramento || cota.data_ultima_parcela
   if (informada) return { data: informada, estimado: false }
   if (cota.data_adesao && Number(cota.prazo_meses) > 0) {
     return { data: somarMeses(cota.data_adesao, Number(cota.prazo_meses)), estimado: true }
+  }
+  if (cota.abertura_data && Number(cota.prazo_meses) > 0) {
+    return { data: somarMeses(cota.abertura_data, Number(cota.prazo_meses) - (Number(cota.abertura_parcelas) || 0)), estimado: true }
   }
   return { data: null, estimado: false }
 }

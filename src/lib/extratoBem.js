@@ -8,7 +8,8 @@
 //   receita lançada na conta do bem                       → pago por terceiro (sem saída de caixa)
 //   receita em outra conta ligada ao bem; saída do bem    → devolução
 //   rendimento manual; despesa lançada na conta do bem    → ajuste de avaliação (não é pagamento)
-// Fora dos lançamentos: bem dado na troca (sem caixa) e desconto de antecipação (informativo).
+// Fora dos lançamentos: bem dado na troca (sem caixa), desconto de antecipação (informativo) e as baixas
+// sem movimento em conta (dados.baixas): histórico de abertura, terceiro, conta não controlada e crédito.
 // Ficam de fora os espelhos (reserva_auto) e o ganho/perda da troca (patrimonio_auto): não são pagamento.
 
 export const CLASSE = {
@@ -20,6 +21,24 @@ export const CLASSE = {
   TROCA: 'troca',
   AJUSTE: 'ajuste',
   VENDA: 'venda',
+  FORA: 'fora',
+  CREDITO: 'credito',
+  ABERTURA: 'abertura',
+}
+
+// Baixa sem movimento em conta (bem_baixas.tipo) → classe do extrato.
+const CLASSE_DA_BAIXA = { terceiro: CLASSE.TERCEIRO, conta_externa: CLASSE.FORA, credito: CLASSE.CREDITO, abertura: CLASSE.ABERTURA }
+
+export const MOTIVOS_BAIXA = [
+  { id: 'terceiro', rotulo: 'Paga por terceiro' },
+  { id: 'conta_externa', rotulo: 'Paga por conta não controlada no Finup' },
+  { id: 'credito', rotulo: 'Abatida por crédito ou rendimento' },
+]
+export const SELO_BAIXA = {
+  terceiro: 'Paga por terceiro',
+  conta_externa: 'Paga fora do Finup',
+  credito: 'Crédito ou rendimento',
+  abertura: 'Histórico de abertura',
 }
 
 export const ROTULO_CLASSE = {
@@ -31,6 +50,9 @@ export const ROTULO_CLASSE = {
   devolucao: 'Devolução',
   troca: 'Bem dado na troca',
   ajuste: 'Ajuste de avaliação',
+  fora: 'Pago fora do Finup',
+  credito: 'Crédito ou rendimento',
+  abertura: 'Histórico de abertura',
 }
 
 export const ORIGEM = { PROPRIOS: 'proprios', TERCEIRO: 'terceiro' }
@@ -104,8 +126,26 @@ export function extratoDoBem(bem, dados) {
       valor: r2(p.desconto_antecipacao), descricao: `Parcela ${p.numero}`,
     })
   }
+  for (const b of dados.baixas || []) {
+    if (b.bem_id !== bem.id) continue
+    // Com receita de benefício, a linha já veio do lançamento: só recebe o selo. Conta uma vez só.
+    const doLancamento = b.lancamento_id ? linhas.find(l => l.id === b.lancamento_id) : null
+    if (doLancamento) {
+      doLancamento.baixaId = b.id
+      doLancamento.selo = SELO_BAIXA[b.tipo]
+      continue
+    }
+    linhas.push({
+      id: `baixa:${b.id}`, baixaId: b.id, data: dia(b.data), classe: CLASSE_DA_BAIXA[b.tipo],
+      origem: b.tipo === 'terceiro' ? ORIGEM.TERCEIRO : null, caixa: false, valor: r2(b.valor),
+      descricao: b.descricao || b.favorecido || '', selo: SELO_BAIXA[b.tipo],
+    })
+  }
   return linhas.sort((a, b) => a.data.localeCompare(b.data))
 }
+
+// O que soma no pago acumulado do bem.
+const PAGAMENTOS = [CLASSE.PRINCIPAL, CLASSE.JUROS, CLASSE.TERCEIRO, CLASSE.TROCA, CLASSE.FORA, CLASSE.CREDITO, CLASSE.ABERTURA]
 
 const somar = (linhas, ...classes) => r2(linhas.filter(l => classes.includes(l.classe)).reduce((s, l) => s + l.valor, 0))
 
@@ -128,11 +168,11 @@ export function resumoDoBem(bem, linhas, parcelas = [], cotas = []) {
   const valorBem = ehConsorcio ? carta : r2(bem.valor_nota_fiscal)
 
   // Bem sem nenhum pagamento lançado: vale o valor pago informado à mão, com aviso na tela.
-  const semPagamentos = !linhas.some(l => [CLASSE.PRINCIPAL, CLASSE.JUROS, CLASSE.TERCEIRO, CLASSE.TROCA].includes(l.classe))
+  const semPagamentos = !linhas.some(l => PAGAMENTOS.includes(l.classe))
   if (semPagamentos && bem.valor_pago_manual != null) {
     const informado = r2(bem.valor_pago_manual)
     return {
-      valorBem, pagoSemJuros: informado, pagoComJuros: informado, terceiros: 0, proprios: informado,
+      valorBem, pagoSemJuros: informado, pagoComJuros: informado, terceiros: 0, proprios: informado, foraDoFinup: 0, creditos: 0, abertura: 0,
       devolucoes: 0, custoProprioLiquido: informado, jurosPagos: 0, descontos: 0, faltaPagar: 0,
       custoFinalRealizado: valorBem, custoFinalProjetado: valorBem, valorInformado: true, ehConsorcio,
     }
@@ -144,9 +184,12 @@ export function resumoDoBem(bem, linhas, parcelas = [], cotas = []) {
   const troca = somar(linhas, CLASSE.TROCA)
   const devolucoes = somar(linhas, CLASSE.DEVOLUCAO)
   const descontos = somar(linhas, CLASSE.DESCONTO)
-  const pagoSemJuros = r2(principal + terceiros + troca)
+  const foraDoFinup = somar(linhas, CLASSE.FORA)
+  const creditos = somar(linhas, CLASSE.CREDITO)
+  const abertura = somar(linhas, CLASSE.ABERTURA)
+  const pagoSemJuros = r2(principal + terceiros + troca + foraDoFinup + creditos + abertura)
   const pagoComJuros = r2(pagoSemJuros + juros)
-  const proprios = r2(pagoComJuros - terceiros)
+  const proprios = r2(principal + troca + juros)
   const jurosPrevistos = r2(parcelas.reduce((s, p) => s + (Number(p.juros_provisioned) || 0), 0))
   return {
     valorBem,
@@ -154,8 +197,12 @@ export function resumoDoBem(bem, linhas, parcelas = [], cotas = []) {
     pagoComJuros,
     terceiros,
     proprios,
+    foraDoFinup,
+    creditos,
+    abertura,
     devolucoes,
-    custoProprioLiquido: r2(proprios - devolucoes),
+    // O que saiu do bolso: o histórico de abertura e o pago fora do Finup também. Terceiro e crédito não.
+    custoProprioLiquido: r2(proprios + foraDoFinup + abertura - devolucoes),
     jurosPagos: juros,
     descontos,
     faltaPagar: ehConsorcio ? saldoInformado : faltaPagar(parcelas),
@@ -171,7 +218,7 @@ export function resumoDoBem(bem, linhas, parcelas = [], cotas = []) {
 // Por mês, desde o primeiro pagamento e sem buracos: quanto foi pago e quanto saiu do próprio bolso
 // (sem terceiros, descontando devoluções). Base do simulador de saída do consórcio.
 export function historicoDePagamentos(linhas) {
-  const pagos = linhas.filter(l => [CLASSE.PRINCIPAL, CLASSE.JUROS, CLASSE.TERCEIRO, CLASSE.TROCA].includes(l.classe))
+  const pagos = linhas.filter(l => PAGAMENTOS.includes(l.classe))
   if (pagos.length === 0) return []
   const relevantes = linhas.filter(l => pagos.includes(l) || l.classe === CLASSE.DEVOLUCAO)
   const primeiro = pagos[0].data.slice(0, 7)
@@ -180,7 +227,7 @@ export function historicoDePagamentos(linhas) {
   for (let mes = primeiro; mes <= ultimo; mes = proximoMes(mes)) {
     const doMes = relevantes.filter(l => l.data.slice(0, 7) === mes)
     const total = r2(doMes.filter(l => l.classe !== CLASSE.DEVOLUCAO).reduce((s, l) => s + l.valor, 0))
-    saida.push({ mes, total, proprio: r2(total - somar(doMes, CLASSE.TERCEIRO) - somar(doMes, CLASSE.DEVOLUCAO)) })
+    saida.push({ mes, total, proprio: r2(total - somar(doMes, CLASSE.TERCEIRO, CLASSE.CREDITO) - somar(doMes, CLASSE.DEVOLUCAO)) })
   }
   return saida
 }
@@ -192,8 +239,7 @@ const proximoMes = (mes) => {
 
 // Tabela mês a mês, sem buracos: do primeiro lançamento até o último (ou `ate`, se for depois).
 export function linhaDoTempo(linhas, parcelas = [], { ate = null, faltaFixa = null } = {}) {
-  const pagamentos = [CLASSE.PRINCIPAL, CLASSE.JUROS, CLASSE.TERCEIRO, CLASSE.TROCA]
-  const relevantes = linhas.filter(l => pagamentos.includes(l.classe))
+  const relevantes = linhas.filter(l => PAGAMENTOS.includes(l.classe))
   if (relevantes.length === 0) return []
   const totalContratado = parcelas.reduce((s, p) => s + (Number(p.total_provisioned) || 0), 0)
   const primeiro = relevantes[0].data.slice(0, 7)

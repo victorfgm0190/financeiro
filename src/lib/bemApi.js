@@ -77,6 +77,11 @@ export const salvarConsorcio = (payload) => request('/api/consorcio', { method: 
 export const registrarEventoConsorcio = (payload) => post('/api/consorcio-eventos', { acao: 'registrar', ...payload })
 export const estornarEventoConsorcio = (eventoId) => post('/api/consorcio-eventos', { acao: 'estornar', evento_id: eventoId })
 
+// Parcela paga sem movimento em conta do Finup. Os efeitos voltam para o app espelhar (lib/baixaSemMovimento).
+export const registrarBaixaBem = (payload) => post('/api/bem/baixas', { acao: 'registrar', ...payload })
+export const registrarAberturaFinanciamento = (financingId, abertura) => post('/api/bem/baixas', { acao: 'abertura', financing_id: financingId, ...abertura })
+export const estornarBaixaBem = (baixaId) => post('/api/bem/baixas', { acao: 'estornar', baixa_id: baixaId })
+
 export const criarFinanciamento = (payload) => post('/api/financiamento/criar', payload)
 
 export const getFinanciamento = (financiamentoId) =>

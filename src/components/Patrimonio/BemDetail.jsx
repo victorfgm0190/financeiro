@@ -7,8 +7,12 @@ import Toast from '../shared/Toast'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import {
   getBem, getFinanciamento, getParcelas, getMovimentacoes, estornarEntrada, atualizarValoresBem,
-  popularRateiosParcelas, getConsorcio,
+  popularRateiosParcelas, getConsorcio, registrarAberturaFinanciamento,
 } from '../../lib/bemApi'
+import { espelharRegistro } from '../../lib/baixaSemMovimento'
+import MarcarPagaModal from './MarcarPagaModal'
+import InputMoeda from '../shared/InputMoeda'
+import DateInput from '../shared/DateInput'
 import ConsorcioTab from './ConsorcioTab'
 import ConsorcioModal from './ConsorcioModal'
 import SimulacaoTab from './SimulacaoTab'
@@ -33,6 +37,48 @@ const ABAS = [
 ]
 
 const POR_PAGINA = 20
+
+// Histórico de abertura de um financiamento que já existe: as primeiras parcelas viram pagas, sem lançamento.
+function AberturaFinanciamentoForm({ financiamento, onCancel, onSuccess }) {
+  const [form, setForm] = useState({ parcelas: '', valor: '', data: '' })
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+  const enviar = async (e) => {
+    e.preventDefault()
+    setSalvando(true)
+    setErro('')
+    try {
+      await onSuccess(await registrarAberturaFinanciamento(financiamento.id, { parcelas: Number(form.parcelas), valor: Number(form.valor), data: form.data }))
+    } catch (err) {
+      setErro(err.message)
+      setSalvando(false)
+    }
+  }
+  return (
+    <form onSubmit={enviar} className="space-y-3">
+      <p className="text-xs text-texto-3">
+        As primeiras parcelas ficam pagas e somam no bem. Não cria lançamento, não entra no Demonstrativo e os agendamentos delas são removidos.
+      </p>
+      <div>
+        <label className="label" htmlFor="abertura-parcelas">Parcelas já pagas antes do Finup *</label>
+        <input id="abertura-parcelas" className="input" type="number" min="1" step="1" required value={form.parcelas} onChange={e => setForm(f => ({ ...f, parcelas: e.target.value }))} placeholder="Quantidade paga antes de usar o Finup" />
+      </div>
+      <div>
+        <label className="label" htmlFor="abertura-valor">Valor total pago até então (R$) *</label>
+        <InputMoeda id="abertura-valor" required value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} placeholder="Soma das parcelas já pagas" />
+      </div>
+      <div>
+        <label className="label" htmlFor="abertura-data">Data de referência *</label>
+        <DateInput id="abertura-data" className="input" required value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} />
+      </div>
+      {erro && <p className="text-sm text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}
+      <div className="flex gap-3">
+        <button type="button" className="btn-secondary flex-1" onClick={onCancel} disabled={salvando}>Cancelar</button>
+        <button type="submit" className="btn-primary flex-1" disabled={salvando}>{salvando ? 'Salvando…' : 'Confirmar'}</button>
+      </div>
+    </form>
+  )
+}
 
 // `parcelaInicial` (nº): abre direto na aba Parcelas, na página dessa parcela (consulta do
 // financiamento › "Abrir a parcela").
@@ -418,6 +464,23 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
     await carregar()
     await carregarConsorcio()
   }
+  // Baixa sem movimento em conta: espelha agendamento, receita e saldos, e recarrega o que depende dela.
+  const recarregarAposBaixa = async () => {
+    setMovimentacoes(null)
+    await carregar()
+    await carregarConsorcio()
+    if (financiamento?.id) await carregarParcelas(financiamento.id, paginaParcelas)
+  }
+  const aposBaixa = async ({ efeitos }) => {
+    espelharRegistro(efeitos, { addTransaction, markScheduleRegistered, deleteSchedule, atualizarSaldo: sincronizarSaldo })
+    setModal(null)
+    avisar('Baixa registrada. Nenhum saldo de conta mudou.')
+    await recarregarAposBaixa()
+  }
+  const aposEstornoBaixa = async (efeitos) => {
+    if (efeitos?.agendamentos_criados) avisar(`${efeitos.agendamentos_criados} agendamento(s) recriado(s). Recarregue o app para vê-los nas outras telas.`)
+    await recarregarAposBaixa()
+  }
   // Evento do consórcio: pode ter mudado saldo, tipo e valor do bem.
   const aposEventoConsorcio = async () => {
     setMovimentacoes(null)
@@ -540,7 +603,7 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
               />
             )}
 
-            {abaAtiva === 'resumo' && <BemResumoTab bemId={conta.id} />}
+            {abaAtiva === 'resumo' && <BemResumoTab bemId={conta.id} onMudou={aposEstornoBaixa} />}
 
             {abaAtiva === 'consorcio' && consorcio && (
               <ConsorcioTab
@@ -565,6 +628,8 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
                 loading={loadingParcelas}
                 onPage={setPaginaParcelas}
                 onPagar={podeEditarPat ? (parcela) => setModal({ parcela }) : null}
+                onMarcarPaga={podeEditarPat ? (parcela) => setModal({ marcar: parcela }) : null}
+                onAbertura={podeEditarPat ? () => setModal('abertura') : null}
                 onEditarFavorecido={podeEditarPat ? () => setModal('favorecido') : null}
                 onSepararJuros={podeEditarPat ? separarJuros : null}
                 separandoJuros={separandoJuros}
@@ -661,6 +726,26 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
             onSuccess={aposPagamento}
             onErro={(m) => avisar(m, 'error')}
           />
+        )}
+      </Modal>
+
+      <Modal open={!!modal?.marcar} onClose={() => setModal(null)} title="Marcar parcela como paga">
+        {modal?.marcar && (
+          <MarcarPagaModal
+            bemId={conta.id}
+            alvo={{ parcelaId: modal.marcar.id }}
+            rotulo={`Parcela ${modal.marcar.numero} de ${financiamento?.num_parcelas || ''}`}
+            valorSugerido={modal.marcar.total_provisioned}
+            dataSugerida={modal.marcar.data_vencimento}
+            onCancel={() => setModal(null)}
+            onSuccess={aposBaixa}
+          />
+        )}
+      </Modal>
+
+      <Modal open={modal === 'abertura'} onClose={() => setModal(null)} title="Histórico de abertura">
+        {modal === 'abertura' && financiamento && (
+          <AberturaFinanciamentoForm financiamento={financiamento} onCancel={() => setModal(null)} onSuccess={aposBaixa} />
         )}
       </Modal>
 

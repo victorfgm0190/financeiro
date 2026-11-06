@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { contextoPerfis, exigirContaPermitida } from './_permissoesApi.js'
 import { pode } from '../src/lib/permissoes.js'
 import { num, fail, explicarErro, isIsoDate } from './_bem.js'
+import { gravarAberturaDaCota, estornarAberturasOrfas } from './_bemBaixas.js'
 import { comAmbiente } from './_ambiente.js'
 
 // GET /api/consorcio            → todos os consórcios permitidos, com as cotas.
@@ -35,7 +36,15 @@ async function listar(req, res) {
   const permitidos = ctx ? linhas.filter(c => ctx.contas.has(c.bem_id)) : linhas
   const ids = permitidos.map(c => c.bem_id)
   const cotas = ids.length ? await query(`SELECT * FROM consorcio_cotas WHERE bem_id = ANY($1) ORDER BY created_at, numero`, [ids]) : []
-  const consorcios = permitidos.map(c => ({ ...c, cotas: cotas.filter(x => x.bem_id === c.bem_id).map(cotaParaApi) }))
+  // Histórico de abertura de cada cota, para o cadastro mostrar e o prazo considerar.
+  const aberturas = ids.length ? await query(
+    `SELECT bem_id, cota_numero, quantidade_parcelas, valor, data FROM bem_baixas WHERE bem_id = ANY($1) AND tipo = 'abertura' AND estornado_em IS NULL`, [ids],
+  ) : []
+  const comAbertura = (c) => {
+    const a = aberturas.find(x => x.bem_id === c.bem_id && x.cota_numero === c.numero)
+    return { ...c, abertura_parcelas: a ? num(a.quantidade_parcelas) : null, abertura_valor: a ? num(a.valor) : null, abertura_data: a?.data ?? null }
+  }
+  const consorcios = permitidos.map(c => ({ ...c, cotas: cotas.filter(x => x.bem_id === c.bem_id).map(cotaParaApi).map(comAbertura) }))
   if (!bemId) return res.json({ success: true, consorcios })
   if (!consorcios[0]) return res.json({ success: true, consorcio: null })
   const eventos = await query(`SELECT * FROM consorcio_eventos WHERE bem_id = $1 ORDER BY created_at DESC`, [bemId])
@@ -53,7 +62,7 @@ async function salvar(req, res) {
   if (cotas.some(c => !textoOuNull(c.numero))) return fail(res, 400, 'Toda cota precisa de número')
   if (cotas.some(c => !(Number(c.valor_carta) > 0))) return fail(res, 400, 'Toda cota precisa do valor da carta de crédito')
   if (cotas.some(c => !(Number(c.percentual_parcela) > 0))) return fail(res, 400, 'Informe o % da parcela paga de cada cota')
-  for (const d of [b.data_adesao, ...cotas.flatMap(c => [c.data_adesao, c.saldo_devedor_data, c.previsao_encerramento, c.data_ultima_parcela])]) {
+  for (const d of [b.data_adesao, ...cotas.flatMap(c => [c.data_adesao, c.saldo_devedor_data, c.previsao_encerramento, c.data_ultima_parcela, c.abertura_data])]) {
     if (textoOuNull(d) && !isIsoDate(d)) return fail(res, 400, 'Data inválida')
   }
 
@@ -91,6 +100,8 @@ async function salvar(req, res) {
           textoOuNull(c.previsao_encerramento), textoOuNull(c.data_ultima_parcela)],
       )
     }
+    await estornarAberturasOrfas(q, bemId, cotas.map(c => textoOuNull(c.numero)))
+    for (const c of cotas) await gravarAberturaDaCota(q, bemId, c)
     await q(`UPDATE contas SET tipo_bem = 'consorcio' WHERE id = $1`, [bemId])
   })
   return res.json({ success: true, bem_id: bemId, tipo_bem: 'consorcio', situacao })
