@@ -2,6 +2,7 @@ import { query, parseBody, withTransaction } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
 import { getRouteId, num, round2, fail, explicarErro, ensureBemSchema } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
+import { exigirLinhasPermitidas } from '../../_permissoesApi.js'
 
 // POST /api/bem/[id]/estornar-entrada — desfaz TODA a entrada à vista registrada no bem
 // (transferências vinculadas + trade-ins), deixando-o pronto para registrar de novo.
@@ -43,6 +44,15 @@ async function handler(req, res) {
       [bemId],
     )
     if (!entradas?.n) return fail(res, 400, 'Este bem não tem entrada registrada para estornar')
+
+    // O estorno apaga o ganho/perda da troca: só quem pode gravar esse lançamento (perfil do bem vendido).
+    const resultados = await query(
+      `SELECT m.lancamento_id FROM bem_movimentacoes m
+         JOIN lancamentos l ON l.id = m.lancamento_id AND l.origin = 'patrimonio_auto'
+        WHERE m.bem_id = $1 AND m.tipo IN ('entrada_venda', 'entrada_trade_in')`,
+      [bemId],
+    )
+    await exigirLinhasPermitidas(query, req.user, 'lancamentos', resultados.map(r => r.lancamento_id))
 
     // Guarda deliberada, não bloqueio: com financiamento aberto a entrada é a base do valor
     // financiado, então desfazê-la sozinha deixa os dois números incoerentes. Quem sabe se isso
@@ -188,6 +198,7 @@ async function handler(req, res) {
       movimentacoes_removidas: resultado.movimentacoesRemovidas,
     })
   } catch (err) {
+    if (err.status) return fail(res, err.status, err.message)
     console.error('[api/bem/[id]/estornar-entrada]', err.message)
     return fail(res, 500, explicarErro(err))
   }

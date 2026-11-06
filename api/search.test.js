@@ -13,7 +13,8 @@ beforeAll(async () => {
   db = new PGlite()
   await db.exec(`
     CREATE TABLE lancamentos (id TEXT PRIMARY KEY, date TEXT, amount NUMERIC, description TEXT, payee TEXT,
-      account_id TEXT, to_account_id TEXT, reserva_auto BOOLEAN);
+      account_id TEXT, to_account_id TEXT, reserva_auto BOOLEAN, origin TEXT, bem_id TEXT);
+    CREATE TABLE bem_movimentacoes (lancamento_id TEXT, bem_origem_id TEXT);
     CREATE TABLE agendamentos (id TEXT PRIMARY KEY, start_date TEXT, amount NUMERIC, description TEXT, payee TEXT, account_id TEXT);
     INSERT INTO lancamentos VALUES
       ('t1', '2026-10-01', -200.00, 'Mercado Extra', 'Extra', 'a', NULL, NULL),

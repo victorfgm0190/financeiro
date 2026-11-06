@@ -43,7 +43,7 @@ async function handler(req, res) {
 
     const rows = await query(
       `SELECT l.id, l.date, l.amount, l.description, l.type,
-              l.account_id, l.to_account_id, l.reserva_funcao_id,
+              l.account_id, l.to_account_id, l.reserva_funcao_id, l.origin, l.bem_id,
               c.name  AS categoria_nome,
               g.name  AS grupo_nome,
               rf.name AS reserva_funcao_nome

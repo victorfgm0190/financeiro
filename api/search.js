@@ -1,6 +1,6 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
-import { contextoPerfis, recortarLeitura } from './_permissoesApi.js'
+import { contextoPerfis, recortarLeitura, comBemVendido, sqlBemVendido } from './_permissoesApi.js'
 import { comAmbiente } from './_ambiente.js'
 import { faixaValorCentavos, modoValor } from '../src/lib/buscaGlobal.js'
 
@@ -33,7 +33,11 @@ export function filtrosBusca({ value, valueMode, text, description, payee, from,
       // Sombras automáticas de reserva/investimento (reserva_auto, sem conta) não são itens da
       // busca — a transferência de origem as representa (e ganha o selo no front).
       where.push(`reserva_auto IS NOT TRUE`)
-      if (accIds) { const i = p(accIds); where.push(`(account_id = ANY($${i}) OR to_account_id = ANY($${i}))`) }
+      // Ganho/perda de venda de bem não tem conta: segue o bem vendido (sem movimentação, o bem ligado).
+      if (accIds) {
+        const i = p(accIds)
+        where.push(`(account_id = ANY($${i}) OR to_account_id = ANY($${i}) OR (origin = 'patrimonio_auto' AND account_id IS NULL AND to_account_id IS NULL AND COALESCE(${sqlBemVendido('lancamentos.id')}, bem_id) = ANY($${i})))`)
+      }
     } else {
       // Período: começou até a data final; a recorrência é resolvida no front.
       if (to) where.push(`start_date <= $${p(to)}`)
@@ -61,6 +65,8 @@ async function handler(req, res) {
     const f = filtrosBusca({ value, valueMode, text, description, payee, from, to, accIds })
     const txRows = await query(`SELECT * FROM lancamentos ${f.tx.where} ORDER BY date DESC NULLS LAST LIMIT ${LIMIT}`, f.tx.params)
     const scRows = await query(`SELECT * FROM agendamentos ${f.sc.where} ORDER BY start_date DESC NULLS LAST LIMIT ${LIMIT}`, f.sc.params)
+
+    await comBemVendido(query, txRows)
 
     // Perfis permitidos do usuário: só o que pertence às contas desses perfis.
     const ctx = await contextoPerfis(query, req.user)

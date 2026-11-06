@@ -6,6 +6,8 @@ import { ErroHttp } from './_usuarios.js'
 
 // Tabelas cujo dado pertence a uma conta (recortadas pelos perfis permitidos).
 const TABELAS_COM_CONTA = new Set(['contas', 'cartoes', 'lancamentos', 'agendamentos'])
+// Colunas a mais para decidir o dono de ganho/perda de venda de bem (só lançamentos as têm em uso).
+const COLUNAS_DO_BEM = { lancamentos: ', origin, bem_id' }
 
 // Contas (ids) dos perfis permitidos. Conta sem perfil não entra: só "todos" a vê.
 export async function contasPermitidas(q, perfis) {
@@ -33,16 +35,19 @@ export function linhaPermitida(tabela, r, contas, funcoes = new Set(), perfis = 
   return !!r.reserva_funcao_id && funcoes.has(r.reserva_funcao_id)
 }
 
+// O bem vendido de um lançamento, em SQL: fonte única da regra, para leitura, gravação e busca.
+// A troca cria um lançamento e uma movimentação por bem dado em pagamento, então não há duas baixas no
+// mesmo lançamento. Se um dado manual criar esse caso, MIN mantém o resultado igual em qualquer ordem.
+export const sqlBemVendido = (lancamentoId) =>
+  `(SELECT MIN(m.bem_origem_id) FROM bem_movimentacoes m WHERE m.lancamento_id = ${lancamentoId})`
+
 // Acrescenta `bem_vendido_id` às linhas de ganho/perda de venda de bem, pela movimentação do bem (o bem
-// baixado, bem_origem_id). Só na leitura: nada é gravado, vale para lançamentos novos e antigos.
+// baixado, bem_origem_id). Calculado, nunca gravado: vale para lançamentos novos e antigos.
 export async function comBemVendido(q, rows) {
   const ids = rows.filter(r => r.origin === 'patrimonio_auto' && !r.account_id && !r.to_account_id).map(r => r.id)
   if (!ids.length) return rows
-  const movs = await q(
-    'SELECT lancamento_id, bem_origem_id FROM bem_movimentacoes WHERE lancamento_id = ANY($1) AND bem_origem_id IS NOT NULL',
-    [ids],
-  )
-  const porLanc = new Map(movs.map(m => [m.lancamento_id, m.bem_origem_id]))
+  const achados = await q(`SELECT u.id, ${sqlBemVendido('u.id')} AS bem FROM unnest($1::text[]) AS u(id)`, [ids])
+  const porLanc = new Map(achados.filter(a => a.bem).map(a => [a.id, a.bem]))
   for (const r of rows) if (porLanc.has(r.id)) r.bem_vendido_id = porLanc.get(r.id)
   return rows
 }
@@ -81,16 +86,27 @@ export async function filtrarGravacao(q, user, { tabela, modulo, upsert = [], de
   const existentes = new Map()
   if (ids.length) {
     const cols = ctx && tabela !== 'cartoes'
-      ? (tabela === 'contas' ? `"${idCol}", profile_id` : `"${idCol}", account_id, to_account_id, reserva_funcao_id`)
+      ? (tabela === 'contas' ? `"${idCol}", profile_id` : `"${idCol}", account_id, to_account_id, reserva_funcao_id${COLUNAS_DO_BEM[tabela] || ''}`)
       : `"${idCol}"`
-    for (const r of await q(`SELECT ${cols} FROM ${tabela} WHERE "${idCol}" = ANY($1)`, [ids])) existentes.set(r[idCol], r)
+    const linhas = await q(`SELECT ${cols} FROM ${tabela} WHERE "${idCol}" = ANY($1)`, [ids])
+    if (ctx && tabela === 'lancamentos') await comBemVendido(q, linhas)
+    for (const r of linhas) existentes.set(r[idCol], r)
   }
   const permitida = (r) => !ctx || linhaPermitida(tabela, r, ctx.contas, ctx.funcoes, ctx.perfis)
+  // A versão enviada não escolhe o dono do ganho/perda de bem: o app nem manda bem_id e o bem vendido
+  // é calculado aqui. Vale o vínculo gravado; bem_vendido_id vindo do cliente é ignorado.
+  const versaoEnviada = (r, atual) => {
+    if (tabela !== 'lancamentos') return r
+    const enviada = { ...r }
+    delete enviada.bem_vendido_id
+    if (atual?.origin !== 'patrimonio_auto') return enviada
+    return { ...enviada, origin: atual.origin, bem_id: atual.bem_id, bem_vendido_id: atual.bem_vendido_id }
+  }
 
   const upOk = upsert.filter(r => {
     const atual = existentes.get(r?.[idCol])
-    if (atual) return perm.editar && permitida(atual) && permitida(r)
-    return perm.incluir && permitida(r)
+    if (atual) return perm.editar && permitida(atual) && permitida(versaoEnviada(r, atual))
+    return perm.incluir && permitida(versaoEnviada(r))
   })
   const delOk = perm.excluir ? del.filter(id => { const atual = existentes.get(id); return !atual || permitida(atual) }) : []
   const filtradas = total - upOk.length - delOk.length
@@ -146,7 +162,8 @@ export async function exigirLinhasPermitidas(q, user, tabela, ids) {
   if (!lista.length) return
   const ctx = await contextoPerfis(q, user)
   if (!ctx) return
-  const rows = await q(`SELECT id, account_id, to_account_id, reserva_funcao_id FROM ${tabela} WHERE id = ANY($1)`, [lista])
+  const rows = await q(`SELECT id, account_id, to_account_id, reserva_funcao_id${COLUNAS_DO_BEM[tabela] || ''} FROM ${tabela} WHERE id = ANY($1)`, [lista])
+  if (tabela === 'lancamentos') await comBemVendido(q, rows)
   if (rows.some(r => !linhaPermitida(tabela, r, ctx.contas, ctx.funcoes, ctx.perfis))) {
     throw new ErroHttp(403, 'Sem permissão para registros de um perfil não permitido')
   }

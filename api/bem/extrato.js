@@ -1,6 +1,6 @@
 import { query } from '../_db.js'
 import { requireAuth } from '../_auth.js'
-import { contextoPerfis } from '../_permissoesApi.js'
+import { contextoPerfis, comBemVendido, linhaPermitida } from '../_permissoesApi.js'
 import { dadosDoExtrato, num, fail, explicarErro } from '../_bem.js'
 import { comAmbiente } from '../_ambiente.js'
 
@@ -39,7 +39,16 @@ async function handler(req, res) {
       `SELECT bem_id, valor_carta, saldo_devedor_informado FROM consorcio_cotas WHERE bem_id = ANY($1)`, [ids],
     )
 
-    return res.json({ success: true, bens, cotas, ...(await dadosDoExtrato(query, ids)) })
+    const dados = await dadosDoExtrato(query, ids)
+    if (ctx) {
+      // O ganho/perda da troca tem bem_id no bem novo, mas é do perfil do bem vendido: quem só tem o bem
+      // novo não recebe. Os demais lançamentos do bem continuam como estão.
+      await comBemVendido(query, dados.lancamentos)
+      dados.lancamentos = dados.lancamentos.filter(l =>
+        l.origin !== 'patrimonio_auto' || l.account_id || l.to_account_id
+        || linhaPermitida('lancamentos', l, ctx.contas, ctx.funcoes, ctx.perfis))
+    }
+    return res.json({ success: true, bens, cotas, ...dados })
   } catch (err) {
     console.error('[api/bem/extrato]', err.message)
     return fail(res, 500, explicarErro(err))

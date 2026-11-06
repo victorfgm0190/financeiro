@@ -13,7 +13,7 @@ beforeEach(async () => {
   db = new PGlite()
   await db.exec(`
     CREATE TABLE contas (id TEXT PRIMARY KEY, profile_id TEXT);
-    CREATE TABLE lancamentos (id TEXT PRIMARY KEY, account_id TEXT, to_account_id TEXT, reserva_funcao_id TEXT);
+    CREATE TABLE lancamentos (id TEXT PRIMARY KEY, account_id TEXT, to_account_id TEXT, reserva_funcao_id TEXT, origin TEXT, bem_id TEXT);
     CREATE TABLE reserve_functions (id TEXT PRIMARY KEY, account_id TEXT);
     CREATE TABLE categorias (id TEXT PRIMARY KEY);
     INSERT INTO contas VALUES ('itau', 'prf_v'), ('cora', 'prf_l'), ('rico', NULL);
