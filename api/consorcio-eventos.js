@@ -58,7 +58,7 @@ async function vender(q, { bem, consorcio, data, dados }) {
   return {
     dados: { ...dados, valor, custo_proprio: resumo.custoProprioLiquido, ganho },
     anterior: { saldo: num(bem.balance), situacao: consorcio.situacao, lancamentos: lancamentos.map(l => l.id) },
-    efeitos: { lancamentos, saldo: 0 },
+    efeitos: { lancamentos, saldo: 0, conta: { foiVendido: true, dataVenda: data } },
   }
 }
 
@@ -131,6 +131,7 @@ async function estornar(req, res, b) {
       await q(`UPDATE contas SET balance = $2, foi_vendido = FALSE, data_venda = NULL WHERE id = $1`, [ev.bem_id, num(ant.saldo)])
       saida.lancamentos = ids
       saida.saldo = num(ant.saldo)
+      saida.conta = { foiVendido: false, dataVenda: null }
     }
     if (ev.tipo === 'usar_carta') {
       await q(`UPDATE contas SET valor_nota_fiscal = $2, patrimonio_use_method = $3, tipo_bem = $4 WHERE id = $1`,

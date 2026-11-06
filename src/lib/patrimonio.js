@@ -35,6 +35,8 @@ const escolhido = (conta) => (
 // porque o método aponta para um campo vazio é pior — e mais silencioso — do que um bem avaliado
 // pelo saldo. `valorPatrimonialEhFallback` diz quando isso está acontecendo, para a UI avisar.
 export function valorPatrimonial(conta) {
+  // Bem vendido saiu do patrimônio: o histórico continua consultável, mas não soma.
+  if (conta?.foiVendido) return 0
   // Consórcio não contemplado: o PL conta o pago acumulado (inclusive o pago por terceiros), que é o
   // saldo da conta. O valor de venda é só simulação; o saldo devedor é compromisso, fora do PL.
   if (ehConsorcio(conta)) return Number(conta?.balance) || 0
@@ -86,7 +88,7 @@ export function categorizarPatrimonio(accounts, accountGroups) {
 export function totaisPatrimonio(categorized, creditUsage) {
   const item = (conta, valor) => ({ conta, valor })
   const itens = {
-    bens: categorized.bens.map(a => item(a, valorPatrimonial(a))),
+    bens: categorized.bens.filter(a => !a.foiVendido).map(a => item(a, valorPatrimonial(a))),
     investimentos: categorized.investimentos.map(a => item(a, a.balance || 0)),
     contas: categorized.contas.map(a => item(a, a.balance || 0)),
     dividas: categorized.dividas.map(a => item(a, -(a.balance || 0))),

@@ -21,6 +21,7 @@ import BemResumoTab from './BemResumoTab'
 import BemParcelasTab from './BemParcelasTab'
 import BemHistoricoTab from './BemHistoricoTab'
 import TradeInResumo from './TradeInResumo'
+import VendaDoBem from './VendaDoBem'
 import FinanciamentoModal from './FinanciamentoModal'
 import PagarParcelaModal from './PagarParcelaModal'
 import RegistrarEntradaModal from './RegistrarEntradaModal'
@@ -231,6 +232,7 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
     sincronizarSaldo(conta.id, resposta.bem?.saldo)
     for (const antigo of resposta.bens_antigos || []) {
       sincronizarSaldo(antigo.id, antigo.saldo_reducido)
+      updateAccount(antigo.id, { foiVendido: true, dataVenda: antigo.data_venda || null })
     }
     // Favorecido e categoria das transferências escolhidas — mesma razão do sincronizarSaldo:
     // o sync é diferencial sobre o estado React, então o que o backend gravou (categoria) e o
@@ -277,7 +279,7 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
       const r = await estornarEntrada(conta.id, { confirmar_com_financiamento: !!financiamento })
 
       sincronizarSaldo(conta.id, r.bem?.saldo)
-      for (const b of r.bens_restaurados || []) sincronizarSaldo(b.id, b.saldo)
+      for (const b of r.bens_restaurados || []) { sincronizarSaldo(b.id, b.saldo); updateAccount(b.id, { foiVendido: false, dataVenda: null }) }
       // Mesma razão do sincronizarSaldo em aposEntrada: o backend tirou o `bem_id` das
       // transferências, mas o sync é diferencial sobre o estado React — sem espelhar aqui, o
       // próximo full-sync reporia o vínculo que acabamos de desfazer.
@@ -538,6 +540,10 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
                 estornando={estornando}
                 onEstornar={podeExcluirPat ? () => setConfirmandoEstorno(true) : null}
               />
+            )}
+
+            {!consorcio && (
+              <VendaDoBem conta={conta} bem={bem} podeVender={podeEditarPat} podeEstornar={podeExcluirPat} onMudou={recarregarTudo} avisar={avisar} />
             )}
 
             {movimentacoes !== null && !temEntrada && !bem.foi_vendido && (

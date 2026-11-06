@@ -55,6 +55,10 @@ export const getBem = (bemId) => request(`/api/bem/${enc(bemId)}`)
 export const registrarEntrada = (bemId, payload) =>
   post(`/api/bem/${enc(bemId)}/registrar-entrada`, payload)
 
+// Venda simples: { acao: 'previa' | 'consultar' | 'confirmar' | 'estornar', ... }.
+export const venderBem = (bemId, payload) =>
+  post(`/api/bem/${enc(bemId)}/vender`, payload)
+
 export const estornarEntrada = (bemId, payload = {}) =>
   post(`/api/bem/${enc(bemId)}/estornar-entrada`, payload)
 

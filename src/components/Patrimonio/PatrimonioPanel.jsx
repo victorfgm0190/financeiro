@@ -103,6 +103,7 @@ export default function PatrimonioPanel({ setActivePage }) {
   const podeEditarPatrimonio = pode('patrimonio', 'editar')
   const cor = useThemeColors()
   const [updateValueAccount, setUpdateValueAccount] = useState(null)
+  const [mostrarVendidos, setMostrarVendidos] = useState(false)
   const [expandedHistory, setExpandedHistory] = useState(null)
   // "Abrir bem" vindo de outra tela (composição do PL em Contas) — lido uma vez, na montagem.
   const [detalheBem, setDetalheBem] = useState(() => {
@@ -152,7 +153,9 @@ export default function PatrimonioPanel({ setActivePage }) {
           .sort((x, y) => x.date.localeCompare(y.date))
         // Histórico de valores continua ganhando quando existe (é a avaliação daquele mês);
         // sem histórico, o fallback é o mesmo valor que o KPI usa, não o saldo.
-        return s + (hist.length > 0 ? hist[hist.length - 1].value : valorPatrimonial(a))
+        // Vendido sai a partir da data da venda; nos meses anteriores ele ainda era patrimônio.
+        if (a.foiVendido && a.dataVenda && monthEnd >= a.dataVenda) return s
+        return s + (hist.length > 0 ? hist[hist.length - 1].value : valorPatrimonial({ ...a, foiVendido: false }))
       }, 0)
 
       // Financial accounts: use current (no history tracked)
@@ -255,9 +258,14 @@ export default function PatrimonioPanel({ setActivePage }) {
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-texto-2 flex items-center gap-2">
             <Home size={14} className="text-receita" /> Bens e Ativos
+            {categorized.bens.some(a => a.foiVendido) && (
+              <label className="ml-auto flex items-center gap-1.5 text-xs font-normal text-texto-3">
+                <input type="checkbox" className="accent-primary" checked={mostrarVendidos} onChange={e => setMostrarVendidos(e.target.checked)} /> Mostrar vendidos
+              </label>
+            )}
           </h2>
           <div className="space-y-2">
-            {categorized.bens.map(a => {
+            {categorized.bens.filter(a => mostrarVendidos || !a.foiVendido).map(a => {
               const gain = a.acquisitionValue != null ? a.balance - a.acquisitionValue : null
               const pct = a.acquisitionValue ? ((a.balance - a.acquisitionValue) / a.acquisitionValue) * 100 : null
               const isExpanded = expandedHistory === a.id

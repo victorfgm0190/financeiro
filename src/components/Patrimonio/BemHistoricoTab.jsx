@@ -6,6 +6,7 @@ const TIPOS = {
   entrada_trade_in: { rotulo: 'Entrada (Trade-in)', icone: Repeat, cor: 'text-receita', pino: 'bg-receita' },
   entrada_venda: { rotulo: 'Entrada à Vista', icone: ArrowDownLeft, cor: 'text-receita', pino: 'bg-receita' },
   pagamento_parcela: { rotulo: 'Pagamento de Parcela', icone: CreditCard, cor: 'text-despesa', pino: 'bg-despesa' },
+  venda: { rotulo: 'Venda', icone: Repeat, cor: 'text-receita', pino: 'bg-receita' },
 }
 
 function Campo({ label, children, cor }) {

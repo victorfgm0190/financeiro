@@ -187,7 +187,7 @@ export function regraDaRota(rota, metodo) {
   const r = String(rota || '').replace(/^\/?api\//, '').replace(/^\//, '').split('?')[0].replace(/\/$/, '')
   // bem/financiamento: POST de pagar parcela / atualizar valores são edições do patrimônio
   if (/^financiamento\/criar$/.test(r)) return M('patrimonio', 'incluir')
-  if (/^(financiamento\/parcela\/[^/]+\/pagar|bem\/[^/]+\/atualizar-valores|financiamento\/parcelas\/popular-rateios)$/.test(r)) return M('patrimonio', 'editar')
+  if (/^(financiamento\/parcela\/[^/]+\/pagar|bem\/[^/]+\/atualizar-valores|bem\/[^/]+\/vender|financiamento\/parcelas\/popular-rateios)$/.test(r)) return M('patrimonio', 'editar')
   for (const [re, fn] of ROTAS) if (re.test(r)) return fn(m) ?? null
   // rota desconhecida que grava: exige gravar em algum módulo (nunca libera para Consulta)
   return M('*', 'editar')

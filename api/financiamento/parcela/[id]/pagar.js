@@ -159,7 +159,8 @@ async function handler(req, res) {
       }
 
       const saldoBemAnterior = num(bem.balance)
-      const saldoBemNovo = round2(saldoBemAnterior + valorPago)
+      // Bem vendido com a dívida em aberto: a parcela é paga, mas o bem já saiu do patrimônio.
+      const saldoBemNovo = bem.foi_vendido ? saldoBemAnterior : round2(saldoBemAnterior + valorPago)
       await q(`UPDATE contas SET balance = $2 WHERE id = $1`, [bem.id, saldoBemNovo])
 
       const saldoDividaAnterior = num(divida.balance)

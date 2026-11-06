@@ -534,6 +534,9 @@ export const rowToAccount = (r) => ({
   valorPagoManual: r.valor_pago_manual != null ? Number(r.valor_pago_manual) : null,
   patrimonioUseMethod: r.patrimonio_use_method || 'valor_pago',
   tipoBem: r.tipo_bem || null,
+  // Só leitura: quem grava é o servidor (venda, troca, venda de cota).
+  foiVendido: !!r.foi_vendido,
+  dataVenda: r.data_venda ? String(r.data_venda).slice(0, 10) : null,
   isReserva: !!r.is_reserva,
   reservaType: r.reserva_type || null,
   reservaCategoryId: r.reserva_category_id || null,
