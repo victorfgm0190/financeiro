@@ -18,7 +18,7 @@ function Linha({ label, children, cor }) {
   )
 }
 
-export default function TradeInResumo({ movimentacoes, saldoBem, contas = [], onEstornar, estornando }) {
+export default function TradeInResumo({ movimentacoes, contas = [], onEstornar, estornando }) {
   const entradas = (movimentacoes || []).filter(
     m => m.tipo === 'entrada_venda' || m.tipo === 'entrada_trade_in',
   )
@@ -101,7 +101,6 @@ export default function TradeInResumo({ movimentacoes, saldoBem, contas = [], on
         <Linha label="Total da entrada" cor="text-receita font-semibold text-sm">
           {fmt(totalTransferencias + totalTradeIn)}
         </Linha>
-        <Linha label="Saldo atual do bem">{fmt(saldoBem)}</Linha>
         {perdaGanho !== 0 && (
           <Linha
             label={perdaGanho >= 0 ? 'Ganho lançado' : 'Perda lançada'}

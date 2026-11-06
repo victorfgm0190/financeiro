@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet, ArrowLeftRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView, reservaDespesaFuncIds, groupedAccountOptions, isResgateReservaSombra } from '../shared/utils'
+import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView, reservaDespesaFuncIds, groupedAccountOptions, isResgateReservaSombra, isInvestimentoSombra } from '../shared/utils'
+import { linhaDeBemNoDemonstrativo } from '../../lib/extratoBem'
 import { isPatrimonioOrigin } from '../../lib/origins'
 import { filtrarPerfilDemonstrativo, regraDosConjuntos } from '../../lib/regraDemonstrativo'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -114,11 +115,15 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
     const groups = {}
     txList.forEach(tx => {
       const cat = catMap[tx.categoryId]
-      const groupKey = cat?.group || cat?.id || '__none__'
-      const groupName = cat?.group || cat?.name || 'Sem Categoria'
-      const subcatKey = cat?.id || '__none__'
-      const subcatName = cat?.name || 'Sem Categoria'
-      const isFlat = !cat?.group // top-level category or uncategorised
+      // Parcela de bem: grupo próprio, com principal e juros em linhas separadas (D4 do Patrimônio).
+      const deBem = linhaDeBemNoDemonstrativo(tx, isInvestimentoSombra)
+      const nomeCat = cat?.name || 'Sem Categoria'
+      const groupKey = deBem ? '__bens' : (cat?.group || cat?.id || '__none__')
+      const groupName = deBem ? 'Bens e investimentos' : (cat?.group || cat?.name || 'Sem Categoria')
+      const subcatKey = `${cat?.id || '__none__'}${deBem?.sufixo ? `:${deBem.sufixo}` : ''}`
+      const subcatName = deBem?.sufixo === 'juros' ? `${nomeCat} (juros)`
+        : deBem?.sufixo === 'principal' ? `${nomeCat} (principal)` : nomeCat
+      const isFlat = deBem ? false : !cat?.group // top-level category or uncategorised
       // Resgate de reserva (perna _r, receita de compensação) entra na categoria de DESPESA
       // ABATENDO o total (sinal negativo); a despesa real e o depósito somam normalmente.
       const signed = (tx.type === 'income' && isResgateReservaSombra(tx)) ? -tx.amount : tx.amount

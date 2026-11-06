@@ -5,9 +5,11 @@ import {
 } from 'recharts'
 import { subMonths, format, startOfMonth, endOfMonth, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileSpreadsheet, Users, Wallet } from 'lucide-react'
+import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileSpreadsheet, Users, Wallet, Landmark } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtSinal, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, reservaDespesaFuncIds } from '../shared/utils'
+import { fmt, fmtSinal, aplicacaoAccountIds, countsAsReportExpense, reservaDespesaFuncIds } from '../shared/utils'
+import { regraDosConjuntos, totaisDoDemonstrativo } from '../../lib/regraDemonstrativo'
+import RelatorioBens from './RelatorioBens'
 import RelatorioFatura from '../CreditCard/RelatorioFatura'
 import DemonstrativoFinanceiro from './DemonstrativoFinanceiro'
 import RelatorioPorFavorecido from './RelatorioPorFavorecido'
@@ -39,7 +41,12 @@ export default function ReportsPanel() {
   // Depósitos em reserva de funções "exibir como despesa" contam como despesa nos relatórios.
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
   const reservaDespesaFuncSet = useMemo(() => reservaDespesaFuncIds(reserveFunctions), [reserveFunctions])
+  const regra = useMemo(
+    () => regraDosConjuntos({ reserveFunctions, aplicSet, reservaSet, reservaDespesaFuncSet, transactions }),
+    [reserveFunctions, aplicSet, reservaSet, reservaDespesaFuncSet, transactions],
+  )
   const [selectedMonth, setSelectedMonth] = useState(0)
+  const [showBens, setShowBens] = useState(false)
   const [modoValor, setModoValor] = useState(MODO_VALOR_PADRAO)
   const [showRelatorioFatura, setShowRelatorioFatura] = useState(false)
   const [showDemonstrativo, setShowDemonstrativo] = useState(false)
@@ -55,16 +62,12 @@ export default function ReportsPanel() {
       const start = isoLocal(startOfMonth(d))
       const end = isoLocal(endOfMonth(d))
       const label = format(d, 'MMM/yy', { locale: ptBR })
-      const income = transactions
-        .filter(tx => countsAsReportIncome(tx, reservaDespesaFuncSet, reservaSet) && tx.date >= start && tx.date <= end)
-        .reduce((s, t) => s + t.amount, 0)
-      const expense = transactions
-        .filter(tx => countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet) && tx.date >= start && tx.date <= end)
-        .reduce((s, t) => s + t.amount, 0)
+      // Mesma regra do Demonstrativo: o resgate de reserva não é receita.
+      const { receita: income, despesa: expense } = totaisDoDemonstrativo(transactions, { start, end }, regra)
       months.push({ label, start, end, income, expense, balance: income - expense })
     }
     return months
-  }, [transactions, aplicSet, reservaDespesaFuncSet, reservaSet])
+  }, [transactions, regra])
 
   const currentMonthData = last6Months[5 - selectedMonth] || last6Months[last6Months.length - 1]
 
@@ -133,6 +136,17 @@ export default function ReportsPanel() {
     )
   }
 
+  if (showBens) {
+    return (
+      <div className="space-y-4">
+        <button data-guia="reports:bens.voltar" className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors" onClick={() => setShowBens(false)}>
+          <ArrowLeft size={14} /> Voltar aos Relatórios
+        </button>
+        <RelatorioBens />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       <button
@@ -176,6 +190,21 @@ export default function ReportsPanel() {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Fluxo de Caixa por Conta</p>
           <p className="text-xs text-texto-3 mt-0.5">Movimentações e saldo acumulado por conta, grupo ou contas principais — com agendamentos futuros</p>
+        </div>
+        <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
+      </button>
+
+      <button
+        data-guia="reports.bens"
+        className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
+        onClick={() => setShowBens(true)}
+      >
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
+          <Landmark size={16} className="text-primary-fg" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Bens e investimentos — saídas por mês</p>
+          <p className="text-xs text-texto-3 mt-0.5">Quanto saiu de caixa por bem e por mês, com principal, juros, terceiros e devoluções</p>
         </div>
         <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
       </button>

@@ -674,7 +674,17 @@ export async function montarComposicaoBem(q, conta, fin) {
     }
   }
 
-  const pagoTotal = round2(dinheiro + bensTroca + parcelas.principal_pago)
+  // Receita lançada na conta do bem: parcela paga por terceiro (mesma regra de src/lib/extratoBem.js).
+  // Entra no pago: o bem está pago, mesmo que o dinheiro não tenha saído das contas do usuário.
+  const [{ total: somaTerceiros }] = await q(
+    `SELECT COALESCE(SUM(amount), 0) AS total FROM lancamentos
+      WHERE account_id = $1 AND type = 'income' AND COALESCE(reserva_auto, false) = false
+        AND COALESCE(origin, '') NOT IN ('rendimento_manual', 'patrimonio_auto')`,
+    [conta.id],
+  )
+  const terceiros = round2(num(somaTerceiros))
+
+  const pagoTotal = round2(dinheiro + bensTroca + terceiros + parcelas.principal_pago)
   // Saldo devedor pelo PRINCIPAL que falta amortizar, não pelo total_restante das parcelas: o
   // que ainda se deve de capital não inclui os juros das parcelas que nem venceram.
   const saldoDevedor = round2(Math.max(0, parcelas.principal_previsto - parcelas.principal_pago))
@@ -686,6 +696,7 @@ export async function montarComposicaoBem(q, conta, fin) {
       dinheiro_detalhe: entradasDinheiro,
       bens_troca: bensTroca,
       bens_troca_detalhe: trocas,
+      terceiros,
       parcelas_principal: parcelas.principal_pago,
       total: pagoTotal,
     },

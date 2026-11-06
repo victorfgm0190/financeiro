@@ -1,6 +1,6 @@
 import { contaCentralPara } from '../../lib/contaCentral'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, Info, ListOrdered, History, Settings2, Wallet } from 'lucide-react'
+import { Loader2, Info, ListOrdered, History, Settings2, Wallet, Scale } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
@@ -10,6 +10,7 @@ import {
   popularRateiosParcelas,
 } from '../../lib/bemApi'
 import BemInfoTab from './BemInfoTab'
+import BemResumoTab from './BemResumoTab'
 import BemParcelasTab from './BemParcelasTab'
 import BemHistoricoTab from './BemHistoricoTab'
 import TradeInResumo from './TradeInResumo'
@@ -23,6 +24,7 @@ import { espelharBaixaParcela } from '../../lib/baixaParcela'
 
 const ABAS = [
   { id: 'informacoes', label: 'Informações', icone: Info },
+  { id: 'resumo', label: 'Resumo do bem', icone: Scale },
   { id: 'parcelas', label: 'Parcelas', icone: ListOrdered },
   { id: 'historico', label: 'Histórico', icone: History },
 ]
@@ -435,7 +437,6 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
             {temEntrada && (
               <TradeInResumo
                 movimentacoes={movimentacoes}
-                saldoBem={bem.saldo}
                 contas={accounts}
                 estornando={estornando}
                 onEstornar={podeExcluirPat ? () => setConfirmandoEstorno(true) : null}
@@ -503,6 +504,8 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
                 onErro={(m) => avisar(m, 'error')}
               />
             )}
+
+            {abaAtiva === 'resumo' && <BemResumoTab bemId={conta.id} />}
 
             {abaAtiva === 'parcelas' && (
               <BemParcelasTab

@@ -70,6 +70,8 @@ export default function BemComposicao({ composicao }) {
           </div>
         ))}
 
+        {pago.terceiros > 0 && <Linha label="Pago por terceiros">{fmt(pago.terceiros)}</Linha>}
+
         <Linha label="Parcelas (principal)">{fmt(pago.parcelas_principal)}</Linha>
         {/* Fora do total de propósito — a linha existe para responder "quanto já custou o
             crédito", não para compor o investimento. Por isso vem depois do principal e em
@@ -84,7 +86,7 @@ export default function BemComposicao({ composicao }) {
           </Linha>
         </div>
         <p className="text-xs text-texto-3 mt-2">
-          Dinheiro, bens e principal das parcelas. Os juros ficam fora: são custo do crédito, não
+          Dinheiro, bens, pagamentos de terceiros e principal das parcelas. Os juros ficam fora: são custo do crédito, não
           investimento no bem, e já saem como despesa na categoria de taxa.
         </p>
       </div>
@@ -95,7 +97,7 @@ export default function BemComposicao({ composicao }) {
         </h3>
         <Linha label="Valor financiado (principal)">{fmt(financiamento.valor_principal)}</Linha>
         <Linha label="Principal já amortizado">{fmt(financiamento.principal_pago)}</Linha>
-        <Linha label="Saldo devedor" destaque="text-despesa font-semibold">
+        <Linha label="Principal a amortizar (dívida no PL)" destaque="text-despesa font-semibold">
           {fmt(financiamento.saldo_devedor)}
         </Linha>
         <Linha label="Parcelas">

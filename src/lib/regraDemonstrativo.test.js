@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { criarRegraDemonstrativo, despesaPorCategoria, filtrarPerfilDemonstrativo } from './regraDemonstrativo.js'
+import { criarRegraDemonstrativo, despesaPorCategoria, filtrarPerfilDemonstrativo, totaisDoDemonstrativo } from './regraDemonstrativo.js'
 
 const accounts = [
   { id: 'itau', profileId: 'P1', type: 'checking' },
@@ -39,6 +39,23 @@ describe('Orçamento = regra do Demonstrativo', () => {
   it('perfil: espelho só quando a conta da função é do perfil', () => {
     expect(filtrarPerfilDemonstrativo(txs, reserveFunctions, new Set(['itau', 'ca']))).toHaveLength(txs.length)
     expect(filtrarPerfilDemonstrativo(txs, reserveFunctions, new Set(['cora']))).toHaveLength(0)
+  })
+})
+
+describe('gráfico dos 6 meses = totais do Demonstrativo', () => {
+  it('resgate não soma como receita: abate a despesa, se a função tem depósito', () => {
+    const lista = [...txs, { id: 'sal', type: 'income', amount: 1000, accountId: 'itau', date: '2026-10-20', categoryId: 'cat_sal' }]
+    const regra = criarRegraDemonstrativo(reserveFunctions, accounts, lista)
+    expect(totaisDoDemonstrativo(lista, periodo, regra)).toEqual({ receita: 1000, despesa: -210 })
+  })
+  it('resgate de função sem depósito não é receita nem abate', () => {
+    const f = [{ id: 'f', accountId: 'ca', categoryId: 'cat_x', exibirComoDespesa: true }]
+    const lista = [
+      { id: 'g', type: 'expense', amount: 300, accountId: 'itau', date: '2026-10-20', categoryId: 'cat_x' },
+      sombra('tx_rsg_9_r', 'income', 300, 'f', 'cat_x', 'Resgate Reserva: CA'),
+      sombra('tx_rsg_9_d', 'expense', 300, 'f', 'cat_x', 'Resgate Reserva: CA'),
+    ]
+    expect(totaisDoDemonstrativo(lista, periodo, criarRegraDemonstrativo(f, accounts, lista))).toEqual({ receita: 0, despesa: 300 })
   })
 })
 

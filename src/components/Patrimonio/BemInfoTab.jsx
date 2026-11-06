@@ -39,7 +39,7 @@ export default function BemInfoTab({
         </h3>
         <Linha label="Nome">{bem.nome}</Linha>
         <Linha label="Valor da Nota Fiscal">{fmt(bem.valor_nota_fiscal)}</Linha>
-        <Linha label="Saldo Atual" destaque="text-receita font-semibold">{fmt(bem.saldo)}</Linha>
+        <Linha label="Saldo contábil da conta (não é o valor pago)">{fmt(bem.saldo)}</Linha>
         <Linha label="Status">
           {bem.foi_vendido
             ? <span className="text-despesa font-semibold">VENDIDO</span>
@@ -69,8 +69,8 @@ export default function BemInfoTab({
           <Linha label="Valor Financiado">{fmt(financiamento.valor_principal)}</Linha>
           <Linha label="Juros Totais">{fmt(financiamento.juros_totais)}</Linha>
           <Linha label="Valor Total">{fmt(financiamento.valor_total)}</Linha>
-          <Linha label="Saldo Devedor" destaque="text-despesa font-semibold">
-            {fmt(-(financiamento.analise?.total_restante ?? financiamento.valor_total))}
+          <Linha label="Falta pagar" destaque="text-despesa font-semibold">
+            {fmt(financiamento.analise?.saldo_restante ?? financiamento.valor_total)}
           </Linha>
           {parcelasResumo && (
             <>

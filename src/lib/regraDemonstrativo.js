@@ -84,7 +84,24 @@ export function regraDosConjuntos({ reserveFunctions, aplicSet, reservaSet, rese
   const ehDespesa = (tx) => !isReservaGerSombra(tx) && countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet)
   const ehCompensacao = (tx) => !isReservaGerSombra(tx) && tx.type === 'income' && isResgateReservaSombra(tx)
     && countsAsReportIncome(tx, reservaDespesaFuncSet, reservaSet) && resgateAbate(tx)
-  return { isReservaGerSombra, ehDespesa, ehCompensacao }
+  // O resgate nunca é receita: quando abate, abate a despesa; quando não abate, some.
+  const ehReceita = (tx) => !isReservaGerSombra(tx) && tx.type === 'income' && !isResgateReservaSombra(tx)
+    && countsAsReportIncome(tx, reservaDespesaFuncSet, reservaSet)
+  return { isReservaGerSombra, ehDespesa, ehCompensacao, ehReceita }
+}
+
+// Receita e despesa do período pela regra do Demonstrativo, para o gráfico dos 6 meses mostrar os
+// mesmos números do relatório.
+export function totaisDoDemonstrativo(transactions, { start, end }, regra) {
+  let receita = 0
+  let despesa = 0
+  for (const tx of transactions || []) {
+    if (!(tx.date >= start && tx.date <= end) || isInvestAutoOrigin(tx)) continue
+    if (regra.ehReceita(tx)) receita += tx.amount
+    else if (regra.ehDespesa(tx)) despesa += tx.amount
+    else if (regra.ehCompensacao(tx)) despesa -= tx.amount
+  }
+  return { receita: Math.round(receita * 100) / 100, despesa: Math.round(despesa * 100) / 100 }
 }
 
 // { [categoryId | '']: valor } no período (despesa +, compensação do resgate −).

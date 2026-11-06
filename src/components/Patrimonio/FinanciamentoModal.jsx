@@ -92,7 +92,7 @@ export default function FinanciamentoModal({
       <div className="p-3 bg-surface-2/60 rounded-lg text-xs text-texto-2 space-y-1">
         <div className="flex justify-between"><span>Bem</span><span className="text-texto-1">{bem.nome}</span></div>
         <div className="flex justify-between"><span>Valor da nota fiscal</span><span className="text-texto-1">{fmt(bem.valor_nota_fiscal)}</span></div>
-        <div className="flex justify-between"><span>Saldo atual (entrada já paga)</span><span className="text-texto-1">{fmt(bem.saldo)}</span></div>
+        <div className="flex justify-between"><span>Entrada já paga</span><span className="text-texto-1">{fmt(bem.composicao?.pago?.total ?? bem.saldo)}</span></div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

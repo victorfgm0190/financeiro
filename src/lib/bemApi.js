@@ -63,6 +63,10 @@ export const atualizarValoresBem = (bemId, payload) =>
 
 export const getMovimentacoes = (bemId) => request(`/api/bem/${enc(bemId)}/movimentacoes`)
 
+// Dados do Extrato do bem (src/lib/extratoBem.js). Sem bemId: de todos os bens permitidos.
+export const getExtratoBens = (bemId = null) =>
+  request(`/api/bem/extrato${bemId ? `?bem_id=${enc(bemId)}` : ''}`)
+
 export const criarFinanciamento = (payload) => post('/api/financiamento/criar', payload)
 
 export const getFinanciamento = (financiamentoId) =>

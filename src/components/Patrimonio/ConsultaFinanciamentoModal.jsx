@@ -42,8 +42,8 @@ export default function ConsultaFinanciamentoModal({ conta, onClose, onAbrirParc
       {resumo && (
         <div className="space-y-4">
           <div className="rounded-lg border border-despesa/20 bg-surface-2/40 px-3 py-2">
-            <Linha rotulo="Saldo devedor (principal)" valor={fmt(resumo.saldoPrincipal)} destaque cor="text-despesa" />
-            <Linha rotulo="Total a pagar até o fim (com juros previstos)" valor={fmt(resumo.totalAPagar)} />
+            <Linha rotulo="Falta pagar (com juros previstos)" valor={fmt(resumo.totalAPagar)} destaque cor="text-despesa" />
+            <Linha rotulo="Principal a amortizar (dívida no PL)" valor={fmt(resumo.saldoPrincipal)} />
           </div>
 
           <div>
