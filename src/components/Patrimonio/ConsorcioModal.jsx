@@ -7,6 +7,7 @@ import { salvarConsorcio } from '../../lib/bemApi'
 const COTA_VAZIA = {
   numero: '', data_adesao: '', valor_carta: '', prazo_meses: '', percentual_parcela: '100', valor_parcela_cheia: '',
   saldo_devedor_informado: '', saldo_devedor_data: '', parcelas_pagas_informadas: '', valor_pago_informado: '',
+  previsao_encerramento: '', data_ultima_parcela: '',
 }
 const paraForm = (c) => Object.fromEntries(Object.keys(COTA_VAZIA).map(k => [k, c?.[k] == null ? COTA_VAZIA[k] : String(c[k])]))
 
@@ -126,6 +127,15 @@ export default function ConsorcioModal({ bemId, consorcio, favorecidos = [], con
             <div>
               <label className="label">Parcelas pagas informadas</label>
               <input className="input" type="number" min="0" value={c.parcelas_pagas_informadas} onChange={campoCota(i, 'parcelas_pagas_informadas')} placeholder="Quantas a administradora mostra pagas" />
+            </div>
+            <div>
+              <label className="label" htmlFor={`encerramento-cota-${i}`}>Previsão de encerramento</label>
+              <DateInput id={`encerramento-cota-${i}`} className="input" value={c.previsao_encerramento} onChange={campoCota(i, 'previsao_encerramento')} />
+              <p className="text-xs text-texto-3 mt-1">Conforme o contrato. Em branco, o Finup estima por adesão + prazo.</p>
+            </div>
+            <div>
+              <label className="label" htmlFor={`ultima-parcela-cota-${i}`}>Data da última parcela</label>
+              <DateInput id={`ultima-parcela-cota-${i}`} className="input" value={c.data_ultima_parcela} onChange={campoCota(i, 'data_ultima_parcela')} />
             </div>
             <div>
               <label className="label">Valores pagos informados (R$)</label>

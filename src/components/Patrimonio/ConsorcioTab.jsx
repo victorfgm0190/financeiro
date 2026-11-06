@@ -8,7 +8,7 @@ import DateInput from '../shared/DateInput'
 import { getExtratoBens, registrarEventoConsorcio, estornarEventoConsorcio } from '../../lib/bemApi'
 import { extratoDoBem, resumoDoBem } from '../../lib/extratoBem'
 import {
-  agendamentosDoBem, batimento, fotoDosAgendamentos, parcelaDaCota, planoEncerrar, planoNovaParcela, rotuloSituacao, totaisDasCotas,
+  agendamentosDoBem, batimento, encerramentoDaCota, fotoDosAgendamentos, parcelaDaCota, parcelasFinupPorCota, planoEncerrar, planoNovaParcela, prazoDaCota, rotuloSituacao, totaisDasCotas,
 } from '../../lib/consorcio'
 import { isoLocal } from '../../lib/hoje'
 
@@ -103,6 +103,10 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
     return bem ? resumoDoBem(bem, extratoDoBem(bem, extrato), extrato.parcelas, extrato.cotas) : null
   }, [extrato])
   const bate = resumo ? batimento(cotas, resumo.pagoSemJuros) : null
+  const pagasPorCota = resumo ? parcelasFinupPorCota(cotas, resumo.pagoSemJuros) : null
+  const prazos = cotas.map((c, i) => (pagasPorCota ? prazoDaCota(c, pagasPorCota[i]) : null))
+  const somaPrazos = cotas.every(c => c.prazo_meses != null) ? cotas.reduce((s, c) => s + Number(c.prazo_meses), 0) : null
+  const somaRestantes = pagasPorCota && prazos.every(p => p.restantes != null) ? prazos.reduce((s, p) => s + p.restantes, 0) : null
   const ativos = (consorcio.eventos || []).filter(e => !e.estornado_em)
   const ultimoId = ativos[0]?.id
   const vendida = consorcio.situacao === 'vendida'
@@ -165,33 +169,49 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
           )}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
+          <table className="w-full text-sm min-w-[820px]">
             <thead>
               <tr className="border-b border-borda text-xs text-texto-2">
                 <th className="text-left font-medium py-2 pr-3">Cota</th>
                 <th className="text-left font-medium py-2 px-2">Adesão</th>
                 <th className="text-right font-medium py-2 px-2">Carta</th>
                 <th className="text-right font-medium py-2 px-2">Parcela</th>
-                <th className="text-right font-medium py-2 px-2">Prazo</th>
-                <th className="text-right font-medium py-2 px-2">Parcelas pagas</th>
+                <th className="text-right font-medium py-2 px-2">Pagas/Prazo</th>
+                <th className="text-right font-medium py-2 px-2">Restantes</th>
+                <th className="text-left font-medium py-2 px-2">Encerramento</th>
                 <th className="text-right font-medium py-2 pl-2">Saldo devedor</th>
               </tr>
             </thead>
             <tbody>
-              {cotas.map(c => (
+              {cotas.map((c, i) => {
+                const p = prazos[i]
+                const enc = encerramentoDaCota(c)
+                return (
                 <tr key={c.id} className="border-b border-borda/60">
                   <td className="py-1.5 pr-3 text-texto-1">{c.numero}</td>
                   <td className="py-1.5 px-2 text-texto-2">{c.data_adesao ? fmtDate(c.data_adesao) : '—'}</td>
                   <td className="py-1.5 px-2 text-right text-texto-1">{fmt(c.valor_carta)}</td>
                   <td className="py-1.5 px-2 text-right text-texto-1">{fmt(parcelaDaCota(c))} <span className="text-xs text-texto-3">({Number(c.percentual_parcela)}%)</span></td>
-                  <td className="py-1.5 px-2 text-right text-texto-2">{c.prazo_meses ? `${c.prazo_meses} meses` : '—'}</td>
-                  <td className="py-1.5 px-2 text-right text-texto-2">{c.parcelas_pagas_informadas ?? '—'}</td>
+                  <td className="py-1.5 px-2 text-right text-texto-1">
+                    {p ? `${p.pagas}/${p.prazo ?? '—'}` : '—'}
+                    {p?.diverge && <span className="block text-[11px] text-aviso">administradora: {p.informadas}/{p.prazo ?? '—'}</span>}
+                  </td>
+                  <td className="py-1.5 px-2 text-right text-texto-1">
+                    {p?.restantes ?? '—'}
+                    {p?.diverge && p.restantesInformadas != null && <span className="block text-[11px] text-aviso">administradora: {p.restantesInformadas}</span>}
+                  </td>
+                  <td className="py-1.5 px-2 text-texto-1">
+                    {enc.data ? fmtDate(enc.data) : '—'}
+                    {enc.estimado && <span className="block text-[11px] text-texto-3">estimado</span>}
+                    {c.previsao_encerramento && c.data_ultima_parcela && <span className="block text-[11px] text-texto-3">última parcela {fmtDate(c.data_ultima_parcela)}</span>}
+                  </td>
                   <td className="py-1.5 pl-2 text-right text-texto-1">
                     {c.saldo_devedor_informado == null ? '—' : fmt(c.saldo_devedor_informado)}
                     {c.saldo_devedor_data && <span className="block text-[11px] text-texto-3">em {fmtDate(c.saldo_devedor_data)}</span>}
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
             <tfoot>
               <tr className="font-semibold">
@@ -199,13 +219,19 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
                 <td />
                 <td className="py-2 px-2 text-right text-texto-1">{fmt(totais.carta)}</td>
                 <td className="py-2 px-2 text-right text-texto-1">{fmt(totais.parcelaMensal)}</td>
+                <td className="py-2 px-2 text-right text-texto-2">{bate ? `${bate.parcelasFinup}/${somaPrazos ?? '—'}` : '—'}</td>
+                <td className="py-2 px-2 text-right text-texto-2">{somaRestantes ?? '—'}</td>
                 <td />
-                <td className="py-2 px-2 text-right text-texto-2">{totais.parcelasInformadas ?? '—'}</td>
                 <td className="py-2 pl-2 text-right text-texto-1">{fmt(totais.saldoDevedor)}</td>
               </tr>
             </tfoot>
           </table>
         </div>
+        {cotas.length > 1 && (
+          <p className="text-xs text-texto-3 mt-2">
+            O pagamento não é ligado a uma cota: as pagas no Finup são o total do batimento dividido entre as cotas.
+          </p>
+        )}
         {totais.meiaParcela && (
           <p className="text-xs text-aviso bg-aviso/5 border border-aviso/20 rounded-lg px-3 py-2 mt-3 flex items-start gap-2">
             <AlertTriangle size={13} className="shrink-0 mt-px" />

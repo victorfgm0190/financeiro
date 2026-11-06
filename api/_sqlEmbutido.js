@@ -139,5 +139,9 @@ export const MIGRACOES = [
  {
   "nome": "2026-11-06b_consorcio_adesao_por_cota.sql",
   "sql": "-- Data de adesão por cota: cotas do mesmo consórcio podem ser compradas em datas diferentes.\n-- consorcios.data_adesao continua existindo só como padrão sugerido ao incluir uma cota nova.\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS data_adesao TEXT;\n\n-- Cotas já cadastradas herdam a data que estava no consórcio.\nUPDATE consorcio_cotas q\n   SET data_adesao = c.data_adesao\n  FROM consorcios c\n WHERE c.bem_id = q.bem_id\n   AND q.data_adesao IS NULL\n   AND c.data_adesao IS NOT NULL;\n"
+ },
+ {
+  "nome": "2026-11-06c_consorcio_encerramento_cota.sql",
+  "sql": "-- Encerramento por cota, conforme o contrato ou a administradora. Opcionais: sem eles, a tela estima\n-- o encerramento por adesão + prazo e mostra o rótulo \"estimado\".\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS previsao_encerramento TEXT;\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS data_ultima_parcela TEXT;\n"
  }
 ]

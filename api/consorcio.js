@@ -53,7 +53,7 @@ async function salvar(req, res) {
   if (cotas.some(c => !textoOuNull(c.numero))) return fail(res, 400, 'Toda cota precisa de número')
   if (cotas.some(c => !(Number(c.valor_carta) > 0))) return fail(res, 400, 'Toda cota precisa do valor da carta de crédito')
   if (cotas.some(c => !(Number(c.percentual_parcela) > 0))) return fail(res, 400, 'Informe o % da parcela paga de cada cota')
-  for (const d of [b.data_adesao, ...cotas.flatMap(c => [c.data_adesao, c.saldo_devedor_data])]) {
+  for (const d of [b.data_adesao, ...cotas.flatMap(c => [c.data_adesao, c.saldo_devedor_data, c.previsao_encerramento, c.data_ultima_parcela])]) {
     if (textoOuNull(d) && !isIsoDate(d)) return fail(res, 400, 'Data inválida')
   }
 
@@ -82,11 +82,13 @@ async function salvar(req, res) {
     for (const c of cotas) {
       await q(
         `INSERT INTO consorcio_cotas (bem_id, numero, data_adesao, valor_carta, prazo_meses, percentual_parcela, valor_parcela_cheia,
-           saldo_devedor_informado, saldo_devedor_data, parcelas_pagas_informadas, valor_pago_informado)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+           saldo_devedor_informado, saldo_devedor_data, parcelas_pagas_informadas, valor_pago_informado,
+           previsao_encerramento, data_ultima_parcela)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [bemId, textoOuNull(c.numero), textoOuNull(c.data_adesao), Number(c.valor_carta), numeroOuNull(c.prazo_meses), Number(c.percentual_parcela),
           numeroOuNull(c.valor_parcela_cheia) ?? 0, numeroOuNull(c.saldo_devedor_informado), textoOuNull(c.saldo_devedor_data),
-          numeroOuNull(c.parcelas_pagas_informadas), numeroOuNull(c.valor_pago_informado)],
+          numeroOuNull(c.parcelas_pagas_informadas), numeroOuNull(c.valor_pago_informado),
+          textoOuNull(c.previsao_encerramento), textoOuNull(c.data_ultima_parcela)],
       )
     }
     await q(`UPDATE contas SET tipo_bem = 'consorcio' WHERE id = $1`, [bemId])

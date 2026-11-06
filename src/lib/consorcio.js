@@ -48,6 +48,59 @@ export function batimento(cotas, pagoAcumulado) {
   }
 }
 
+// ─── Prazo e encerramento por cota ───────────────────────────────────────────────────────────────
+// O pagamento não é ligado a uma cota, então o total do batimento é dividido entre elas: na proporção
+// das parcelas informadas pela administradora ou, sem esse dado, por igual. A soma fecha com o batimento
+// (maior resto, com empate para a primeira cota).
+export function parcelasFinupPorCota(cotas = [], pagoAcumulado = 0) {
+  const total = batimento(cotas, pagoAcumulado).parcelasFinup
+  const informadas = cotas.map(c => Number(c.parcelas_pagas_informadas) || 0)
+  const temInformadas = cotas.every(c => c.parcelas_pagas_informadas != null) && informadas.some(n => n > 0)
+  const pesos = temInformadas ? informadas : cotas.map(() => 1)
+  const somaPesos = pesos.reduce((s, p) => s + p, 0)
+  const exatas = pesos.map(p => (somaPesos > 0 ? (total * p) / somaPesos : 0))
+  const parcelas = exatas.map(Math.floor)
+  let sobra = total - parcelas.reduce((s, p) => s + p, 0)
+  const porResto = exatas.map((v, i) => ({ i, resto: v - Math.floor(v) })).sort((a, b) => b.resto - a.resto || a.i - b.i)
+  for (let n = 0; sobra > 0 && n < porResto.length; n++, sobra--) parcelas[porResto[n].i] += 1
+  return parcelas
+}
+
+// Pagas, prazo e restantes de uma cota. Restantes usa as pagas no Finup; informadas fica para comparar.
+export function prazoDaCota(cota, pagasFinup) {
+  const prazo = cota.prazo_meses == null || cota.prazo_meses === '' ? null : Number(cota.prazo_meses)
+  const informadas = cota.parcelas_pagas_informadas == null ? null : Number(cota.parcelas_pagas_informadas)
+  return {
+    pagas: pagasFinup,
+    prazo,
+    restantes: prazo == null ? null : Math.max(0, prazo - pagasFinup),
+    informadas,
+    restantesInformadas: prazo == null || informadas == null ? null : Math.max(0, prazo - informadas),
+    diverge: informadas != null && informadas !== pagasFinup,
+  }
+}
+
+// Soma meses a uma data 'YYYY-MM-DD'. Dia que não existe no mês final vira o último dia do mês.
+export function somarMeses(iso, meses) {
+  const [a, m, d] = String(iso).slice(0, 10).split('-').map(Number)
+  if (!a || !m || !d) return null
+  const indice = a * 12 + (m - 1) + Number(meses)
+  const ano = Math.floor(indice / 12)
+  const mes = indice % 12
+  const ultimoDia = new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate()
+  return `${ano}-${String(mes + 1).padStart(2, '0')}-${String(Math.min(d, ultimoDia)).padStart(2, '0')}`
+}
+
+// Data informada vale. Sem ela: adesão + prazo, marcada como estimada. Sem base: null.
+export function encerramentoDaCota(cota) {
+  const informada = cota.previsao_encerramento || cota.data_ultima_parcela
+  if (informada) return { data: informada, estimado: false }
+  if (cota.data_adesao && Number(cota.prazo_meses) > 0) {
+    return { data: somarMeses(cota.data_adesao, Number(cota.prazo_meses)), estimado: true }
+  }
+  return { data: null, estimado: false }
+}
+
 // ─── Agendamentos ────────────────────────────────────────────────────────────────────────────────
 // Os agendamentos do consórcio são as transferências cujo destino é o bem.
 export const agendamentosDoBem = (schedules, bemId) =>
