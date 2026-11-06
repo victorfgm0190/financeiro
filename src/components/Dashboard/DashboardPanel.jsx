@@ -88,7 +88,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
 
   // Classificação receita/despesa (mesma função do card do Início mobile).
   const { isReservaGerSombra, isExpenseTx, isIncomeTx } = useMemo(
-    () => criarClassificadores(reserveFunctions, accounts), [reserveFunctions, accounts]
+    () => criarClassificadores(reserveFunctions, accounts, transactions), [reserveFunctions, accounts, transactions]
   )
 
   const period = getFinancialPeriod()

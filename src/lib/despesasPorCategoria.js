@@ -56,6 +56,7 @@ export function despesasPorCategoria(transactions, periodo, cls, modo = MODO_DES
   // Resgate de reserva: só em categoria que tem despesa no período.
   for (const tx of transactions || []) {
     if (!noPeriodo(tx) || tx.type !== 'income' || !isResgateReservaSombra(tx)) continue
+    if (cls.resgateAbate && !cls.resgateAbate(tx)) continue
     const c = porCat.get(tx.categoryId || SEM_CATEGORIA_ID)
     if (!c) continue
     c.resgate += tx.amount

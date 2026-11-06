@@ -48,7 +48,8 @@ import { ocorrenciasVencidas, tocaCartao, buscarPossivelDuplicado, mapaPossiveis
 import { statusSemBanco, tentarSairDoModoSemBanco } from '../lib/conexao'
 import { podeRecarregar, criarJanela, textoNovidades } from '../lib/recargaRemota'
 import { publicarAgendaJa } from '../lib/agendaFeedApi'
-import { espelhoNoPerfil } from '../lib/espelhoReserva'
+import { espelhoNoPerfil, comEspelhosAtualizados } from '../lib/espelhoReserva'
+import { bemDoAgendamento } from '../lib/patrimonio'
 import { faturaParaCriacao, faturaParaEdicao } from '../lib/faturaAberta'
 import { ehRendimentoDeReserva, rateioDoRendimento } from '../lib/rendimentoReserva'
 import { iofAposMudancaDaCompra, aliquotaIof } from '../lib/cambio'
@@ -1753,6 +1754,7 @@ export function AppProvider({ children }) {
             tipoDocumentoId: schedule.tipoDocumentoId || null,
             // ...e as categorias por visão da transferência entre perfis (null fora dela).
             ...categoriasEntrePerfis(accounts.find(a => a.id === schedule.accountId), accounts.find(a => a.id === schedule.toAccountId), schedule),
+            bemId: bemDoAgendamento(schedule, accounts),
             origin: ORIGIN.AGENDAMENTO_AUTO,
             createdAt: new Date().toISOString(),
           }
@@ -2412,7 +2414,7 @@ export function AppProvider({ children }) {
       // campos de saldo não mudam (ex.: só descrição/categoria/reconciliado), o efeito é nulo.
       let accounts = applyBalanceEffect(d.accounts, oldTx, -1)
       accounts = applyBalanceEffect(accounts, newTx, 1)
-      return { ...d, accounts, transactions: d.transactions.map(t => t.id === id ? newTx : t) }
+      return { ...d, accounts, transactions: comEspelhosAtualizados(d.transactions.map(t => t.id === id ? newTx : t), oldTx, newTx) }
     })
     if (recalcArgs) {
       recalcFaturaRef.current?.(recalcArgs.cartaoId, recalcArgs.updated.date, recalcArgs.updated.faturaMonthYear)
@@ -3221,6 +3223,7 @@ export function AppProvider({ children }) {
         // O lançamento efetivado herda o tipo de documento do agendamento.
         tipoDocumentoId: schedule.tipoDocumentoId || null,
         ...categoriasPerfis,
+        bemId: bemDoAgendamento(schedule, d.accounts),
         origin: ORIGIN.AGENDAMENTO,
         ...gerTrace,
       }
@@ -5225,10 +5228,17 @@ export function AppProvider({ children }) {
   // vai para registered_meta[date] = { tipo, lancamento_id, import_id } — descreve a baixa sem
   // mudar o formato de `registered`, que segue sendo o que computeOccurrences lê.
   const markScheduleRegistered = useCallback((scheduleId, date, meta = null) => {
-    update(d => ({
-      ...d,
-      schedules: d.schedules.map(s => s.id === scheduleId ? aplicarBaixa(s, date, meta) : s),
-    }))
+    update(d => {
+      // Transferência baixada para um bem: o lançamento passa a ser desse bem.
+      const bemId = meta?.lancamento_id ? bemDoAgendamento(d.schedules.find(s => s.id === scheduleId), d.accounts) : null
+      return {
+        ...d,
+        schedules: d.schedules.map(s => s.id === scheduleId ? aplicarBaixa(s, date, meta) : s),
+        transactions: bemId
+          ? d.transactions.map(t => (t.id === meta.lancamento_id && t.type === 'transfer' && t.toAccountId === bemId ? { ...t, bemId } : t))
+          : d.transactions,
+      }
+    })
     if (meta?.lancamento_id && meta.tipo !== TIPO_BAIXA.JA_NO_CARTAO && meta.tipo !== TIPO_BAIXA.COBERTA_PARCELA) {
       posEfetivacaoRef.current?.([{ scheduleId, occurrenceDate: date, lancamentoId: meta.lancamento_id }])
     }

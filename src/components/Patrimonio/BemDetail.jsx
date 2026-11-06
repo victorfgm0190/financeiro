@@ -19,6 +19,7 @@ import RegistrarEntradaModal from './RegistrarEntradaModal'
 import ParametrizarBemModal from './ParametrizarBemModal'
 import EditarFavorecidoModal from './EditarFavorecidoModal'
 import { transferenciasElegiveisEntrada } from './bemUtils'
+import { espelharBaixaParcela } from '../../lib/baixaParcela'
 
 const ABAS = [
   { id: 'informacoes', label: 'Informações', icone: Info },
@@ -34,7 +35,7 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
   const {
     accounts, profiles, categories, profileTransactions, payees,
     addAccount, updateAccount, updateTransaction, addPayee, updateSchedulesPayee, mergeRateios,
-    deleteSchedule, updateSchedule, pode,
+    deleteSchedule, updateSchedule, pode, addTransaction, markScheduleRegistered,
   } = useApp()
   // Nível de acesso (src/lib/permissoes.js) — bem, entrada à vista e financiamento = patrimônio.
   const podeIncluirPat = pode('patrimonio', 'incluir')
@@ -348,10 +349,17 @@ export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
     }
   }
 
-  const aposPagamento = async (resposta) => {
+  const aposPagamento = async (resposta, { contaOrigemId, dataPagamento }) => {
     setModal(null)
-    sincronizarSaldo(resposta.saldos_atualizados?.bem?.id, resposta.saldos_atualizados?.bem?.saldo_novo)
-    sincronizarSaldo(resposta.saldos_atualizados?.divida?.id, resposta.saldos_atualizados?.divida?.saldo_novo)
+    espelharBaixaParcela(resposta, {
+      contaOrigemId,
+      dataPagamento,
+      scheduleId: resposta.agendamento?.id,
+      ocorrencia: resposta.agendamento?.ocorrencia,
+      addTransaction,
+      atualizarSaldo: sincronizarSaldo,
+      markScheduleRegistered,
+    })
     avisar(`Parcela ${resposta.parcela.numero} ${resposta.parcela.status === 'paid' ? 'quitada' : 'paga parcialmente'}.`)
     setMovimentacoes(null)
     await carregar()

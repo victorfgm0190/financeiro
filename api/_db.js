@@ -22,6 +22,9 @@ const MAX_CHUNK_ROWS = 500
 // A limpeza intencional ("Marcar como à vista") manda _limpar_parcela = true e grava o NULL.
 export const CAMPOS_PARCELA_PROTEGIDOS = ['installment_num', 'installment_total', 'installment_key', 'serie_id']
 export const FLAG_LIMPAR_PARCELA = '_limpar_parcela'
+// Vínculo com o bem: o sync grava (baixa de agendamento), mas NULL vindo do app nunca o apaga, nem na
+// limpeza de parcela. Quem desvincula é /api/bem/[id]/estornar-entrada.
+export const CAMPOS_PRESERVADOS_SE_NULO = ['bem_id']
 
 // Nome de tabela/coluna não vai como parâmetro ($n): entra no texto do SQL. Por isso só passa nome
 // simples em minúsculas (sem aspas, espaço, ponto-e-vírgula…), e sempre entre aspas duplas — nada
@@ -180,7 +183,7 @@ export async function desligarFlagsUnicasAntes(client, rows) {
 // banco; "ausente" é conferido de novo a cada minuto (a migração pode rodar com a instância quente).
 export const COLUNAS_OPCIONAIS = {
   lancamentos: ['importacao_id', 'fitid', 'data_ocorrencia', 'contrato_id', 'composicao', 'numero_contrato',
-    'moeda', 'valor_original', 'cotacao', 'data_cotacao', 'spread', 'estimado', 'compra_iof_id'],
+    'moeda', 'valor_original', 'cotacao', 'data_cotacao', 'spread', 'estimado', 'compra_iof_id', 'bem_id'],
   contas: ['spread_cambio', 'iof_linha_separada'],
   configuracoes: ['iof_compra_internacional', 'reserva_perguntar_virada'],
   agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato', 'efetivacoes'],
@@ -313,8 +316,8 @@ export async function upsertRowsNoClient(client, table, rows, conflictCol = 'id'
   if (table === 'lancamentos') {
     const { protegidas, limpar } = separarLimpezaDeParcela(rows)
     lotes = [
-      [await reconcileInstallmentKeys(client, protegidas), CAMPOS_PARCELA_PROTEGIDOS],
-      [await reconcileInstallmentKeys(client, limpar), []],
+      [await reconcileInstallmentKeys(client, protegidas), [...CAMPOS_PARCELA_PROTEGIDOS, ...CAMPOS_PRESERVADOS_SE_NULO]],
+      [await reconcileInstallmentKeys(client, limpar), CAMPOS_PRESERVADOS_SE_NULO],
     ]
   }
   let gravadas = 0

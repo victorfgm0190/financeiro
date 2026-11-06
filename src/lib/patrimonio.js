@@ -13,6 +13,14 @@
 // Todas as funções recebem a conta no formato do estado React (camelCase, rowToAccount), não o
 // payload de /api/bem/[id].
 
+// O bem a que um agendamento está ligado: transferência cujo destino é um bem parametrizado. O
+// lançamento gerado na baixa herda esse vínculo (bemId), sem coluna nova no agendamento.
+export function bemDoAgendamento(schedule, accounts) {
+  if (schedule?.transactionType !== 'transfer' || !schedule.toAccountId) return null
+  const destino = (accounts || []).find(a => a.id === schedule.toAccountId)
+  return destino?.tipoBem === 'bem_imobilizado' ? destino.id : null
+}
+
 const escolhido = (conta) => (
   conta?.patrimonioUseMethod === 'nota_fiscal' ? conta?.valorNotaFiscal : conta?.valorPagoManual
 )

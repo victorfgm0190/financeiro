@@ -602,6 +602,8 @@ export const txToRow = (tx) => ({
   }),
   categoria_cnpj_id: tx.categoriaCnpjId || null,
   categoria_cpf_id: tx.categoriaCpfId || null,
+  // Bem do lançamento. NULL nunca apaga o vínculo gravado (api/_db.js CAMPOS_PRESERVADOS_SE_NULO).
+  bem_id: tx.bemId || null,
   // Tipo de documento (tipos_documento.id). NULL = sem tipo; o fallback de exibição (CC/ENV/RES)
   // nunca é gravado — ver src/lib/tiposDocumento.js.
   tipo_documento_id: tx.tipoDocumentoId || null,
@@ -641,11 +643,9 @@ export const rowToTx = (r) => ({
   dateCartao: toDateStr(r.date_cartao),
   description: r.description || '',
   categoryId: r.category_id || '',
-  // Vínculo com o bem imobilizado (coluna criada por ensureBemSchema em api/_bem.js). Somente
-  // leitura, pelo mesmo motivo de valorNotaFiscal em rowToAccount: quem grava é
-  // POST /api/bem/[id]/registrar-entrada, e como upsertRows deriva as colunas das chaves da row
-  // produzida por txToRow, incluir bem_id LÁ apagaria o vínculo do banco a cada sync.
-  // Serve para o modal de entrada à vista não reoferecer transferências já vinculadas.
+  // Vínculo com o bem imobilizado (coluna criada por ensureBemSchema em api/_bem.js). Serve para o
+  // modal de entrada à vista e para os relatórios do bem. O sync grava o vínculo das baixas de
+  // agendamento, mas nunca o apaga (api/_db.js); quem desvincula é /api/bem/[id]/estornar-entrada.
   bemId: r.bem_id || null,
   // Bem vendido (ganho/perda de venda de bem): calculado no /api/load pela movimentação, não é coluna.
   bemVendidoId: r.bem_vendido_id || null,

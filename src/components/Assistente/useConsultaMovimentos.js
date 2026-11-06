@@ -21,7 +21,7 @@ export function useDadosConsulta() {
     reserveFunctions, getFinancialPeriod,
   } = useApp()
   const [modo] = useModoDespesas()
-  const cls = useMemo(() => ({ ...criarClassificadores(reserveFunctions, profileAccounts), isResgateReservaSombra }), [reserveFunctions, profileAccounts])
+  const cls = useMemo(() => ({ ...criarClassificadores(reserveFunctions, profileAccounts, profileReportTransactions), isResgateReservaSombra }), [reserveFunctions, profileAccounts, profileReportTransactions])
   const rows = useMemo(() => buildScheduleGroups(profileSchedules || [], getNextOccurrences), [profileSchedules, getNextOccurrences])
   const nomesFavorecidos = useMemo(() => [...new Set([
     ...(payees || []), ...(profileSchedules || []).map(s => s.payee), ...(profileReportTransactions || []).map(t => t.payee),

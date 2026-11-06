@@ -2,13 +2,17 @@
 // do Painel e card do Início mobile). Extraído de DashboardPanel sem mudança de regra — as duas
 // telas usam esta mesma função para mostrar os mesmos números.
 import {
-  isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds,
+  isInvestimentoSombra, isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds,
 } from '../components/shared/utils.js'
 import { isInvestAutoOrigin } from './origins.js'
 import { isoLocal } from './hoje.js'
+import { criarTesteAbatimento } from './regraDemonstrativo.js'
 
-// reserveFunctions + contas do perfil → predicados de classificação.
-export function criarClassificadores(reserveFunctions, accounts) {
+// reserveFunctions + contas do perfil → predicados de classificação. `transactions` (todos os
+// lançamentos, sem filtro de período) identifica o resgate de função sem depósito: a despesa já
+// aparece no gasto, então esse resgate não é compensação nem receita. Sem ele, conta como antes.
+export function criarClassificadores(reserveFunctions, accounts, transactions) {
+  const resgateAbate = criarTesteAbatimento(transactions, reserveFunctions)
   // Depósitos em reserva de funções marcadas "exibir como despesa" contam como despesa.
   const reservaDespesaFuncSet = reservaDespesaFuncIds(reserveFunctions)
   // category_ids das funções com exibir_como_despesa = true — reconhece sombras legadas
@@ -21,7 +25,7 @@ export function criarClassificadores(reserveFunctions, accounts) {
   // no card "Reservas", não em Receitas/Despesas. Funções com exibir_como_despesa = TRUE seguem
   // dentro das despesas (reconhecidas por reservaFuncaoId ou pelo category_id da função).
   const isReservaGerSombra = (t) =>
-    t.reservaAuto === true && !reservaDespesaFuncSet.has(t.reservaFuncaoId) && !(t.reservaFuncaoId == null && reservaDespesaCategorySet.has(t.categoryId))
+    t.reservaAuto === true && !isInvestimentoSombra(t) && !reservaDespesaFuncSet.has(t.reservaFuncaoId) && !(t.reservaFuncaoId == null && reservaDespesaCategorySet.has(t.categoryId))
   const isExpenseTx = (t) => {
     // Movimento de reserva sem categoria → card Reservas, fora das despesas.
     if (isReservaGerSombra(t)) return false
@@ -37,7 +41,8 @@ export function criarClassificadores(reserveFunctions, accounts) {
   // income), mantendo o par receita+despesa neutro quando a reserva é poupança.
   const isIncomeTx = (t) =>
     t.type === 'income' && !isReservaGerSombra(t) && !isReservaMovimentoExcluido(t, reservaDespesaFuncSet, reservaSet)
-  return { isReservaGerSombra, isExpenseTx, isIncomeTx }
+    && !(isResgateReservaSombra(t) && !resgateAbate(t))
+  return { isReservaGerSombra, isExpenseTx, isIncomeTx, resgateAbate }
 }
 
 // Lançamentos do período (sem investAuto, invisíveis nos relatórios/totais) e seus totais.

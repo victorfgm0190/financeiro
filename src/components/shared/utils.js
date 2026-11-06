@@ -102,9 +102,23 @@ export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
 }
 
-// Conjunto de ids de contas marcadas como "Aplicação Financeira".
+// A transferência para esta conta já gera um espelho de despesa (reserva, investimento ou patrimônio).
+function geraEspelhoProprio(a) {
+  return !!a.isReserva
+    || (!!a.isInvestimento && !!a.investmentCategoryId)
+    || (a.vinculoTipo === 'patrimonio' && !!a.patrimonioCategoryId)
+}
+
+// Conjunto de ids de contas marcadas como "Aplicação Financeira". Conta que gera espelho próprio fica
+// de fora: o espelho já representa a saída, e contar a transferência também dobraria o valor.
 export function aplicacaoAccountIds(accounts) {
-  return new Set((accounts || []).filter(a => a.contaAplicacao).map(a => a.id))
+  return new Set((accounts || []).filter(a => a.contaAplicacao && !geraEspelhoProprio(a)).map(a => a.id))
+}
+
+// Espelho de aporte em conta de investimento ("Investimento - X", id tx_inv_): é despesa, não reserva,
+// mesmo sem função de reserva. Não confundir com o aporte investAuto, que não tem reservaAuto.
+export function isInvestimentoSombra(tx) {
+  return tx?.reservaAuto === true && typeof tx.id === 'string' && tx.id.startsWith('tx_inv_')
 }
 
 // Lançamentos automáticos que nunca entram nos cálculos de relatório financeiro.

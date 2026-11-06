@@ -49,6 +49,7 @@ import VincularLancamento from './VincularLancamento'
 import { useAtalho, useTituloAtalho } from '../../context/atalhosHooks'
 import ShortcutHint from '../shared/ShortcutHint'
 import { pagarParcela } from '../../lib/bemApi'
+import { espelharBaixaParcela } from '../../lib/baixaParcela'
 import ToastShared from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import TransferenciaPerfisCategorias from '../shared/TransferenciaPerfisCategorias'
@@ -343,27 +344,15 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
         debitar_origem: true,
         quitar_com_desconto: !!(finRateio?.oferecerQuitar && finQuitar),
       })
-      for (const l of r.lancamentos_criados || []) {
-        addTransaction({
-          id: l.id,
-          type: 'expense',
-          accountId: finAccountId,
-          amount: l.valor,
-          date: l.data || finDate,
-          categoryId: l.categoria_id || '',
-          description: l.descricao,
-          scheduleId: schedule.id,
-          dataOcorrencia: nextDate || today,
-          origin: ORIGIN.PAGAMENTO_DIVIDA,
-        })
-      }
-      // Bem e dívida são asset/liability: o saldo deles é do backend, o app só espelha (mesma
-      // regra do BemDetail). Sem isto o Patrimônio só mostraria a amortização após recarregar.
-      for (const c of [r.saldos_atualizados?.bem, r.saldos_atualizados?.divida]) {
-        if (c?.id) updateAccount(c.id, { balance: c.saldo_novo })
-      }
-      // Meta aponta o 1º lançamento criado pelo endpoint (principal; o de juros vai junto no estado).
-      markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(r.lancamentos_criados?.[0]?.id))
+      espelharBaixaParcela(r, {
+        contaOrigemId: finAccountId,
+        dataPagamento: finDate,
+        scheduleId: schedule.id,
+        ocorrencia: nextDate || today,
+        addTransaction,
+        atualizarSaldo: (id, saldo) => updateAccount(id, { balance: saldo }),
+        markScheduleRegistered,
+      })
       concluir()
     } catch (err) {
       setFinErro(err.message)

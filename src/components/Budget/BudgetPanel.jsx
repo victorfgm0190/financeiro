@@ -33,7 +33,7 @@ export default function BudgetPanel() {
   // espelho do depósito conta na categoria da função, a perna de despesa do resgate não conta, a
   // receita de compensação do resgate abate a categoria (pode ficar negativa) e funções que não
   // são "exibir como despesa" ficam fora.
-  const regra = useMemo(() => criarRegraDemonstrativo(reserveFunctions, profileAccounts), [reserveFunctions, profileAccounts])
+  const regra = useMemo(() => criarRegraDemonstrativo(reserveFunctions, profileAccounts, transactions), [reserveFunctions, profileAccounts, transactions])
   const categorySpent = useMemo(() => {
     const ids = activeProfile ? new Set(profileAccounts.map(a => a.id)) : null
     const txs = filtrarPerfilDemonstrativo(lancamentosNoModo(transactions, modoValor), reserveFunctions, ids)

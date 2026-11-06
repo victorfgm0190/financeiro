@@ -15,6 +15,7 @@ import { occEfetiva } from './fluxoCaixa.js'
 import { similaridade } from './matchLancamento.js'
 import { numeroParcelaDoTx, totalParcelasDoTx } from './revisaoImportacao.js'
 import { rateioDaOcorrencia } from './rateio.js'
+import { bemDoAgendamento } from './patrimonio.js'
 
 export const JANELA_VINCULO_DIAS = 15
 export const MAX_CANDIDATOS = 20
@@ -217,7 +218,8 @@ export function planejarVinculo(d, { txId, scheduleId, data, manter = 'lancament
     base = { ...s, overrides: { ...(s.overrides || {}), [occ]: ov } }
   }
   const schedule = aplicarBaixa(base, occ, meta)
-  const novoTx = { ...tx, dataOcorrencia: occ }
+  const bemId = tx.type === 'transfer' && tx.toAccountId === s.toAccountId ? bemDoAgendamento(s, d.accounts) : null
+  const novoTx = { ...tx, dataOcorrencia: occ, ...(bemId ? { bemId } : {}) }
   const mudancas = [{ campo: 'vinculo', de: null, para: tx.id }]
   if (manter === 'lancamento' && div.valor) mudancas.push({ campo: 'amount', de: div.valor.previsto, para: div.valor.real })
   if (manter === 'lancamento' && div.data) mudancas.push({ campo: 'date', de: div.data.previsto, para: div.data.real })

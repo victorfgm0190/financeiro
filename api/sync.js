@@ -4,6 +4,7 @@ import { requireAuth } from './_auth.js'
 import { autorizarSync } from './_permissoesApi.js'
 import { ErroHttp } from './_usuarios.js'
 import { comAmbiente } from './_ambiente.js'
+import { sincronizarEntradasDoBem, apagarEntradasDoBem } from './_bem.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 import { filtrarConfiguracoes, conferirExclusaoEmMassa, logRecusa, TABELAS_DO_SYNC } from './_syncTrava.js'
 
@@ -81,6 +82,16 @@ async function handler(req, res) {
       ])
       const gravado = { upserted, deleted }
       logSync(`section ${table}`, recebido, gravado)
+      if (table === 'lancamentos') {
+        // O lançamento já está gravado: uma falha aqui não pode recusar o sync. O próximo envio da
+        // linha refaz a movimentação (a operação é idempotente).
+        try {
+          await apagarEntradasDoBem(query, toDelete)
+          await sincronizarEntradasDoBem(query, upsert)
+        } catch (err) {
+          console.error('[api/sync] movimentação do bem', err.message)
+        }
+      }
       const recalculo = prepVirada ? await concluirRecalculo(prepVirada, 'lançamento com data em mês fechado') : null
       return res.json({ ok: true, ...recebido, written: gravado, ...respostaRecalculo(recalculo) })
 

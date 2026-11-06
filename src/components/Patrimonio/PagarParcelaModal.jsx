@@ -43,7 +43,7 @@ export default function PagarParcelaModal({
     }
   }, [valorPago, parcela, quitar])
 
-  const podeEnviar = rateio && dataPagamento && !loading
+  const podeEnviar = rateio && dataPagamento && contaOrigemId && !loading
 
   const enviar = async (e) => {
     e.preventDefault()
@@ -53,10 +53,11 @@ export default function PagarParcelaModal({
       const resposta = await pagarParcela(parcela.id, {
         valor_pago: Number(valorPago),
         data_pagamento: dataPagamento,
-        conta_origem_id: contaOrigemId || null,
+        conta_origem_id: contaOrigemId,
+        debitar_origem: true,
         quitar_com_desconto: !!(rateio.oferecerQuitar && quitar),
       })
-      onSuccess(resposta)
+      onSuccess(resposta, { contaOrigemId, dataPagamento })
     } catch (err) {
       onErro(err.message)
     } finally {

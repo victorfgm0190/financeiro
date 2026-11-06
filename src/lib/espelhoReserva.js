@@ -5,6 +5,19 @@
 //   resgate (receita, ou a perna de despesa do resgate) → origem da transferência.
 // Sem transferência-pai resolvível, vale a conta da função de reserva (reservaFuncaoId).
 import { isResgateReservaSombra } from '../components/shared/utils.js'
+import { isPatrimonioOrigin } from './origins.js'
+
+// Editar o valor ou a data de uma transferência: os espelhos dela acompanham. Espelho não tem conta,
+// então isto não mexe em saldo. Sem esta atualização, o relatório continuava com o valor antigo.
+export function comEspelhosAtualizados(transactions, antes, depois) {
+  if (depois?.type !== 'transfer') return transactions
+  if (antes.amount === depois.amount && antes.date === depois.date) return transactions
+  return transactions.map(t => (
+    t.parentTxId === depois.id && !t.accountId && (t.reservaAuto === true || isPatrimonioOrigin(t))
+      ? { ...t, amount: Number(depois.amount), date: depois.date }
+      : t
+  ))
+}
 
 export function contaDonaDoEspelho(tx, txById, funcAccById) {
   const pai = tx.parentTxId ? txById.get(tx.parentTxId) : null

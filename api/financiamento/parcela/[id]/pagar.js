@@ -21,14 +21,10 @@ import { comAmbiente } from '../../../_ambiente.js'
 // fórmula é stateless, então aplicá-la só sobre a parcela do dia daria principal/juros errados
 // no segundo aporte. Os lançamentos e os saldos usam apenas o DELTA deste pagamento.
 //
-// A conta de origem não é debitada aqui de propósito: o agendamento da parcela é uma
-// transferência conta corrente → conta de dívida e é ela que move o dinheiro da conta corrente.
-// Debitar nos dois lugares contaria a saída duas vezes.
-//
-// `debitar_origem: true` inverte essa premissa e existe para a baixa feita pela tela de Contas a
-// Pagar: lá o desdobramento principal/juros SUBSTITUI a transferência do agendamento (ela nunca
-// é registrada), então são estes dois lançamentos que precisam sair da conta de origem — e é por
-// isso que eles nascem com `account_id` preenchido nesse modo.
+// `debitar_origem: true` é o modo das duas telas (Contas a Pagar e aba Parcelas do bem): o
+// desdobramento principal/juros SUBSTITUI a transferência do agendamento, que nunca é registrada,
+// então são estes dois lançamentos que saem da conta de origem — e nascem com `account_id`.
+// Sem a flag, os lançamentos ficam sem conta e nenhum dinheiro sai: nenhuma tela usa esse modo.
 //
 // O saldo da conta de ORIGEM não é escrito aqui nem nesse modo: para conta corrente o saldo é
 // derivado dos lançamentos pelo próprio app (AppContext.recalcularSaldo), que reescreve
@@ -275,6 +271,8 @@ async function handler(req, res) {
         data: dataPagamento,
       })),
       movimentacao_id: resultado.movimentacaoId,
+      // A aba Parcelas não tem o agendamento em mãos e precisa dele para espelhar a baixa no estado.
+      agendamento: parcela.schedule_id ? { id: parcela.schedule_id, ocorrencia: parcela.venc_iso } : null,
       financiamento: { id: fin.id, status: resultado.statusFin },
       saldos_atualizados: {
         bem: {

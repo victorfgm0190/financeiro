@@ -160,6 +160,9 @@ export function baixasSemRateio({ schedules = [], transactions = [], rateiosPorI
 // próprio (manual, Assistente, linha da importação), é transferência, ou o agendamento não é rateado.
 export function rateioHerdado({ tx, schedule, data, rateiosPorId = new Map() }) {
   if (!tx || !schedule || (tx.type !== 'expense' && tx.type !== 'income')) return []
+  // Parcela de financiamento: o endpoint já desdobrou em dois lançamentos (principal e juros), cada
+  // um na sua categoria. Herdar o rateio do agendamento dividiria o principal de novo entre os dois.
+  if (tx.origin === 'pagamento_divida') return []
   if ((rateiosPorId.get(tx.id) || []).length) return []
   const base = rateioDaOcorrencia(schedule, data, rateiosPorId.get(schedule.id) || [])
   if (base.length < 2) return []

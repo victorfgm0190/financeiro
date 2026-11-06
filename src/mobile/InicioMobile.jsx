@@ -149,7 +149,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpen
 function ResumoCard({ saldosPrincipais, v: valor, ocultar, carregando, onAbrir }) {
   const { profileAccounts, profileReportTransactions, reserveFunctions, getFinancialPeriod, getSaldoPrincipal } = useApp()
   // Mesma classificação e período dos KPIs "Receitas do Mês"/"Despesas do Mês" do Painel.
-  const cls = useMemo(() => criarClassificadores(reserveFunctions, profileAccounts), [reserveFunctions, profileAccounts])
+  const cls = useMemo(() => criarClassificadores(reserveFunctions, profileAccounts, profileReportTransactions), [reserveFunctions, profileAccounts, profileReportTransactions])
   const periodo = getFinancialPeriod()
   const { income, expense } = totaisDoPeriodo(profileReportTransactions, periodoStr(periodo), cls)
   const b = useMemo(() => getSaldoPrincipal(), [getSaldoPrincipal])

@@ -555,6 +555,43 @@ export async function registrarMovimentacao(q, {
   return id
 }
 
+// Histórico do bem acompanha o sync de lançamentos: transferência vinculada sem movimentação ganha a
+// sua (com a data REAL do pagamento) e a que mudou de valor é corrigida. Idempotente: o sync reenvia
+// as mesmas linhas e uma linha repetida não cria nada.
+export async function sincronizarEntradasDoBem(q, rows) {
+  const entradas = (rows || []).filter(r => r.bem_id && r.type === 'transfer' && r.to_account_id === r.bem_id)
+  if (entradas.length === 0) return
+  const existentes = await q(
+    `SELECT lancamento_id, valor FROM bem_movimentacoes
+      WHERE tipo = 'entrada_venda' AND lancamento_id = ANY($1)`,
+    [entradas.map(r => r.id)],
+  )
+  const porLancamento = new Map(existentes.map(m => [m.lancamento_id, Number(m.valor)]))
+  for (const r of entradas) {
+    const valor = round2(Number(r.amount))
+    if (!porLancamento.has(r.id)) {
+      await registrarMovimentacao(q, {
+        bemId: r.bem_id,
+        tipo: 'entrada_venda',
+        data: String(r.date).slice(0, 10),
+        descricao: r.payee || r.description || 'Entrada à vista',
+        valor,
+        categoriaId: r.category_id || null,
+        lancamentoId: r.id,
+      })
+    } else if (round2(porLancamento.get(r.id)) !== valor) {
+      await q(`UPDATE bem_movimentacoes SET valor = $2 WHERE tipo = 'entrada_venda' AND lancamento_id = $1`, [r.id, valor])
+    }
+  }
+}
+
+// Lançamento apagado leva a movimentação de entrada: sem isso, o total da entrada contaria um
+// pagamento que não existe mais.
+export async function apagarEntradasDoBem(q, ids) {
+  if (!ids || ids.length === 0) return
+  await q(`DELETE FROM bem_movimentacoes WHERE tipo = 'entrada_venda' AND lancamento_id = ANY($1)`, [ids])
+}
+
 // Valida que todos os ids de categoria informados existem. Retorna os ids inválidos.
 export async function categoriasInexistentes(q, ids) {
   const alvo = [...new Set(ids.filter(Boolean))]

@@ -9,7 +9,7 @@ import { lerPreferencias, gravarPreferencias } from '../lib/preferenciasUi'
 // Mês"). Pizza, ranking e a lista do clique chamam isto com o mesmo período/modo.
 export function useDespesasPorCategoria(periodo, modo) {
   const { profileReportTransactions, reserveFunctions, profileAccounts } = useApp()
-  const cls = useMemo(() => criarClassificadores(reserveFunctions, profileAccounts), [reserveFunctions, profileAccounts])
+  const cls = useMemo(() => criarClassificadores(reserveFunctions, profileAccounts, profileReportTransactions), [reserveFunctions, profileAccounts, profileReportTransactions])
   return useMemo(
     () => despesasPorCategoria(profileReportTransactions, periodo, { ...cls, isResgateReservaSombra }, modo),
     [profileReportTransactions, periodo, cls, modo]

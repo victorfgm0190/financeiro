@@ -147,7 +147,7 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
   // Sombras legadas com reservaFuncaoId = null são reconhecidas pelo category_id da função
   // (reservaDespesaCategorySet), evitando que depósitos de funções "despesa" caiam em Reservas.
   // Regra única com o Orçamento (lib/regraDemonstrativo).
-  const { isReservaGerSombra, ehDespesa, ehCompensacao } = regraDosConjuntos({ reserveFunctions, aplicSet, reservaSet: reservaAccSet, reservaDespesaFuncSet })
+  const { isReservaGerSombra, ehDespesa, ehCompensacao } = regraDosConjuntos({ reserveFunctions, aplicSet, reservaSet: reservaAccSet, reservaDespesaFuncSet, transactions })
 
   const expenseTxs = inRange.filter(ehDespesa)
   // Receitas de compensação do resgate de reserva → vão para a seção de DESPESAS abatendo a
