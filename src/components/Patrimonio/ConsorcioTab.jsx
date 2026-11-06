@@ -13,6 +13,7 @@ import BaixasDoBem from './BaixasDoBem'
 import {
   agendamentosDoBem, batimento, encerramentoDaCota, fotoDosAgendamentos, parcelaDaCota, parcelasFinupPorCota, planoEncerrar, planoNovaParcela, prazoDaCota, rotuloSituacao, totaisDasCotas,
 } from '../../lib/consorcio'
+import PlanoVendaConsorcio from './PlanoVendaConsorcio'
 import { isoLocal } from '../../lib/hoje'
 
 const ROTULO_EVENTO = { contemplar: 'Contemplação', reajuste: 'Reajuste', vender: 'Venda', usar_carta: 'Uso da carta' }
@@ -354,6 +355,8 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
             </div>
           )}
       </div>
+
+      <PlanoVendaConsorcio bemId={bemId} consorcio={consorcio} resumo={resumo} pagasPorCota={pagasPorCota} podeEditar={podeEditar} onMudou={onMudou} avisar={avisar} />
 
       {marcando && (
         <Modal open onClose={() => setMarcando(null)} title={marcando.soCredito ? 'Registrar crédito ou rendimento' : 'Marcar parcela como paga'}>

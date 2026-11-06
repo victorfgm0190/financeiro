@@ -10,8 +10,10 @@ import { comAmbiente } from './_ambiente.js'
 // GET /api/consorcio?bem_id=    → um consórcio (ou null), com cotas e eventos.
 // PUT /api/consorcio            → cadastra ou edita. Converte um bem existente sem tocar nos lançamentos:
 //                                 só contas.tipo_bem muda; entradas e vínculos ficam como estão.
+// PATCH /api/consorcio          → plano de venda: { bem_id, funcao_reserva_id, cotas: [{ numero, plano_mes,
+//                                 plano_valor, vendida_em, vendida_valor }] }. Só previsão: nada de lançamento.
 
-const COLS_COTA = ['valor_carta', 'percentual_parcela', 'valor_parcela_cheia', 'saldo_devedor_informado', 'valor_pago_informado']
+const COLS_COTA = ['valor_carta', 'percentual_parcela', 'valor_parcela_cheia', 'saldo_devedor_informado', 'valor_pago_informado', 'plano_valor', 'vendida_valor']
 const cotaParaApi = (c) => ({
   ...c,
   ...Object.fromEntries(COLS_COTA.map(k => [k, c[k] == null ? null : num(c[k])])),
@@ -87,17 +89,21 @@ async function salvar(req, res) {
       [bemId, textoOuNull(b.administradora), textoOuNull(b.grupo), textoOuNull(b.data_adesao),
         textoOuNull(b.indice_reajuste), textoOuNull(b.conta_origem_id), situacao],
     )
+    // Editar o cadastro recria as cotas: o plano de venda de cada uma continua, pelo número.
+    const planos = new Map((await q(`SELECT numero, plano_mes, plano_valor, vendida_em, vendida_valor FROM consorcio_cotas WHERE bem_id = $1`, [bemId])).map(p => [p.numero, p]))
     await q(`DELETE FROM consorcio_cotas WHERE bem_id = $1`, [bemId])
     for (const c of cotas) {
       await q(
         `INSERT INTO consorcio_cotas (bem_id, numero, data_adesao, valor_carta, prazo_meses, percentual_parcela, valor_parcela_cheia,
            saldo_devedor_informado, saldo_devedor_data, parcelas_pagas_informadas, valor_pago_informado,
-           previsao_encerramento, data_ultima_parcela)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+           previsao_encerramento, data_ultima_parcela, plano_mes, plano_valor, vendida_em, vendida_valor)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
         [bemId, textoOuNull(c.numero), textoOuNull(c.data_adesao), Number(c.valor_carta), numeroOuNull(c.prazo_meses), Number(c.percentual_parcela),
           numeroOuNull(c.valor_parcela_cheia) ?? 0, numeroOuNull(c.saldo_devedor_informado), textoOuNull(c.saldo_devedor_data),
           numeroOuNull(c.parcelas_pagas_informadas), numeroOuNull(c.valor_pago_informado),
-          textoOuNull(c.previsao_encerramento), textoOuNull(c.data_ultima_parcela)],
+          textoOuNull(c.previsao_encerramento), textoOuNull(c.data_ultima_parcela),
+          planos.get(textoOuNull(c.numero))?.plano_mes ?? null, planos.get(textoOuNull(c.numero))?.plano_valor ?? null,
+          planos.get(textoOuNull(c.numero))?.vendida_em ?? null, planos.get(textoOuNull(c.numero))?.vendida_valor ?? null],
       )
     }
     await estornarAberturasOrfas(q, bemId, cotas.map(c => textoOuNull(c.numero)))
@@ -107,11 +113,43 @@ async function salvar(req, res) {
   return res.json({ success: true, bem_id: bemId, tipo_bem: 'consorcio', situacao })
 }
 
+async function salvarPlano(req, res) {
+  if (!pode(req.user, 'patrimonio', 'editar')) return fail(res, 403, 'Sem permissão para Patrimônio')
+  const b = await parseBody(req)
+  if (!b.bem_id) return fail(res, 400, 'bem_id é obrigatório')
+  await exigirContaPermitida(query, req.user, b.bem_id)
+  const [cons] = await query(`SELECT bem_id FROM consorcios WHERE bem_id = $1`, [b.bem_id])
+  if (!cons) return fail(res, 404, 'Consórcio não encontrado')
+  const cotas = Array.isArray(b.cotas) ? b.cotas : []
+  for (const c of cotas) {
+    if (textoOuNull(c.plano_mes) && !/^\d{4}-(0[1-9]|1[0-2])$/.test(c.plano_mes)) return fail(res, 400, 'Mês previsto inválido')
+    if (textoOuNull(c.vendida_em) && !isIsoDate(c.vendida_em)) return fail(res, 400, 'Data da venda inválida')
+    if (numeroOuNull(c.plano_valor) != null && Number(c.plano_valor) < 0) return fail(res, 400, 'Valor de venda inválido')
+  }
+  const funcaoId = textoOuNull(b.funcao_reserva_id)
+  if (funcaoId) {
+    const [fn] = await query(`SELECT account_id FROM reserve_functions WHERE id = $1`, [funcaoId])
+    if (!fn) return fail(res, 400, 'Função de reserva não encontrada')
+    await exigirContaPermitida(query, req.user, fn.account_id)
+  }
+  await withTransaction(async (q) => {
+    await q(`UPDATE consorcios SET funcao_reserva_id = $2, updated_at = now() WHERE bem_id = $1`, [b.bem_id, funcaoId])
+    for (const c of cotas) {
+      await q(
+        `UPDATE consorcio_cotas SET plano_mes = $3, plano_valor = $4, vendida_em = $5, vendida_valor = $6 WHERE bem_id = $1 AND numero = $2`,
+        [b.bem_id, c.numero, textoOuNull(c.plano_mes), numeroOuNull(c.plano_valor), textoOuNull(c.vendida_em), numeroOuNull(c.vendida_valor)],
+      )
+    }
+  })
+  return res.json({ success: true })
+}
+
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
   try {
     if (req.method === 'GET') return await listar(req, res)
     if (req.method === 'PUT') return await salvar(req, res)
+    if (req.method === 'PATCH') return await salvarPlano(req, res)
     return fail(res, 405, 'Método não permitido')
   } catch (err) {
     if (err.status) return fail(res, err.status, err.message)

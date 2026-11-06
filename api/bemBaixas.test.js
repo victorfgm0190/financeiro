@@ -81,6 +81,7 @@ beforeEach(async () => {
   await db.exec(migracao('2026-11-06b_consorcio_adesao_por_cota.sql'))
   await db.exec(migracao('2026-11-06c_consorcio_encerramento_cota.sql'))
   await db.exec(migracao('2026-11-06d_bem_baixas.sql'))
+  await db.exec(migracao('2026-11-06h_plano_venda_consorcio.sql'))
 }, 30000)
 
 describe('Histórico de abertura', () => {

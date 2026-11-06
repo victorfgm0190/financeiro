@@ -159,5 +159,9 @@ export const MIGRACOES = [
  {
   "nome": "2026-11-06g_bem_vendas.sql",
   "sql": "-- Venda simples de bem (api/bem/[id]/vender.js). Uma linha por venda: o que foi informado e, em `anterior`,\n-- o que o estorno precisa para desfazer tudo. Idempotente. Não altera nenhum dado existente.\nCREATE TABLE IF NOT EXISTS bem_vendas (\n  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,\n  bem_id TEXT NOT NULL,\n  data TEXT NOT NULL,\n  dados JSONB NOT NULL DEFAULT '{}'::jsonb,\n  anterior JSONB NOT NULL DEFAULT '{}'::jsonb,\n  criado_por TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  estornado_em TIMESTAMPTZ\n);\nCREATE INDEX IF NOT EXISTS ix_bem_vendas_bem ON bem_vendas (bem_id);\n-- Um bem só tem uma venda valendo.\nCREATE UNIQUE INDEX IF NOT EXISTS ux_bem_vendas_ativa ON bem_vendas (bem_id) WHERE estornado_em IS NULL;\n"
+ },
+ {
+  "nome": "2026-11-06h_plano_venda_consorcio.sql",
+  "sql": "-- Plano de venda do consórcio: previsão por cota, venda já feita da cota e a função de reserva que paga as\n-- parcelas. Tudo vazio por padrão. Idempotente. Não altera nenhum dado existente.\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS plano_mes TEXT;\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS plano_valor NUMERIC(14,2);\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS vendida_em TEXT;\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS vendida_valor NUMERIC(14,2);\nALTER TABLE consorcios ADD COLUMN IF NOT EXISTS funcao_reserva_id TEXT;\n"
  }
 ]

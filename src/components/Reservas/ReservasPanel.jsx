@@ -15,8 +15,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ResgateBreakdownModal from '../Schedule/ResgateBreakdownModal'
-import { itemSaidaFluxo, itemAbreComposicao, parteDaFuncao, parteDaFuncaoNaOcorrencia } from '../../lib/resgateComposicao'
-import { occEfetiva } from '../../lib/fluxoCaixa'
+import { itemAbreComposicao } from '../../lib/resgateComposicao'
 import ViradaAssistidaModal from './ViradaAssistidaModal'
 import HelpCampo from '../shared/HelpCampo'
 import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
@@ -25,6 +24,7 @@ import InputMoeda from '../shared/InputMoeda'
 import { isoLocal } from '../../lib/hoje'
 import { erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
 import { ehAjusteDeRendimento } from '../../lib/rendimentoReserva'
+import { previsoesDasFuncoes } from '../../lib/previsaoReserva'
 import { parseValorBR } from '../../lib/valorBR'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
@@ -1553,18 +1553,7 @@ function buildFluxoWindow() {
 function computeScheduledByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win) {
   const { winStart, winEnd, winIndexOf } = win
   const round2 = (n) => Math.round(n * 100) / 100
-  const accById = new Map(accounts.map(a => [a.id, a]))
-  const detBySchedule = new Map()
-  for (const srf of (scheduleReservaFuncoes || [])) {
-    if (!detBySchedule.has(srf.scheduleId)) detBySchedule.set(srf.scheduleId, [])
-    detBySchedule.get(srf.scheduleId).push(srf)
-  }
-  const transfers = (schedules || []).filter(s =>
-    s.transactionType === 'transfer' && (s.reservaFuncaoId || detBySchedule.has(s.id))
-  )
-  const provisoes = (schedules || []).filter(s =>
-    s.isProvisao && !s.provisaoEfetivada && s.transactionType === 'expense' && s.reservaFuncaoId
-  )
+  const previsoes = previsoesDasFuncoes(linked, { accounts, schedules, scheduleReservaFuncoes, getNextOccurrences }, { ini: winStart, fim: winEnd })
   const result = {}
   for (const f of linked) {
     const deps = new Array(12).fill(0)
@@ -1574,45 +1563,12 @@ function computeScheduledByFunction(linked, accounts, schedules, scheduleReserva
     // FUTUROS (idx >= 1; idx 0 é o mês anterior/referência) — casam com o total dos arrays.
     const depItems = []  // { date, label, amount }
     const resItems = []  // { date, label, amount, resgateScheduleId? } (resgates reais + provisões)
-    for (const p of provisoes) {
-      if (p.reservaFuncaoId !== f.id) continue
-      const occs = getNextOccurrences(p, 24)
-      const until = p.provisaoEfetivadaUntil || null
-      // `until` compara datas-base (chave); a janela e o valor usam a ocorrência EFETIVA.
-      const base = until ? occs.find(dd => dd > until) : occs[0]
-      if (!base) continue
-      const ef = occEfetiva(p, base)
-      const proxima = ef.date
-      const amt = Number(ef.amount) || 0
-      if (!amt) continue
-      if (proxima < winStart || proxima > winEnd) continue
-      const idx = winIndexOf(proxima)
+    for (const p of previsoes[f.id] || []) {
+      const idx = winIndexOf(p.date)
       if (idx < 0 || idx > 11) continue
-      provs[idx] = round2(provs[idx] + amt)
-      if (idx >= 1) resItems.push({ date: proxima, label: p.description || 'Resgate (provisão)', amount: amt })
-    }
-    for (const s of transfers) {
-      const isDep = !!accById.get(s.toAccountId)?.isReserva
-      const isRes = !isDep && !!accById.get(s.accountId)?.isReserva
-      if (!isDep && !isRes) continue
-      // Regra de rateio por função em parteDaFuncao — a mesma que a composição do resgate usa —
-      // aplicada à ocorrência EFETIVA (data e valor do override).
-      const det = detBySchedule.get(s.id)
-      if (!parteDaFuncao(s, det, f.id).valor) continue
-      for (const base of getNextOccurrences(s, 140)) {
-        const { date: dateStr, valor: amt } = parteDaFuncaoNaOcorrencia(s, det, f.id, base)
-        if (!amt) continue
-        if (dateStr < winStart || dateStr > winEnd) continue
-        const idx = winIndexOf(dateStr)
-        if (idx < 0 || idx > 11) continue
-        if (isDep) {
-          deps[idx] = round2(deps[idx] + amt)
-          if (idx >= 1) depItems.push({ date: dateStr, label: s.description || 'Depósito', amount: amt })
-        } else {
-          ress[idx] = round2(ress[idx] + amt)
-          if (idx >= 1) resItems.push(itemSaidaFluxo(s, dateStr, amt, f.id))
-        }
-      }
+      const coluna = p.tipo === 'deposito' ? deps : p.tipo === 'resgate' ? ress : provs
+      coluna[idx] = round2(coluna[idx] + p.amount)
+      if (idx >= 1) (p.tipo === 'deposito' ? depItems : resItems).push(p.itemFluxo)
     }
     result[f.id] = { deps, ress, provs, depItems, resItems }
   }
