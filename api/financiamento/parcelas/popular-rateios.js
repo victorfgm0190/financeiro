@@ -5,6 +5,7 @@ import {
 } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
 import { exigirContaPermitida } from '../../_permissoesApi.js'
+import { comGuardaVirada } from '../../_guardaVirada.js'
 
 // POST /api/financiamento/parcelas/popular-rateios — divide os agendamentos de parcela de um
 // financiamento ANTIGO nas duas categorias do bem, via rateio.
@@ -216,4 +217,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

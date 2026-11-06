@@ -1,9 +1,65 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { poolDoContexto, bancoAtual } from './_conexao.js'
 
 // Todas as funções daqui usam o banco do AMBIENTE da requisição (api/_conexao.js): o handler roda
 // dentro de comAmbiente() (api/_ambiente.js). Sem contexto de ambiente, getPool() lança — nunca há
 // um banco padrão. O banco central da plataforma é acessado por api/_central.js.
-const getPool = () => poolDoContexto()
+const transacaoUnica = new AsyncLocalStorage()
+const getPool = () => transacaoUnica.getStore() ?? poolDoContexto()
+
+// Roda `fn` numa transação só: todo `query`, `withTransaction` e `upsertRows` chamado dentro dela (mesmo
+// em outro módulo) entra na mesma conexão, e as transações internas viram SAVEPOINT. Erro em `fn` desfaz
+// tudo. As consultas soltas também vão em SAVEPOINT: uma falha que a rota trata (coluna que ainda não existe)
+// não invalida a transação inteira. Os comandos rodam em sequência: não use Promise.all dentro dela.
+export async function emTransacaoUnica(fn) {
+  const client = await poolDoContexto().connect()
+  let seq = 0
+  const salvando = async (acao) => {
+    const nome = `sp_${++seq}`
+    await client.query(`SAVEPOINT ${nome}`)
+    try {
+      const r = await acao()
+      await client.query(`RELEASE SAVEPOINT ${nome}`)
+      return r
+    } catch (err) {
+      await client.query(`ROLLBACK TO SAVEPOINT ${nome}`)
+      await client.query(`RELEASE SAVEPOINT ${nome}`)
+      throw err
+    }
+  }
+  const interno = () => {
+    const nomes = []
+    return {
+      query(sql, params) {
+        const c = typeof sql === 'string' ? sql.trim().toUpperCase() : ''
+        if (c === 'BEGIN') { const n = `sp_${++seq}`; nomes.push(n); return client.query(`SAVEPOINT ${n}`) }
+        if (c === 'COMMIT') return client.query(`RELEASE SAVEPOINT ${nomes.pop()}`)
+        if (c === 'ROLLBACK') {
+          const n = nomes.pop()
+          return client.query(`ROLLBACK TO SAVEPOINT ${n}`).then(() => client.query(`RELEASE SAVEPOINT ${n}`))
+        }
+        return params === undefined ? client.query(sql) : client.query(sql, params)
+      },
+      release() {},
+    }
+  }
+  const pool = {
+    query: (sql, params) => salvando(() => (params === undefined ? client.query(sql) : client.query(sql, params))),
+    connect: async () => interno(),
+  }
+  const q = async (sql, params = []) => (await client.query(sql, params)).rows
+  try {
+    await client.query('BEGIN')
+    const r = await transacaoUnica.run(pool, () => fn(q))
+    await client.query('COMMIT')
+    return r
+  } catch (err) {
+    try { await client.query('ROLLBACK') } catch { /* a conexão pode ter caído */ }
+    throw err
+  } finally {
+    client.release()
+  }
+}
 
 export async function query(sql, params = []) {
   const { rows } = await getPool().query(sql, params)

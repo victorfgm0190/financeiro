@@ -3,6 +3,7 @@ import { requireAuth } from '../../_auth.js'
 import { getRouteId, num, round2, fail, explicarErro, ensureBemSchema } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
 import { exigirContaPermitida } from '../../_permissoesApi.js'
+import { comGuardaVirada } from '../../_guardaVirada.js'
 
 // POST /api/bem/[id]/estornar-entrada — desfaz TODA a entrada à vista registrada no bem
 // (transferências vinculadas + trade-ins), deixando-o pronto para registrar de novo.
@@ -204,4 +205,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

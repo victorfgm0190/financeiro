@@ -345,137 +345,6 @@ describe('virada com diferença', () => {
   })
 })
 
-describe('lançamento retroativo', () => {
-  const sincronizarRetro = (date = '2026-08-10', id = 'retro') => chamar(syncHandler, {
-    method: 'POST', url: '/api/sync',
-    body: { type: 'section', table: 'lancamentos', delete: [], upsert: [txToRow({ id, type: 'transfer', amount: 40, date, accountId: CONTA_CORRENTE, toAccountId: CONTA_RESERVA, reservaFuncaoId: F.ipva, description: 'Depósito esquecido' })] },
-  })
-
-  it('lançamento em mês fechado é salvo, fica pendente e não mexe nos fechamentos', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'r1' })
-    await acao({ acao: 'confirmar', fim: '2026-09-14', chave: 'r2' })
-    const fotoSnap = () => linhas(bancoA, 'SELECT id, entradas::float AS e, saldo::float AS s FROM reserve_period_snapshots ORDER BY id')
-    const antes = await fotoSnap()
-    const tx = { id: 'retro', type: 'transfer', amount: 40, date: '2026-08-10', accountId: CONTA_CORRENTE, toAccountId: CONTA_RESERVA, reservaFuncaoId: F.ipva, description: 'Depósito esquecido' }
-    const envio = { method: 'POST', url: '/api/sync', body: { type: 'section', table: 'lancamentos', upsert: [txToRow(tx)], delete: [] } }
-    const s = await chamar(syncHandler, envio)
-    expect(s.statusCode).toBe(200)
-    expect(s.body.reservaPendencias).toBe(1)
-    expect(s.body.viradaRecalculada).toBeUndefined()
-    expect(await linhas(bancoA, "SELECT id FROM lancamentos WHERE id = 'retro'")).toHaveLength(1)
-    expect(await fotoSnap()).toEqual(antes)
-    const [p] = (await status()).body.pendenciasFechado
-    expect(p).toMatchObject({ lancamento_id: 'retro', function_id: F.ipva, account_id: CONTA_RESERVA, valor: 40, dataAjuste: '2026-09-15', podeReabrir: true, fechamentosADesfazer: ['2026-09-14', '2026-08-14'] })
-    expect(p.observacaoSugerida).toContain('Depósito esquecido')
-    // o mesmo sync de novo não cria outra pendência
-    expect((await chamar(syncHandler, envio)).body.reservaPendencias).toBeUndefined()
-    expect((await status()).body.pendenciasFechado).toHaveLength(1)
-  })
-
-  it('a) Ajuste no próximo período aberto: entra no saldo, não mexe no fechamento nem em Rendimentos', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'r3' })
-    await sincronizarRetro()
-    const [p] = (await status()).body.pendenciasFechado
-    const r = await acao({ acao: 'pendencia_ajustar', id: p.id, functionId: F.ipva, valor: 40, observacao: p.observacaoSugerida })
-    expect(r.statusCode).toBe(200)
-    const [aj] = await linhas(bancoA, "SELECT to_char(data, 'YYYY-MM-DD') AS data, valor::float AS v, lancamento_id FROM reserve_adjustments WHERE observacao LIKE 'Referente%'")
-    expect(aj).toEqual({ data: '2026-08-15', v: 40, lancamento_id: null })
-    expect((await status()).body.pendenciasFechado).toEqual([])
-    const [g] = await linhas(bancoA, 'SELECT status, ajuste_id FROM reserve_pendencias_fechado')
-    expect(g.status).toBe('ajustado')
-    expect(g.ajuste_id).toBeTruthy()
-    expect((await acao({ acao: 'pendencia_ajustar', id: p.id, functionId: F.ipva, valor: 40, observacao: 'de novo' })).statusCode).toBe(409)
-  })
-
-  it('b) Reabrir: desfaz a partir do mais recente, a fórmula passa a contar e sobra a virada anterior', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'r4' })
-    const entradasAntes = (await acao({ acao: 'previa', fim: '2026-09-14' })).body.previa.linhas.find(l => l.functionId === F.ipva).entradas
-    await acao({ acao: 'confirmar', fim: '2026-09-14', chave: 'r5' })
-    await sincronizarRetro('2026-09-05')
-    const [p] = (await status()).body.pendenciasFechado
-    expect(p.fechamentosADesfazer).toEqual(['2026-09-14'])
-    const r = await acao({ acao: 'pendencia_reabrir', id: p.id })
-    expect(r.statusCode).toBe(200)
-    expect(r.body.desfeitas.map(v => v.data_corte)).toEqual(['2026-09-14'])
-    const st = await status()
-    expect(st.body.ultimoCorte).toBe('2026-08-14')
-    expect(st.body.pendenciasFechado).toEqual([])
-    expect((await linhas(bancoA, 'SELECT status FROM reserve_pendencias_fechado'))[0].status).toBe('reaberto')
-    const previa = (await acao({ acao: 'previa', fim: '2026-09-14' })).body.previa
-    expect(previa.linhas.find(l => l.functionId === F.ipva).entradas).toBe(entradasAntes + 40)
-  })
-
-  it('Reabrir sobre pendência já ajustada tira o ajuste, para o valor não contar duas vezes', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'r6' })
-    await sincronizarRetro()
-    const [p] = (await status()).body.pendenciasFechado
-    await acao({ acao: 'pendencia_ajustar', id: p.id, functionId: F.ipva, valor: 40, observacao: 'x' })
-    await sincronizarRetro('2026-08-11', 'retro2')
-    const [p2] = (await status()).body.pendenciasFechado
-    const r = await acao({ acao: 'pendencia_reabrir', id: p2.id })
-    expect(r.body.ajustesRemovidos).toBe(1)
-    expect(await linhas(bancoA, "SELECT id FROM reserve_adjustments WHERE observacao = 'x'")).toEqual([])
-  })
-
-  it('fechamento antigo não reabre: só a opção de Ajuste, e o servidor recusa', async () => {
-    await sincronizarRetro('2026-07-10')
-    const [p] = (await status()).body.pendenciasFechado
-    expect(p.podeReabrir).toBe(false)
-    expect(p.motivoReabrir).toMatch(/antes da virada assistida/)
-    expect((await acao({ acao: 'pendencia_reabrir', id: p.id })).statusCode).toBe(422)
-    expect((await acao({ acao: 'pendencia_ajustar', id: p.id, functionId: F.ipva, valor: 40, observacao: 'y' })).statusCode).toBe(200)
-  })
-
-  it('editar soma na mesma pendência; excluir o lançamento novo anula', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'r7' })
-    const tx = { id: 'retro', type: 'transfer', amount: 40, date: '2026-08-10', accountId: CONTA_CORRENTE, toAccountId: CONTA_RESERVA, reservaFuncaoId: F.ipva, description: 'D' }
-    const env = (body) => chamar(syncHandler, { method: 'POST', url: '/api/sync', body: { type: 'section', table: 'lancamentos', ...body } })
-    await env({ upsert: [txToRow(tx)], delete: [] })
-    await env({ upsert: [txToRow({ ...tx, amount: 55 })], delete: [] })
-    const [p] = (await status()).body.pendenciasFechado
-    expect(p.valor).toBe(55)
-    await env({ upsert: [], delete: ['retro'] })
-    expect((await status()).body.pendenciasFechado).toEqual([])
-    expect(await linhas(bancoA, "SELECT id FROM reserve_pendencias_fechado WHERE status = 'cancelado'")).toHaveLength(1)
-  })
-
-  it('excluir lançamento antigo de período fechado gera pendência de valor negativo', async () => {
-    await bancoA.query("INSERT INTO lancamentos (id, type, amount, date, account_id, to_account_id, reserva_funcao_id, description) VALUES ('velho', 'transfer', 25, '2026-08-05', $1, $2, $3, 'Velho')", [CONTA_CORRENTE, CONTA_RESERVA, F.ipva])
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'r8' })
-    const s = await chamar(syncHandler, { method: 'POST', url: '/api/sync', body: { type: 'section', table: 'lancamentos', upsert: [], delete: ['velho'] } })
-    expect(s.body.reservaPendencias).toBe(1)
-    const [p] = (await status()).body.pendenciasFechado
-    expect(p.motivo).toBe('excluido')
-    expect(p.valor).toBeLessThan(0)
-  })
-
-  it('importação em lote: tudo é gravado e a lista vem da mesma fonte, sem travar', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'r9' })
-    const linhasDoLote = ['l1', 'l2', 'l3'].map((id, i) => txToRow({ id, type: 'transfer', amount: 10 + i, date: `2026-08-0${i + 2}`, accountId: CONTA_CORRENTE, toAccountId: CONTA_RESERVA, reservaFuncaoId: F.seguro, description: id }))
-    const s = await chamar(syncHandler, { method: 'POST', url: '/api/sync', body: { type: 'section', table: 'lancamentos', upsert: linhasDoLote, delete: [] } })
-    expect(s.body.written.upserted).toBe(3)
-    expect(s.body.reservaPendencias).toBe(3)
-    expect((await status()).body.pendenciasFechado).toHaveLength(3)
-  })
-
-  it('banco sem a migração das pendências segue o recálculo antigo', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'r10' })
-    await bancoA.exec('DROP TABLE reserve_pendencias_fechado')
-    const s = await sincronizarRetro()
-    expect(s.body.viradaRecalculada).toBeGreaterThan(0)
-    expect((await status()).body.pendenciasFechado).toEqual([])
-  })
-
-  it('ajuste com data em mês fechado também recalcula; ajuste no mês aberto não', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'a1' })
-    await chamar(ajustesHandler, { method: 'POST', url: '/api/reserve-adjustments', body: { id: 'aj_aberto', function_id: F.seguro, data: '2026-09-01', valor: 5, observacao: 'x' } })
-    expect(await linhas(bancoA, 'SELECT id FROM reserve_virada_recalculos')).toEqual([])
-    await chamar(ajustesHandler, { method: 'POST', url: '/api/reserve-adjustments', body: { id: 'aj_retro', function_id: F.seguro, data: '2026-08-05', valor: 7, observacao: 'x' } })
-    const snap = await linhas(bancoA, "SELECT ajuste::float AS a FROM reserve_period_snapshots WHERE data_fim = '2026-08-14' AND function_id = $1", [F.seguro])
-    expect(snap[0].a).toBe(7)
-  })
-})
-
 describe('isolamento, permissões e compatibilidade', () => {
   beforeEach(async ({ task }) => {
     if (task.name === 'dois clientes não se misturam') await comBancoB()
@@ -525,69 +394,15 @@ describe('isolamento, permissões e compatibilidade', () => {
   })
 })
 
-describe('falha no gancho de recálculo (nunca silenciosa)', () => {
+describe('recálculo pendente de antes da regra do estorno', () => {
   const txRetro = { id: 'retro_f', type: 'transfer', amount: 40, date: '2026-08-10', accountId: CONTA_CORRENTE, toAccountId: CONTA_RESERVA, reservaFuncaoId: F.ipva, description: 'Depósito esquecido' }
-  const syncTx = (tx) => chamar(syncHandler, { method: 'POST', url: '/api/sync', body: { type: 'section', table: 'lancamentos', upsert: [txToRow(tx)], delete: [] } })
-  const logs = () => console.error.mock.calls.map(c => c.map(String).join(' ')).join('\n')
-
-  it('verificação falha: o lançamento é gravado, a resposta avisa; log sem dados financeiros', async () => {
+  it('"Refazer recálculo" dá baixa na pendência que ficou', async () => {
     await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'f1' })
-    await bancoA.exec('ALTER TABLE reserve_functions RENAME TO reserve_functions_x')
-    const s = await syncTx(txRetro)
-    await bancoA.exec('ALTER TABLE reserve_functions_x RENAME TO reserve_functions')
-    expect(s.statusCode).toBe(200)
-    expect(s.body.written.upserted).toBe(1)
-    expect(s.body.reservaPendenciasFalhou).toBe(true)
-    expect(await linhas(bancoA, "SELECT id FROM lancamentos WHERE id = 'retro_f'")).toHaveLength(1)
-    expect(logs()).not.toMatch(/Depósito esquecido|2026-08-10/)
-  })
-
-  it('pendência não registrada: lançamento gravado e a resposta avisa', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'f2' })
-    await bancoA.exec('ALTER TABLE reserve_pendencias_fechado RENAME COLUMN descricao TO descricao_x')
-    const s = await syncTx(txRetro)
-    await bancoA.exec('ALTER TABLE reserve_pendencias_fechado RENAME COLUMN descricao_x TO descricao')
-    expect(s.statusCode).toBe(200)
-    expect(s.body.reservaPendenciasFalhou).toBe(true)
-    expect(await linhas(bancoA, "SELECT id FROM lancamentos WHERE id = 'retro_f'")).toHaveLength(1)
-  })
-
-  it('recálculo de ajuste falha: pendência registrada; "Refazer recálculo" conclui e dá baixa', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'f2b' })
-    await bancoA.exec('ALTER TABLE reserve_virada_recalculos RENAME COLUMN depois TO depois_x')
-    const aj = await chamar(ajustesHandler, { method: 'POST', url: '/api/reserve-adjustments', body: { id: 'aj_r', function_id: F.ipva, data: '2026-08-05', valor: 7, observacao: 'r' } })
-    expect(aj.body.viradaRecalculoPendente).toBe(true)
-    expect((await linhas(bancoA, "SELECT ajuste::float AS a FROM reserve_period_snapshots WHERE data_fim = '2026-08-14' AND function_id = $1", [F.ipva]))[0].a).toBe(0)
-    await bancoA.exec('ALTER TABLE reserve_virada_recalculos RENAME COLUMN depois_x TO depois')
+    await bancoA.exec("INSERT INTO reserve_virada_recalculos (campo, motivo) VALUES ('recalculo_pendente', 'antiga')")
     expect((await status()).body.recalculoPendente).toBe(true)
     const r = await acao({ acao: 'recalcular' })
-    expect(r.body.mudancas).toBeGreaterThan(0)
-    expect((await linhas(bancoA, "SELECT ajuste::float AS a FROM reserve_period_snapshots WHERE data_fim = '2026-08-14' AND function_id = $1", [F.ipva]))[0].a).toBe(7)
+    expect(r.statusCode).toBe(200)
     expect((await status()).body.recalculoPendente).toBe(false)
-  })
-
-  it('recálculo de ajuste não engole o lançamento pendente', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'f2c' })
-    await syncTx(txRetro)
-    await chamar(ajustesHandler, { method: 'POST', url: '/api/reserve-adjustments', body: { id: 'aj_s', function_id: F.ipva, data: '2026-08-05', valor: 7, observacao: 's' } })
-    const [sn] = await linhas(bancoA, "SELECT entradas::float AS e, ajuste::float AS a FROM reserve_period_snapshots WHERE data_fim = '2026-08-14' AND function_id = $1", [F.ipva])
-    expect(sn).toEqual({ e: 0, a: 7 })
-  })
-
-  it('ajuste e saldo inicial em mês fechado: falha vira pendência, o registro é gravado', async () => {
-    await acao({ acao: 'confirmar', fim: '2026-08-14', chave: 'f3' })
-    await bancoA.exec('ALTER TABLE reserve_virada_recalculos RENAME COLUMN depois TO depois_x')
-    const aj = await chamar(ajustesHandler, { method: 'POST', url: '/api/reserve-adjustments', body: { id: 'aj_f', function_id: F.seguro, data: '2026-08-05', valor: 7, observacao: 'x' } })
-    expect(aj.statusCode).toBe(200)
-    expect(aj.body.viradaRecalculoPendente).toBe(true)
-    expect(await linhas(bancoA, "SELECT id FROM reserve_adjustments WHERE id = 'aj_f'")).toHaveLength(1)
-    const pe = await chamar(periodosHandler, { method: 'POST', url: '/api/reserve-periods', body: { id: 'p_manual', function_id: F.seguro, data_inicio: '2026-08-10', saldo_inicial: 100 } })
-    expect(pe.statusCode).toBe(200)
-    expect(pe.body.viradaRecalculoPendente).toBe(true)
-    expect(await linhas(bancoA, "SELECT id FROM reserve_virada_recalculos WHERE campo = 'recalculo_pendente'")).toHaveLength(2)
-    // fora de mês fechado: nada a recalcular, nada pendente
-    const ok = await chamar(ajustesHandler, { method: 'POST', url: '/api/reserve-adjustments', body: { id: 'aj_ok', function_id: F.seguro, data: '2026-09-01', valor: 1, observacao: 'x' } })
-    expect(ok.body.viradaRecalculoPendente).toBeUndefined()
   })
 
   it('ambiente sem a migração segue funcionando em Lançamentos, Reservas e Razão; só a virada fica bloqueada', async () => {

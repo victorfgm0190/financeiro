@@ -1,5 +1,5 @@
 import { installmentKey } from './installments.js'
-import { authHeaders, clearTokenAndRedirect, gravacaoPermitida, exigirConexao } from './api.js'
+import { authHeaders, clearTokenAndRedirect, gravacaoPermitida, exigirConexao, fetchComEstorno } from './api.js'
 import { idsApagados, textoConfirmacaoExclusao } from './syncSeguro.js'
 
 // ─── Helpers fetch ────────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ function onUnauthorized() {
 // é o que separa "sem internet / servidor não respondeu" de erro do próprio app (filaOffline.js).
 async function buscar(path, init) {
   try {
-    return await fetch(path, init)
+    return await fetchComEstorno(path, init)
   } catch (err) {
     const e = err instanceof Error ? err : new Error(String(err))
     try { e.semResposta = true } catch { /* objeto congelado */ }
@@ -32,14 +32,9 @@ const comPrazo = (ms) => (ms && typeof AbortSignal !== 'undefined' && typeof Abo
 // gravado, mas o recálculo ficou pendente (api/_viradaReservaServidor.js). Avisa a tela — nunca um
 // "sucesso" silencioso. O AppContext mostra o aviso; Reservas oferece "Refazer recálculo".
 export const EVENTO_RECALCULO_PENDENTE = 'finup:virada-recalculo-pendente'
-// Lançamento gravado em período fechado: fica pendente em Reservas (detail: { n } ou { falhou: true }).
-export const EVENTO_PENDENCIA_FECHADO = 'finup:reserva-pendencia-fechado'
 function avisarRecalculoPendente(corpo) {
-  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-    if (corpo?.viradaRecalculoPendente) window.dispatchEvent(new CustomEvent(EVENTO_RECALCULO_PENDENTE))
-    if (corpo?.reservaPendencias || corpo?.reservaPendenciasFalhou) {
-      window.dispatchEvent(new CustomEvent(EVENTO_PENDENCIA_FECHADO, { detail: { n: corpo.reservaPendencias || 0, falhou: !!corpo.reservaPendenciasFalhou } }))
-    }
+  if (corpo?.viradaRecalculoPendente && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent(EVENTO_RECALCULO_PENDENTE))
   }
   return corpo
 }
@@ -60,12 +55,12 @@ async function apiGet(path, { timeoutMs } = {}) {
 // a interface já esconde as ações de quem não pode gravar.
 const SEM_PERMISSAO = Object.freeze({ ok: true, skipped: true, semPermissao: true })
 
-async function apiPost(path, body) {
+async function apiPost(path, body, { confirmarEstorno = false } = {}) {
   if (!gravacaoPermitida(path, 'POST', body)) return SEM_PERMISSAO
   exigirConexao(path, 'POST')
   const res = await buscar(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(confirmarEstorno ? { 'X-Confirmar-Estorno': '1' } : {}) },
     body: JSON.stringify(body),
   })
   if (res.status === 401) { onUnauthorized() }
@@ -1320,20 +1315,20 @@ let confirmadorExclusaoEmMassa = (dados) =>
 export function definirConfirmadorExclusaoEmMassa(fn) { confirmadorExclusaoEmMassa = fn }
 
 // POST com a trava de exclusão em massa (o /api/sync e o /api/sync-srf respondem igual).
-async function postComConfirmacao(rota, body) {
+async function postComConfirmacao(rota, body, opcoes = {}) {
   try {
-    return await apiPost(rota, body)
+    return await apiPost(rota, body, opcoes)
   } catch (err) {
     if (err.status !== 409 || err.codigo !== 'exclusao_em_massa' || body.confirmarExclusaoEmMassa) throw err
     if (!(await confirmadorExclusaoEmMassa(err.dados || {}))) {
       err.exclusaoRecusada = true
       throw err
     }
-    return apiPost(rota, { ...body, confirmarExclusaoEmMassa: true })
+    return apiPost(rota, { ...body, confirmarExclusaoEmMassa: true }, opcoes)
   }
 }
 
-export const postSync = (body) => postComConfirmacao('/api/sync', body)
+export const postSync = (body, opcoes) => postComConfirmacao('/api/sync', body, opcoes)
 
 // Tabela inteira (restauração de backup, seed). O dia a dia vai pela fila (src/lib/filaOffline.js),
 // que envia só os itens alterados. `confirmarExclusaoEmMassa`: pedido explícito do usuário

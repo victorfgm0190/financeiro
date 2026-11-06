@@ -1,7 +1,7 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
-import { corteAssistido, prepararRecalculo, concluirRecalculo, respostaRecalculo } from './_viradaReservaServidor.js'
+import { comGuardaVirada } from './_guardaVirada.js'
 
 // Histórico de ajustes por função de reserva (data + valor ± + observação).
 //   GET    → lista todos os ajustes (todas as funções)
@@ -21,22 +21,6 @@ function queryParam(req, nome) {
 const queryId = (req) => queryParam(req, 'id')
 // Coluna ainda não criada (42703) → repete sem ela.
 const semColuna = (err) => err?.code === '42703'
-
-// Ajuste com data (nova ou antiga) dentro de mês já fechado pela virada assistida → recalcula as
-// viradas daquele mês em diante (api/_viradaReservaServidor.js). Datas antigas lidas ANTES de gravar.
-// Banco sem a migração: nada a verificar. Falha na verificação: o ajuste é gravado e fica uma
-// pendência de recálculo visível (prepararRecalculo/concluirRecalculo) — nunca sucesso silencioso.
-function verificarMesFechado(datas = [], where = null, params = []) {
-  return prepararRecalculo(async () => {
-    const corte = await corteAssistido()
-    if (!corte) return false
-    const antigas = where
-      ? (await query(`SELECT to_char(data, 'YYYY-MM-DD') AS data FROM reserve_adjustments WHERE ${where}`, params)).map(r => r.data)
-      : []
-    return [...datas, ...antigas].some(d => d && String(d).slice(0, 10) <= corte)
-  })
-}
-const MOTIVO_AJUSTE = 'ajuste de reserva com data em mês fechado'
 
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -58,7 +42,6 @@ async function handler(req, res) {
         return res.status(400).json({ error: 'id, function_id e data são obrigatórios' })
       }
       const params = [id, function_id, data, Number(valor) || 0, observacao ?? null]
-      const prep = await verificarMesFechado([data], 'id = $1', [id])
       try {
         await query(
           `INSERT INTO reserve_adjustments (id, function_id, data, valor, observacao, lancamento_id)
@@ -86,34 +69,31 @@ async function handler(req, res) {
           params,
         )
       }
-      return res.json({ ok: true, id, ...respostaRecalculo(await concluirRecalculo(prep, MOTIVO_AJUSTE)) })
+      return res.json({ ok: true, id })
     }
 
     if (req.method === 'PUT') {
       const { id, valor, observacao } = await parseBody(req)
       if (!id) return res.status(400).json({ error: 'id é obrigatório' })
-      const prep = await verificarMesFechado([], 'id = $1', [id])
       await query(
         `UPDATE reserve_adjustments SET valor = $2, observacao = $3 WHERE id = $1`,
         [id, Number(valor) || 0, observacao ?? null],
       )
-      return res.json({ ok: true, id, ...respostaRecalculo(await concluirRecalculo(prep, MOTIVO_AJUSTE)) })
+      return res.json({ ok: true, id })
     }
 
     if (req.method === 'DELETE') {
       const lancamentoId = queryParam(req, 'lancamento_id')
       if (lancamentoId) {
-        const prep = await verificarMesFechado([], 'lancamento_id = $1', [lancamentoId])
         try {
           await query(`DELETE FROM reserve_adjustments WHERE lancamento_id = $1`, [lancamentoId])
         } catch (err) { if (!semColuna(err)) throw err }
-        return res.json({ ok: true, lancamento_id: lancamentoId, ...respostaRecalculo(await concluirRecalculo(prep, 'rateio de rendimento com data em mês fechado')) })
+        return res.json({ ok: true, lancamento_id: lancamentoId })
       }
       const id = queryId(req)
       if (!id) return res.status(400).json({ error: 'id é obrigatório' })
-      const prep = await verificarMesFechado([], 'id = $1', [id])
       await query(`DELETE FROM reserve_adjustments WHERE id = $1`, [id])
-      return res.json({ ok: true, id, ...respostaRecalculo(await concluirRecalculo(prep, MOTIVO_AJUSTE)) })
+      return res.json({ ok: true, id })
     }
 
     return res.status(405).end()
@@ -123,4 +103,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

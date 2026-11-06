@@ -8,6 +8,7 @@ import {
 import { gravarAberturaDoFinanciamento } from '../_bemBaixas.js'
 import { comAmbiente } from '../_ambiente.js'
 import { exigirContaPermitida } from '../_permissoesApi.js'
+import { comGuardaVirada } from '../_guardaVirada.js'
 
 // POST /api/financiamento/criar — provisiona o financiamento inteiro de uma vez:
 // conta de dívida em "Dívidas e Passivos", N parcelas em financing_installments e N
@@ -259,4 +260,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

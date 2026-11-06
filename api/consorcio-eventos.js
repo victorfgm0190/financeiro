@@ -5,6 +5,7 @@ import { pode } from '../src/lib/permissoes.js'
 import { dadosDoExtrato, genId, num, round2, fail, explicarErro, isIsoDate } from './_bem.js'
 import { extratoDoBem, resumoDoBem } from '../src/lib/extratoBem.js'
 import { comAmbiente } from './_ambiente.js'
+import { comGuardaVirada } from './_guardaVirada.js'
 
 // POST /api/consorcio-eventos — eventos do consórcio, todos com estorno.
 //   { acao: 'registrar', bem_id, tipo, data, dados, agendamentos }
@@ -163,4 +164,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

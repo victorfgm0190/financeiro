@@ -1,5 +1,5 @@
 import { upsertRows, deleteRows, parseBody, query, ErroIdentificador, ErroBancoDesatualizado } from './_db.js'
-import { prepararLancamentos, concluirLancamentos } from './_viradaReservaServidor.js'
+import { comGuardaVirada } from './_guardaVirada.js'
 import { requireAuth } from './_auth.js'
 import { autorizarSync } from './_permissoesApi.js'
 import { ErroHttp } from './_usuarios.js'
@@ -66,18 +66,17 @@ async function handler(req, res) {
       if (table === 'account_mapping' && req.ambiente?.sigla !== AMBIENTE_PRINCIPAL) {
         return res.status(403).json({ error: 'De-para Dindin disponível só no ambiente principal' })
       }
-      const bloqueio = await conferirExclusaoEmMassa(query, table, toDelete, { confirmado })
+      // A conferência de período virado não apaga nada: quem pergunta da exclusão em massa é o envio real.
+      const bloqueio = body.somenteVerificar === true ? null : await conferirExclusaoEmMassa(query, table, toDelete, { confirmado })
       if (bloqueio) return recusarExclusao(res, bloqueio)
       const recebido = { table, upsert: upsert?.length ?? 0, delete: toDelete?.length ?? 0 }
       // Lançamento criado/editado/excluído com data em mês já fechado pela virada assistida das
       // reservas → recalcula aquela virada e as seguintes depois de gravar (comparação feita ANTES).
       // Falha na verificação ou no recálculo: o lançamento é gravado do mesmo jeito e fica uma
       // pendência de recálculo visível (resposta + tela de Reservas). Banco sem a migração: nada.
-      const prepVirada = table === 'lancamentos' ? await prepararLancamentos(query, { upsert, del: toDelete }) : null
-      const [deleted, upserted] = await Promise.all([
-        deleteRows(table, toDelete),
-        upsertRows(table, upsert),
-      ])
+      // Em sequência: dentro da guarda de período virado tudo roda numa transação só.
+      const deleted = await deleteRows(table, toDelete)
+      const upserted = await upsertRows(table, upsert)
       const gravado = { upserted, deleted }
       logSync(`section ${table}`, recebido, gravado)
       if (table === 'lancamentos') {
@@ -90,8 +89,7 @@ async function handler(req, res) {
           console.error('[api/sync] movimentação do bem', err.message)
         }
       }
-      const fechado = prepVirada ? await concluirLancamentos(prepVirada, { usuario: req.user?.username || req.user?.sub || null, motivo: 'lançamento com data em mês fechado' }) : {}
-      return res.json({ ok: true, ...recebido, written: gravado, ...fechado })
+      return res.json({ ok: true, ...recebido, written: gravado })
 
     } else if (type === 'accounts') {
       // Contas + cartões (tabelas separadas)
@@ -155,4 +153,7 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+// Só as seções que mexem no saldo de função de reserva passam pela guarda.
+export default comAmbiente(comGuardaVirada(handler, {
+  aplica: (_req, corpo) => corpo?.type === 'section' && (corpo.table === 'lancamentos' || corpo.table === 'reserve_functions'),
+}))

@@ -6,6 +6,7 @@ import {
 } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
 import { exigirContaPermitida } from '../../_permissoesApi.js'
+import { comGuardaVirada } from '../../_guardaVirada.js'
 
 // POST /api/bem/[id]/atualizar-valores — edita os dois valores do bem e escolhe qual deles
 // representa o bem no Patrimônio.
@@ -134,4 +135,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

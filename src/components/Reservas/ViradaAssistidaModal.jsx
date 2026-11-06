@@ -77,7 +77,6 @@ function DecisaoDiferenca({ conta, decisao, onChange }) {
         <li>Diferença total entre o saldo da conta e a soma das funções: <b>{fmtSinal(conta.diferenca)}</b></li>
         {Math.abs(conta.rendimentoARatear) > 0.005 && <li>Rendimento real rateado nesta virada, entre as funções positivas: {fmtSinal(conta.rendimentoARatear)}</li>}
         {Math.abs(conta.rendimentoSemBase) > 0.005 && <li>Rendimento sem função positiva, fica a distribuir: {fmtSinal(conta.rendimentoSemBase)}</li>}
-        {Math.abs(conta.pendenciasFechado) > 0.005 && <li>Lançamentos em período fechado, pendentes em Reservas: {fmtSinal(conta.pendenciasFechado)}</li>}
         {Math.abs(conta.aceitoAntes) > 0.005 && <li>Já estava a distribuir na virada anterior: {fmtSinal(conta.aceitoAntes)}</li>}
         {Math.abs(conta.lancamentosSemFuncao) > 0.005 && <li>Lançamentos do mês sem função, dentro do valor acima: {fmtSinal(conta.lancamentosSemFuncao)}</li>}
       </ul>

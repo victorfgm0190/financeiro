@@ -1,9 +1,9 @@
-// Regras da virada das Reservas: saldo negativo não rende, lançamento em período fechado, diferença que
-// não é rendimento, reabertura a partir do mais recente.
+// Regras da virada das Reservas: saldo negativo não rende, o que uma gravação mexe em período fechado,
+// diferença que não é rendimento, estorno a partir do mais recente.
 import { describe, it, expect } from 'vitest'
 import { ratearRendimento, rateioDoRendimento, refazerRendimentos, dataFechadaNaFuncao } from './rendimentoReserva.js'
 import {
-  pendenciasDaMudanca, reabertura, dataDoAjuste, agruparPendencias, conferirDecisoes, montarPrevia, rateiosDaVirada, recalcularViradas,
+  efeitoEmPeriodoFechado, diferencasNoFechado, reabertura, agruparItensVirada, conferirDecisoes, montarPrevia, rateiosDaVirada,
 } from './viradaReserva.js'
 
 const CONTA = 'conta_reserva'
@@ -66,9 +66,9 @@ describe('refazer os rendimentos seguintes', () => {
 })
 
 describe('lançamento em período fechado', () => {
-  const pend = (arg) => pendenciasDaMudanca({ functions, periods, corte: CORTE, ...arg })
+  const pend = (arg) => efeitoEmPeriodoFechado({ functions, periods, corte: CORTE, ...arg })
 
-  it('novo em período fechado: uma pendência com função, valor e vínculo', () => {
+  it('novo em período fechado: função, valor e vínculo', () => {
     expect(pend({ depois: deposito('t', '2026-07-10', 40) })).toEqual([expect.objectContaining({
       lancamento_id: 't', function_id: 'a', account_id: CONTA, valor: 40, data: '2026-07-10', motivo: 'novo',
     })])
@@ -76,11 +76,11 @@ describe('lançamento em período fechado', () => {
   it('no período aberto: nada', () => {
     expect(pend({ depois: deposito('t', '2026-08-02', 40) })).toEqual([])
   })
-  it('anterior ao período mais antigo (hoje era ignorado sem avisar): também fica pendente', () => {
-    const r = pendenciasDaMudanca({ functions, periods, corte: null, depois: deposito('t', '2026-01-10', 40) })
+  it('anterior ao período mais antigo: também conta', () => {
+    const r = efeitoEmPeriodoFechado({ functions, periods, corte: null, depois: deposito('t', '2026-01-10', 40) })
     expect(r).toHaveLength(1)
   })
-  it('sem função, na conta de reserva: pendência sem função', () => {
+  it('sem função, na conta de reserva: fica sem função', () => {
     const [p] = pend({ depois: rendimento('r', '2026-07-10', 12) })
     expect(p).toMatchObject({ function_id: null, account_id: CONTA, valor: 12 })
   })
@@ -99,12 +99,8 @@ describe('lançamento em período fechado', () => {
     expect(pend({ depois: { id: 'x', type: 'expense', amount: 5, date: '2026-07-10', accountId: 'corrente' } })).toEqual([])
     expect(pend({ depois: { ...deposito('s', '2026-07-10', 5), reservaAuto: true } })).toEqual([])
   })
-  it('ajuste vai para o primeiro dia aberto', () => {
-    expect(dataDoAjuste({ functionId: 'a', corte: CORTE, periods })).toBe('2026-08-01')
-    expect(dataDoAjuste({ functionId: null, corte: CORTE, periods })).toBe('2026-08-01')
-  })
   it('lista agrupada por conta e mês, com total', () => {
-    const g = agruparPendencias([
+    const g = agruparItensVirada([
       { id: '1', account_id: CONTA, data: '2026-07-20', valor: 10 },
       { id: '2', account_id: CONTA, data: '2026-07-05', valor: 5 },
       { id: '3', account_id: CONTA, data: '2026-06-05', valor: -1 },
@@ -112,18 +108,39 @@ describe('lançamento em período fechado', () => {
     expect(g.map(x => [x.mes, x.total])).toEqual([['2026-06', -1], ['2026-07', 15]])
     expect(g[1].itens.map(i => i.id)).toEqual(['2', '1'])
   })
-  it('recalcular as viradas deixa a pendência de fora', () => {
-    const t = deposito('t', '2026-07-10', 40)
-    const per = [{ id: 'pa', function_id: 'a', data_inicio: '2026-07-01', saldo_inicial: 0 }]
-    const viradas = [{ id: 'v', data_corte: '2026-07-31' }]
-    const snapshots = [{ id: 's', virada_id: 'v', function_id: 'a', saldo_inicial: 0, entradas: 0, saidas: 0, ajuste: 0, rendimentos: 0, saldo: 0, saldo_atualizado: 0 }]
-    const base = { viradas, snapshots, periods: per, functions: functions.slice(0, 1), adjustments: [], transactions: [t] }
-    expect(recalcularViradas(base).length).toBeGreaterThan(0)
-    expect(recalcularViradas({ ...base, pendencias: [{ function_id: 'a', data: '2026-07-10', entrada: 40, saida: 0, status: 'pendente' }] })).toEqual([])
+})
+
+describe('ajuste e saldo inicial em período fechado', () => {
+  const vazio = () => ({ lancamentos: new Map(), ajustes: new Map(), periodos: new Map(), funcoes: new Map() })
+  const ctx = { functions, periods, corte: CORTE }
+  const ajuste = (over = {}) => ({ id: 'a', function_id: 'a', data: '2026-07-10', valor: 5, observacao: 'x', ...over })
+  const comAjuste = (a) => ({ ...vazio(), ajustes: new Map([[a.id, a]]) })
+  const comPeriodo = (p) => ({ ...vazio(), periodos: new Map([[p.id, p]]) })
+
+  it('ajuste novo, editado, movido e apagado em período fechado aparecem; no período aberto, não', () => {
+    expect(diferencasNoFechado(vazio(), comAjuste(ajuste()), ctx)[0]).toMatchObject({ valor: 5, tipo: 'ajuste', data: '2026-07-10' })
+    expect(diferencasNoFechado(comAjuste(ajuste()), comAjuste(ajuste({ valor: 8 })), ctx)[0].valor).toBe(3)
+    expect(diferencasNoFechado(comAjuste(ajuste()), comAjuste(ajuste({ data: '2026-07-11' })), ctx)).toHaveLength(1)
+    expect(diferencasNoFechado(comAjuste(ajuste()), vazio(), ctx)[0].valor).toBe(-5)
+    expect(diferencasNoFechado(vazio(), comAjuste(ajuste({ data: '2026-08-05' })), ctx)).toEqual([])
+    expect(diferencasNoFechado(comAjuste(ajuste()), comAjuste(ajuste({ observacao: 'y' })), ctx)).toEqual([])
+  })
+  it('saldo inicial informado com data até o corte aparece; depois do corte, não', () => {
+    const p = { id: 'p', function_id: 'a', data_inicio: '2026-07-20', saldo_inicial: 100 }
+    expect(diferencasNoFechado(vazio(), comPeriodo(p), ctx)[0]).toMatchObject({ tipo: 'saldo_inicial', valor: 100 })
+    expect(diferencasNoFechado(comPeriodo(p), comPeriodo({ ...p, saldo_inicial: 90 }), ctx)[0].valor).toBe(-10)
+    expect(diferencasNoFechado(comPeriodo(p), comPeriodo(p), ctx)).toEqual([])
+    expect(diferencasNoFechado(vazio(), comPeriodo({ ...p, data_inicio: '2026-08-20' }), ctx)).toEqual([])
+  })
+  it('saldo inicial na ficha da função com período já aberto aparece', () => {
+    const f = { id: 'a', name: 'A', accountId: CONTA, saldoInicial: 0 }
+    const fotos = (v) => ({ ...vazio(), funcoes: new Map([['a', { ...f, saldoInicial: v }]]) })
+    expect(diferencasNoFechado(fotos(0), fotos(10), ctx)[0]).toMatchObject({ valor: 10, data: '0001-01-01' })
+    expect(diferencasNoFechado(fotos(0), fotos(0), ctx)).toEqual([])
   })
 })
 
-describe('reabrir a partir do mais recente', () => {
+describe('estornar a partir do mais recente', () => {
   const snapshots = [{ data_fim: '2026-06-30' }, { data_fim: '2026-07-31' }, { data_fim: '2026-08-31' }]
   const viradas = [{ data_corte: '2026-07-31' }, { data_corte: '2026-08-31' }]
   it('desfaz do mais recente até o mês do lançamento', () => {
@@ -170,11 +187,6 @@ describe('diferença que não é rendimento', () => {
     expect(conferirDecisoes(p, { [CONTA]: { tipo: 'ajuste', functionId: 'outra', observacao: 'x' } }).faltam).toHaveLength(1)
     expect(conferirDecisoes(p, { [CONTA]: { tipo: 'a_distribuir' } })).toEqual({ faltam: [], ajustes: [] })
     expect(conferirDecisoes(p, { [CONTA]: { tipo: 'ajuste', functionId: 'a', observacao: 'x' } }).ajustes).toEqual([{ accountId: CONTA, function_id: 'a', valor: 100, observacao: 'x' }])
-  })
-  it('separa o que tem explicação: lançamento pendente de período fechado não para a virada', () => {
-    const p = montarPrevia({ ...base, accounts: [{ ...accounts[0], initialBalance: 390 }], pendencias: [{ status: 'pendente', account_id: CONTA, valor: 40 }] })
-    expect(p.contas[0].pendenciasFechado).toBe(40)
-    expect(p.contas[0].resto).toBe(0)
   })
   it('valor já aceito a distribuir não para de novo; distribuído depois, também não', () => {
     const conta = (initialBalance, aceito) => montarPrevia({ ...base, accounts: [{ ...accounts[0], initialBalance }], aceitos: { [CONTA]: aceito } }).contas[0]

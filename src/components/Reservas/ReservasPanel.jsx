@@ -24,7 +24,6 @@ import RazaoDiarioTab from './RazaoDiarioTab'
 import InputMoeda from '../shared/InputMoeda'
 import { isoLocal } from '../../lib/hoje'
 import { erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
-import PendenciasFechado from './PendenciasFechado'
 import { ehAjusteDeRendimento } from '../../lib/rendimentoReserva'
 import { parseValorBR } from '../../lib/valorBR'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
@@ -2091,7 +2090,7 @@ function HistoricoTab({ snapshots, selFim, onSelFim }) {
 }
 
 // ── Aviso de recálculo de virada (lançamento retroativo em mês fechado) ─────────────────────────
-// O servidor recalcula a virada do mês afetado e as seguintes (api/_viradaReservaServidor.js) e
+// Recálculos feitos antes da regra do estorno (api/_guardaVirada.js) ainda aparecem aqui: o servidor
 // registra antes/depois em reserve_virada_recalculos. Aqui o usuário vê o que mudou e dá ciência.
 const CAMPO_RECALCULO = {
   saldo_inicial: 'Saldo Inicial', entradas: 'Entradas', saidas: 'Saídas', ajuste: 'Ajuste',
@@ -2347,17 +2346,6 @@ export default function ReservasPanel() {
 
       {tab === 'resumo' && viradaStatus?.recalculos?.length > 0 && (
         <AvisoRecalculo itens={viradaStatus.recalculos} functions={functions} onCiente={marcarRecalculosVistos} onRefazer={refazerRecalculo} />
-      )}
-
-      {tab === 'resumo' && viradaStatus?.pendenciasFechado?.length > 0 && (
-        <PendenciasFechado
-          itens={viradaStatus.pendenciasFechado}
-          functions={functions}
-          accounts={nonCreditAccounts}
-          hoje={todayStr}
-          podeEditar={podeVirar}
-          onMudou={aposVirada}
-        />
       )}
 
       {tab === 'resumo' && (

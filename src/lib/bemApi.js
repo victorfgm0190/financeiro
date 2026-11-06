@@ -1,4 +1,4 @@
-import { authHeaders, clearTokenAndRedirect, exigirConexao } from './api'
+import { authHeaders, clearTokenAndRedirect, exigirConexao, fetchComEstorno } from './api'
 
 // Cliente dos endpoints de Bem Imobilizado / Financiamento (api/bem/*, api/financiamento/*).
 // Todos exigem Bearer token — daí passar sempre por aqui em vez de fetch() solto.
@@ -12,7 +12,7 @@ async function request(url, options = {}) {
   exigirConexao(url, options.method || 'GET')
   let res
   try {
-    res = await fetch(url, {
+    res = await fetchComEstorno(url, {
       ...options,
       signal: options.signal ?? AbortSignal.timeout(TIMEOUT_MS),
       headers: {

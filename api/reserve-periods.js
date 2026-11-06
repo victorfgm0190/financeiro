@@ -1,7 +1,8 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
-import { corteAssistido, temViradaAssistida, prepararRecalculo, concluirRecalculo, respostaRecalculo } from './_viradaReservaServidor.js'
+import { temViradaAssistida } from './_viradaReservaServidor.js'
+import { comGuardaVirada } from './_guardaVirada.js'
 
 // Histórico de períodos de saldo inicial por função de reserva.
 //   GET    → lista todos os períodos (todas as funções)
@@ -16,7 +17,6 @@ function queryId(req) {
   try { return new URL(req.url, 'http://x').searchParams.get('id') } catch { return null }
 }
 
-const MOTIVO_PERIODO = 'saldo inicial informado em mês fechado'
 
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -37,12 +37,6 @@ async function handler(req, res) {
       if (!id || !function_id || !data_inicio) {
         return res.status(400).json({ error: 'id, function_id e data_inicio são obrigatórios' })
       }
-      // Saldo inicial informado à mão com data dentro de mês já fechado pela virada assistida:
-      // recalcula as viradas daquele mês em diante (falha → pendência visível, nunca silêncio).
-      const prep = await prepararRecalculo(async () => {
-        const corte = await corteAssistido()
-        return !!corte && String(data_inicio).slice(0, 10) <= corte
-      })
       await query(
         `INSERT INTO reserve_periods (id, function_id, data_inicio, saldo_inicial)
               VALUES ($1, $2, $3, $4)
@@ -52,7 +46,7 @@ async function handler(req, res) {
               saldo_inicial = EXCLUDED.saldo_inicial`,
         [id, function_id, data_inicio, Number(saldo_inicial) || 0],
       )
-      return res.json({ ok: true, id, ...respostaRecalculo(await concluirRecalculo(prep, MOTIVO_PERIODO)) })
+      return res.json({ ok: true, id })
     }
 
     if (req.method === 'DELETE') {
@@ -66,13 +60,8 @@ async function handler(req, res) {
         ? await query("SELECT virada_id, to_char(data_inicio, 'YYYY-MM-DD') AS data_inicio FROM reserve_periods WHERE id = $1", [id])
         : []
       if (atual?.virada_id) return res.status(409).json({ error: 'Este saldo inicial foi criado por uma virada. Use "Desfazer Virada".', codigo: 'periodo_da_virada' })
-      // Saldo inicial manual apagado dentro de mês fechado também muda as viradas seguintes.
-      const prep = await prepararRecalculo(async () => {
-        const corte = comVirada ? await corteAssistido() : null
-        return !!corte && !!atual?.data_inicio && atual.data_inicio <= corte
-      })
       await query(`DELETE FROM reserve_periods WHERE id = $1`, [id])
-      return res.json({ ok: true, id, ...respostaRecalculo(await concluirRecalculo(prep, MOTIVO_PERIODO)) })
+      return res.json({ ok: true, id })
     }
 
     return res.status(405).end()
@@ -82,4 +71,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

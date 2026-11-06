@@ -5,6 +5,7 @@ import { pode } from '../../src/lib/permissoes.js'
 import { fail, explicarErro } from '../_bem.js'
 import { registrarBaixa, estornarBaixa, gravarAberturaDoFinanciamento } from '../_bemBaixas.js'
 import { comAmbiente } from '../_ambiente.js'
+import { comGuardaVirada } from '../_guardaVirada.js'
 
 // POST /api/bem/baixas — parcela paga sem movimento em conta do Finup. A leitura vem em /api/bem/extrato.
 //   { acao: 'registrar', bem_id, tipo, data, valor, parcela_id | schedule_id + ocorrencia, cota_numero,
@@ -64,4 +65,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

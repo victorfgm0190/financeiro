@@ -6,6 +6,7 @@ import {
 } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
 import { exigirContaPermitida, exigirLinhasPermitidas } from '../../_permissoesApi.js'
+import { comGuardaVirada } from '../../_guardaVirada.js'
 
 // POST /api/bem/[id]/registrar-entrada — registra a entrada à vista do bem.
 //
@@ -242,4 +243,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

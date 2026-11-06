@@ -7,6 +7,7 @@ import {
 } from '../_bem.js'
 import { comAmbiente } from '../_ambiente.js'
 import { exigirContaPermitida } from '../_permissoesApi.js'
+import { comGuardaVirada } from '../_guardaVirada.js'
 
 // POST /api/bem/criar — cadastro inicial de um bem imobilizado.
 // Cria (ou converte) a conta do bem e parametriza as 4 categorias usadas pelo módulo:
@@ -109,4 +110,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

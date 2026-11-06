@@ -171,6 +171,9 @@ export async function enviarFila(entradas) {
   const enviadas = []
   let lote = []
   try {
+    // Período virado: uma confirmação só para o lote, antes de gravar qualquer coisa (nem o saldo das contas).
+    const estorno = await verificarPeriodoVirado(entradas)
+    if (estorno) lote = estorno.lote
     const contas = entradas.filter(e => e.tipo === 'conta')
     if (contas.length) {
       const grav = contas.filter(e => e.op === 'gravar').map(e => e.item)
@@ -192,6 +195,13 @@ export async function enviarFila(entradas) {
       const daTabela = secoes.filter(e => e.tabela === tabela)
       const grav = daTabela.filter(e => e.op === 'gravar')
       const apag = daTabela.filter(e => e.op === 'apagar')
+      if (estorno && tabela === estorno.tabela) {
+        // Confirmado: o lote inteiro numa operação só, para estornar e refazer uma vez.
+        lote = daTabela
+        await postSync({ type: 'section', table: tabela, upsert: grav.map(e => toRowDaTabela[tabela](e.item)), delete: apag.map(e => e.id) }, { confirmarEstorno: true })
+        enviadas.push(...daTabela)
+        continue
+      }
       for (let i = 0; i === 0 || i < grav.length; i += LOTE) {
         const pagina = grav.slice(i, i + LOTE)
         lote = [...pagina, ...(i === 0 ? apag : [])]
@@ -225,10 +235,34 @@ export async function enviarFila(entradas) {
     }
   } catch (err) {
     err.enviadas = enviadas
-    err.lote = lote
+    err.lote = err.lote || lote
     throw err
   }
   return enviadas
+}
+
+// Pergunta ao servidor (sem gravar) se os lançamentos da fila caem em período virado. Sem confirmação do
+// usuário, lança com `periodoRecusado`. Sem resposta do servidor, a falha segue como qualquer outra de envio.
+async function verificarPeriodoVirado(entradas) {
+  const SECOES = ['lancamentos', 'reserve_functions']
+  const toRow = Object.fromEntries(SECOES_SYNC.map(s => [s.tabela, s.toRow]))
+  for (const tabela of SECOES) {
+    const daTabela = entradas.filter(e => e.tipo === 'secao' && e.tabela === tabela)
+    if (!daTabela.length) continue
+    try {
+      const r = await postSync({
+        type: 'section', table: tabela, somenteVerificar: true,
+        upsert: daTabela.filter(e => e.op === 'gravar').map(e => toRow[tabela](e.item)),
+        delete: daTabela.filter(e => e.op === 'apagar').map(e => e.id),
+      })
+      if (r?.estornoConfirmado) return { tabela, lote: daTabela }
+    } catch (err) {
+      if (err?.codigo === 'periodo_virado') err.periodoRecusado = true
+      err.lote = daTabela
+      throw err
+    }
+  }
+  return null
 }
 
 // Tipo da falha de envio:
@@ -261,7 +295,7 @@ export async function enviarFilaIsolando(entradas, enviar = enviarFila) {
     } catch (err) {
       const ok = err.enviadas || []
       enviadas.push(...ok)
-      if (err.exclusaoRecusada || tipoDeFalha(err) === 'rede') throw interromper(err)
+      if (err.exclusaoRecusada || err.periodoRecusado || tipoDeFalha(err) === 'rede') throw interromper(err)
       const lote = err.lote?.length ? err.lote : resto.filter(e => !ok.includes(e))
       if (lote.length === 1) falhas.push({ entrada: lote[0], err })
       else {
@@ -269,7 +303,7 @@ export async function enviarFilaIsolando(entradas, enviar = enviarFila) {
           try {
             enviadas.push(...await enviar([e]))
           } catch (err1) {
-            if (err1.exclusaoRecusada || tipoDeFalha(err1) === 'rede') throw interromper(err1)
+            if (err1.exclusaoRecusada || err1.periodoRecusado || tipoDeFalha(err1) === 'rede') throw interromper(err1)
             falhas.push({ entrada: e, err: err1 })
           }
         }

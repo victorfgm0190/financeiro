@@ -4,6 +4,7 @@ import { exigirContaPermitida, exigirLinhasPermitidas } from '../../_permissoesA
 import { pode } from '../../../src/lib/permissoes.js'
 import { getRouteId, fail, explicarErro } from '../../_bem.js'
 import { comAmbiente } from '../../_ambiente.js'
+import { comGuardaVirada } from '../../_guardaVirada.js'
 
 const PAPEIS = new Set(['terceiro', 'devolucao'])
 
@@ -42,4 +43,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

@@ -7,6 +7,7 @@ import {
 } from '../_bem.js'
 import { comAmbiente } from '../_ambiente.js'
 import { exigirContaPermitida } from '../_permissoesApi.js'
+import { comGuardaVirada } from '../_guardaVirada.js'
 
 // GET   /api/financiamento/[id] — financiamento completo: provisão × realizado, desvios e as
 // N parcelas. `desvio_juros` acumulado é a diferença entre os juros provisionados das parcelas
@@ -218,4 +219,4 @@ async function patch(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

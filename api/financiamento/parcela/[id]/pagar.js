@@ -8,6 +8,7 @@ import {
 import { rateioComQuitacao } from '../../../../src/lib/financiamento.js'
 import { comAmbiente } from '../../../_ambiente.js'
 import { exigirContaPermitida } from '../../../_permissoesApi.js'
+import { comGuardaVirada } from '../../../_guardaVirada.js'
 
 // POST /api/financiamento/parcela/[id]/pagar — baixa (total ou parcial) de uma parcela.
 //
@@ -296,4 +297,4 @@ async function handler(req, res) {
   }
 }
 
-export default comAmbiente(handler)
+export default comAmbiente(comGuardaVirada(handler))

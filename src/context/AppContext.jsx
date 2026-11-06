@@ -13,7 +13,7 @@ import {
   aplicarEdicaoApi, fetchHistoricoResumo,
   fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi, deleteAjustesDoRendimentoApi,
   fetchReserveSnapshots, createReserveSnapshots,
-  recalcularRazaoReservas, EVENTO_RECALCULO_PENDENTE, EVENTO_PENDENCIA_FECHADO,
+  recalcularRazaoReservas, EVENTO_RECALCULO_PENDENTE,
 } from '../lib/db'
 import { localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
 import { getToken, getSessao, noAmbientePrincipal, definirSemConexao } from '../lib/api'
@@ -1068,6 +1068,12 @@ export function AppProvider({ children }) {
     } catch (err) {
       enviadas = err?.enviadas || []
       if (err?.falhas?.length) marcarErroFila(err.falhas)
+      if (err?.periodoRecusado) {
+        // O usuário não confirmou o estorno: nada desta rodada é gravado e o app volta ao que está no banco.
+        tirarDaFila(entradas.map(e => e.chave))
+        window.location.reload()
+        return
+      }
       if (err?.exclusaoRecusada) {
         // O usuário recusou a exclusão em massa: as exclusões daquela tabela saem da fila (foi o
         // pedido dele) e o app volta ao estado do banco.
@@ -3891,15 +3897,8 @@ export function AppProvider({ children }) {
   // salvo, mas as viradas fechadas precisam ser recalculadas — avisa em vez de sucesso silencioso.
   useEffect(() => {
     const aviso = () => setAvisoToast('Uma alteração mexeu num mês já fechado das Reservas e o recálculo da virada não pôde ser concluído. O que você gravou está salvo. Abra Reservas e use "Refazer recálculo".')
-    const avisoFechado = (ev) => setAvisoToast(ev.detail?.falhou
-      ? 'O lançamento foi gravado, mas não foi possível conferir se a data cai em período fechado das Reservas. Confira em Reservas.'
-      : `${ev.detail?.n === 1 ? '1 lançamento gravado com data' : `${ev.detail?.n} lançamentos gravados com data`} em período já fechado das Reservas. Veja as opções em Reservas › Resumo.`)
     window.addEventListener(EVENTO_RECALCULO_PENDENTE, aviso)
-    window.addEventListener(EVENTO_PENDENCIA_FECHADO, avisoFechado)
-    return () => {
-      window.removeEventListener(EVENTO_RECALCULO_PENDENTE, aviso)
-      window.removeEventListener(EVENTO_PENDENCIA_FECHADO, avisoFechado)
-    }
+    return () => window.removeEventListener(EVENTO_RECALCULO_PENDENTE, aviso)
   }, [])
 
   // Recarrega períodos, ajustes e snapshots do banco (depois de virada/desfazer/recálculo).
@@ -3916,7 +3915,7 @@ export function AppProvider({ children }) {
   useEffect(() => {
     rateioRendimentoRef.current = async (lancamentoId, tx) => {
       const d = dataRef.current
-      // Rateio em período fechado fica como está: o fechamento não muda sozinho (a pendência cuida do valor).
+      // Rateio em período fechado fica como está: mudar o fechamento exige estornar a virada.
       const partes = reserveAdjustments.filter(a => a.lancamento_id === lancamentoId)
       if (partes.some(a => dataFechadaNaFuncao(reservePeriods, a.function_id, a.data))) return
       const tinha = partes.length > 0

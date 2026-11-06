@@ -37,6 +37,28 @@ export function entrarAutorAssistente() {
 }
 export const autorDasRequisicoes = () => autorAtual
 
+// Gravação em período já virado: o servidor recusa com a prévia (409 periodo_virado). Aqui pergunta e, com a
+// confirmação, reenvia o mesmo pedido: estornar, gravar e refazer é uma operação só, no servidor. Sem
+// confirmação, devolve a recusa a quem chamou e nada foi gravado. Vale para todas as rotas do app.
+export const EVENTO_ESTORNO_VIRADA = 'finup:estorno-virada'
+let confirmadorEstorno = null
+export function definirConfirmadorEstorno(fn) { confirmadorEstorno = fn }
+export async function fetchComEstorno(url, init = {}) {
+  const res = await fetch(url, init)
+  if (res.status !== 409) return res
+  const dados = typeof res.clone === 'function' ? await res.clone().json().catch(() => null) : null
+  if (dados?.codigo !== 'periodo_virado' || !confirmadorEstorno) return res
+  if (!(await confirmadorEstorno(dados))) return res
+  const segunda = await fetch(url, { ...init, headers: { ...(init.headers || {}), 'X-Confirmar-Estorno': '1' } })
+  if (segunda.ok) {
+    const corpo = typeof segunda.clone === 'function' ? await segunda.clone().json().catch(() => null) : null
+    if (corpo?.viradaEstorno && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(EVENTO_ESTORNO_VIRADA, { detail: corpo.viradaEstorno }))
+    }
+  }
+  return segunda
+}
+
 // Modo sem internet (AppContext liga quando o banco não responde). Gravações que dependem do
 // servidor — importações, financiamento, usuários, edição em massa… — avisam em vez de tentar. As
 // do sync (fila de pendências) não passam por aqui.
