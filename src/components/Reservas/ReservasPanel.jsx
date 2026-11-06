@@ -23,9 +23,10 @@ import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
 import RazaoDiarioTab from './RazaoDiarioTab'
 import InputMoeda from '../shared/InputMoeda'
 import { isoLocal } from '../../lib/hoje'
-import { ratearProporcional, erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
+import { erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
+import PendenciasFechado from './PendenciasFechado'
 import { ehAjusteDeRendimento } from '../../lib/rendimentoReserva'
-import { parseValorBR, valorParaInput } from '../../lib/valorBR'
+import { parseValorBR } from '../../lib/valorBR'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -548,11 +549,6 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
   const [distErro, setDistErro] = useState({})
   const [distSalvando, setDistSalvando] = useState(null)
   useSubtelaGuia('reservas:resumo')
-  const ratear = (accountId, fns, aDistribuir) => {
-    const r = ratearProporcional(fns.map(f => ({ id: f.id, saldo: computeSaldo(f) })), aDistribuir)
-    setDistrib(prev => ({ ...prev, ...Object.fromEntries(fns.map(f => [f.id, r[f.id] ? valorParaInput(r[f.id]) : ''])) }))
-    setDistErro(e => ({ ...e, [accountId]: null }))
-  }
   const limparDistrib = (accountId, fns) => {
     setDistrib(prev => ({ ...prev, ...Object.fromEntries(fns.map(f => [f.id, ''])) }))
     setDistErro(e => ({ ...e, [accountId]: null }))
@@ -997,7 +993,6 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       <tr>
                         <td colSpan={11} className="px-4 py-2">
                           <div className="flex flex-wrap items-center gap-2 text-xs" data-guia={fns === groups.find(g => g.accountId)?.fns ? 'reservas:resumo.distribuir' : undefined}>
-                            <button type="button" className="btn-secondary text-xs py-1" onClick={() => ratear(accountId, fns, diff)}>Ratear proporcional</button>
                             <button type="button" className="btn-secondary text-xs py-1" onClick={() => limparDistrib(accountId, fns)}>Limpar</button>
                             <span className="text-texto-3">
                               Distribuindo <span className="font-semibold text-texto-2">{fmtSinal(totalDistrib)}</span> de {fmtSinal(diff)}
@@ -2352,6 +2347,17 @@ export default function ReservasPanel() {
 
       {tab === 'resumo' && viradaStatus?.recalculos?.length > 0 && (
         <AvisoRecalculo itens={viradaStatus.recalculos} functions={functions} onCiente={marcarRecalculosVistos} onRefazer={refazerRecalculo} />
+      )}
+
+      {tab === 'resumo' && viradaStatus?.pendenciasFechado?.length > 0 && (
+        <PendenciasFechado
+          itens={viradaStatus.pendenciasFechado}
+          functions={functions}
+          accounts={nonCreditAccounts}
+          hoje={todayStr}
+          podeEditar={podeVirar}
+          onMudou={aposVirada}
+        />
       )}
 
       {tab === 'resumo' && (

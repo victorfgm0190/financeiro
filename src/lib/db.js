@@ -32,9 +32,14 @@ const comPrazo = (ms) => (ms && typeof AbortSignal !== 'undefined' && typeof Abo
 // gravado, mas o recálculo ficou pendente (api/_viradaReservaServidor.js). Avisa a tela — nunca um
 // "sucesso" silencioso. O AppContext mostra o aviso; Reservas oferece "Refazer recálculo".
 export const EVENTO_RECALCULO_PENDENTE = 'finup:virada-recalculo-pendente'
+// Lançamento gravado em período fechado: fica pendente em Reservas (detail: { n } ou { falhou: true }).
+export const EVENTO_PENDENCIA_FECHADO = 'finup:reserva-pendencia-fechado'
 function avisarRecalculoPendente(corpo) {
-  if (corpo?.viradaRecalculoPendente && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-    window.dispatchEvent(new CustomEvent(EVENTO_RECALCULO_PENDENTE))
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    if (corpo?.viradaRecalculoPendente) window.dispatchEvent(new CustomEvent(EVENTO_RECALCULO_PENDENTE))
+    if (corpo?.reservaPendencias || corpo?.reservaPendenciasFalhou) {
+      window.dispatchEvent(new CustomEvent(EVENTO_PENDENCIA_FECHADO, { detail: { n: corpo.reservaPendencias || 0, falhou: !!corpo.reservaPendenciasFalhou } }))
+    }
   }
   return corpo
 }

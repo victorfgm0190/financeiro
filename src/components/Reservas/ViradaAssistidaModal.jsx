@@ -64,6 +64,44 @@ function Avisos({ itens }) {
   )
 }
 
+const temResto = (c) => Math.abs(c.resto || 0) > 0.005
+const decisaoValida = (d) => d?.tipo === 'a_distribuir' || (d?.tipo === 'ajuste' && d.functionId && String(d.observacao || '').trim())
+
+// A soma das funções não bate com o saldo e o rendimento não explica: a virada para até o usuário escolher.
+function DecisaoDiferenca({ conta, decisao, onChange }) {
+  const d = decisao || {}
+  return (
+    <div className="rounded-lg border border-perigo/40 bg-perigo/5 p-3 space-y-2" role="alert" data-testid={`virada-decisao-${conta.accountId}`}>
+      <p className="text-xs font-semibold text-perigo flex items-center gap-1.5"><Lock size={12} /> {conta.nome}: {fmtSinal(conta.resto)} sem explicação por rendimento. A virada para aqui.</p>
+      <ul className="text-[11px] text-texto-2 space-y-0.5">
+        <li>Diferença total entre o saldo da conta e a soma das funções: <b>{fmtSinal(conta.diferenca)}</b></li>
+        {Math.abs(conta.rendimentoARatear) > 0.005 && <li>Rendimento real rateado nesta virada, entre as funções positivas: {fmtSinal(conta.rendimentoARatear)}</li>}
+        {Math.abs(conta.rendimentoSemBase) > 0.005 && <li>Rendimento sem função positiva, fica a distribuir: {fmtSinal(conta.rendimentoSemBase)}</li>}
+        {Math.abs(conta.pendenciasFechado) > 0.005 && <li>Lançamentos em período fechado, pendentes em Reservas: {fmtSinal(conta.pendenciasFechado)}</li>}
+        {Math.abs(conta.aceitoAntes) > 0.005 && <li>Já estava a distribuir na virada anterior: {fmtSinal(conta.aceitoAntes)}</li>}
+        {Math.abs(conta.lancamentosSemFuncao) > 0.005 && <li>Lançamentos do mês sem função, dentro do valor acima: {fmtSinal(conta.lancamentosSemFuncao)}</li>}
+      </ul>
+      <div className="flex flex-wrap gap-3 text-xs text-texto-1">
+        <label className="flex items-center gap-1.5"><input type="radio" className="accent-primary" checked={d.tipo === 'ajuste'} onChange={() => onChange({ tipo: 'ajuste', functionId: '', observacao: '' })} /> Lançar como Ajuste</label>
+        <label className="flex items-center gap-1.5"><input type="radio" className="accent-primary" checked={d.tipo === 'a_distribuir'} onChange={() => onChange({ tipo: 'a_distribuir' })} /> Deixar a distribuir</label>
+      </div>
+      {d.tipo === 'ajuste' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <label className="text-[11px] text-texto-2">Função
+            <select className="input mt-1 w-full" value={d.functionId || ''} onChange={e => onChange({ ...d, functionId: e.target.value })}>
+              <option value="">Escolha…</option>
+              {conta.funcoes.map(f => <option key={f.functionId} value={f.functionId}>{f.nome}</option>)}
+            </select>
+          </label>
+          <label className="text-[11px] text-texto-2">Observação
+            <input className="input mt-1 w-full" value={d.observacao || ''} onChange={e => onChange({ ...d, observacao: e.target.value })} />
+          </label>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TabelaConta({ conta, fim }) {
   const th = 'text-right px-2 py-1.5 text-[11px] font-medium text-texto-2 whitespace-nowrap'
   const td = 'text-right px-2 py-1 text-xs whitespace-nowrap'
@@ -121,6 +159,7 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
   const [resultado, setResultado] = useState(null)
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState('')
+  const [decisoes, setDecisoes] = useState({})          // por conta: Ajuste ou a distribuir
   const chaveRef = useRef(null)                          // idempotência do "Confirmar" (clique duplo)
   const enviandoRef = useRef(false)
 
@@ -136,6 +175,7 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
     setCarregando(true)
     setErro('')
     setDados(null)
+    setDecisoes({})
     chaveRef.current = novaChave()
     try {
       setDados(await viradaReservaAcao({ acao: 'previa', fim: m.fim, hoje }))
@@ -152,7 +192,7 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
     setCarregando(true)
     setErro('')
     try {
-      const r = await viradaReservaAcao({ acao: 'confirmar', fim: mes.fim, chave: chaveRef.current, hoje })
+      const r = await viradaReservaAcao({ acao: 'confirmar', fim: mes.fim, chave: chaveRef.current, hoje, decisoes })
       setResultado({ ...r, mes })
       setPasso(PASSO.RESULTADO)
       await onVirou?.()
@@ -164,6 +204,8 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
     }
   }
 
+  const contasComResto = (dados?.previa?.contas || []).filter(temResto)
+  const faltaDecidir = contasComResto.some(c => !decisaoValida(decisoes[c.accountId]))
   const proximo = pendentes[indice + 1] || null
   const mesFechado = resultado?.virada?.data_corte
     ? { inicio: resultado.virada.data_inicio || resultado.mes?.inicio, fim: resultado.virada.data_corte }
@@ -193,7 +235,7 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
                 <ul className="space-y-1" data-testid="virada-pendentes">
                   {pendentes.map(m => <li key={m.fim} className="text-xs text-texto-1 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-primary" />{rotuloMes(m)}</li>)}
                 </ul>
-                <p className="text-[11px] text-texto-3 flex gap-1.5"><Info size={12} className="shrink-0 mt-0.5" />A virada não muda o Saldo de nenhuma função: ela fecha o período, guarda o fechamento no Histórico e recomeça Entradas, Saídas, Ajuste e Rendimentos no mês seguinte.</p>
+                <p className="text-[11px] text-texto-3 flex gap-1.5"><Info size={12} className="shrink-0 mt-0.5" />A virada fecha o período, guarda o fechamento no Histórico e recomeça Entradas, Saídas, Ajuste e Rendimentos no mês seguinte. O Saldo só muda se houver rendimento a ratear ou um Ajuste escolhido por você.</p>
               </>
             ) : (
               <p className="text-sm text-texto-2">Não há virada pendente. {status?.ultimoCorte ? `O último fechamento foi em ${dataBR(status.ultimoCorte)}.` : ''}</p>
@@ -216,6 +258,9 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
             <Bloqueios itens={[...bloqueiosTela, ...(dados?.bloqueios || [])]} />
             {dados?.previa && (
               <>
+                {contasComResto.map(c => (
+                  <DecisaoDiferenca key={c.accountId} conta={c} decisao={decisoes[c.accountId]} onChange={d => setDecisoes(prev => ({ ...prev, [c.accountId]: d }))} />
+                ))}
                 <Avisos itens={dados.previa.avisos} />
                 {dados.previa.contas.map(c => <TabelaConta key={c.accountId} conta={c} fim={mes.fim} />)}
                 {dados.previa.semConta.length > 0 && (
@@ -224,7 +269,7 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
                     {dados.previa.semConta.map(l => <p key={l.functionId}>{l.nome}: saldo final {fmt(l.saldoFinal)}</p>)}
                   </div>
                 )}
-                <p className="text-xs text-texto-2">Ao confirmar, o Saldo Final de cada função vira o Saldo Inicial a partir de {fmtDate(somarDias(mes.fim, 1))}. Nenhum valor é rateado nem movido.</p>
+                <p className="text-xs text-texto-2">Ao confirmar, o Saldo Final de cada função vira o Saldo Inicial a partir de {fmtDate(somarDias(mes.fim, 1))}. Nenhum dinheiro é movido. Rendimento real ainda sem rateio é dividido só entre as funções positivas; outra diferença nunca vai para Rendimentos.</p>
               </>
             )}
             {erro && <p className="text-xs text-perigo" role="alert">{erro}</p>}
@@ -232,7 +277,7 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
               <button className="btn-secondary" disabled={carregando && !!dados} onClick={onFechar}>Cancelar</button>
               <button
                 className="btn-primary flex items-center gap-1.5"
-                disabled={carregando || !dados?.previa || bloqueado || !!dados?.bloqueios?.length}
+                disabled={carregando || !dados?.previa || bloqueado || !!dados?.bloqueios?.length || faltaDecidir}
                 onClick={confirmar}
               >
                 {carregando && dados ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
@@ -246,7 +291,7 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
           <>
             {/* O mês fechado é o que o SERVIDOR gravou (virada.data_inicio/data_corte). */}
             <p className="text-sm text-receita font-semibold flex items-center gap-1.5" data-testid="virada-resultado"><CheckCircle size={16} /> Mês {rotuloMes(mesFechado)} fechado{pendentes.length > 1 ? ` (${indice + 1} de ${pendentes.length})` : ''}{resultado?.repetida ? ' (já estava gravado)' : ''}.</p>
-            <p className="text-xs text-texto-2">O Saldo das funções não mudou: apenas o período foi fechado. O fechamento está na aba Histórico, e Entradas, Saídas, Ajuste e Rendimentos recomeçam em {fmtDate(somarDias(mesFechado.fim, 1))}.</p>
+            <p className="text-xs text-texto-2">O período foi fechado. O fechamento está na aba Histórico, e Entradas, Saídas, Ajuste e Rendimentos recomeçam em {fmtDate(somarDias(mesFechado.fim, 1))}.</p>
             {resultado?.resumo?.contas?.map(c => (
               <Fragment key={c.accountId}>
                 <p className="text-xs text-texto-2">{c.nome}: soma das funções {fmt(c.somaFuncoes)} · saldo da conta {c.saldoConta == null ? '—' : fmt(c.saldoConta)} · diferença {c.diferenca == null ? '—' : fmtSinal(c.diferenca)}{c.diferenca && Math.abs(c.diferenca) > 0.005 ? ' (pode ser distribuída pela coluna Distribuir do Resumo)' : ''}</p>

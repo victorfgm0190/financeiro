@@ -1,12 +1,15 @@
 // ── Virada de saldo das reservas — motor puro ───────────────────────────────────────────────────
 // O mesmo código monta a prévia na tela e grava/confere no servidor (api/_viradaReservaServidor.js).
 //
-// Regras (pedido de 06/11/2026):
+// Regras:
 //   • A virada fecha UM mês financeiro (mesFinanceiro.js) por vez, em ordem cronológica.
 //   • Saldo Final de cada função = fórmula única (saldoReserva.js) com tudo até o último dia do mês;
 //     nada posterior ao corte entra. Ele vira o Saldo Inicial do período que abre no dia seguinte.
-//   • A virada não rateia nada: rendimentos já foram rateados no dia de cada um; a diferença entre a
-//     soma das funções e o saldo da conta só é mostrada e registrada (Distribuir continua manual).
+//   • Rendimento REAL (receita sem função na conta de reserva) ainda sem rateio é rateado na virada,
+//     só entre funções positivas (rendimentoReserva.js). Nenhuma positiva: fica "a distribuir".
+//   • Diferença entre a soma das funções e o saldo da conta sem explicação por rendimento: a virada PARA
+//     e o usuário escolhe Ajuste (função e observação) ou "a distribuir". Nunca vai para Rendimentos.
+//   • Lançamento em período já fechado: fica pendente (Ajuste no próximo período aberto ou Reabrir).
 //   • O saldo da conta no corte vem dos lançamentos gravados (saldos.js) — nunca do "Saldo Real"
 //     digitado no navegador.
 
@@ -15,6 +18,7 @@ import { saldosDaConta, efeitoNaConta } from './saldos.js'
 import { computeOccurrences } from './occurrences.js'
 import { occEfetiva } from './fluxoCaixa.js'
 import { mesesPendentes, mesFinanceiroDe, somarDias, dataBR, rotuloMes } from './mesFinanceiro.js'
+import { rateioDoRendimento, inicioMaisRecente } from './rendimentoReserva.js'
 
 export const TOLERANCIA = 0.005
 const fmtValor = (v) => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -94,9 +98,37 @@ function agendamentosVencidos(mes, schedules, contasReserva) {
   return out.sort((a, b) => a.date.localeCompare(b.date))
 }
 
-// Prévia de UM mês: por conta e função, avisos (não bloqueiam) e totais.
-// `mes` = { inicio, fim }. Funções sem conta aparecem à parte.
-export function montarPrevia({ mes, functions = [], periods = [], adjustments = [], transactions = [], accounts = [], schedules = [] }) {
+// Rateios que a virada do mês grava: rendimentos reais do mês ainda sem rateio, em ordem de data.
+export function rateiosDaVirada({ mes, functions = [], periods = [], adjustments = [], transactions = [] }) {
+  const contas = new Set(functions.map(f => f.accountId).filter(Boolean))
+  const jaRateados = new Set(adjustments.filter(ehAjusteDeRendimento).map(a => a.lancamento_id))
+  const novos = []
+  const rendimentos = transactions
+    .filter(t => t.type === 'income' && !t.reservaFuncaoId && !t.reservaAuto && contas.has(t.accountId)
+      && t.date >= mes.inicio && t.date <= mes.fim && !jaRateados.has(t.id))
+    .sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)))
+  for (const tx of rendimentos) {
+    novos.push(...rateioDoRendimento(tx, { functions, periods, adjustments: [...adjustments, ...novos], transactions }))
+  }
+  return novos
+}
+
+// A diferença `x` (já sem o que tem caminho próprio) em relação ao que o usuário aceitou deixar "a
+// distribuir" na virada anterior: o que couber no aceito não para de novo; o que passar, para.
+function restoSemDecisao(x, aceito) {
+  if (Math.abs(x) <= TOLERANCIA) return 0
+  const mesmoSinal = Math.sign(x) === Math.sign(aceito)
+  if (mesmoSinal && Math.abs(x) <= Math.abs(aceito) + TOLERANCIA) return 0
+  return round2(mesmoSinal ? x - aceito : x)
+}
+
+// Prévia de UM mês: por conta e função, avisos, o que a diferença de cada conta explica e totais.
+// `mes` = { inicio, fim }. Funções sem conta aparecem à parte. `pendencias`: lançamentos em período
+// fechado ainda sem decisão. `aceitos`: { [conta]: valor } deixado "a distribuir" na virada anterior.
+export function montarPrevia({ mes, functions = [], periods = [], adjustments: gravados = [], transactions = [], accounts = [], schedules = [], pendencias = [], aceitos = {} }) {
+  const rateios = rateiosDaVirada({ mes, functions, periods, adjustments: gravados, transactions })
+  const adjustments = rateios.length ? [...gravados, ...rateios] : gravados
+  const fnDoRateio = new Map(functions.map(f => [f.id, f.accountId]))
   const idx = indexarReserva({ periods, adjustments, transactions })
   const linhas = linhasNoCorte(functions, mes.fim, idx)
   const accById = new Map((accounts || []).map(a => [a.id, a]))
@@ -125,6 +157,14 @@ export function montarPrevia({ mes, functions = [], periods = [], adjustments = 
     const soltos = lancamentosSoltos(accId, mes, transactions, fnById, rateados)
     const explicadoNoMes = round2(soltos.reduce((s, x) => s + x.valor, 0))
     const variacaoNoMes = diferenca == null || diferencaAnterior == null ? null : round2(diferenca - diferencaAnterior)
+    // O que a diferença tem de explicado por caminho próprio; o `resto` é o que faz a virada parar.
+    const rendimentoARatear = round2(rateios.filter(a => fnDoRateio.get(a.function_id) === accId).reduce((s, a) => s + (Number(a.valor) || 0), 0))
+    const rendimentoSemBase = round2(soltos.filter(s => s.tipo === 'receita_sem_rateio').reduce((s, x) => s + x.valor, 0))
+    const lancamentosSemFuncao = round2(soltos.filter(s => s.tipo === 'sem_funcao').reduce((s, x) => s + x.valor, 0))
+    const pendenciasFechado = round2(pendencias.filter(p => p.status === 'pendente' && p.account_id === accId).reduce((s, p) => s + (Number(p.valor) || 0), 0))
+    const aceitoAntes = round2(aceitos[accId])
+    const semCaminho = diferenca == null ? 0 : round2(diferenca - pendenciasFechado - rendimentoSemBase)
+    const resto = restoSemDecisao(semCaminho, aceitoAntes)
     return {
       accountId: accId,
       nome: acc ? (acc.apelido || acc.name || '') : '(conta não encontrada)',
@@ -138,6 +178,13 @@ export function montarPrevia({ mes, functions = [], periods = [], adjustments = 
       soltos,
       explicadoNoMes,
       semExplicacao: variacaoNoMes == null ? null : round2(variacaoNoMes - explicadoNoMes),
+      rendimentoARatear,
+      rendimentoSemBase,
+      lancamentosSemFuncao,
+      pendenciasFechado,
+      aceitoAntes,
+      resto,
+      aDistribuir: diferenca == null ? 0 : round2(diferenca - pendenciasFechado),
     }
   })
   const semConta = linhas.filter(l => !l.accountId)
@@ -156,7 +203,7 @@ export function montarPrevia({ mes, functions = [], periods = [], adjustments = 
   const semFuncao = soltos.filter(s => s.tipo === 'sem_funcao')
   const semRateio = soltos.filter(s => s.tipo === 'receita_sem_rateio')
   if (semFuncao.length) avisos.push({ codigo: 'sem_funcao', itens: semFuncao, texto: `${semFuncao.length} lançamento(s) da conta de reserva no mês não entram em nenhuma função.` })
-  if (semRateio.length) avisos.push({ codigo: 'receita_sem_rateio', itens: semRateio, texto: `${semRateio.length} receita(s) na conta de reserva sem função e sem rateio de rendimento.` })
+  if (semRateio.length) avisos.push({ codigo: 'receita_sem_rateio', itens: semRateio, texto: `${semRateio.length} rendimento(s) sem função com saldo positivo para receber: o valor fica a distribuir.` })
   const negativas = linhas.filter(l => l.saldoFinal < -TOLERANCIA)
   if (negativas.length) avisos.push({ codigo: 'negativa', itens: negativas.map(l => ({ functionId: l.functionId, nome: l.nome, saldo: round2(l.saldoFinal) })), texto: `${negativas.length} função(ões) com saldo negativo no fim do mês.` })
   if (vencidos.length) avisos.push({ codigo: 'vencidos', itens: vencidos, texto: `${vencidos.length} agendamento(s) das reservas venceram no mês e continuam pendentes.` })
@@ -168,6 +215,7 @@ export function montarPrevia({ mes, functions = [], periods = [], adjustments = 
     semConta,
     linhas,
     avisos,
+    rateios,
     totais: {
       somaFuncoes: somaSaldos(linhas.map(l => l.saldoFinal)),
       saldoContas: round2(contas.reduce((s, c) => s + (c.saldoConta || 0), 0)),
@@ -210,6 +258,120 @@ export function bloqueiosDeData({ mes, ultimoCorte, hoje, cfg, inicioUso = null 
   return []
 }
 
+// Decisões da virada para as contas com diferença não explicada. Sem decisão válida para alguma conta,
+// `faltam` traz a conta e a virada não pode ser gravada. decisoes: { [conta]: { tipo: 'a_distribuir' } |
+// { tipo: 'ajuste', functionId, observacao } }. O ajuste nunca tem lancamento_id: não vai para Rendimentos.
+export function conferirDecisoes(previa, decisoes) {
+  const faltam = []
+  const ajustes = []
+  for (const c of previa.contas) {
+    if (Math.abs(c.resto) <= TOLERANCIA) continue
+    const d = decisoes?.[c.accountId]
+    if (d?.tipo === 'a_distribuir') continue
+    const obs = String(d?.observacao || '').trim()
+    if (d?.tipo === 'ajuste' && obs && c.funcoes.some(f => f.functionId === d.functionId)) {
+      ajustes.push({ accountId: c.accountId, function_id: d.functionId, valor: c.resto, observacao: obs })
+      continue
+    }
+    faltam.push({ accountId: c.accountId, nome: c.nome, resto: c.resto })
+  }
+  return { faltam, ajustes }
+}
+
+// ── Lançamento em período já fechado ────────────────────────────────────────────────────────────
+// Efeito do lançamento nas reservas, por função (ou só na conta, sem função).
+function efeitosDoLancamento(tx, fnById, contasReserva) {
+  if (!tx || tx.reservaAuto || !tx.date) return []
+  const out = []
+  const fn = tx.reservaFuncaoId ? fnById.get(tx.reservaFuncaoId) : null
+  let contaDaFuncao = null
+  if (fn?.accountId) {
+    const m = reserveMovOf(tx, fn.accountId)
+    if (m.entrada || m.saida) {
+      out.push({ function_id: fn.id, account_id: fn.accountId, entrada: m.entrada, saida: m.saida })
+      contaDaFuncao = fn.accountId
+    }
+  }
+  for (const acc of contasReserva) {
+    if (acc === contaDaFuncao) continue
+    const e = efeitoNaConta(tx, acc)
+    if (e) out.push({ function_id: null, account_id: acc, entrada: Math.max(e, 0), saida: Math.max(-e, 0) })
+  }
+  return out
+}
+
+// Pendências de uma mudança num lançamento: o efeito em período fechado depois − o de antes, por função
+// e conta. Só a diferença: reenviar a mesma linha não gera nada; editar soma; excluir devolve.
+// `corte` = último dia fechado do ambiente; cada função fecha antes do início do período mais recente.
+export function pendenciasDaMudanca({ antes = null, depois = null, functions = [], periods = [], corte = null }) {
+  const fnById = new Map(functions.map(f => [f.id, f]))
+  const contasReserva = [...new Set(functions.map(f => f.accountId).filter(Boolean))]
+  const fechado = (ef, data) => {
+    if (ef.function_id) {
+      const inicio = inicioMaisRecente(periods, ef.function_id)
+      return !!inicio && data < inicio
+    }
+    return !!corte && data <= corte
+  }
+  const somar = (mapa, tx, sinal) => {
+    for (const ef of efeitosDoLancamento(tx, fnById, contasReserva)) {
+      if (!fechado(ef, tx.date)) continue
+      const chave = `${ef.function_id || ''}|${ef.account_id}`
+      const atual = mapa.get(chave) || { function_id: ef.function_id, account_id: ef.account_id, entrada: 0, saida: 0 }
+      atual.entrada = round2(atual.entrada + sinal * ef.entrada)
+      atual.saida = round2(atual.saida + sinal * ef.saida)
+      mapa.set(chave, atual)
+    }
+  }
+  const mapa = new Map()
+  somar(mapa, antes, -1)
+  somar(mapa, depois, 1)
+  const base = depois || antes
+  const motivo = !antes ? 'novo' : !depois ? 'excluido' : 'editado'
+  return [...mapa.values()]
+    .map(p => ({ ...p, valor: round2(p.entrada - p.saida) }))
+    .filter(p => Math.abs(p.entrada) > TOLERANCIA || Math.abs(p.saida) > TOLERANCIA)
+    .map(p => ({ ...p, lancamento_id: base?.id, data: base?.date, descricao: base?.description || '', motivo }))
+}
+
+// Dia do ajuste: o primeiro do próximo período aberto, em que a fórmula do saldo já conta o ajuste.
+export function dataDoAjuste({ functionId = null, corte = null, periods = [], hoje = null }) {
+  const aposCorte = corte ? somarDias(corte, 1) : null
+  const inicio = functionId ? inicioMaisRecente(periods, functionId) : null
+  const d = [aposCorte, inicio].filter(Boolean).sort().pop()
+  return d || hoje
+}
+
+// Reabrir só pode desfazer do fechamento mais recente para trás, até o mês do lançamento, e só se todos
+// esses fechamentos forem da virada assistida e o saldo inicial da função não tiver sido informado depois.
+export function reabertura(p, { viradas = [], snapshots = [], periods = [] }) {
+  const data = dia(p.data)
+  const cortes = [...new Set(snapshots.map(s => dia(s.data_fim)).filter(Boolean))].filter(c => c >= data).sort().reverse()
+  const assistidas = new Set(viradas.map(v => dia(v.data_corte)))
+  const antigo = cortes.find(c => !assistidas.has(c))
+  if (antigo) return { pode: false, cortes: [], motivo: `O fechamento de ${dataBR(antigo)} foi feito antes da virada assistida e não pode ser desfeito.` }
+  const fixo = p.function_id
+    ? periods.find(x => x.function_id === p.function_id && !x.virada_id && dia(x.data_inicio) > data)
+    : null
+  if (fixo) return { pode: false, cortes: [], motivo: `A data é anterior ao saldo inicial informado em ${dataBR(dia(fixo.data_inicio))}: não há fechamento para reabrir.` }
+  if (!cortes.length) return { pode: false, cortes: [], motivo: 'Não há fechamento para reabrir nesta data.' }
+  return { pode: true, cortes, motivo: null }
+}
+
+// Lista agrupada por conta e mês (importação e sincronização podem trazer muitas de uma vez).
+export function agruparPendencias(itens) {
+  const grupos = new Map()
+  for (const p of [...(itens || [])].sort((a, b) => dia(a.data).localeCompare(dia(b.data)))) {
+    const mes = dia(p.data).slice(0, 7)
+    const chave = `${p.account_id || ''}|${mes}`
+    if (!grupos.has(chave)) grupos.set(chave, { chave, accountId: p.account_id || null, mes, itens: [], total: 0 })
+    const g = grupos.get(chave)
+    g.itens.push(p)
+    g.total = round2(g.total + (Number(p.valor) || 0))
+  }
+  return [...grupos.values()]
+}
+
 // Registros que a virada grava (snapshot do mês fechado + período novo por função).
 // `novoId` gera os ids (o servidor passa crypto.randomUUID).
 export function registrosDaVirada({ previa, viradaId, novoId }) {
@@ -248,7 +410,7 @@ export function resumoDaVirada(previa) {
     contas: previa.contas.map(c => ({
       accountId: c.accountId, nome: c.nome, somaFuncoes: c.somaFuncoes, saldoConta: c.saldoConta,
       diferenca: c.diferenca, diferencaAnterior: c.diferencaAnterior, rendimentosMes: c.rendimentosMes,
-      explicadoNoMes: c.explicadoNoMes, semExplicacao: c.semExplicacao,
+      explicadoNoMes: c.explicadoNoMes, semExplicacao: c.semExplicacao, aDistribuir: c.aDistribuir,
     })),
     avisos: previa.avisos.map(a => a.codigo),
   }
@@ -277,8 +439,9 @@ const CAMPOS_SNAPSHOT = [
 // Recalcula as viradas ASSISTIDAS já feitas (em ordem) com os dados atuais. Devolve as mudanças —
 // snapshots e períodos que precisam ser regravados — sem criar registro novo. A virada antiga (sem
 // virada_id, anterior à assistida) não é recalculada: o saldo inicial dela foi definido à mão.
-// `viradas` = reserve_viradas ativas; snapshots/periods com virada_id.
-export function recalcularViradas({ viradas = [], snapshots = [], periods = [], functions = [], adjustments = [], transactions = [] }) {
+// `viradas` = reserve_viradas ativas; snapshots/periods com virada_id. `pendencias`: lançamentos em
+// período fechado que ficam de fora do fechamento (o valor deles vai por Ajuste ou Reabrir).
+export function recalcularViradas({ viradas = [], snapshots = [], periods = [], functions = [], adjustments = [], transactions = [], pendencias = [] }) {
   const ordem = [...viradas].sort((a, b) => dia(a.data_corte).localeCompare(dia(b.data_corte)))
   const pers = (periods || []).map(p => ({ ...p, data_inicio: dia(p.data_inicio) }))
   const mudancas = []
@@ -290,7 +453,10 @@ export function recalcularViradas({ viradas = [], snapshots = [], periods = [], 
       const fn = fnById.get(snap.function_id)
       if (!fn) continue
       const s = saldoDaFuncao(fn, fim, idx)
-      const novo = { saldoInicial: s.saldoInicial, entradas: s.entradas, saidas: s.saidas, ajuste: s.ajuste, rendimentos: s.rendimentos, saldoFinal: s.saldo }
+      const fora = pendencias.filter(p => (p.status === 'pendente' || p.status === 'ajustado') && p.function_id === fn.id && dia(p.data) >= s.inicio && dia(p.data) <= fim)
+      const foraEntrada = fora.reduce((t, p) => t + (Number(p.entrada) || 0), 0)
+      const foraSaida = fora.reduce((t, p) => t + (Number(p.saida) || 0), 0)
+      const novo = { saldoInicial: s.saldoInicial, entradas: round2(s.entradas - foraEntrada), saidas: round2(s.saidas - foraSaida), ajuste: s.ajuste, rendimentos: s.rendimentos, saldoFinal: fora.length ? Math.round((s.saldo - foraEntrada + foraSaida) * 1e6) / 1e6 : s.saldo }
       for (const [col, chave] of CAMPOS_SNAPSHOT) {
         const antes = Number(snap[col]) || 0
         if (Math.abs(antes - novo[chave]) > TOLERANCIA) {

@@ -170,11 +170,14 @@ describe('avisos (não bloqueiam)', () => {
     const p = montarPrevia({ mes: MES1, ...c })
     const codigos = p.avisos.map(a => a.codigo)
     expect(codigos).toContain('sem_funcao')
-    expect(codigos).toContain('receita_sem_rateio')
+    expect(codigos).not.toContain('receita_sem_rateio') // o rendimento real é rateado na virada
     expect(p.avisos.find(a => a.codigo === 'sem_funcao').itens.map(i => i.id)).toEqual(['solto', 'desp'])
     const conta = p.contas[0]
-    expect(conta.diferenca).toBe(72) // 70 + 5 − 3
-    expect(conta.explicadoNoMes).toBe(72)
+    expect(conta.diferenca).toBe(67) // 70 − 3; os 5 de rendimento entraram nas funções
+    expect(conta.rendimentoARatear).toBe(5)
+    expect(conta.lancamentosSemFuncao).toBe(67)
+    expect(conta.resto).toBe(67) // lançamento sem função não é rendimento: a virada para
+    expect(conta.explicadoNoMes).toBe(67)
     expect(conta.semExplicacao).toBe(0)
   })
 

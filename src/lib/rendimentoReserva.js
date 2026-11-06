@@ -29,10 +29,37 @@ export function saldosDasFuncoesNaData({ functions, periods, adjustments, transa
     .map(s => ({ id: s.functionId, saldo: r2(s.saldo) }))
 }
 
-// Ajustes do rateio de UM rendimento (ids determinísticos: refazer substitui).
+// SALDO NEGATIVO NÃO RENDE. Único rateio de rendimento do sistema: só funções com saldo positivo
+// recebem, proporcional ao saldo, centavos na maior. Nenhuma positiva: o valor fica "a distribuir".
+// saldos: [{ id, saldo }] → { partes: { [id]: valor }, aDistribuir }.
+export function ratearRendimento(saldos, valor) {
+  const partes = ratearProporcional(saldos, valor)
+  return { partes, aDistribuir: Object.keys(partes).length ? 0 : r2(Number(valor) || 0) }
+}
+
+// Início do período mais recente da função: antes dele o saldo da função já está fechado.
+export function inicioMaisRecente(periods, functionId) {
+  let max = null
+  for (const p of periods || []) {
+    const d = p.function_id === functionId && p.data_inicio ? String(p.data_inicio).slice(0, 10) : null
+    if (d && (!max || d > max)) max = d
+  }
+  return max
+}
+
+// A data cai em período já fechado da função? (rendimento nesse caso vira pendência, não rateio)
+export const dataFechadaNaFuncao = (periods, functionId, data) => {
+  const inicio = inicioMaisRecente(periods, functionId)
+  return !!inicio && !!data && String(data).slice(0, 10) < inicio
+}
+
+// Ajustes do rateio de UM rendimento (ids determinísticos: refazer substitui). Rendimento com data em
+// período fechado não é rateado: não entraria no saldo de ninguém.
 export function rateioDoRendimento(tx, ctx) {
+  const fns = (ctx.functions || []).filter(f => f.accountId === tx.accountId)
+  if (fns.some(f => dataFechadaNaFuncao(ctx.periods, f.id, tx.date))) return []
   const saldos = saldosDasFuncoesNaData({ ...ctx, contaId: tx.accountId, date: tx.date, ignorarLancamentoId: tx.id })
-  const partes = ratearProporcional(saldos, Number(tx.amount) || 0)
+  const { partes } = ratearRendimento(saldos, Number(tx.amount) || 0)
   return Object.entries(partes).map(([functionId, valor]) => ({
     id: `adj_rend_${tx.id}_${functionId}`,
     function_id: functionId,
@@ -41,4 +68,27 @@ export function rateioDoRendimento(tx, ctx) {
     observacao: OBS_RENDIMENTO,
     lancamento_id: tx.id,
   }))
+}
+
+// Refaz, em ordem de data, o rateio dos rendimentos a partir de `desde` (cada um depende do saldo que os
+// anteriores deixaram). Devolve só os que mudam: { lancamentoId, date, description, antes, depois, novos }.
+export function refazerRendimentos({ functions = [], periods = [], adjustments = [], transactions = [], desde }) {
+  const contas = new Set(functions.map(f => f.accountId).filter(Boolean))
+  const rendimentos = transactions
+    .filter(t => t.type === 'income' && !t.reservaFuncaoId && !t.reservaAuto && contas.has(t.accountId) && t.date && t.date >= desde)
+    .sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)))
+  const mapa = (lista) => Object.fromEntries(lista.map(a => [a.function_id, r2(Number(a.valor) || 0)]))
+  let atuais = adjustments
+  const itens = []
+  for (const tx of rendimentos) {
+    const novos = rateioDoRendimento(tx, { functions, periods, adjustments: atuais, transactions })
+    const antes = mapa(atuais.filter(a => a.lancamento_id === tx.id))
+    const depois = mapa(novos)
+    const mudou = new Set([...Object.keys(antes), ...Object.keys(depois)])
+    if ([...mudou].some(id => Math.abs((antes[id] || 0) - (depois[id] || 0)) > 0.005)) {
+      itens.push({ lancamentoId: tx.id, date: tx.date, description: tx.description || '', antes, depois, novos })
+    }
+    atuais = [...atuais.filter(a => a.lancamento_id !== tx.id), ...novos]
+  }
+  return itens
 }

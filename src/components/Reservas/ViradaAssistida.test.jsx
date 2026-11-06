@@ -151,7 +151,7 @@ describe('prévia e confirmação', () => {
     const btn = screen.getByRole('button', { name: /Confirmar virada de 15\/10\/2026 a 14\/11\/2026/ })
     fireEvent.click(btn)
     fireEvent.click(btn)
-    await waitFor(() => expect(screen.getByText(/O Saldo das funções não mudou: apenas o período foi fechado/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/O período foi fechado\. O fechamento/)).toBeTruthy())
     const confirmacoes = api.acao.mock.calls.filter(([b]) => b.acao === 'confirmar')
     expect(confirmacoes).toHaveLength(1)
     expect(confirmacoes[0][0].chave).toBeTruthy()

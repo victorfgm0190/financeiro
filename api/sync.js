@@ -1,5 +1,5 @@
 import { upsertRows, deleteRows, parseBody, query, ErroIdentificador, ErroBancoDesatualizado } from './_db.js'
-import { lancamentosAfetamViradas, prepararRecalculo, concluirRecalculo, respostaRecalculo } from './_viradaReservaServidor.js'
+import { prepararLancamentos, concluirLancamentos } from './_viradaReservaServidor.js'
 import { requireAuth } from './_auth.js'
 import { autorizarSync } from './_permissoesApi.js'
 import { ErroHttp } from './_usuarios.js'
@@ -73,9 +73,7 @@ async function handler(req, res) {
       // reservas → recalcula aquela virada e as seguintes depois de gravar (comparação feita ANTES).
       // Falha na verificação ou no recálculo: o lançamento é gravado do mesmo jeito e fica uma
       // pendência de recálculo visível (resposta + tela de Reservas). Banco sem a migração: nada.
-      const prepVirada = table === 'lancamentos'
-        ? await prepararRecalculo(() => lancamentosAfetamViradas(query, { upsert, del: toDelete }))
-        : null
+      const prepVirada = table === 'lancamentos' ? await prepararLancamentos(query, { upsert, del: toDelete }) : null
       const [deleted, upserted] = await Promise.all([
         deleteRows(table, toDelete),
         upsertRows(table, upsert),
@@ -92,8 +90,8 @@ async function handler(req, res) {
           console.error('[api/sync] movimentação do bem', err.message)
         }
       }
-      const recalculo = prepVirada ? await concluirRecalculo(prepVirada, 'lançamento com data em mês fechado') : null
-      return res.json({ ok: true, ...recebido, written: gravado, ...respostaRecalculo(recalculo) })
+      const fechado = prepVirada ? await concluirLancamentos(prepVirada, { usuario: req.user?.username || req.user?.sub || null, motivo: 'lançamento com data em mês fechado' }) : {}
+      return res.json({ ok: true, ...recebido, written: gravado, ...fechado })
 
     } else if (type === 'accounts') {
       // Contas + cartões (tabelas separadas)

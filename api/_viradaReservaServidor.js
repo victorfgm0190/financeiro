@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { query, withTransaction } from './_db.js'
 import {
   montarPrevia, bloqueiosDeData, registrosDaVirada, resumoDaVirada, recalcularViradas, ultimoCorteDe,
+  conferirDecisoes, pendenciasDaMudanca, dataDoAjuste, reabertura,
 } from '../src/lib/viradaReserva.js'
+import { refazerRendimentos } from '../src/lib/rendimentoReserva.js'
 import { configDoMes, mesesPendentes, somarDias, dataBR } from '../src/lib/mesFinanceiro.js'
 import { buildDailyLedgerRows } from '../src/lib/reserveDailyLedger.js'
 
@@ -66,6 +68,28 @@ async function lerViradasAtivas(q) {
             status, chave, resumo, criado_por, created_at
        FROM reserve_viradas WHERE status = 'ativa' ORDER BY data_corte`,
   )
+}
+
+// O que ficou "a distribuir" por conta na virada mais recente: o usuário já decidiu sobre esse valor.
+function aceitosDe(viradas) {
+  const ultima = viradas[viradas.length - 1]
+  return Object.fromEntries((ultima?.resumo?.contas || []).map(c => [c.accountId, Number(c.aDistribuir) || 0]))
+}
+
+// Banco ainda sem a migração 2026-11-06e: sem pendências (e o lançamento segue o recálculo antigo).
+async function temPendencias(q = query) {
+  const [r] = await q("SELECT to_regclass('reserve_pendencias_fechado') IS NOT NULL AS tem")
+  return !!r?.tem
+}
+
+async function lerPendencias(q, status = ['pendente', 'ajustado']) {
+  if (!(await temPendencias(q))) return []
+  const rows = await q(
+    `SELECT id, lancamento_id, function_id, account_id, data, entrada, saida, valor, descricao, motivo, status, ajuste_id, created_at
+       FROM reserve_pendencias_fechado WHERE status = ANY($1) ORDER BY data, created_at`,
+    [status],
+  )
+  return rows.map(r => ({ ...r, entrada: Number(r.entrada) || 0, saida: Number(r.saida) || 0, valor: Number(r.valor) || 0 }))
 }
 
 // Linhas do banco → objetos que o motor usa. Aqui, e não em src/lib/db.js: aquele módulo é do
@@ -202,7 +226,28 @@ export async function statusVirada({ hoje: hojeTela } = {}) {
     podeDesfazer,
     motivoDesfazer,
     recalculos,
+    pendenciasFechado: await pendenciasParaTela(query, ultimoCorte, hoje),
   }
+}
+
+// Pendências abertas, com as duas opções já resolvidas: dados do ajuste e se dá para reabrir.
+async function pendenciasParaTela(q, corte, hoje) {
+  const pendentes = await lerPendencias(q, ['pendente'])
+  if (!pendentes.length) return []
+  const viradas = await lerViradasAtivas(q)
+  const snapshots = await lerSnapshots(q)
+  const periods = await lerPeriodos(q)
+  return pendentes.map(p => {
+    const r = reabertura(p, { viradas, snapshots, periods })
+    return {
+      ...p,
+      dataAjuste: dataDoAjuste({ functionId: p.function_id, corte, periods, hoje }),
+      observacaoSugerida: `Referente a "${p.descricao || 'lançamento'}" de ${dataBR(p.data)} (período fechado)`,
+      podeReabrir: r.pode,
+      motivoReabrir: r.motivo,
+      fechamentosADesfazer: r.cortes,
+    }
+  })
 }
 
 // Mês pendente que termina em `fim` (ou o mês inválido, para os bloqueios explicarem).
@@ -225,11 +270,13 @@ export async function previaVirada({ fim, hoje: hojeTela }) {
   if (bloqueios.length) return { hoje, mes, bloqueios, previa: null }
   // Razão Diário do período recalculado com o banco — é a base de conferência da prévia.
   try { await gravarRazao(query, dados, { hoje, desde: mes.inicio }) } catch (err) { console.error('[virada] razão:', codigoDoErro(err)) }
-  return { hoje, mes, bloqueios, previa: montarPrevia({ mes, ...dados }) }
+  const pendencias = await lerPendencias(query)
+  const aceitos = aceitosDe(await lerViradasAtivas(query))
+  return { hoje, mes, bloqueios, previa: montarPrevia({ mes, ...dados, pendencias, aceitos }) }
 }
 
 // ── Confirmar: grava UM mês, atômico e idempotente ──────────────────────────────────────────────
-export async function confirmarVirada({ fim, chave = null, hoje: hojeTela, usuario = null }) {
+export async function confirmarVirada({ fim, chave = null, hoje: hojeTela, usuario = null, decisoes = null }) {
   if (!(await temViradaAssistida())) throw new ErroVirada(409, 'banco_desatualizado', 'O banco deste ambiente ainda não tem a atualização da virada assistida. Avise o suporte.')
   const hoje = hojeDaVirada(hojeTela)
   const resultado = await withTransaction(async (q) => {
@@ -252,8 +299,29 @@ export async function confirmarVirada({ fim, chave = null, hoje: hojeTela, usuar
       const status = bloqueios[0].codigo === 'mes_ja_fechado' ? 409 : 422
       throw new ErroVirada(status, bloqueios[0].codigo, bloqueios[0].texto, { bloqueios })
     }
-    const previa = montarPrevia({ mes, ...dados })
-    const resumo = resumoDaVirada(previa)
+    const pendencias = await lerPendencias(q)
+    const aceitos = aceitosDe(await lerViradasAtivas(q))
+    const inicial = montarPrevia({ mes, ...dados, pendencias, aceitos })
+    // Diferença sem explicação por rendimento: sem a decisão do usuário, nada é gravado.
+    const { faltam, ajustes } = conferirDecisoes(inicial, decisoes)
+    if (faltam.length) {
+      const nomes = faltam.map(c => c.nome).join(', ')
+      throw new ErroVirada(422, 'diferenca_nao_explicada', `A diferença de ${nomes} não é explicada por rendimento. Escolha entre lançar como Ajuste ou deixar a distribuir.`, { contas: faltam })
+    }
+    // Rateio dos rendimentos reais (entre positivas) e ajustes escolhidos: entram no mês que fecha.
+    const novosAjustes = [
+      ...inicial.rateios,
+      ...ajustes.map(a => ({ id: randomUUID(), function_id: a.function_id, data: mes.fim, valor: a.valor, observacao: a.observacao, lancamento_id: null })),
+    ]
+    for (const a of novosAjustes) {
+      await q(
+        `INSERT INTO reserve_adjustments (id, function_id, data, valor, observacao, lancamento_id)
+              VALUES ($1, $2, $3, $4, $5, $6)`,
+        [a.id, a.function_id, a.data, a.valor, a.observacao, a.lancamento_id ?? null],
+      )
+    }
+    const previa = montarPrevia({ mes, ...dados, adjustments: [...dados.adjustments, ...novosAjustes], pendencias, aceitos })
+    const resumo = { ...resumoDaVirada(previa), criados: { ajustes: novosAjustes.map(a => a.id) } }
     const viradaId = randomUUID()
     await q(
       `INSERT INTO reserve_viradas (id, data_inicio, data_corte, status, chave, resumo, criado_por)
@@ -296,22 +364,220 @@ export async function desfazerVirada({ usuario = null, hoje: hojeTela } = {}) {
   const r = await withTransaction(async (q) => {
     const [trava] = await q('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS ok', [TRAVA])
     if (!trava?.ok) throw new ErroVirada(409, 'virada_em_execucao', 'Outra sessão está mexendo na virada agora. Aguarde alguns segundos e tente de novo.')
-    const [{ corte }] = await q("SELECT to_char(MAX(data_fim), 'YYYY-MM-DD') AS corte FROM reserve_period_snapshots")
-    const [v] = await q(
-      `SELECT id, to_char(data_inicio, 'YYYY-MM-DD') AS data_inicio, to_char(data_corte, 'YYYY-MM-DD') AS data_corte
-         FROM reserve_viradas WHERE status = 'ativa' ORDER BY data_corte DESC LIMIT 1`)
-    if (!v) throw new ErroVirada(422, 'nada_para_desfazer', 'Não há virada assistida para desfazer.')
-    if (v.data_corte !== corte) throw new ErroVirada(422, 'virada_antiga', `O último fechamento (${dataBR(corte)}) foi feito antes da virada assistida e não pode ser desfeito por aqui.`)
-    // Prévia do que sai (SELECT antes do DELETE).
-    const snaps = await q('SELECT id FROM reserve_period_snapshots WHERE virada_id = $1', [v.id])
-    const pers = await q('SELECT id FROM reserve_periods WHERE virada_id = $1', [v.id])
-    await q('DELETE FROM reserve_period_snapshots WHERE virada_id = $1', [v.id])
-    await q('DELETE FROM reserve_periods WHERE virada_id = $1', [v.id])
-    await q("UPDATE reserve_viradas SET status = 'desfeita', desfeita_em = now(), desfeita_por = $2 WHERE id = $1", [v.id, usuario])
-    return { virada: v, removidos: { snapshots: snaps.length, periodos: pers.length } }
+    const feito = await desfazerMaisRecente(q, usuario)
+    await liberarPendencias(q, usuario)
+    return feito
   })
   try { await recalcularRazaoNoBanco({ hoje, desde: somarDias(r.virada.data_corte, 1) }) } catch (err) { console.error('[virada] razão após desfazer:', codigoDoErro(err)) }
   return r
+}
+
+// Desfaz a virada mais recente dentro da transação de quem chama, com o que ela mesma criou (rateios e
+// ajustes da decisão, guardados no resumo).
+async function desfazerMaisRecente(q, usuario) {
+  const [{ corte }] = await q("SELECT to_char(MAX(data_fim), 'YYYY-MM-DD') AS corte FROM reserve_period_snapshots")
+  const [v] = await q(
+    `SELECT id, to_char(data_inicio, 'YYYY-MM-DD') AS data_inicio, to_char(data_corte, 'YYYY-MM-DD') AS data_corte, resumo
+       FROM reserve_viradas WHERE status = 'ativa' ORDER BY data_corte DESC LIMIT 1`)
+  if (!v) throw new ErroVirada(422, 'nada_para_desfazer', 'Não há virada assistida para desfazer.')
+  if (v.data_corte !== corte) throw new ErroVirada(422, 'virada_antiga', `O último fechamento (${dataBR(corte)}) foi feito antes da virada assistida e não pode ser desfeito por aqui.`)
+  // Prévia do que sai (SELECT antes do DELETE).
+  const snaps = await q('SELECT id FROM reserve_period_snapshots WHERE virada_id = $1', [v.id])
+  const pers = await q('SELECT id FROM reserve_periods WHERE virada_id = $1', [v.id])
+  const criados = v.resumo?.criados?.ajustes || []
+  const ajustes = criados.length ? await q('SELECT id FROM reserve_adjustments WHERE id = ANY($1)', [criados]) : []
+  await q('DELETE FROM reserve_period_snapshots WHERE virada_id = $1', [v.id])
+  await q('DELETE FROM reserve_periods WHERE virada_id = $1', [v.id])
+  if (ajustes.length) await q('DELETE FROM reserve_adjustments WHERE id = ANY($1)', [ajustes.map(a => a.id)])
+  await q("UPDATE reserve_viradas SET status = 'desfeita', desfeita_em = now(), desfeita_por = $2 WHERE id = $1", [v.id, usuario])
+  const virada = { id: v.id, data_inicio: v.data_inicio, data_corte: v.data_corte }
+  return { virada, removidos: { snapshots: snaps.length, periodos: pers.length, ajustes: ajustes.length } }
+}
+
+// Depois de reabrir: o lançamento volta a contar pela fórmula, então a pendência dele acaba. Se já tinha
+// virado Ajuste, o ajuste sai junto (senão o valor contaria duas vezes).
+async function liberarPendencias(q, usuario) {
+  if (!(await temPendencias(q))) return { liberadas: 0, ajustesRemovidos: 0 }
+  const [{ corte }] = await q("SELECT to_char(MAX(data_fim), 'YYYY-MM-DD') AS corte FROM reserve_period_snapshots")
+  const periods = await lerPeriodos(q)
+  const abertas = await lerPendencias(q)
+  const liberadas = abertas.filter(p => {
+    if (corte && p.data <= corte) return false
+    return !(p.function_id && dataDoAjusteFechada(p, periods))
+  })
+  const ajustes = liberadas.map(p => p.ajuste_id).filter(Boolean)
+  if (ajustes.length) await q('DELETE FROM reserve_adjustments WHERE id = ANY($1)', [ajustes])
+  if (liberadas.length) {
+    await q(
+      "UPDATE reserve_pendencias_fechado SET status = 'reaberto', resolvido_em = now(), resolvido_por = $2 WHERE id = ANY($1)",
+      [liberadas.map(p => p.id), usuario],
+    )
+  }
+  return { liberadas: liberadas.length, ajustesRemovidos: ajustes.length }
+}
+const dataDoAjusteFechada = (p, periods) => periods.some(x => x.function_id === p.function_id && String(x.data_inicio).slice(0, 10) > p.data)
+
+// ── Pendências: as duas opções e o "refazer rendimentos" ────────────────────────────────────────
+// Prévia dos rendimentos cujo rateio muda (nunca dentro de período fechado).
+async function previaRendimentos(q, desde) {
+  const dados = await carregarDadosReserva(q)
+  const corte = ultimoCorteDe(dados.snapshots)
+  const aberto = corte ? somarDias(corte, 1) : null
+  const inicio = [desde, aberto].filter(Boolean).sort().pop()
+  return { desde: inicio, itens: refazerRendimentos({ ...dados, desde: inicio }) }
+}
+
+const respostaRendimentos = ({ desde, itens }) => ({
+  desde,
+  itens: itens.map(i => ({ lancamentoId: i.lancamentoId, date: i.date, description: i.description, antes: i.antes, depois: i.depois })),
+})
+
+// a) Ajuste no próximo período aberto: não mexe no fechamento nem na coluna Rendimentos.
+export async function ajustarPendencia({ id, functionId, valor, observacao, usuario = null, hoje: hojeTela }) {
+  const hoje = hojeDaVirada(hojeTela)
+  const obs = String(observacao || '').trim()
+  const v = Number(valor)
+  if (!obs) throw new ErroVirada(422, 'observacao_obrigatoria', 'Informe a observação do ajuste.')
+  if (!Number.isFinite(v) || v === 0) throw new ErroVirada(422, 'valor_invalido', 'Informe o valor do ajuste.')
+  const desde = await withTransaction(async (q) => {
+    await q('SELECT pg_advisory_xact_lock(hashtext($1))', [TRAVA])
+    const [p] = await q("SELECT id, account_id FROM reserve_pendencias_fechado WHERE id = $1 AND status = 'pendente'", [id])
+    if (!p) throw new ErroVirada(409, 'pendencia_resolvida', 'Esta pendência já foi resolvida.')
+    const [fn] = await q('SELECT id, account_id FROM reserve_functions WHERE id = $1', [functionId])
+    if (!fn || (p.account_id && fn.account_id !== p.account_id)) throw new ErroVirada(422, 'funcao_invalida', 'Escolha uma função da conta deste lançamento.')
+    const [{ corte }] = await q("SELECT to_char(MAX(data_fim), 'YYYY-MM-DD') AS corte FROM reserve_period_snapshots")
+    const data = dataDoAjuste({ functionId, corte, periods: await lerPeriodos(q), hoje })
+    const ajusteId = randomUUID()
+    await q('INSERT INTO reserve_adjustments (id, function_id, data, valor, observacao) VALUES ($1, $2, $3, $4, $5)', [ajusteId, functionId, data, v, obs])
+    await q(
+      "UPDATE reserve_pendencias_fechado SET status = 'ajustado', function_id = $2, ajuste_id = $3, resolvido_em = now(), resolvido_por = $4 WHERE id = $1",
+      [id, functionId, ajusteId, usuario],
+    )
+    return data
+  })
+  try { await recalcularRazaoNoBanco({ hoje, desde }) } catch (err) { console.error('[virada] razão após ajuste:', codigoDoErro(err)) }
+  return { ok: true, refazer: respostaRendimentos(await previaRendimentos(query, desde)) }
+}
+
+// b) Reabrir: desfaz do fechamento mais recente até o mês do lançamento, tudo ou nada.
+export async function reabrirPendencia({ id, usuario = null, hoje: hojeTela }) {
+  const hoje = hojeDaVirada(hojeTela)
+  const r = await withTransaction(async (q) => {
+    await q('SELECT pg_advisory_xact_lock(hashtext($1))', [TRAVA])
+    const [p] = (await lerPendencias(q, ['pendente'])).filter(x => x.id === id)
+    if (!p) throw new ErroVirada(409, 'pendencia_resolvida', 'Esta pendência já foi resolvida.')
+    const { pode, motivo, cortes } = reabertura(p, { viradas: await lerViradasAtivas(q), snapshots: await lerSnapshots(q), periods: await lerPeriodos(q) })
+    if (!pode) throw new ErroVirada(422, 'nao_pode_reabrir', motivo)
+    const desfeitas = []
+    for (let i = 0; i < cortes.length; i++) desfeitas.push((await desfazerMaisRecente(q, usuario)).virada)
+    const liberacao = await liberarPendencias(q, usuario)
+    return { desfeitas, data: p.data, ...liberacao }
+  })
+  try { await recalcularRazaoNoBanco({ hoje, desde: r.data }) } catch (err) { console.error('[virada] razão após reabrir:', codigoDoErro(err)) }
+  return { ok: true, ...r, refazer: respostaRendimentos(await previaRendimentos(query, r.data)) }
+}
+
+// "Refazer os rendimentos seguintes", depois da prévia. Só o rateio muda; o lançamento não.
+export async function refazerRendimentosNoBanco({ desde, hoje: hojeTela }) {
+  const hoje = hojeDaVirada(hojeTela)
+  const r = await withTransaction(async (q) => {
+    await q('SELECT pg_advisory_xact_lock(hashtext($1))', [TRAVA])
+    const previa = await previaRendimentos(q, desde)
+    for (const it of previa.itens) {
+      await q('DELETE FROM reserve_adjustments WHERE lancamento_id = $1', [it.lancamentoId])
+      for (const a of it.novos) {
+        await q(
+          'INSERT INTO reserve_adjustments (id, function_id, data, valor, observacao, lancamento_id) VALUES ($1, $2, $3, $4, $5, $6)',
+          [a.id, a.function_id, a.data, a.valor, a.observacao, a.lancamento_id],
+        )
+      }
+    }
+    return previa
+  })
+  try { await recalcularRazaoNoBanco({ hoje, desde: r.desde }) } catch (err) { console.error('[virada] razão após refazer:', codigoDoErro(err)) }
+  return { ok: true, refeitos: r.itens.length }
+}
+
+// ── Lançamentos gravados com data em período fechado ────────────────────────────────────────────
+// Chamar ANTES de gravar (lê como o lançamento está). O lançamento é gravado sempre: falha aqui nunca
+// trava a gravação e vira aviso na resposta. Banco sem a migração: segue o recálculo antigo.
+export async function prepararLancamentos(q, { upsert = [], del = [] } = {}) {
+  let tem
+  try {
+    tem = await temPendencias(q)
+  } catch (err) {
+    console.error('[virada] verificação de período fechado falhou:', codigoDoErro(err))
+    return { falhou: true }
+  }
+  if (!tem) return { antigo: await prepararRecalculo(() => lancamentosAfetamViradas(q, { upsert, del })) }
+  try {
+    const ids = [...new Set([...(upsert || []).map(r => r?.id), ...(del || [])].filter(Boolean))]
+    if (!ids.length) return { itens: [] }
+    const periods = await lerPeriodos(q)
+    const [{ corte }] = await q("SELECT to_char(MAX(data_fim), 'YYYY-MM-DD') AS corte FROM reserve_period_snapshots")
+    if (!periods.length && !corte) return { itens: [] }
+    const functions = (await q('SELECT * FROM reserve_functions')).map(funcaoDaLinha)
+    const atuais = new Map((await q('SELECT * FROM lancamentos WHERE id = ANY($1)', [ids])).map(r => [r.id, r]))
+    const itens = []
+    for (const r of upsert || []) {
+      if (!r?.id) continue
+      const gravada = atuais.get(r.id) || null
+      itens.push(...pendenciasDaMudanca({
+        antes: gravada && lancamentoDaLinha(gravada),
+        depois: lancamentoDaLinha({ ...gravada, ...r }),
+        functions, periods, corte,
+      }))
+    }
+    for (const id of del || []) {
+      const gravada = atuais.get(id)
+      if (gravada) itens.push(...pendenciasDaMudanca({ antes: lancamentoDaLinha(gravada), functions, periods, corte }))
+    }
+    return { itens }
+  } catch (err) {
+    console.error('[virada] verificação de período fechado falhou:', codigoDoErro(err))
+    return { falhou: true }
+  }
+}
+
+// Chamar DEPOIS de gravar. Soma na pendência aberta do mesmo lançamento; se a soma zerar, ela se cancela.
+export async function concluirLancamentos(prep, { q = query, usuario = null, motivo } = {}) {
+  if (prep?.antigo) return respostaRecalculo(await concluirRecalculo(prep.antigo, motivo))
+  if (prep?.falhou) return { reservaPendenciasFalhou: true }
+  if (!prep?.itens?.length) return {}
+  try {
+    let n = 0
+    for (const p of prep.itens) {
+      const [aberta] = await q(
+        `SELECT id, entrada, saida FROM reserve_pendencias_fechado
+          WHERE status = 'pendente' AND lancamento_id = $1 AND COALESCE(function_id, '') = $2 AND COALESCE(account_id, '') = $3`,
+        [p.lancamento_id, p.function_id || '', p.account_id || ''],
+      )
+      if (!aberta) {
+        await q(
+          `INSERT INTO reserve_pendencias_fechado (lancamento_id, function_id, account_id, data, entrada, saida, valor, descricao, motivo, criado_por)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [p.lancamento_id, p.function_id, p.account_id, p.data, p.entrada, p.saida, p.valor, p.descricao, p.motivo, usuario],
+        )
+        n++
+        continue
+      }
+      const entrada = Math.round((Number(aberta.entrada) + p.entrada) * 100) / 100
+      const saida = Math.round((Number(aberta.saida) + p.saida) * 100) / 100
+      if (Math.abs(entrada) < 0.005 && Math.abs(saida) < 0.005) {
+        await q("UPDATE reserve_pendencias_fechado SET status = 'cancelado', resolvido_em = now() WHERE id = $1", [aberta.id])
+        continue
+      }
+      await q(
+        'UPDATE reserve_pendencias_fechado SET entrada = $2, saida = $3, valor = $4, data = $5, descricao = $6 WHERE id = $1',
+        [aberta.id, entrada, saida, Math.round((entrada - saida) * 100) / 100, p.data, p.descricao],
+      )
+      n++
+    }
+    return n ? { reservaPendencias: n } : {}
+  } catch (err) {
+    console.error('[virada] pendência de período fechado não registrada:', codigoDoErro(err))
+    return { reservaPendenciasFalhou: true }
+  }
 }
 
 export async function marcarRecalculosVistos(ids) {
@@ -344,7 +610,7 @@ export async function recalcularViradasNoBanco(motivo) {
     const viradas = await lerViradasAtivas(q)
     if (!viradas.length) return []
     const dados = await carregarDadosReserva(q)
-    const mudancas = recalcularViradas({ viradas, ...dados })
+    const mudancas = recalcularViradas({ viradas, ...dados, pendencias: await lerPendencias(q) })
     for (const m of mudancas) {
       if (!CAMPOS_RECALCULO[m.tabela]?.has(m.campo)) continue
       await q(`UPDATE ${m.tabela} SET ${m.campo} = $1 WHERE id = $2`, [m.depois, m.id])

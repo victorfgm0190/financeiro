@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { ensureHistoricoSchema, inserirHistorico } from './_historico.js'
 import { comAmbiente } from './_ambiente.js'
 import { exigirLinhasPermitidas } from './_permissoesApi.js'
+import { prepararLancamentos, concluirLancamentos } from './_viradaReservaServidor.js'
 
 // Atualização em lote de lançamentos: altera date e/ou category_id de vários
 // registros (id = ANY) numa única transação, junto com o histórico de alterações
@@ -50,11 +51,14 @@ async function handler(req, res) {
     await exigirLinhasPermitidas(query, req.user, 'lancamentos', ids)
     const loteId = loteBody ? String(loteBody) : `lote_${Date.now()}_${Math.random().toString(36).slice(2)}`
     await ensureHistoricoSchema()
+    // Mudar a data pode levar o lançamento para período fechado (ou tirá-lo de lá).
+    const prepFechado = date ? await prepararLancamentos(query, { upsert: ids.map(id => ({ id, date })) }) : null
     const r = await withTransaction(q => aplicarBulkLancamentos(q, {
       ids, date, categoryId, loteId,
       motivo: motivo ? String(motivo).trim().slice(0, 500) || null : null,
     }))
-    res.json({ ok: true, ...r, lote_id: loteId })
+    const fechado = prepFechado ? await concluirLancamentos(prepFechado, { usuario: req.user?.username || req.user?.sub || null, motivo: 'lançamento com data em mês fechado' }) : {}
+    res.json({ ok: true, ...r, lote_id: loteId, ...fechado })
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message })
     console.error('[api/transactions-bulk-update]', err.message)
