@@ -265,6 +265,34 @@ async function verificarPeriodoVirado(entradas) {
   return null
 }
 
+// O que sai junto quando o usuário não confirma o estorno: os lançamentos em período virado, as sombras e os
+// espelhos deles, o rateio e a baixa no agendamento (sem eles a baixa ficaria sem lançamento). O resto segue.
+export function entradasDoRecusado(entradas, itens) {
+  const lancs = new Set((itens || []).map(i => i.lancamento_id).filter(Boolean))
+  const funcoes = new Set((itens || []).filter(i => i.tipo === 'saldo_inicial').map(i => i.function_id).filter(Boolean))
+  const agendamentos = new Set()
+  const ehDoRecusado = (e) => {
+    const t = e.item || {}
+    if (lancs.has(e.id) || lancs.has(t.parentTxId) || lancs.has(t.sourceExpenseId) || lancs.has(t.espelhoOrigemId)) return true
+    return String(e.id || '').startsWith('tx_inv_') && lancs.has(String(e.id).slice('tx_inv_'.length))
+  }
+  const fora = entradas.filter(e => e.tipo === 'secao' && e.tabela === 'lancamentos' && ehDoRecusado(e))
+  for (const e of fora) {
+    if (e.item?.scheduleId) agendamentos.add(e.item.scheduleId)
+    if (e.item?.sourceScheduleId) agendamentos.add(e.item.sourceScheduleId)
+  }
+  const baixaDoRecusado = (e) => agendamentos.has(e.id)
+    || Object.values(e.item?.registeredMeta || {}).some(m => lancs.has(m?.lancamento_id))
+  for (const e of entradas) {
+    if (fora.includes(e)) continue
+    if (e.tipo === 'secao' && e.tabela === 'reserve_functions' && funcoes.has(e.id)) fora.push(e)
+    else if (e.tipo === 'secao' && e.tabela === 'agendamentos' && baixaDoRecusado(e)) fora.push(e)
+    else if (e.tipo === 'rateios' && lancs.has(e.id)) fora.push(e)
+    else if (e.tipo === 'srf' && agendamentos.has(e.id)) fora.push(e)
+  }
+  return fora
+}
+
 // Tipo da falha de envio:
 //   'rede'     — sem conexão / servidor fora / sessão: tenta de novo depois, sem marcar nada;
 //   'recusa'   — o servidor ou o banco recusou a alteração (validação, permissão, regra do banco):
@@ -282,11 +310,13 @@ export function tipoDeFalha(err) {
 // Envia a fila separando o que o servidor RECUSA: um lote recusado é reenviado item a item, para
 // que um item com problema não prenda os outros. Devolve { enviadas, falhas: [{ entrada, err }] }.
 // Falha de rede (ou exclusão em massa recusada pelo usuário) interrompe e é lançada como antes, com
-// `err.enviadas` e `err.falhas` do que já se resolveu.
+// `err.enviadas` e `err.falhas` do que já se resolveu. Estorno de período virado não confirmado: só o que cai
+// nesse período sai (`descartadas`), e o resto da rodada segue.
 export async function enviarFilaIsolando(entradas, enviar = enviarFila) {
   const enviadas = []
   const falhas = []
-  const interromper = (err) => { err.enviadas = [...enviadas]; err.falhas = falhas; return err }
+  const descartadas = []
+  const interromper = (err) => { err.enviadas = [...enviadas]; err.falhas = falhas; err.descartadas = descartadas; return err }
   let resto = entradas
   while (resto.length) {
     try {
@@ -295,6 +325,14 @@ export async function enviarFilaIsolando(entradas, enviar = enviarFila) {
     } catch (err) {
       const ok = err.enviadas || []
       enviadas.push(...ok)
+      if (err.periodoRecusado) {
+        const fora = entradasDoRecusado(resto, err.dados?.previa?.itens)
+        if (fora.length) {
+          descartadas.push(...fora)
+          resto = resto.filter(e => !fora.includes(e) && !ok.includes(e))
+          continue
+        }
+      }
       if (err.exclusaoRecusada || err.periodoRecusado || tipoDeFalha(err) === 'rede') throw interromper(err)
       const lote = err.lote?.length ? err.lote : resto.filter(e => !ok.includes(e))
       if (lote.length === 1) falhas.push({ entrada: lote[0], err })
@@ -312,7 +350,7 @@ export async function enviarFilaIsolando(entradas, enviar = enviarFila) {
       resto = resto.filter(e => !fora.has(e))
     }
   }
-  return { enviadas, falhas }
+  return { enviadas, falhas, descartadas }
 }
 
 // Motivo da recusa em português, para o aviso e o painel. `err.dados` = corpo da resposta da API

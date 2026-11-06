@@ -406,7 +406,7 @@ export async function analisarEstorno(q, itens) {
   const snapshots = await lerSnapshots(q)
   const periods = await lerPeriodos(q)
   const cortes = new Set()
-  const itensTela = itens.map(({ function_id, account_id, data, valor, descricao, tipo }) => ({ function_id, account_id, data, valor, descricao, tipo }))
+  const itensTela = itens.map(({ lancamento_id, function_id, account_id, data, valor, descricao, tipo }) => ({ lancamento_id, function_id, account_id, data, valor, descricao, tipo }))
   for (const item of itens) {
     const r = reabertura(item, { viradas, snapshots, periods })
     if (!r.pode) return { bloqueio: `Não é possível gravar em ${item.data === '0001-01-01' ? 'período já fechado' : dataBR(item.data)}. ${r.motivo}`, itens: itensTela }

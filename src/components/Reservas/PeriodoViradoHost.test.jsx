@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { fetchComEstorno, definirConfirmadorEstorno, EVENTO_ESTORNO_VIRADA } from '../../lib/api'
-import { enviarFila, enviarFilaIsolando } from '../../lib/filaOffline'
+import { enviarFila, enviarFilaIsolando, entradasDoRecusado } from '../../lib/filaOffline'
 import { PreviaEstorno } from './PeriodoViradoHost'
 
 // Aviso de período virado: o interceptador de todas as gravações, a fila do app e a janela da prévia.
@@ -70,6 +70,44 @@ describe('fila do app', () => {
     expect(err.periodoRecusado).toBe(true)
     expect(f).toHaveBeenCalledTimes(1)
     expect(corpos(f)[0]).toMatchObject({ table: 'lancamentos', somenteVerificar: true })
+  })
+  it('recusou com 5 lançamentos de hoje e 1 em período virado: os 5 são gravados, o de período virado não', async () => {
+    const hoje = Array.from({ length: 5 }, (_, i) => ({ ...lancamento, chave: `h${i}`, id: `h${i}`, item: { ...lancamento.item, id: `h${i}`, date: '2026-11-06' } }))
+    const virado = { ...lancamento, chave: 'v', id: 'v', item: { ...lancamento.item, id: 'v', date: '2026-08-10' } }
+    const gravados = []
+    const pedidos = []
+    vi.stubGlobal('fetch', vi.fn(async (_u, init) => {
+      const b = JSON.parse(init.body)
+      pedidos.push(b)
+      const ids = (b.upsert || []).map(r => r.id)
+      if (ids.includes('v')) {
+        return resposta(409, { ...PREVIA, previa: { ...PREVIA.previa, itens: [{ lancamento_id: 'v', function_id: 'f', account_id: 'c', data: '2026-08-10', valor: 10, descricao: 'V' }] } })
+      }
+      if (b.somenteVerificar) return resposta(200, { ok: true, verificado: true })
+      gravados.push(...ids)
+      return resposta(200, { ok: true, written: { upserted: ids.length, deleted: 0 } })
+    }))
+    const pergunta = vi.fn(async () => false)
+    definirConfirmadorEstorno(pergunta)
+    const r = await enviarFilaIsolando([...hoje, virado])
+    expect(pergunta).toHaveBeenCalledTimes(1)
+    expect(gravados.sort()).toEqual(['h0', 'h1', 'h2', 'h3', 'h4'])
+    expect(r.descartadas.map(e => e.chave)).toEqual(['v'])
+    expect(r.enviadas.map(e => e.chave).sort()).toEqual(['h0', 'h1', 'h2', 'h3', 'h4'])
+    expect(r.falhas).toEqual([])
+    expect(pedidos.some(b => !b.somenteVerificar && (b.upsert || []).some(x => x.id === 'v'))).toBe(false)
+  })
+  it('o que sai junto com o recusado: sombra, espelho, rateio e a baixa no agendamento; o resto fica', () => {
+    const tx = (id, extra = {}) => ({ chave: `l:${id}`, tipo: 'secao', tabela: 'lancamentos', op: 'gravar', id, item: { id, ...extra } })
+    const ag = (id, extra = {}) => ({ chave: `a:${id}`, tipo: 'secao', tabela: 'agendamentos', op: 'gravar', id, item: { id, ...extra } })
+    const entradas = [
+      tx('v', { scheduleId: 's1' }), tx('tx_inv_v'), tx('filho', { parentTxId: 'v' }), tx('esp', { espelhoOrigemId: 'v' }), tx('outro'),
+      ag('s1'), ag('s2', { registeredMeta: { '2026-08-10': { lancamento_id: 'v' } } }), ag('s3', { registeredMeta: { '2026-08-10': { lancamento_id: 'outro' } } }),
+      { chave: 'r:v', tipo: 'rateios', id: 'v', op: 'gravar', item: [] }, { chave: 'r:o', tipo: 'rateios', id: 'outro', op: 'gravar', item: [] },
+      conta,
+    ]
+    const fora = entradasDoRecusado(entradas, [{ lancamento_id: 'v' }]).map(e => e.chave).sort()
+    expect(fora).toEqual(['a:s1', 'a:s2', 'l:esp', 'l:filho', 'l:tx_inv_v', 'l:v', 'r:v'].sort())
   })
   it('confirmou: uma confirmação só; contas, depois o lote inteiro numa operação', async () => {
     const lote = Array.from({ length: 700 }, (_, i) => ({ ...lancamento, chave: `l${i}`, id: `t${i}`, item: { ...lancamento.item, id: `t${i}` } }))

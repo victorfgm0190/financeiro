@@ -39,7 +39,7 @@ export function PreviaEstorno({ dados, onConfirmar, onCancelar }) {
           ))}
         </div>
       </div>
-      <p className="text-[11px] text-texto-3">É tudo ou nada: se algo falhar, nada muda. Se você não confirmar, nada é gravado. Se uma virada refeita tiver diferença sem explicação, ela para e mostra o valor para você decidir.</p>
+      <p className="text-[11px] text-texto-3">É tudo ou nada: se algo falhar, nada muda. Se você não confirmar, o que cai nesses períodos não é gravado; o restante segue normalmente. Se uma virada refeita tiver diferença sem explicação, ela para e mostra o valor para você decidir.</p>
       <div className="flex justify-end gap-2">
         <button type="button" className="btn-secondary" disabled={enviando} onClick={onCancelar}>Não gravar</button>
         <button type="button" className="btn-primary" disabled={enviando} onClick={() => { setEnviando(true); onConfirmar() }}>

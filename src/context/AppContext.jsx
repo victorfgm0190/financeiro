@@ -1062,6 +1062,12 @@ export function AppProvider({ children }) {
     try {
       const r = await enviarFilaIsolando(entradas)
       enviadas = r.enviadas
+      if (r.descartadas?.length) {
+        // Estorno não confirmado: o que caía em período virado sai da fila, e o app volta ao banco depois
+        // do envio (a recarga também refaz os saldos das contas, que ainda contavam com ele).
+        tirarDaFila(r.descartadas.map(e => e.chave))
+        recarregarRef.current?.({ forcar: true })
+      }
       if (r.falhas.length) marcarErroFila(r.falhas)
       else setSyncError(prev => (prev ? null : prev))
       setErroEnvio(r.falhas.length ? motivoDaRecusa(r.falhas[0].err) : null)
@@ -1069,7 +1075,7 @@ export function AppProvider({ children }) {
       enviadas = err?.enviadas || []
       if (err?.falhas?.length) marcarErroFila(err.falhas)
       if (err?.periodoRecusado) {
-        // O usuário não confirmou o estorno: nada desta rodada é gravado e o app volta ao que está no banco.
+        // Estorno não confirmado sem saber quais itens eram: nada desta rodada é gravado e o app volta ao banco.
         tirarDaFila(entradas.map(e => e.chave))
         window.location.reload()
         return
