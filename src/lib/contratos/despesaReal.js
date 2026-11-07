@@ -32,7 +32,8 @@ export function lancamentosDoRepasse(tx, partes) {
   return (partes || []).filter(p => Math.abs(Number(p.valor) || 0) > 0.004).map((p, k) => ({
     ...tx, id: `${tx.id}:rep${k}`, type: p.valor >= 0 ? 'income' : 'expense', amount: r2(Math.abs(p.valor)),
     categoryId: p.categoria_id || (p.tipo === 'aluguel' ? tx.categoryId : ADMINISTRADORA_ID), description: p.descricao || tx.description,
-    _composicaoDe: tx.id,
+    // Filtro por categoria dos relatórios: a parte segue a categoria do lançamento de origem.
+    _composicaoDe: tx.id, _categoriaFiltro: tx.categoryId,
   }))
 }
 

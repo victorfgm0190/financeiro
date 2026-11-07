@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
 import CampoValor from './CampoValor'
+import DateInput from '../shared/DateInput'
 import { fmtYm, hojeStr } from '../../lib/contratos/datas'
 import { competenciasDoRepasse, confirmadosDe, repassesRegistrados, ehParcelaGerada, parcelaPaga, competenciaDaParcela } from '../../lib/contratos/parcelas'
 import {
@@ -44,6 +45,8 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
   const [linhas, setLinhas] = useState(() => (linha?.itens || []).map(paraEdicao))
   const [fechada, setFechada] = useState(linha?.linha?.status === 'fechada')
   const [observacao, setObservacao] = useState(linha?.linha?.observacao || '')
+  // Dia em que o inquilino pagou à administradora (relatório de rendimentos); vazio = vencimento.
+  const [pagoInquilino, setPagoInquilino] = useState(linha?.linha?.data_pagamento_inquilino || '')
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const bem = contrato.bem_id ? accounts.find(a => a.id === contrato.bem_id) : null
@@ -85,6 +88,7 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
     try {
       await salvarCompetenciaRepasse(contrato.id, {
         competencia, itens: itensParaGravar(itens), status: fechada ? 'fechada' : 'aberta', observacao: observacao.trim() || null,
+        data_pagamento_inquilino: pagoInquilino || null,
       }, { remover: paraPadrao })
       onClose()
     } catch (e) {
@@ -231,6 +235,12 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
           <input type="checkbox" className="accent-primary" checked={fechada} disabled={!podeEditar} onChange={e => setFechada(e.target.checked)} />
           Competência conferida (fechada): a composição fica como está, mesmo se o contrato mudar
         </label>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-texto-2">
+          <label htmlFor="pago-inquilino">Inquilino pagou à administradora em</label>
+          <DateInput id="pago-inquilino" className="input py-1 text-xs w-36" value={pagoInquilino} disabled={!podeEditar}
+            onChange={e => setPagoInquilino(e.target.value)} aria-label="Data do pagamento do inquilino" />
+          {!pagoInquilino && linha.vencimentoInquilino && <span className="text-texto-3">vazio = vencimento ({fmtDate(linha.vencimentoInquilino)})</span>}
+        </div>
         <textarea className="input min-h-[44px] text-xs" placeholder="Observação (opcional)" value={observacao} disabled={!podeEditar}
           onChange={e => setObservacao(e.target.value)} maxLength={2000} aria-label="Observação da competência" />
 

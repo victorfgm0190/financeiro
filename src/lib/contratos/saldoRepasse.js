@@ -41,6 +41,14 @@ export function calcularSaldos(contrato, linhas) {
 // Repasses já registrados (parcelas geradas pagas): { 'AAAA-MM': valor que caiu no banco }.
 // O valor é o do lançamento da baixa; sem ele, o da parcela.
 export function repassesRegistrados(contrato, schedules, transactions = []) {
+  const out = {}
+  for (const [k, r] of Object.entries(repassesComData(contrato, schedules, transactions))) out[k] = r.valor
+  return out
+}
+
+// Idem, com a data em que o dinheiro caiu (a do lançamento; sem ele, a da baixa):
+// { 'AAAA-MM': { valor, data } }.
+export function repassesComData(contrato, schedules, transactions = []) {
   const txPorId = new Map((transactions || []).map(t => [t.id, t]))
   const out = {}
   for (const s of schedules || []) {
@@ -50,7 +58,7 @@ export function repassesRegistrados(contrato, schedules, transactions = []) {
     if (!d) continue
     const id = s.registeredMeta?.[d]?.lancamento_id
     const tx = (id && txPorId.get(id)) || (transactions || []).find(t => t.scheduleId === s.id) || null
-    out[competenciaDoId(s.id)] = r2(tx ? tx.amount : s.amount)
+    out[competenciaDoId(s.id)] = { valor: r2(tx ? tx.amount : s.amount), data: (tx?.date || d || '').slice(0, 10) }
   }
   return out
 }

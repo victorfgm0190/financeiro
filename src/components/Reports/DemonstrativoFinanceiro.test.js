@@ -31,3 +31,20 @@ describe('Demonstrativo: bruto × líquido', () => {
     expect(b.totalIncome - b.totalExpense).toBe(l.totalIncome - l.totalExpense)
   })
 })
+
+describe('Demonstrativo: repasse "Por composição"', () => {
+  // Dados fictícios: repasse de 1.977 (aluguel 2.200 − adm 220 − tarifa 3) aberto pela composição.
+  it('as partes passam no filtro de categoria pela categoria do lançamento de origem', async () => {
+    const { lancamentosNoModo, CATEGORIA_ADMINISTRADORA } = await import('../../lib/contratos/despesaReal')
+    const rep = { id: 't1', type: 'income', amount: 1977, categoryId: 'cat-alug', accountId: 'itau', date: '2026-10-10', contratoId: 'c9', composicao: { tipo: 'repasse', competencia: '2026-09' } }
+    const partes = lancamentosNoModo([rep], 'pago', { abrirRepasse: () => [
+      { tipo: 'aluguel', valor: 2200, categoria_id: null }, { tipo: 'taxa_adm', valor: -220, categoria_id: 'cat-adm' }, { tipo: 'tarifa', valor: -3, categoria_id: null },
+    ] })
+    const categorias = [{ id: 'cat-alug', name: 'Aluguel' }, { id: 'cat-adm', name: 'Taxas' }, CATEGORIA_ADMINISTRADORA]
+    const r = buildReport(partes, categorias, '2026-10-01', '2026-10-31', [], ['cat-alug'], new Set(), null, false, new Set(), new Set(), [], null, null, 'liquido')
+    expect(r.totalIncome).toBe(2200)
+    expect(r.totalExpense).toBe(223)
+    expect(r.totalIncome - r.totalExpense).toBe(1977)
+    expect(r.expenses.map(g => g.name).sort()).toEqual(['Administradora (saldo e sem categoria)', 'Taxas'])
+  })
+})

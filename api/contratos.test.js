@@ -510,3 +510,51 @@ describe('migração 2026-11-07d: benfeitoria no custo do bem e reajuste do repa
     expect(aj.body.competencia.itens[0].lancamento_id).toBe('tx_1')
   })
 })
+
+describe('migração 2026-11-07e: rendimentos (informe da administradora e pagamento do inquilino)', () => {
+  const ler = (n) => readFileSync(new URL(`../supabase/migrations/${n}`, import.meta.url), 'utf-8')
+  const preparar = async ({ comE = true } = {}) => {
+    await estado.db.exec('CREATE TABLE IF NOT EXISTS financing_installments (id TEXT PRIMARY KEY);')
+    const lista = ['2026-11-06d_bem_baixas.sql', '2026-11-07b_contratos_repasse.sql', '2026-11-07c_contratos_composicao_repasse.sql', '2026-11-07d_contratos_benfeitoria_reajuste.sql']
+    if (comE) lista.push('2026-11-07e_contratos_rendimentos.sql', '2026-11-07e_contratos_rendimentos.sql')
+    for (const n of lista) await estado.db.exec(ler(n))
+  }
+  // Dados fictícios.
+  const REPASSE = {
+    ...CONTRATO, tipo: 'receber', objeto: 'Imóvel Exemplo', favorecido: 'Administradora Exemplo', bonificacao_valor: 0, bonificacao_meses: 0,
+    modo_repasse: true, dia_repasse: 10,
+  }
+  const comp = (extra = {}) => ({ competencia: '2026-03', status: 'aberta', itens: [], ...extra })
+  const put = (id, b) => chamar(competencias, 'PUT', { url: '/api/contrato-competencias', body: { contrato_id: id, ...b } })
+
+  it('informe por ano grava no contrato; ano ou valor inválido → 400', async () => {
+    await preparar()
+    const id = (await chamar(contratos, 'POST', { body: { contrato: REPASSE } })).body.contrato.id
+    const ok = await chamar(contratos, 'PUT', { body: { id, contrato: { informes_adm: { 2026: { rendimentos: 16000, deducoes: '' } } } } })
+    expect(ok.statusCode).toBe(200)
+    expect(ok.body.contrato.informes_adm).toEqual({ 2026: { rendimentos: 16000, deducoes: null } })
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { informes_adm: { 26: { rendimentos: 1 } } } } })).statusCode).toBe(400)
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { informes_adm: { 2026: { rendimentos: 'x' } } } } })).statusCode).toBe(400)
+  })
+
+  it('data do pagamento do inquilino: grava, vem na lista e fica quando o corpo não a traz', async () => {
+    await preparar()
+    const id = (await chamar(contratos, 'POST', { body: { contrato: REPASSE } })).body.contrato.id
+    expect((await put(id, comp({ data_pagamento_inquilino: '2026-03-07' }))).body.competencia.data_pagamento_inquilino).toBe('2026-03-07')
+    // Fechar o bloco no registro do repasse não manda a data: a gravada fica.
+    expect((await put(id, comp({ status: 'fechada' }))).body.competencia.data_pagamento_inquilino).toBe('2026-03-07')
+    const c = (await chamar(contratos, 'GET')).body.contratos.find(x => x.id === id)
+    expect(c.competencias[0]).toMatchObject({ status: 'fechada', data_pagamento_inquilino: '2026-03-07' })
+    expect((await put(id, comp({ data_pagamento_inquilino: null }))).body.competencia.data_pagamento_inquilino).toBeNull()
+    expect((await put(id, comp({ data_pagamento_inquilino: '07/03/2026' }))).statusCode).toBe(400)
+  })
+
+  it('sem a 07e: informe e data → 409; o resto da composição grava; recurso contratoRepasse desligado', async () => {
+    await preparar({ comE: false })
+    const id = (await chamar(contratos, 'POST', { body: { contrato: REPASSE } })).body.contrato.id
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { informes_adm: { 2026: { rendimentos: 1 } } } } })).statusCode).toBe(409)
+    expect((await put(id, comp({ data_pagamento_inquilino: '2026-03-07' }))).statusCode).toBe(409)
+    expect((await put(id, comp())).statusCode).toBe(200)
+    expect((await chamar(contratos, 'GET')).body.contratos[0].competencias[0].data_pagamento_inquilino).toBeUndefined()
+  })
+})

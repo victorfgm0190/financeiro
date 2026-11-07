@@ -36,14 +36,15 @@ const SQL_ITENS_REPASSE = `COALESCE((SELECT json_agg(json_build_object('id', i.i
                'vigencia_fim', i.vigencia_fim, 'categoria_id', i.categoria_id, 'dedutivel_ir', i.dedutivel_ir, 'ativo', i.ativo)
                ORDER BY i.vigencia_inicio, i.descricao) FROM contrato_itens i WHERE i.contrato_id = c.id AND i.tipo_repasse IS NOT NULL), '[]'::json) AS itens_repasse`
 const SQL_COMPETENCIAS = `COALESCE((SELECT json_agg(json_build_object('id', k.id, 'competencia', k.competencia, 'itens', k.itens,
-               'status', k.status, 'observacao', k.observacao, 'repasse_lancamento_id', k.repasse_lancamento_id)
+               'status', k.status, 'observacao', k.observacao, 'repasse_lancamento_id', k.repasse_lancamento_id/*PAG*/)
                ORDER BY k.competencia) FROM contrato_competencias k WHERE k.contrato_id = c.id), '[]'::json) AS competencias`
 async function sqlLista() {
-  const [{ t, e, r, k } = {}] = await query(`SELECT to_regclass('contrato_creditos') IS NOT NULL AS t,
+  const [{ t, e, r, k, p } = {}] = await query(`SELECT to_regclass('contrato_creditos') IS NOT NULL AS t,
     EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_itens' AND column_name = 'na_parcela') AS e,
     EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_itens' AND column_name = 'tipo_repasse') AS r,
-    to_regclass('contrato_competencias') IS NOT NULL AS k`)
-  return `SELECT c.*, ${SQL_EXCLUIDAS}${t ? `, ${SQL_CREDITOS}` : ''}${e ? `, ${SQL_ENCARGOS}` : ''}${r ? `, ${SQL_ITENS_REPASSE}` : ''}${k ? `, ${SQL_COMPETENCIAS}` : ''} FROM contratos c`
+    to_regclass('contrato_competencias') IS NOT NULL AS k,
+    EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_competencias' AND column_name = 'data_pagamento_inquilino') AS p`)
+  return `SELECT c.*, ${SQL_EXCLUIDAS}${t ? `, ${SQL_CREDITOS}` : ''}${e ? `, ${SQL_ENCARGOS}` : ''}${r ? `, ${SQL_ITENS_REPASSE}` : ''}${k ? `, ${SQL_COMPETENCIAS.replace('/*PAG*/', p ? ", 'data_pagamento_inquilino', k.data_pagamento_inquilino" : '')}` : ''} FROM contratos c`
 }
 
 // Conta do contrato: tem de ser conta (cartão fica de fora na 1ª versão) e, com perfis restritos,

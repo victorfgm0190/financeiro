@@ -2,14 +2,15 @@ import { query, parseBody, withTransaction } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { queryParam } from './_plataforma.js'
-import { exigirModulo, contratoVisivel, normalizarCompetencia, MSG_SEM_COMPOSICAO } from './_contratos.js'
+import { exigirModulo, contratoVisivel, normalizarCompetencia, colunasDe, MSG_SEM_COMPOSICAO } from './_contratos.js'
 import { sincronizarBenfeitorias, bensDoMapa } from './_benfeitoriasContrato.js'
 
 // COMPOSIÇÃO DO REPASSE por competência (contrato a receber por administradora) — tabela
 // contrato_competencias, a ÚNICA fonte da verdade da composição (a cópia no agendamento é só para
 // exibir). Fora do /api/sync, como as demais tabelas do módulo.
 //   GET ?contrato_id=x                                         → { competencias }
-//   PUT { contrato_id, competencia, itens, status, observacao, repasse_lancamento_id }
+//   PUT { contrato_id, competencia, itens, status, observacao, repasse_lancamento_id, data_pagamento_inquilino? }
+//     (data_pagamento_inquilino ausente = mantém a gravada; migração 2026-11-07e)
 //                                                   → grava (cria ou substitui) → { competencia, bens }
 //   DELETE ?contrato_id=x&competencia=AAAA-MM       → volta ao padrão do contrato → { bens }
 // Benfeitoria com "somar ao custo do bem" (e bem ligado ao contrato) vira movimento no bem na MESMA
@@ -38,18 +39,33 @@ async function handler(req, res) {
       const c = await contratoVisivel(query, body?.contrato_id, req.user)
       if (!c) return res.status(404).json({ error: 'Contrato não encontrado' })
       if (!c.modo_repasse) return res.status(400).json({ error: 'Composição do repasse só em contrato a receber por administradora' })
-      const { erro, dados } = normalizarCompetencia(body)
+      const { erro, dados, temDataPagamento } = normalizarCompetencia(body)
       if (erro) return res.status(400).json({ error: erro })
+      const comData = (await colunasDe(query, 'contrato_competencias')).has('data_pagamento_inquilino')
+      if (!comData && dados.data_pagamento_inquilino) return res.status(409).json({ error: MSG_SEM_COMPOSICAO, codigo: 'banco_desatualizado' })
       const r = await withTransaction(async (q) => {
-        const [row] = await q(
-          `INSERT INTO contrato_competencias (contrato_id, competencia, itens, status, observacao, repasse_lancamento_id)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (contrato_id, competencia)
-           DO UPDATE SET itens = EXCLUDED.itens, status = EXCLUDED.status, observacao = EXCLUDED.observacao,
-             repasse_lancamento_id = EXCLUDED.repasse_lancamento_id, updated_at = now()
-           RETURNING *`,
-          [c.id, dados.competencia, JSON.stringify(dados.itens), dados.status, dados.observacao, dados.repasse_lancamento_id],
-        )
+        const params = [c.id, dados.competencia, JSON.stringify(dados.itens), dados.status, dados.observacao, dados.repasse_lancamento_id]
+        const [row] = comData
+          ? await q(
+            `INSERT INTO contrato_competencias (contrato_id, competencia, itens, status, observacao, repasse_lancamento_id, data_pagamento_inquilino)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (contrato_id, competencia)
+             DO UPDATE SET itens = EXCLUDED.itens, status = EXCLUDED.status, observacao = EXCLUDED.observacao,
+               repasse_lancamento_id = EXCLUDED.repasse_lancamento_id,
+               data_pagamento_inquilino = CASE WHEN $8 THEN EXCLUDED.data_pagamento_inquilino ELSE contrato_competencias.data_pagamento_inquilino END,
+               updated_at = now()
+             RETURNING *`,
+            [...params, dados.data_pagamento_inquilino, temDataPagamento],
+          )
+          : await q(
+            `INSERT INTO contrato_competencias (contrato_id, competencia, itens, status, observacao, repasse_lancamento_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (contrato_id, competencia)
+             DO UPDATE SET itens = EXCLUDED.itens, status = EXCLUDED.status, observacao = EXCLUDED.observacao,
+               repasse_lancamento_id = EXCLUDED.repasse_lancamento_id, updated_at = now()
+             RETURNING *`,
+            params,
+          )
         const tocados = await sincronizarBenfeitorias(q, c, dados.competencia, dados.itens)
         return { row, bens: bensDoMapa(tocados) }
       })

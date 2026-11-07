@@ -16,6 +16,7 @@ import { Segmentado } from '../Dashboard/DespesasCategoria'
 import RelatorioFatura from '../CreditCard/RelatorioFatura'
 import DemonstrativoFinanceiro from './DemonstrativoFinanceiro'
 import RelatorioPorFavorecido from './RelatorioPorFavorecido'
+import RelatorioRendimentos from './RelatorioRendimentos'
 import FluxoCaixaPorConta from './FluxoCaixaPorConta'
 import { useThemeColors } from '../../hooks/useTheme'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -37,7 +38,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function ReportsPanel() {
-  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, reserveFunctions, abridorDeRepasse, contratos } = useApp()
+  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, reserveFunctions, abridorDeRepasse, contratos, contratosHabilitado } = useApp()
   const cor = useThemeColors()
   const isMobile = useIsMobile()
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
@@ -51,6 +52,8 @@ export default function ReportsPanel() {
   const [modoDespesas, setModoDespesas] = useModoDespesas()
   const [selectedMonth, setSelectedMonth] = useState(0)
   const [showBens, setShowBens] = useState(false)
+  const [showRendimentos, setShowRendimentos] = useState(false)
+  const temContratoReceber = !!contratosHabilitado && (contratos || []).some(c => c.tipo === 'receber')
   const [modoValor, setModoValor] = useState(MODO_VALOR_PADRAO)
   const [porComposicao, setPorComposicao] = useState(false)
   const [showRelatorioFatura, setShowRelatorioFatura] = useState(false)
@@ -141,6 +144,17 @@ export default function ReportsPanel() {
     )
   }
 
+  if (showRendimentos) {
+    return (
+      <div className="space-y-4">
+        <button data-guia="reports:rendimentos.voltar" className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors" onClick={() => setShowRendimentos(false)}>
+          <ArrowLeft size={14} /> Voltar aos Relatórios
+        </button>
+        <RelatorioRendimentos />
+      </div>
+    )
+  }
+
   if (showBens) {
     return (
       <div className="space-y-4">
@@ -213,6 +227,23 @@ export default function ReportsPanel() {
         </div>
         <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
       </button>
+
+      {temContratoReceber && (
+        <button
+          data-guia="reports.rendimentos"
+          className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
+          onClick={() => setShowRendimentos(true)}
+        >
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
+            <FileSpreadsheet size={16} className="text-primary-fg" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Rendimentos de aluguel</p>
+            <p className="text-xs text-texto-3 mt-0.5">Por contrato a receber e por ano: aluguel bruto, deduções, base tributável, repasses e conferência com o informe</p>
+          </div>
+          <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
+        </button>
+      )}
 
       {hasCredit && (
         <button

@@ -50,6 +50,21 @@ const basesConfirmadas = (v) => {
   }
   return { v: out }
 }
+// { "<AAAA>": { rendimentos, deducoes } } — informe de rendimentos da administradora por ano.
+const informesAdm = (v) => {
+  if (v == null || v === '') return { v: {} }
+  if (typeof v !== 'object' || Array.isArray(v)) return { erro: 'deve ser um objeto { ano: { rendimentos, deducoes } }' }
+  const out = {}
+  const n = (x) => (x == null || x === '' ? null : Math.round(Number(x) * 100) / 100)
+  for (const [k, x] of Object.entries(v)) {
+    if (!/^\d{4}$/.test(k) || !x || typeof x !== 'object') return { erro: 'ano inválido (AAAA)' }
+    const rend = n(x.rendimentos)
+    const ded = n(x.deducoes)
+    if ([rend, ded].some(y => y != null && (!Number.isFinite(y) || Math.abs(y) > 1e12))) return { erro: `valor inválido em ${k}` }
+    if (rend != null || ded != null) out[k] = { rendimentos: rend, deducoes: ded }
+  }
+  return { v: out }
+}
 // Uma competência 'AAAA-MM' (opcional).
 const competencia = (v) => {
   if (v == null || v === '') return { v: null }
@@ -113,6 +128,8 @@ export const CAMPOS_CONTRATO = {
   categoria_taxa_adm_id: texto(80),
   // Reajuste confirmado no modo repasse (migração 2026-11-07d): { "<ciclo>": aluguel }.
   bases_confirmadas: basesConfirmadas,
+  // Conferência com o informe da administradora (migração 2026-11-07e).
+  informes_adm: informesAdm,
 }
 const PADROES = { modalidade: 'aluguel', periodicidade: 'mensal', indice_reajuste: 'IPCA', status: 'ativo', credito_abatimento: 'mes_seguinte', taxa_adm_base: 'bruto' }
 
@@ -122,6 +139,7 @@ export const COLS_REPASSE = {
   modo_repasse: false, contraparte_nome: null, contraparte_documento: null, bem_id: null, dia_repasse: null,
   repasse_meses_depois: 1, valor_primeiro_mes: null, saldo_inicial_adm: null, saldo_inicial_competencia: null,
   taxa_adm_pct: null, taxa_adm_base: 'bruto', categoria_taxa_adm_id: null, bases_confirmadas: {},
+  informes_adm: {},
 }
 export const MSG_SEM_REPASSE = 'O banco deste ambiente ainda não tem a atualização de contrato a receber por administradora. Nada foi gravado — avise o suporte para atualizar o banco.'
 // Campos do repasse com valor de verdade que o banco não tem → lista (vazia = pode gravar).
@@ -129,7 +147,7 @@ export const repasseSemColuna = (dados, existem) =>
   Object.keys(COLS_REPASSE).filter(k => k in dados && !existem.has(k) && JSON.stringify(dados[k] ?? null) !== JSON.stringify(COLS_REPASSE[k]))
 
 // Colunas JSONB: o pg mandaria a lista como array do Postgres; vai como texto JSON.
-const JSONB = new Set(['meses_sem_cobranca', 'itens', 'valores_parcelas', 'bases_confirmadas'])
+const JSONB = new Set(['meses_sem_cobranca', 'itens', 'valores_parcelas', 'bases_confirmadas', 'informes_adm'])
 export const valorColuna = (k, v) => (JSONB.has(k) && v != null ? JSON.stringify(v) : v)
 
 // Colunas que o banco do ambiente já tem (as da migração 2026-11-03 só existem depois de aplicada):
@@ -264,7 +282,18 @@ export function normalizarCompetencia(b) {
     itens.push(item)
   }
   const obs = texto(2000)(b.observacao)
-  return { dados: { competencia: comp.v, status: status.v, itens, observacao: obs.v, repasse_lancamento_id: texto(120)(b.repasse_lancamento_id).v } }
+  // Dia em que o inquilino pagou à administradora (migração 2026-11-07e). Ausente no corpo = mantém o
+  // gravado (temDataPagamento false).
+  const temDataPagamento = b.data_pagamento_inquilino !== undefined
+  const pag = data()(b.data_pagamento_inquilino)
+  if (pag.erro) return { erro: `data_pagamento_inquilino: ${pag.erro}` }
+  return {
+    dados: {
+      competencia: comp.v, status: status.v, itens, observacao: obs.v, repasse_lancamento_id: texto(120)(b.repasse_lancamento_id).v,
+      data_pagamento_inquilino: pag.v,
+    },
+    temDataPagamento,
+  }
 }
 export const MSG_SEM_COMPOSICAO = 'O banco deste ambiente ainda não tem a atualização da composição do repasse. Nada foi gravado — avise o suporte para atualizar o banco.'
 

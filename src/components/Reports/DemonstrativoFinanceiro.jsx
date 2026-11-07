@@ -15,6 +15,8 @@ import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { isoLocal } from '../../lib/hoje'
 import { exportarExcel } from '../../lib/exportExcel'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
+import SeletorModoValor from '../Contratos/SeletorModoValor'
+import { lancamentosNoModo, CATEGORIA_ADMINISTRADORA } from '../../lib/contratos/despesaReal'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -107,7 +109,8 @@ export function buildReport(transactions, categories, from, to, accountIds, cate
     (tx._interProfile || tx.reservaAuto === true || accountIds.length === 0 ||
       accountIds.includes(tx.accountId) ||
       (tx.type === 'transfer' && accountIds.includes(tx.toAccountId))) &&
-    (tx._interProfile || categoryIds.length === 0 || categoryIds.includes(tx.categoryId)) &&
+    // Parte de repasse aberto pela composição: filtra pela categoria do lançamento de origem.
+    (tx._interProfile || categoryIds.length === 0 || categoryIds.includes(tx._categoriaFiltro ?? tx.categoryId)) &&
     // "Ocultar movimentos de reserva": esconde transferências que tocam conta de reserva E
     // as sombras automáticas (reservaAuto: "Reserva: X" / "Resgate Reserva: X", accountId null).
     !(reservaSet && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId) || tx.reservaAuto === true)) &&
@@ -463,7 +466,10 @@ function TxRow({ tx, indent }) {
 
 export default function DemonstrativoFinanceiro() {
   useSubtelaGuia('reports:demonstrativo')
-  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, reserveFunctions, activeProfile, profiles, categoryGroupOrder } = useApp()
+  const { profileReportTransactions: transactions, categories: categoriasApp, profileAccounts: accounts, accountGroups, settings, reserveFunctions, activeProfile, profiles, categoryGroupOrder, abridorDeRepasse, contratos } = useApp()
+  // Repasse de administradora: linha única (padrão) ou aberto pela composição (Etapa 4/5).
+  const [porComposicao, setPorComposicao] = useState(false)
+  const categories = useMemo(() => (porComposicao ? [...categoriasApp, CATEGORIA_ADMINISTRADORA] : categoriasApp), [porComposicao, categoriasApp])
   const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
@@ -488,12 +494,12 @@ export default function DemonstrativoFinanceiro() {
   // Transações de entrada do relatório: no modo "Todos" com o toggle ligado, expande as
   // transferências entre perfis em receita/despesa por categoria CPF/CNPJ. Com perfil ativo o
   // contexto já converte a perna do perfil (comportamento inalterado) → não expande.
-  const reportTransactions = useMemo(
-    () => (includeInterProfile && !activeProfile)
-      ? expandInterProfileTransfers(transactions, accounts, profiles)
-      : transactions,
-    [includeInterProfile, activeProfile, transactions, accounts, profiles],
-  )
+  const reportTransactions = useMemo(() => {
+    const base = porComposicao && abridorDeRepasse ? lancamentosNoModo(transactions, 'pago', { abrirRepasse: abridorDeRepasse() }) : transactions
+    return (includeInterProfile && !activeProfile) ? expandInterProfileTransfers(base, accounts, profiles) : base
+  // contratos: a composição muda quando o contrato muda.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeInterProfile, activeProfile, transactions, accounts, profiles, porComposicao, abridorDeRepasse, contratos])
 
   // ── Filter draft state ────────────────────────────────────────────────────
   const [months, setMonths] = useState(() => initialFilters?.periodoType ?? 1)
@@ -519,14 +525,14 @@ export default function DemonstrativoFinanceiro() {
   // Ordem salva em Configurações → Categorias: itens já ordenados e `groupOrder` = posição do
   // grupo (o MultiSelectPanel ordena seções por ela em vez de alfabético).
   const catItems = useMemo(() => {
-    const ordenadas = ordenarCategorias(filtrarCategoriasPorPerfil(categories, activeProfile?.id || null, catsMantidas), categoryGroupOrder)
+    const ordenadas = ordenarCategorias(filtrarCategoriasPorPerfil(categoriasApp, activeProfile?.id || null, catsMantidas), categoryGroupOrder)
     const posGrupo = new Map()
     for (const c of ordenadas) if (c.group && !posGrupo.has(c.group)) posGrupo.set(c.group, posGrupo.size)
     return ordenadas.map(c => ({
       id: c.id, label: `${c.icon || ''} ${c.name}`.trim(), group: c.group || null,
       groupOrder: c.group ? posGrupo.get(c.group) : null,
     }))
-  }, [categories, activeProfile, catsMantidas, categoryGroupOrder])
+  }, [categoriasApp, activeProfile, catsMantidas, categoryGroupOrder])
 
   // Contas agrupadas e ORDENADAS pela ordem dos Grupos de Contas (Configurações), depois
   // pela ordem interna das contas. `group` = nome do grupo; `groupOrder` = posição do grupo
@@ -667,6 +673,7 @@ export default function DemonstrativoFinanceiro() {
               Exibir lançamentos
             </label>
             <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
+            <SeletorModoValor soRepasse value="pago" onChange={() => {}} porComposicao={porComposicao} onPorComposicao={setPorComposicao} />
           </div>
         </div>
 
