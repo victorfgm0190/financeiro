@@ -18,6 +18,7 @@ import { rotearConsulta } from '../src/lib/assistente/roteamentoConsulta.js'
 import {
   DEFINICAO_LEITURA, FERRAMENTA_LEITURA, INSTRUCOES_LEITURA, normalizarSaidaLeitura,
   DEFINICAO_RECIBO, FERRAMENTA_RECIBO, INSTRUCOES_RECIBO, normalizarSaidaRecibo,
+  DEFINICAO_EXTRATO, FERRAMENTA_EXTRATO, INSTRUCOES_EXTRATO, normalizarSaidaExtrato,
 } from './_leituraBoleto.js'
 
 // Limites do cliente (central). Sem as colunas (central não migrado) → o padrão.
@@ -87,10 +88,12 @@ async function handler(req, res) {
 
     // Leitura do boleto do condomínio (Contratos → Composição do boleto): só extrai o que está escrito
     // (vencimento, total, itens); o app classifica pelas regras do contrato e mostra a prévia.
-    // Leitura de documento do contrato: boleto do condomínio ou recibo do aluguel (mesma rotina).
+    // Leitura de documento do contrato: boleto do condomínio, recibo do aluguel ou extrato da administradora (mesma rotina).
     const LEITURAS = {
       boleto_condominio: { def: DEFINICAO_LEITURA, nome: FERRAMENTA_LEITURA, instr: INSTRUCOES_LEITURA, pedido: 'Leia este boleto de condomínio.', normalizar: normalizarSaidaLeitura },
       recibo_aluguel: { def: DEFINICAO_RECIBO, nome: FERRAMENTA_RECIBO, instr: INSTRUCOES_RECIBO, pedido: 'Leia este recibo de aluguel.', normalizar: normalizarSaidaRecibo },
+      // Extrato do proprietário da administradora (conferência do repasse, Contratos).
+      extrato_administradora: { def: DEFINICAO_EXTRATO, nome: FERRAMENTA_EXTRATO, instr: INSTRUCOES_EXTRATO, pedido: 'Leia este extrato da administradora.', normalizar: normalizarSaidaExtrato },
     }
     const leituraPedida = LEITURAS[body?.leitura]
     if (leituraPedida) {

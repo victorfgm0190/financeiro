@@ -123,3 +123,12 @@ Contratos de aluguel (e serviço) ligados aos agendamentos. O plano completo est
 - Validação (`validarEtapaCampo`) devolve o campo: o wizard destaca o bloco (borda vermelha + texto), rola até ele e foca. Encargos e taxas também são conferidos ao Avançar da etapa Valores.
 - Troca de etapa rola o corpo do Modal ao topo (`useRolarAoTopo` / `chaveRolagem` em `shared/rolagemModal.js`).
 - **Pendente para a Etapa 6:** aditivo no modo repasse que traz o início para o passado hoje só avisa ("Mudar o início para o passado não gera os meses anteriores…"); na Etapa 6 ele deve oferecer gerar as competências passadas, com o vínculo aos lançamentos já existentes.
+
+## Repasse: o Finup projeta, o extrato ajusta (07/11/2026)
+
+- **Taxa única — forma de desconto** (`lib/contratos/taxaUnica.js`): "De uma vez" (padrão), "Em N parcelas iguais" (centavos na última: 2.200 em 3 = 733,33 + 733,33 + 733,34) ou "Valores informados". Grava só `valores_parcelas`; a forma é deduzida deles (`formaDaTaxa`).
+- **Saldo a descontar** (`projetarTaxasUnicas`): em competência conferida/fechada vale o descontado de verdade (itens `taxa_unica` com `taxa_id`); nas demais projeta o acumulado previsto menos o já descontado, até zerar. Ex.: 2.200 de uma vez; extrato 02 = 470 → 03 projeta 1.730; 03 = 865 → 04 projeta 865.
+- **Conferir extrato** (`ConferirExtratoModal`, `lib/contratos/conferenciaExtrato.js`): na ficha (Repasses por competência), na composição aberta pelo agendamento e em Alertas. PDF/foto lido pela IA (`/api/assistente`, leitura `extrato_administradora`; arquivo não guardado, tokens em `ia_uso`) ou digitado a partir do projetado. Lido × projetado por tipo, tipo trocável, taxa única ligada à do contrato, saldo anterior conferido ("Criar ajuste de R$ X"). Confirmar = status `fechada` + `contrato_competencias.conferencia` (migração 2026-11-07f); o repasse da competência passa a ser o líquido do extrato e as seguintes reprojetam.
+- **Conferida × Projetada**: selo "Conferido" / "Projetado" no agendamento do repasse (Agendamentos e Fluxo); a partir do dia 5 do mês do repasse sem conferir, "Extrato de MM/AAAA da <administradora> ainda não conferido" (Alertas, ficha e agendamento).
+- **Pagamento**: o valor esperado é o conferido; igual → fecha sem perguntar; diferente → regra C de antes.
+- Migração **2026-11-07f** só no teste1 (v48); vai junto com 07b–07e para vm/cv/ggsm.

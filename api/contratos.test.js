@@ -558,3 +558,48 @@ describe('migração 2026-11-07e: rendimentos (informe da administradora e pagam
     expect((await chamar(contratos, 'GET')).body.contratos[0].competencias[0].data_pagamento_inquilino).toBeUndefined()
   })
 })
+
+describe('migração 2026-11-07f: conferência do extrato da administradora', () => {
+  const ler = (n) => readFileSync(new URL(`../supabase/migrations/${n}`, import.meta.url), 'utf-8')
+  const preparar = async ({ comF = true } = {}) => {
+    await estado.db.exec('CREATE TABLE IF NOT EXISTS financing_installments (id TEXT PRIMARY KEY);')
+    const lista = ['2026-11-06d_bem_baixas.sql', '2026-11-07b_contratos_repasse.sql', '2026-11-07c_contratos_composicao_repasse.sql',
+      '2026-11-07d_contratos_benfeitoria_reajuste.sql', '2026-11-07e_contratos_rendimentos.sql']
+    if (comF) lista.push('2026-11-07f_contratos_conferencia_extrato.sql', '2026-11-07f_contratos_conferencia_extrato.sql')
+    for (const n of lista) await estado.db.exec(ler(n))
+  }
+  // Dados fictícios.
+  const REPASSE = {
+    ...CONTRATO, tipo: 'receber', objeto: 'Imóvel Exemplo', favorecido: 'Administradora Exemplo', bonificacao_valor: 0, bonificacao_meses: 0,
+    modo_repasse: true, dia_repasse: 10,
+  }
+  const CONF = { conferido_em: '2026-11-07', origem: 'ia', periodo: '02/2026', saldo_anterior_extrato: -10, saldo_anterior_finup: '-10.004', total_extrato: null, repasse: 0 }
+  const itens = [
+    { chave: 'aluguel', tipo: 'aluguel', descricao: 'Aluguel', valor: 586.67, origem: 'auto' },
+    { chave: 'taxa_unica:tu', tipo: 'taxa_unica', descricao: 'Intermediação', valor: -470, origem: 'auto', taxa_id: 'tu' },
+  ]
+  const put = (id, b) => chamar(competencias, 'PUT', { url: '/api/contrato-competencias', body: { contrato_id: id, competencia: '2026-02', status: 'fechada', itens, ...b } })
+
+  it('grava a conferência e o taxa_id; fica quando o corpo não a traz; vem na lista; null desfaz', async () => {
+    await preparar()
+    const id = (await chamar(contratos, 'POST', { body: { contrato: REPASSE } })).body.contrato.id
+    const r = await put(id, { conferencia: CONF })
+    expect(r.statusCode).toBe(200)
+    expect(r.body.competencia.conferencia).toEqual({ ...CONF, saldo_anterior_finup: -10 })
+    expect(r.body.competencia.itens[1]).toMatchObject({ tipo: 'taxa_unica', taxa_id: 'tu' })
+    // Fechar o bloco no registro do repasse não manda a conferência: a gravada fica.
+    expect((await put(id, { repasse_lancamento_id: 'tx1' })).body.competencia.conferencia).toMatchObject({ origem: 'ia', repasse: 0 })
+    const c = (await chamar(contratos, 'GET')).body.contratos.find(x => x.id === id)
+    expect(c.competencias[0].conferencia).toMatchObject({ periodo: '02/2026' })
+    expect((await put(id, { conferencia: null })).body.competencia.conferencia).toBeNull()
+    expect((await put(id, { conferencia: { origem: 'ia' } })).statusCode).toBe(400)
+    expect((await put(id, { conferencia: { ...CONF, repasse: 'x' } })).statusCode).toBe(400)
+  })
+
+  it('sem a 07f: conferência → 409; o resto grava', async () => {
+    await preparar({ comF: false })
+    const id = (await chamar(contratos, 'POST', { body: { contrato: REPASSE } })).body.contrato.id
+    expect((await put(id, { conferencia: CONF })).statusCode).toBe(409)
+    expect((await put(id, {})).statusCode).toBe(200)
+  })
+})

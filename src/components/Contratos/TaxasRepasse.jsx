@@ -3,7 +3,8 @@ import { Plus, Trash2, Pencil, Check } from 'lucide-react'
 import CategorySelect from '../shared/CategorySelect'
 import HelpCampo from '../shared/HelpCampo'
 import CampoValor from './CampoValor'
-import { TIPOS_TAXA, BOTOES_TAXA, novaTaxaForm, parcelasDoTexto, resumoTaxa, somaParcelasTexto, erroTaxa } from '../../lib/contratos/taxasRepasseForm'
+import { TIPOS_TAXA, BOTOES_TAXA, AJUDA_FORMA_DESCONTO, novaTaxaForm, parcelasDoTexto, resumoTaxa, somaParcelasTexto, erroTaxa, formaDoForm, valoresDoForm } from '../../lib/contratos/taxasRepasseForm'
+import { FORMAS_TAXA_UNICA } from '../../lib/contratos/taxaUnica'
 import { valorBRFormatado } from '../../lib/valorBR'
 import { CampoErroContext, CLASSE_ERRO } from './campoErro'
 
@@ -99,17 +100,41 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
                       onChange={e => setL(i, { vigencia_inicio: e.target.value })} />
                   </label>
                   {unica ? (
-                    <div className="text-[11px] text-texto-3 col-span-1 sm:col-span-2">
-                      <label htmlFor={`taxa-parcelas-${i}`}>Valor de cada parcela (opcional) — separe com ";"</label>
-                      <input id={`taxa-parcelas-${i}`} autoComplete="off" className="input py-1 text-sm" placeholder="Vazio = tudo de uma vez" aria-label="Valores das parcelas"
-                        value={l.parcelas ?? ''} onChange={e => setL(i, { parcelas: e.target.value })}
-                        onBlur={e => { const v = parcelasDoTexto(e.target.value); if (v?.length) setL(i, { parcelas: v.map(valorBRFormatado).join('; ') }) }} />
+                    <div className="text-[11px] text-texto-3 col-span-2 sm:col-span-4 space-y-1">
+                      <div className="flex flex-wrap items-end gap-2">
+                        <label className="min-w-0">
+                          Forma de desconto
+                          <select className="input py-1 text-sm" aria-label="Forma de desconto" value={formaDoForm(l)} onChange={e => setL(i, { forma: e.target.value })}>
+                            {Object.entries(FORMAS_TAXA_UNICA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                          </select>
+                        </label>
+                        {formaDoForm(l) === 'iguais' && (
+                          <label className="w-28">
+                            Nº de parcelas
+                            <input type="number" min="1" max="120" className="input py-1 text-sm" aria-label="Número de parcelas iguais"
+                              value={l.n_parcelas ?? ''} onChange={e => setL(i, { n_parcelas: e.target.value })} />
+                          </label>
+                        )}
+                        {formaDoForm(l) === 'valores' && (
+                          <div className="flex-1 min-w-[12rem]">
+                            <label htmlFor={`taxa-parcelas-${i}`}>Valor de cada parcela — separe com ";"</label>
+                            <input id={`taxa-parcelas-${i}`} autoComplete="off" className="input py-1 text-sm" placeholder="Ex.: 470,00; 865,00; 865,00" aria-label="Valores das parcelas"
+                              value={l.parcelas ?? ''} onChange={e => setL(i, { parcelas: e.target.value })}
+                              onBlur={e => { const v = parcelasDoTexto(e.target.value); if (v?.length) setL(i, { parcelas: v.map(valorBRFormatado).join('; ') }) }} />
+                          </div>
+                        )}
+                      </div>
+                      {formaDoForm(l) === 'iguais' && (valoresDoForm(l) || []).length > 1 && (
+                        <span data-testid="parcelas-iguais" className="block text-texto-2">
+                          {valoresDoForm(l).length} parcelas iguais: {valoresDoForm(l).map(valorBRFormatado).join(' + ')}
+                        </span>
+                      )}
                       {soma && (
-                        <span data-testid="soma-parcelas" className={`block mt-1 ${soma.ok ? 'text-receita' : 'text-aviso'}`}>
+                        <span data-testid="soma-parcelas" className={`block ${soma.ok ? 'text-receita' : 'text-aviso'}`}>
                           {soma.texto}{!soma.ok && ' (dá para gravar assim mesmo)'}
                         </span>
                       )}
-                      <span className="block mt-1">Deixe vazio para descontar tudo de uma vez. O saldo com a administradora vai abatendo nos meses seguintes até zerar.</span>
+                      <span className="block">{AJUDA_FORMA_DESCONTO}</span>
                     </div>
                   ) : (
                     <label className="text-[11px] text-texto-3 col-span-1">

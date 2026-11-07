@@ -4,6 +4,7 @@
 //              agendamento nem lançamento, nem de valor zero ou negativo);
 //   saldo > 0 → repasse = saldo; transporta 0. Repasse já registrado com outro valor (sem ajuste na
 //              composição): o valor real fica e a diferença (saldo − real) passa para a seguinte.
+//   competência conferida pelo extrato → repasse = o líquido do extrato (repasseConferido), mesma regra.
 // Saldo inicial do contrato (saldo_inicial_adm, positivo = a administradora me deve) entra antes da
 // competência saldo_inicial_competencia; as competências anteriores a ela ficam fora da conta.
 
@@ -29,7 +30,9 @@ export function calcularSaldos(contrato, linhas) {
     }
     if (anterior == null) anterior = saldoIni
     const saldo = r2(anterior + (Number(l.resultado) || 0))
-    const repasse = saldo > POSITIVO ? saldo : 0
+    // Conferida pelo extrato: o repasse é o líquido do extrato; a diferença para o saldo passa adiante.
+    const conferido = l.repasseConferido != null ? r2(l.repasseConferido) : null
+    const repasse = conferido != null ? (conferido > POSITIVO ? conferido : 0) : saldo > POSITIVO ? saldo : 0
     const real = l.repasseReal != null ? r2(l.repasseReal) : null
     const transportado = r2(saldo - (real ?? repasse))
     const out = { ...l, foraDoSaldo: false, saldo_anterior: anterior, saldo, repasse, transportado }

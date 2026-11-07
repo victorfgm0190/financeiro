@@ -51,6 +51,7 @@ function preencherTaxaUnica(c, parcelas) {
   mudar(w.getByLabelText('Descrição da taxa'), 'Intermediação')
   mudar(w.getByLabelText('Valor total da taxa'), '2.200,00')
   mudar(w.getByLabelText('Competência da 1ª parcela'), '2026-02')
+  mudar(w.getByLabelText('Forma de desconto'), 'valores')
   mudar(w.getByLabelText('Valores das parcelas'), parcelas)
 }
 
@@ -66,8 +67,8 @@ describe('ContratoWizard — tarifas e taxas da administradora', () => {
     abrirValores()
     fireEvent.click(screen.getByRole('button', { name: /Taxa única/ }))
     const c = cartoes()[0]
-    expect(within(c).getByText(/Valor de cada parcela/).textContent).not.toMatch(/\(\d+\)/)
     preencherTaxaUnica(c, '470,00; 865,00; 765,00')
+    expect(within(c).getByText(/Valor de cada parcela/).textContent).not.toMatch(/\(\d+\)/)
     expect(within(c).getByTestId('soma-parcelas').textContent).toMatch(/^soma R\$ 2\.100,00 — diferente do total R\$ 2\.200,00/)
     mudar(within(c).getByLabelText('Valores das parcelas'), '470,00; 865,00; 865,00')
     expect(within(c).getByTestId('soma-parcelas').textContent).toBe('3 parcelas · soma R$ 2.200,00 ✓')
@@ -87,8 +88,8 @@ describe('ContratoWizard — tarifas e taxas da administradora', () => {
     abrirValores()
     fireEvent.click(screen.getByRole('button', { name: /Taxa única/ }))
     const w = within(cartoes()[0])
-    expect(w.getByText('Deixe vazio para descontar tudo de uma vez. O saldo com a administradora vai abatendo nos meses seguintes até zerar.')).toBeTruthy()
-    expect(w.getByText(/Valor de cada parcela \(opcional\)/)).toBeTruthy()
+    expect(w.getByText('Qualquer forma chega no mesmo repasse: o saldo com a administradora vai abatendo até zerar. Quando o extrato chegar, os valores reais substituem os previstos.')).toBeTruthy()
+    expect(w.getByLabelText('Forma de desconto').value).toBe('uma_vez')
     mudar(w.getByLabelText('Descrição da taxa'), 'Intermediação')
     mudar(w.getByLabelText('Competência da 1ª parcela'), '2026-02')
     fireEvent.click(w.getByRole('button', { name: '= 1º aluguel' }))
@@ -106,6 +107,7 @@ describe('ContratoWizard — tarifas e taxas da administradora', () => {
   it('digitando caractere por caractere, o campo das parcelas guarda o texto', () => {
     abrirValores()
     fireEvent.click(screen.getByRole('button', { name: /Taxa única/ }))
+    mudar(within(cartoes()[0]).getByLabelText('Forma de desconto'), 'valores')
     const inp = () => within(cartoes()[0]).getByLabelText('Valores das parcelas')
     inp().focus()
     for (const ch of '470;865;865') {

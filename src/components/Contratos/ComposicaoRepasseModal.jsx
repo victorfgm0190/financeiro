@@ -7,6 +7,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
 import CampoValor from './CampoValor'
 import DateInput from '../shared/DateInput'
+import ConferirExtratoModal from './ConferirExtratoModal'
 import { fmtYm, hojeStr } from '../../lib/contratos/datas'
 import { competenciasDoRepasse, confirmadosDe, repassesRegistrados, ehParcelaGerada, parcelaPaga, competenciaDaParcela } from '../../lib/contratos/parcelas'
 import {
@@ -49,6 +50,7 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
   const [pagoInquilino, setPagoInquilino] = useState(linha?.linha?.data_pagamento_inquilino || '')
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [conferindo, setConferindo] = useState(false)
   const bem = contrato.bem_id ? accounts.find(a => a.id === contrato.bem_id) : null
   // Recebimento desta competência (agendamento gerado pelo contrato).
   const parcela = doContrato.find(s => ehParcelaGerada(s, contrato.id) && (s.contratoPapel || 'aluguel') === 'aluguel' && competenciaDaParcela(s) === competencia) || null
@@ -98,6 +100,9 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
     }
   }
 
+  // Conferir extrato: a tela própria (lido × projetado); ao fechar, esta também fecha (a composição mudou).
+  if (conferindo) return <ConferirExtratoModal contrato={contrato} competencia={competencia} onClose={onClose} />
+
   const tipoCategoria = (l) => (l.sinal > 0 ? 'income' : 'expense')
   const alterado = JSON.stringify(itensParaGravar(itens)) !== inicial
   // Registrar pelo Contrato = mesmo efeito do Agendamento (registerScheduleOccurrence → gancho P5:
@@ -112,6 +117,16 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
   return (
     <Modal open onClose={onClose} title={`Composição do repasse — ${fmtYm(competencia)}`} size="lg">
       <div className="space-y-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className={`text-xs font-medium ${linha.linha?.conferencia ? 'text-receita' : 'text-aviso'}`}>
+            {linha.linha?.conferencia ? `Conferida com o extrato em ${linha.linha.conferencia.conferido_em.split('-').reverse().join('/')}` : 'Projetada pelo Finup — extrato ainda não conferido'}
+          </span>
+          {podeEditar && !linha.foraDoSaldo && (
+            <button type="button" className="btn-secondary text-xs py-1" onClick={() => setConferindo(true)}>
+              {linha.linha?.conferencia ? 'Conferir de novo' : 'Conferir extrato'}
+            </button>
+          )}
+        </div>
         <p className="text-xs text-texto-3">
           Aluguel do inquilino com vencimento em {fmtDate(linha.vencimentoInquilino)} · repasse da administradora em {fmtDate(linha.vencimento)}.
           {' '}Itens automáticos seguem o contrato; ao digitar outro valor, ele fica informado à mão (o calculado aparece ao lado).
@@ -233,7 +248,7 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
 
         <label className="flex items-center gap-2 text-xs text-texto-2">
           <input type="checkbox" className="accent-primary" checked={fechada} disabled={!podeEditar} onChange={e => setFechada(e.target.checked)} />
-          Competência conferida (fechada): a composição fica como está, mesmo se o contrato mudar
+          Competência fechada: a composição fica como está, mesmo se o contrato mudar
         </label>
         <div className="flex flex-wrap items-center gap-2 text-xs text-texto-2">
           <label htmlFor="pago-inquilino">Inquilino pagou à administradora em</label>

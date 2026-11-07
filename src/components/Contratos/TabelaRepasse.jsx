@@ -4,6 +4,8 @@ import { fmt, fmtDate } from '../shared/utils'
 import { fmtYm, hojeStr } from '../../lib/contratos/datas'
 import { competenciasDoRepasse, confirmadosDe, repassesRegistrados, ehParcelaGerada, parcelaPaga, competenciaDaParcela } from '../../lib/contratos/parcelas'
 import ComposicaoRepasseModal from './ComposicaoRepasseModal'
+import ConferirExtratoModal from './ConferirExtratoModal'
+import { extratoPendente } from '../../lib/contratos/conferenciaExtrato'
 
 // Status de uma competência do repasse na ficha.
 export function statusDaCompetencia(l, hoje) {
@@ -17,8 +19,9 @@ export function statusDaCompetencia(l, hoje) {
 // Tabela por competência do contrato a receber por administradora: Bruto | Deduções | Resultado |
 // Saldo | Repasse | Data | Status. Clique abre a composição da competência (a mesma das outras telas).
 export default function TabelaRepasse({ contrato }) {
-  const { schedules, transactions, indicesContratos } = useApp()
+  const { schedules, transactions, indicesContratos, pode } = useApp()
   const [aberta, setAberta] = useState(null)
+  const [conferir, setConferir] = useState(null)
   const hoje = hojeStr()
   const doContrato = useMemo(() => schedules.filter(s => s.contratoId === contrato.id), [schedules, contrato.id])
   const linhas = useMemo(() => {
@@ -37,9 +40,16 @@ export default function TabelaRepasse({ contrato }) {
   }, [contrato, doContrato, transactions, hoje, indicesContratos])
 
   const th = 'px-2 py-1.5 text-right font-medium'
+  const pendente = extratoPendente(contrato, linhas, hoje)
   return (
     <div>
       <p className="label">Repasses por competência</p>
+      {pendente && (
+        <p role="alert" className="mb-2 text-xs text-aviso flex flex-wrap items-center gap-2">
+          ⚠ {pendente.texto}.
+          {pode('contratos', 'editar') && <button type="button" className="btn-secondary text-xs py-0.5" onClick={() => setConferir(pendente.competencia)}>Conferir extrato</button>}
+        </p>
+      )}
       <div className="overflow-x-auto max-h-[55vh] overflow-y-auto">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-surface">
@@ -48,6 +58,7 @@ export default function TabelaRepasse({ contrato }) {
               <th className={th}>Bruto</th><th className={th}>Deduções</th><th className={th}>Resultado</th>
               <th className={th}>Saldo</th><th className={th}>Repasse</th>
               <th className="px-2 py-1.5 text-left font-medium">Data</th><th className="px-2 py-1.5 text-left font-medium">Status</th>
+              <th className="px-2 py-1.5" />
             </tr>
           </thead>
           <tbody>
@@ -58,7 +69,11 @@ export default function TabelaRepasse({ contrato }) {
                 <tr key={l.competencia} className="border-b border-borda/50 hover:bg-surface-hover cursor-pointer" onClick={() => setAberta(l.competencia)}
                   title="Ver ou editar a composição desta competência">
                   <td className="px-2 py-1.5 text-texto-1 whitespace-nowrap">
-                    {fmtYm(l.competencia)}{l.linha?.status === 'fechada' && <span className="ml-1 text-[10px] text-texto-3">· conferida</span>}
+                    {fmtYm(l.competencia)}
+                    {l.linha?.conferencia
+                      ? <span className="ml-1 text-[10px] text-receita">· conferida</span>
+                      : l.linha?.status === 'fechada' ? <span className="ml-1 text-[10px] text-texto-3">· fechada</span>
+                        : !l.foraDoSaldo && <span className="ml-1 text-[10px] text-texto-3">· projetada</span>}
                     {l.valorStatus === 'projetado' && <span className="ml-1 text-[10px] text-aviso">· projetado</span>}
                   </td>
                   <td className="px-2 py-1.5 text-right text-texto-2">{fmt(l.bruto)}</td>
@@ -71,14 +86,22 @@ export default function TabelaRepasse({ contrato }) {
                   </td>
                   <td className="px-2 py-1.5 text-texto-2 whitespace-nowrap">{l.data ? fmtDate(l.data) : '—'}</td>
                   <td className={`px-2 py-1.5 whitespace-nowrap ${st.tom}`}>{st.texto}</td>
+                  <td className="px-2 py-1.5">
+                    {!l.foraDoSaldo && pode('contratos', 'editar') && (
+                      <button type="button" className="text-[11px] text-primary-fg hover:underline whitespace-nowrap" onClick={(e) => { e.stopPropagation(); setConferir(l.competencia) }}>
+                        {l.linha?.conferencia ? 'Conferir de novo' : 'Conferir extrato'}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               )
             })}
-            {linhas.length === 0 && <tr><td colSpan={8} className="px-2 py-3 text-center text-texto-3">Nenhuma competência.</td></tr>}
+            {linhas.length === 0 && <tr><td colSpan={9} className="px-2 py-3 text-center text-texto-3">Nenhuma competência.</td></tr>}
           </tbody>
         </table>
       </div>
       {aberta && <ComposicaoRepasseModal contrato={contrato} competencia={aberta} onClose={() => setAberta(null)} />}
+      {conferir && <ConferirExtratoModal contrato={contrato} competencia={conferir} onClose={() => setConferir(null)} />}
     </div>
   )
 }

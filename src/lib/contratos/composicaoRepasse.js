@@ -12,6 +12,7 @@
 // competência ABERTA os automáticos seguem o contrato (salvo os informados à mão, que guardam
 // valor_calculado e valor informado); FECHADA, a composição gravada vale como está.
 import { mesesEntre } from './datas.js'
+import { descricaoTaxaUnica, linhaCongelada } from './taxaUnica.js'
 
 const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100
 
@@ -76,7 +77,9 @@ const vigente = (it, competencia) => (!it.vigencia_inicio || it.vigencia_inicio 
 
 // Itens automáticos da competência (sem a taxa de administração, que depende deles):
 //   aluguel: { valor, desc } do plano da competência, ou null (mês sem cobrança).
-function automaticosSemAdm(contrato, competencia, aluguel) {
+//   taxasUnicas: projeção da competência ({ [taxaId]: { valor, k, n } }, de projetarTaxasUnicas);
+//   sem ela, a parcela k do plano (valores_parcelas).
+function automaticosSemAdm(contrato, competencia, aluguel, taxasUnicas = null) {
   const out = []
   if (aluguel) {
     out.push({
@@ -95,10 +98,11 @@ function automaticosSemAdm(contrato, competencia, aluguel) {
       })
     }
     if (it.tipo_repasse === 'taxa_unica') {
-      const p = parcelaTaxaUnica(it, competencia)
+      const p = taxasUnicas ? taxasUnicas[it.id] || null : parcelaTaxaUnica(it, competencia)
       if (p && p.valor) {
         out.push({
-          chave: `taxa_unica:${it.id}`, tipo: 'taxa_unica', descricao: `${it.descricao} ${p.k + 1}/${p.n}`, valor: -p.valor,
+          chave: `taxa_unica:${it.id}`, tipo: 'taxa_unica', taxa_id: it.id,
+          descricao: taxasUnicas ? descricaoTaxaUnica(it, p) : `${it.descricao} ${p.k + 1}/${p.n}`, valor: -p.valor,
           categoria_id: catTaxa(it), dedutivel_ir: it.dedutivel_ir ?? dedutivelPadrao('taxa_unica'),
         })
       }
@@ -138,11 +142,13 @@ export function taxaAdmCalculada(contrato, itens) {
 //   aluguel: { valor, desc } do plano (null = mês sem cobrança); linha: contrato_competencias ou null.
 // → itens [{ chave, tipo, descricao, valor, valor_calculado?, informado?, categoria_id, dedutivel_ir,
 //   natureza?, somar_ao_bem?, origem }]
-export function comporCompetencia(contrato, competencia, aluguel, linha = null) {
-  if (linha?.status === 'fechada') return (linha.itens || []).map(i => ({ ...i, valor: r2(i.valor) }))
+// Conferida pelo extrato ou fechada: a composição gravada vale como está.
+//   opts.taxasUnicas: projeção das taxas únicas nesta competência (saldo a descontar).
+export function comporCompetencia(contrato, competencia, aluguel, linha = null, { taxasUnicas = null } = {}) {
+  if (linhaCongelada(linha)) return (linha.itens || []).map(i => ({ ...i, valor: r2(i.valor) }))
   const gravados = linha?.itens || []
   const salvo = new Map(gravados.filter(i => i.origem === 'auto').map(i => [i.chave, i]))
-  const auto = automaticosSemAdm(contrato, competencia, aluguel).map(a => juntar(a, salvo.get(a.chave)))
+  const auto = automaticosSemAdm(contrato, competencia, aluguel, taxasUnicas).map(a => juntar(a, salvo.get(a.chave)))
   const calc = aluguel ? taxaAdmCalculada(contrato, auto) : null
   const admSalvo = salvo.get('adm')
   if (calc != null || admSalvo?.informado) {
@@ -176,6 +182,7 @@ export function itensParaGravar(itens) {
     const base = {
       chave: i.chave, tipo: i.tipo, descricao: String(i.descricao || '').trim(), valor: r2(i.valor),
       categoria_id: i.categoria_id || null, dedutivel_ir: !!i.dedutivel_ir, origem: i.origem === 'auto' ? 'auto' : 'manual',
+      ...(i.tipo === 'taxa_unica' && i.taxa_id ? { taxa_id: i.taxa_id } : {}),
     }
     if (i.origem === 'auto') return { ...base, informado: !!i.informado, valor_calculado: i.valor_calculado ?? null }
     return {

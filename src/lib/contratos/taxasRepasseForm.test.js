@@ -20,6 +20,6 @@ describe('taxa única: parcelas opcionais', () => {
   })
 
   it('texto inválido continua barrando', () => {
-    expect(erroTaxa({ ...base, parcelas: '470; abc' })).toMatch(/valor de parcela inválido/)
+    expect(erroTaxa({ ...base, forma: 'valores', parcelas: '470; abc' })).toMatch(/valor de parcela inválido/)
   })
 })

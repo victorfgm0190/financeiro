@@ -297,15 +297,17 @@ export async function recursosDoBanco(q) {
   const efet = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'agendamentos' AND column_name = 'efetivacoes'")
   const vir = await q("SELECT to_regclass('reserve_viradas') IS NOT NULL AS tem")
   // Contrato sem a tabela (módulo nunca instalado) não tem o que recusar: true.
-  // Repasse = as quatro migrações (2026-11-07b cadastro, 07c composição e saldo, 07d benfeitoria e
-  // reajuste, 07e rendimentos): vão juntas.
+  // Repasse = as migrações 2026-11-07b cadastro, 07c composição e saldo, 07d benfeitoria e reajuste,
+  // 07e rendimentos e 07f conferência do extrato: vão juntas.
   const rep = await q(`SELECT to_regclass('contratos') IS NULL OR (EXISTS (SELECT 1 FROM information_schema.columns
     WHERE table_schema = current_schema() AND table_name = 'contratos' AND column_name = 'modo_repasse')
     AND to_regclass('contrato_competencias') IS NOT NULL
     AND EXISTS (SELECT 1 FROM information_schema.columns
       WHERE table_schema = current_schema() AND table_name = 'contratos' AND column_name = 'bases_confirmadas')
     AND EXISTS (SELECT 1 FROM information_schema.columns
-      WHERE table_schema = current_schema() AND table_name = 'contratos' AND column_name = 'informes_adm')) AS tem`)
+      WHERE table_schema = current_schema() AND table_name = 'contratos' AND column_name = 'informes_adm')
+    AND EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'contrato_competencias' AND column_name = 'conferencia')) AS tem`)
   return {
     envelopeDiario, creditoPrevisto, feriados: !!fer[0]?.tem, encargosContrato: enc.length > 0, efetivacoesProvisao: efet.length > 0,
     viradaAssistida: !!vir[0]?.tem, contratoRepasse: !!rep[0]?.tem,

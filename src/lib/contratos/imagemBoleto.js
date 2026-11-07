@@ -48,3 +48,16 @@ export async function extrairReciboDeImagem(arquivo, { ler = interpretar } = {})
   if (!leitura.itens.length) throw new Error('Não consegui ler os itens do recibo. Tente outra foto (mais nítida e reta) ou digite os itens.')
   return leitura
 }
+
+// Extrato do proprietário da ADMINISTRADORA (conferência do repasse): mesma rota, leitura
+// 'extrato_administradora'. Devolve o que está escrito; a tela compara com o projetado.
+//   → { periodo, saldo_anterior, total_extrato, valor_repasse, itens: [{ descricao, valor, natureza, tipo, natureza_despesa }] }
+export async function extrairExtratoDeImagem(arquivo, { ler = interpretar } = {}) {
+  const anexo = arquivo?.base64 ? arquivo : await anexoDoArquivo(arquivo)
+  const r = await ler({ leitura: 'extrato_administradora', imagemBase64: anexo.base64, mimeType: anexo.mimeType })
+  const l = r?.leitura || {}
+  const itens = Array.isArray(l.itens) ? l.itens.filter(i => Number(i?.valor) > 0) : []
+  if (!itens.length) throw new Error('Não consegui ler os lançamentos do extrato. Tente outra foto (mais nítida e reta) ou digite os itens.')
+  const n = (x) => (x == null || !Number.isFinite(Number(x)) ? null : r2(Number(x)))
+  return { periodo: l.periodo || null, saldo_anterior: n(l.saldo_anterior), total_extrato: n(l.total_extrato), valor_repasse: n(l.valor_repasse), itens }
+}

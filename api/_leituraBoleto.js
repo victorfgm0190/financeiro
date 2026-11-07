@@ -115,3 +115,69 @@ export function normalizarSaidaRecibo(input) {
     valor_pago: Number.isFinite(pago) && pago > 0 ? r2(pago) : null, itens,
   }
 }
+
+// ─── EXTRATO DA ADMINISTRADORA (contrato a receber por administradora — conferência do repasse) ───
+// Só o que está ESCRITO: período, saldo anterior, cada lançamento (crédito a favor do proprietário ou
+// débito descontado dele) com o tipo SUGERIDO, total e valor do repasse. O app compara com o que
+// projetou e o usuário confirma — nada é gravado sozinho; o arquivo não é guardado.
+export const FERRAMENTA_EXTRATO = 'ler_extrato_administradora'
+export const TIPOS_ITEM_EXTRATO = ['aluguel', 'taxa_adm', 'taxa_unica', 'tarifa', 'despesa', 'benfeitoria', 'ajuste']
+const NATUREZAS_DESPESA_EXTRATO = ['iptu', 'condominio', 'consumo', 'manutencao', 'outra']
+
+export const DEFINICAO_EXTRATO = {
+  name: FERRAMENTA_EXTRATO,
+  description: 'Devolve os dados escritos no extrato/demonstrativo do proprietário enviado pela administradora (imobiliária): período, saldo anterior, cada lançamento com natureza e tipo sugerido, total e valor repassado.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      periodo: { type: ['string', 'null'], description: 'Período/competência do extrato como está escrito (ex.: "02/2026", "01/02 a 28/02/2026"); null se não houver.' },
+      saldo_anterior: { type: ['number', 'null'], description: 'Saldo anterior do proprietário com a administradora, em reais, ponto decimal. POSITIVO se a administradora devia ao proprietário; NEGATIVO se o proprietário devia (saldo devedor). null se não houver.' },
+      total_extrato: { type: ['number', 'null'], description: 'Total/saldo do extrato (créditos − débitos, incluindo o saldo anterior se o extrato somar), em reais; null se não houver.' },
+      valor_repasse: { type: ['number', 'null'], description: 'Valor efetivamente repassado/depositado ao proprietário, em reais; 0 se o extrato diz que não houve repasse; null se não estiver escrito.' },
+      itens: {
+        type: 'array',
+        description: 'Cada lançamento do extrato, na ordem. NÃO inclua saldo anterior, subtotal, total nem a linha do repasse/depósito ao proprietário.',
+        items: {
+          type: 'object',
+          properties: {
+            descricao: { type: 'string', description: 'Texto do lançamento como está (ex.: "Aluguel 02/2026", "Taxa de administração", "Intermediação 1/3", "SANEPAR", "Tarifa bancária").' },
+            valor: { type: 'number', description: 'Valor em reais, POSITIVO, ponto decimal.' },
+            natureza: { type: 'string', enum: ['credito', 'debito'], description: 'credito = a favor do proprietário (aluguel recebido, reembolso); debito = descontado do proprietário (taxas, despesas, reparos).' },
+            tipo: { type: 'string', enum: TIPOS_ITEM_EXTRATO, description: 'Sugestão: aluguel; taxa_adm (taxa de administração); taxa_unica (intermediação, taxa de contrato, 1º aluguel); tarifa (tarifa bancária, DOC/TED, boleto); despesa (conta do proprietário paga pela administradora: água, luz, IPTU, condomínio…); benfeitoria (reparo/obra abatido do aluguel); ajuste (qualquer outro).' },
+            natureza_despesa: { type: 'string', enum: NATUREZAS_DESPESA_EXTRATO, description: 'Só para tipo despesa (omita nos demais): iptu, condominio, consumo (água, luz, gás), manutencao ou outra.' },
+          },
+          required: ['descricao', 'valor', 'natureza', 'tipo'],
+        },
+      },
+    },
+    required: ['itens'],
+  },
+}
+
+export const INSTRUCOES_EXTRATO = `Você lê EXTRATOS/DEMONSTRATIVOS DO PROPRIETÁRIO enviados por administradoras de imóveis (imobiliárias) para o Finup, um app brasileiro de controle financeiro.
+Chame a ferramenta ${FERRAMENTA_EXTRATO} UMA vez com o que está ESCRITO no documento.
+- Cada lançamento com a descrição como está, o valor POSITIVO e a natureza: crédito (a favor do proprietário) ou débito (descontado dele). O tipo é só uma sugestão.
+- Saldo anterior, total e valor repassado NÃO são lançamentos: vão nos campos próprios. Saldo anterior devedor (o proprietário devia) é NEGATIVO.
+- Não invente: campo ilegível = null; lançamento ilegível fica de fora.`
+
+// Saída da ferramenta → { periodo, saldo_anterior, total_extrato, valor_repasse, itens: [{ descricao, valor, natureza, tipo, natureza_despesa }] }
+const NAO_ITEM_EXTRATO = /^(sub ?total|total|saldo( anterior| atual| final)?|valor (repassado|liquido|a repassar)|repasse|deposito)\b/i
+export function normalizarSaidaExtrato(input) {
+  const semAcento = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const numOuNull = (x) => (x == null || x === '' || !Number.isFinite(Number(x)) ? null : r2(Number(x)))
+  const itens = (Array.isArray(input?.itens) ? input.itens : [])
+    .map(i => ({
+      descricao: String(i?.descricao ?? '').trim().slice(0, 120), valor: Math.abs(Number(i?.valor)),
+      natureza: String(i?.natureza || '').toLowerCase().startsWith('c') ? 'credito' : 'debito',
+      tipo: TIPOS_ITEM_EXTRATO.includes(i?.tipo) ? i.tipo : 'ajuste',
+      natureza_despesa: NATUREZAS_DESPESA_EXTRATO.includes(i?.natureza_despesa) ? i.natureza_despesa : null,
+    }))
+    .filter(i => i.descricao && Number.isFinite(i.valor) && i.valor !== 0 && !NAO_ITEM_EXTRATO.test(semAcento(i.descricao).trim()))
+    .slice(0, 60)
+    .map(i => ({ ...i, valor: r2(i.valor) }))
+  return {
+    periodo: typeof input?.periodo === 'string' ? input.periodo.trim().slice(0, 40) || null : null,
+    saldo_anterior: numOuNull(input?.saldo_anterior), total_extrato: numOuNull(input?.total_extrato),
+    valor_repasse: numOuNull(input?.valor_repasse), itens,
+  }
+}

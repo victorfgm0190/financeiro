@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import { Bell, CreditCard, Calendar, AlertTriangle, CheckCircle, Zap, ShieldCheck } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
@@ -8,6 +8,11 @@ import { alertasVencimentoCartao, vencimentoDoCartao } from '../../lib/dashboard
 import { useHoje } from '../../hooks/useHoje'
 import { lembretesAgendamentos } from '../../lib/lembretesAgendamentos'
 import IntegridadePanel from './IntegridadePanel'
+import ConferirExtratoModal from '../Contratos/ConferirExtratoModal'
+import { competenciasDoRepasse, confirmadosDe, repassesRegistrados } from '../../lib/contratos/parcelas'
+import { ehModoRepasse } from '../../lib/contratos/repasse'
+import { extratoPendente } from '../../lib/contratos/conferenciaExtrato'
+import { hojeStr } from '../../lib/contratos/datas'
 
 // Vencimento do cartão: mesma função do Dashboard e do selo de Contas (lib/dashboardHoje) — dias de
 // calendário, de 5 dias antes até o próprio dia (inclusive); dia inexistente no mês → último dia.
@@ -74,6 +79,49 @@ function PossiveisDuplicados({ setActivePage }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Contrato a receber por administradora: a partir do dia 5 do mês do repasse, extrato da competência
+// anterior ainda não conferido (lib/contratos/conferenciaExtrato.extratoPendente).
+function ExtratosPendentes() {
+  const { contratos, contratosHabilitado, schedules, transactions, indicesContratos, activeProfileId, pode } = useApp()
+  const [conferir, setConferir] = useState(null)
+  const hoje = hojeStr()
+  const itens = useMemo(() => {
+    if (!contratosHabilitado) return []
+    return (contratos || []).filter(c => ehModoRepasse(c) && (c.status || 'ativo') === 'ativo' && (!activeProfileId || !c.perfil_id || c.perfil_id === activeProfileId))
+      .map(c => {
+        const doContrato = (schedules || []).filter(s => s.contratoId === c.id)
+        const linhas = competenciasDoRepasse(c, {
+          hoje, indices: indicesContratos, confirmados: confirmadosDe(c, doContrato), repassesReais: repassesRegistrados(c, doContrato, transactions),
+        })
+        const p = extratoPendente(c, linhas, hoje)
+        return p ? { contrato: c, ...p } : null
+      }).filter(Boolean)
+  }, [contratos, contratosHabilitado, schedules, transactions, indicesContratos, activeProfileId, hoje])
+  if (!itens.length) return null
+  return (
+    <div>
+      <h2 className="text-sm font-semibold text-texto-2 mb-3">Extratos da administradora ({itens.length})</h2>
+      <div className="space-y-3">
+        {itens.map(({ contrato, competencia, texto }) => (
+          <div key={`${contrato.id}:${competencia}`} data-testid="alerta-extrato" className="card border border-aviso/50 bg-aviso/5 flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="text-aviso" />
+              <div>
+                <p className="font-semibold text-texto-1">{texto}</p>
+                <p className="text-xs text-texto-3 mt-1">Contrato {contrato.objeto || contrato.numero || ''} — o Finup projetou a competência; confira com o extrato.</p>
+              </div>
+            </div>
+            {pode('contratos', 'editar') && (
+              <button type="button" className="text-xs text-primary-fg hover:underline shrink-0" onClick={() => setConferir({ contrato, competencia })}>Conferir extrato</button>
+            )}
+          </div>
+        ))}
+      </div>
+      {conferir && <ConferirExtratoModal contrato={conferir.contrato} competencia={conferir.competencia} onClose={() => setConferir(null)} />}
     </div>
   )
 }
@@ -153,6 +201,7 @@ function VencimentosPanel({ setActivePage }) {
       </div>
 
       <PossiveisDuplicados setActivePage={setActivePage} />
+      <ExtratosPendentes />
 
       <div data-guia="alerts.alertas-vencimento">
         <h2 className="text-sm font-semibold text-texto-2 mb-3">

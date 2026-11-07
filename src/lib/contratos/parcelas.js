@@ -7,6 +7,7 @@ import { ymDe, addMeses, diaNoMes, diaDe, hojeStr, fmtYm } from './datas.js'
 import { ehModoRepasse, competenciasRepasse, primeiroMes } from './repasse.js'
 import { comporCompetencia, resumoComposicao } from './composicaoRepasse.js'
 import { calcularSaldos, repassesRegistrados } from './saldoRepasse.js'
+import { projetarTaxasUnicas } from './taxaUnica.js'
 import { itensEncargos } from './encargos.js'
 import { computeOccurrences } from '../occurrences.js'
 import { occEfetiva } from '../fluxoCaixa.js'
@@ -205,7 +206,7 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
         composicao: {
           tipo: 'repasse', competencia: l.competencia, numero: l.numero, total_parcelas: l.total, itens: l.itens,
           bruto: l.bruto, deducoes: l.deducoes, resultado: l.resultado, saldo_anterior: l.saldo_anterior, saldo: l.saldo,
-          repasse: l.repasse, total: l.repasse, ...(l.projecao ? { projecao: l.projecao } : {}),
+          repasse: l.repasse, total: l.repasse, conferida: !!l.conferida, ...(l.projecao ? { projecao: l.projecao } : {}),
         },
       }))
   }
@@ -294,6 +295,9 @@ export function competenciasDoRepasse(contrato, { hoje, indices, confirmados = {
   const ctx = { bases, bonifValor: r2(contrato.bonificacao_valor), bonifMeses: Number(contrato.bonificacao_meses) || 0, rot: rotulosContrato(contrato) }
   const projecao = refProjecao(contrato, indices)
   const linhas = new Map((contrato.competencias || []).map(c => [c.competencia, c]))
+  // Taxas únicas: saldo a descontar projetado pela forma escolhida (o extrato conferido só ajusta).
+  const taxasUnicas = projetarTaxasUnicas(contrato, lista.map(v => ({ competencia: v.competencia, cobrada: !v.semCobranca, linha: linhas.get(v.competencia) || null })))
+  const taxasDa = (comp) => Object.fromEntries(Object.entries(taxasUnicas).map(([id, p]) => [id, p[comp] || null]))
   const base = lista.map(v => {
     const linha = linhas.get(v.competencia) || null
     let aluguel = null
@@ -303,11 +307,13 @@ export function competenciasDoRepasse(contrato, { hoje, indices, confirmados = {
       status = a.status
       aluguel = { valor: somaItens(a.itens), desc: a.itens.length === 1 ? a.itens[0].desc : `Aluguel (${a.itens.map(i => i.desc).join(', ')})` }
     }
-    const itens = comporCompetencia(contrato, v.competencia, aluguel, linha)
+    const itens = comporCompetencia(contrato, v.competencia, aluguel, linha, { taxasUnicas: taxasDa(v.competencia) })
     return {
       competencia: v.competencia, numero: v.numero, total, vencimento: v.vencimento, vencimentoInquilino: v.vencimentoInquilino,
       semCobranca: !!v.semCobranca, itens, ...resumoComposicao(itens), linha,
       repasseReal: repassesReais?.[v.competencia] ?? null,
+      // Conferida pelo extrato: o repasse é o líquido do extrato (Projetado até lá).
+      conferida: !!linha?.conferencia, repasseConferido: linha?.conferencia?.repasse ?? null,
       valorStatus: status, ...(status === 'projetado' ? { projecao } : {}),
     }
   })

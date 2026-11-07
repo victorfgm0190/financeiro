@@ -277,6 +277,8 @@ export function normalizarCompetencia(b) {
     if (origem === 'auto') Object.assign(item, { informado: i.informado === true, valor_calculado: calc })
     if (tipo.v === 'despesa') item.natureza = NATUREZAS.includes(i.natureza) ? i.natureza : 'outra'
     if (tipo.v === 'benfeitoria') item.somar_ao_bem = i.somar_ao_bem === true
+    // Taxa única do contrato que o item abate (conferência do extrato: saldo a descontar).
+    if (tipo.v === 'taxa_unica' && i.taxa_id) item.taxa_id = String(i.taxa_id).slice(0, 80)
     // Ajuste criado no registro do repasse (Etapa 4): sai junto se o lançamento for estornado.
     if (origem === 'manual' && i.lancamento_id) item.lancamento_id = String(i.lancamento_id).slice(0, 120)
     itens.push(item)
@@ -287,13 +289,34 @@ export function normalizarCompetencia(b) {
   const temDataPagamento = b.data_pagamento_inquilino !== undefined
   const pag = data()(b.data_pagamento_inquilino)
   if (pag.erro) return { erro: `data_pagamento_inquilino: ${pag.erro}` }
+  // Conferência do extrato (migração 2026-11-07f). Ausente no corpo = mantém a gravada; null = desfaz.
+  const temConferencia = b.conferencia !== undefined
+  const conf = conferenciaExtrato(b.conferencia)
+  if (conf.erro) return { erro: `conferencia: ${conf.erro}` }
   return {
     dados: {
       competencia: comp.v, status: status.v, itens, observacao: obs.v, repasse_lancamento_id: texto(120)(b.repasse_lancamento_id).v,
-      data_pagamento_inquilino: pag.v,
+      data_pagamento_inquilino: pag.v, conferencia: conf.v,
     },
     temDataPagamento,
+    temConferencia,
   }
+}
+// { conferido_em, origem, periodo, saldo_anterior_extrato, saldo_anterior_finup, total_extrato, repasse } ou null.
+const NUMS_CONFERENCIA = ['saldo_anterior_extrato', 'saldo_anterior_finup', 'total_extrato', 'repasse']
+export function conferenciaExtrato(v) {
+  if (v == null) return { v: null }
+  if (typeof v !== 'object' || Array.isArray(v)) return { erro: 'objeto ou null' }
+  const dia = data()(v.conferido_em)
+  if (dia.erro || !dia.v) return { erro: 'conferido_em: data AAAA-MM-DD obrigatória' }
+  const out = { conferido_em: dia.v, origem: v.origem === 'ia' ? 'ia' : 'manual', periodo: texto(80)(v.periodo).v }
+  for (const k of NUMS_CONFERENCIA) {
+    if (v[k] == null || v[k] === '') { out[k] = null; continue }
+    const n = Math.round(Number(v[k]) * 100) / 100
+    if (!Number.isFinite(n) || Math.abs(n) > 1e12) return { erro: `${k}: número inválido` }
+    out[k] = n
+  }
+  return { v: out }
 }
 export const MSG_SEM_COMPOSICAO = 'O banco deste ambiente ainda não tem a atualização da composição do repasse. Nada foi gravado — avise o suporte para atualizar o banco.'
 
