@@ -19,7 +19,8 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import { useThemeColors } from '../../hooks/useTheme'
 import { estiloTooltip } from '../../lib/chartPalette'
 import { computeFaturaRef } from '../../lib/fatura'
-import { occEfetiva } from '../../lib/fluxoCaixa'
+import { proximosAgendamentos } from '../../lib/proximosAgendamentos'
+import { useHoje } from '../../hooks/useHoje'
 import { escopoFluxoPrincipal, pendentesNoFluxoPrincipal } from '../../lib/fluxoPrincipal'
 import { hojeStr } from '../../lib/saldos'
 import { isInvestAutoOrigin } from '../../lib/origins'
@@ -83,6 +84,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // serão sobrescritos — mostra skeleton nos números para evitar o flicker visível.
   const loading = dbStatus === 'connecting'
   const isMobile = useIsMobile()
+  const hojeDia = useHoje()
   const cor = useThemeColors()
   // Transferências entre perfis viram receita/despesa na visão do perfil ativo (KPIs/gráficos).
   const transactions = profileReportTransactions
@@ -178,19 +180,12 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     })
   }, [transactions, cls, modoDespesas])
 
-  // Upcoming & overdue schedules (next 7 days + overdue)
-  const upcomingSchedules = useMemo(() => {
-    const in7 = hojeStr(new Date(Date.now() + 7 * 86400000))
-    const items = []
-    schedules.forEach(s => {
-      // Data e valor EFETIVOS (override da ocorrência): a movida aparece no dia novo.
-      getNextOccurrences(s, 2).forEach(base => {
-        const { date, amount } = occEfetiva(s, base)
-        if (date <= in7) items.push({ schedule: s, date, amount })
-      })
-    })
-    return items.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8)
-  }, [schedules, getNextOccurrences])
+  // Upcoming & overdue schedules (next 7 days + overdue). `hojeDia` vira sozinho (useHoje): com o
+  // app aberto de um dia para o outro, a janela de 7 dias anda junto.
+  const upcomingSchedules = useMemo(
+    () => proximosAgendamentos(schedules, getNextOccurrences, hojeDia),
+    [schedules, getNextOccurrences, hojeDia],
+  )
 
   // Credit card alerts
   const creditAlerts = useMemo(() => {

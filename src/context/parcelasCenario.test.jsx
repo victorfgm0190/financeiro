@@ -99,6 +99,19 @@ describe('cenário do seguro no modal real e no motor real', () => {
 
     // Motor real: um resgate por fatura, no mês da fatura (fechamento 14: 25/03 cai em abr).
     await waitFor(() => expect(app.schedules.filter(s => s.tipo === 'resgate_reserva').length).toBeGreaterThanOrEqual(24), { timeout: 15000 })
+    const resgates = app.schedules.filter(s => s.tipo === 'resgate_reserva').sort((a, b) => a.faturaMesAno.localeCompare(b.faturaMesAno))
+    // Um resgate por fatura, da reserva para a conta, com data no mês da fatura (vencimento dia 20).
+    expect(new Set(resgates.map(r => r.faturaMesAno)).size).toBe(resgates.length)
+    for (const r of resgates) {
+      expect(r).toMatchObject({ accountId: 'res', toAccountId: 'cc', cardId: 'card' })
+      expect(r.startDate.slice(0, 7)).toBe(r.faturaMesAno)
+    }
+    expect(resgates[0]).toMatchObject({ faturaMesAno: '2027-04', startDate: '2027-04-20', amount: 233.37 })
+    expect(resgates[1]).toMatchObject({ faturaMesAno: '2027-05', amount: 233.33 })
+    // Por parcela: a soma dos resgates de cada ano de faturas fecha 2.800,00.
+    const anoResgates = (de, ate) => soma(resgates.filter(r => r.faturaMesAno >= de && r.faturaMesAno <= ate).map(r => r.amount))
+    expect(anoResgates('2027-04', '2028-03')).toBe(2800)
+    expect(anoResgates('2028-04', '2029-03')).toBe(2800)
 
     // Fluxo Futuro de Reservas: mesma função que a tela usa (previsoesDasFuncoes), sem o corte da janela.
     const prev = previsoesDasFuncoes(app.reserveFunctions.filter(f => f.id === 'fn_seg'), {
