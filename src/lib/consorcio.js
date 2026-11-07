@@ -124,6 +124,67 @@ export function fotoDosAgendamentos(schedules) {
   return schedules.map(s => ({ id: s.id, ...Object.fromEntries(CAMPOS_RESTAURAR.map(c => [c, s[c] ?? null])) }))
 }
 
+// ─── Venda por cota ───────────────────────────────
+// Custo de cada cota: o pago atribuído a ela (pago próprio, por terceiro, abertura e créditos). A baixa com cota
+// informada é da cota; o resto do pago é dividido entre as cotas ativas na proporção das parcelas, como no
+// batimento. Cota já vendida fica com o custo que saiu do bem, e esse valor não entra de novo na divisão.
+const vendidaDe = (c) => !!c.vendida_em
+export function custoEstimadoPorCota(cotas = [], pagoAcumulado = 0, baixas = []) {
+  const saida = cotas.map(c => (vendidaDe(c) ? r2(c.vendida_custo) : 0))
+  const ativas = cotas.map((c, i) => ({ c, i })).filter(x => !vendidaDe(x.c))
+  if (!ativas.length) return saida
+  const jaSaiu = cotas.reduce((s, c) => s + (vendidaDe(c) ? Number(c.vendida_custo) || 0 : 0), 0)
+  const total = Math.max(0, (Number(pagoAcumulado) || 0) - jaSaiu)
+  const daCota = (c) => baixas.filter(b => b.cota_numero === c.numero)
+  const proprio = ativas.map(x => daCota(x.c).reduce((s, b) => s + (Number(b.valor) || 0), 0))
+  const resto = Math.max(0, total - proprio.reduce((s, v) => s + v, 0))
+  // Parcelas informadas pela administradora quando todas têm; senão, todas com o mesmo número de parcelas.
+  const informadas = ativas.map(x => Math.max(0, (Number(x.c.parcelas_pagas_informadas) || 0) - parcelasDasBaixas(daCota(x.c))))
+  const usarInformadas = ativas.every(x => x.c.parcelas_pagas_informadas != null) && informadas.some(n => n > 0)
+  const pesos = ativas.map((x, n) => parcelaDaCota(x.c) * (usarInformadas ? informadas[n] : 1))
+  const somaPesos = pesos.reduce((s, p) => s + p, 0)
+  ativas.forEach((x, n) => { saida[x.i] = r2(proprio[n] + resto * (somaPesos > 0 ? pesos[n] / somaPesos : 1 / ativas.length)) })
+  // Centavos do arredondamento ficam na última ativa: a soma fecha com o pago.
+  const ultima = ativas[ativas.length - 1].i
+  const soma = ativas.reduce((s, x) => s + saida[x.i], 0)
+  saida[ultima] = Math.max(0, r2(saida[ultima] + total - soma))
+  return saida
+}
+
+// O que a venda de uma cota muda nos agendamentos. Por cota (a descrição cita a cota, ou há um agendamento por
+// cota ativa, com o valor da parcela dela): encerra o da cota. Cobrindo várias: reduz na proporção da cota vendida,
+// a partir do mês seguinte à venda. Era a última cota: encerra tudo. Só agendamentos com parcela pendente.
+const mesSeguinte = (iso) => {
+  const [a, m] = String(iso).split('-').map(Number)
+  return m === 12 ? `${a + 1}-01-01` : `${a}-${String(m + 1).padStart(2, '0')}-01`
+}
+const citaACota = (s, numero) => new RegExp(`cota\\s*(n[º°o.]*\\s*)?${String(numero).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\D|$)`, 'i').test(s.description || '')
+export function planoVendaDaCota(schedules, cotas, numero, data, getOcorrencias) {
+  const cota = (cotas || []).find(c => c.numero === numero)
+  if (!cota) return []
+  const ativas = cotas.filter(c => !vendidaDe(c))
+  const pendentes = (schedules || []).filter(s => getOcorrencias(s).length > 0)
+  const encerrar = (lista) => planoEncerrar(lista).map(p => {
+    const s = lista.find(x => x.id === p.id)
+    return { ...p, descricao: s.description || 'Agendamento', acao: 'encerrar', de: Number(s.amount), para: 0 }
+  })
+  if (ativas.length <= 1) return encerrar(pendentes)
+  const citados = pendentes.filter(s => citaACota(s, numero))
+  if (citados.length) return encerrar(citados)
+  const parcela = parcelaDaCota(cota)
+  const umPorCota = pendentes.length === ativas.length
+    && ativas.every(c => pendentes.some(s => Math.abs(Number(s.amount) - parcelaDaCota(c)) < 0.01))
+  if (umPorCota) return encerrar([pendentes.find(s => Math.abs(Number(s.amount) - parcela) < 0.01)])
+  const total = ativas.reduce((s, c) => s + parcelaDaCota(c), 0)
+  const fator = total > 0 ? 1 - parcela / total : 1
+  const aPartirDe = mesSeguinte(data)
+  return pendentes.map(s => {
+    const para = r2(Number(s.amount) * fator)
+    const [p] = planoNovaParcela([s], { valor: para, data: aPartirDe }, getOcorrencias)
+    return { ...p, descricao: s.description || 'Agendamento', acao: 'reduzir', de: Number(s.amount), para, aPartirDe }
+  })
+}
+
 // Nova parcela a partir de uma data: o valor-base muda, e o que está pendente antes da data fica com o
 // valor antigo. getOcorrencias(schedule) → datas pendentes. Ocorrências já baixadas não mudam.
 export function planoNovaParcela(schedules, { valor, data }, getOcorrencias) {

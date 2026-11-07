@@ -349,3 +349,36 @@ describe('lote (importação e sincronização)', () => {
     expect(await linhas('SELECT id FROM reserve_pendencias_fechado')).toEqual([])
   })
 })
+
+describe('venda de cota do consórcio em período virado', () => {
+  const montar = () => banco.exec(`
+    INSERT INTO categorias (id, name, type) VALUES ('ganho_cota', 'Ganho', 'income');
+    INSERT INTO contas (id, name, type, balance, initial_balance, tipo_bem, categoria_ganho_bem_id) VALUES ('bem_cota', 'Consórcio', 'asset', 0, 0, 'consorcio', 'ganho_cota');
+    INSERT INTO consorcios (bem_id, situacao, funcao_reserva_id) VALUES ('bem_cota', 'ativa', '${F.ipva}');
+    INSERT INTO consorcio_cotas (bem_id, numero, valor_carta, percentual_parcela, valor_parcela_cheia) VALUES ('bem_cota', '1', 100000, 100, 500);`)
+  const vender = async (data, opcoes = {}) => {
+    const { default: eventos } = await import('./consorcio-eventos.js')
+    return chamar(eventos, { url: '/api/consorcio-eventos', body: { acao: 'registrar', bem_id: 'bem_cota', tipo: 'vender_cota', data, dados: { cota_numero: '1', valor: 500, conta_destino_id: CONTA_RESERVA } }, ...opcoes })
+  }
+  const venda = () => linhas("SELECT id FROM lancamentos WHERE bem_id = 'bem_cota'")
+
+  it('data em período virado: não grava sem confirmar; com a confirmação, estorna, grava e refaz', async () => {
+    await montar()
+    const r = await vender('2026-09-10')
+    expect(r.statusCode).toBe(409)
+    expect(r.body.codigo).toBe('periodo_virado')
+    expect(await venda()).toEqual([])
+    expect((await linhas("SELECT vendida_em FROM consorcio_cotas WHERE bem_id = 'bem_cota'"))[0].vendida_em).toBeNull()
+    const ok = await vender('2026-09-10', { confirmar: true })
+    expect(ok.body.error).toBeUndefined()
+    expect(ok.statusCode).toBe(200)
+    expect(await venda()).toHaveLength(2)
+    expect((await fotoViradas()).map(v => v.c)).toEqual(['2026-08-14', '2026-09-14'])
+  }, 60_000)
+  it('data em período aberto: grava direto', async () => {
+    await montar()
+    const r = await vender('2026-09-16')
+    expect(r.statusCode).toBe(200)
+    expect(await venda()).toHaveLength(2)
+  }, 60_000)
+})

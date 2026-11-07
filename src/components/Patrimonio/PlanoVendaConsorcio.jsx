@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { AlertTriangle, Loader2, Save } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import InputMoeda from '../shared/InputMoeda'
-import { fmt } from '../shared/utils'
+import { fmt, fmtDate } from '../shared/utils'
 import { useApp } from '../../context/AppContext'
 import { salvarPlanoConsorcio } from '../../lib/bemApi'
 import { agendamentosDoBem, prazoDaCota } from '../../lib/consorcio'
@@ -51,7 +51,12 @@ export default function PlanoVendaConsorcio({ bemId, consorcio, resumo, pagasPor
     const proximas = doBem.map(s => (getNextOccurrences?.(s, 1) || [])[0]).filter(Boolean).sort()
     return projetarPlano({
       hoje, cotas, funcao: funcao ? { saldo } : null, previsoes, consorcioVendido: vendido,
-      custoPorCota: custoAtualPorCota(cotasBase, resumo?.custoProprioLiquido || 0, pagasPorCota),
+      // O custo da cota vendida já saiu do bem: o que sobra é das que continuam.
+      custoPorCota: custoAtualPorCota(
+        cotasBase,
+        Math.max(0, (resumo?.custoProprioLiquido || 0) - cotasBase.reduce((s, c) => s + (Number(c.vendida_custo) || 0), 0)),
+        cotasBase.map((c, i) => (c.vendida_em ? 0 : (pagasPorCota ? pagasPorCota[i] : 1))),
+      ),
       restantesPorCota: cotasBase.map((c, i) => (pagasPorCota ? prazoDaCota(c, pagasPorCota[i]).restantes : null)),
       primeiroMesComParcela: proximas[0] ? proximas[0].slice(0, 7) : null,
     })
@@ -93,6 +98,7 @@ export default function PlanoVendaConsorcio({ bemId, consorcio, resumo, pagasPor
         {cotasBase.map(c => {
           const p = plano[c.numero] || {}
           const fora = cotaVendida({ vendida_em: p.vendida ? 'x' : null }, vendido)
+          const real = !!c.vendida_evento_id
           return (
             <div key={c.numero} className="grid grid-cols-1 sm:grid-cols-[6rem_1fr_1fr_auto] gap-2 items-end" data-testid={`plano-cota-${c.numero}`}>
               <p className="text-xs font-medium text-texto-1 pb-2">Cota {c.numero}</p>
@@ -102,10 +108,14 @@ export default function PlanoVendaConsorcio({ bemId, consorcio, resumo, pagasPor
               <label className="text-[11px] text-texto-2">Valor de venda esperado
                 <InputMoeda className="input mt-1 w-full text-xs" disabled={!podeEditar || fora} value={p.valor} onChange={e => alterar(c.numero, 'valor', e.target.value)} />
               </label>
-              <label className="flex items-center gap-1.5 text-[11px] text-texto-2 pb-2">
-                <input type="checkbox" className="accent-primary" disabled={!podeEditar || vendido} checked={fora} onChange={e => alterar(c.numero, 'vendida', e.target.checked)} /> Já vendida
-              </label>
-              {p.vendida && !vendido && (
+              {real
+                ? <p className="text-[11px] text-texto-3 pb-2" data-testid={`plano-venda-real-${c.numero}`}>Vendida em {fmtDate(c.vendida_em)}</p>
+                : (
+                  <label className="flex items-center gap-1.5 text-[11px] text-texto-2 pb-2" title="Só para cota vendida antes da venda por cota existir: não gera lançamento. Para vender agora, use Vender cota.">
+                    <input type="checkbox" className="accent-primary" disabled={!podeEditar || vendido} checked={fora} onChange={e => alterar(c.numero, 'vendida', e.target.checked)} /> Vendida antes (sem lançamento)
+                  </label>
+                )}
+              {p.vendida && !vendido && !real && (
                 <div className="sm:col-start-2 sm:col-span-2 grid grid-cols-2 gap-2">
                   <label className="text-[11px] text-texto-2">Vendida em
                     <input type="date" className="input mt-1 w-full text-xs" disabled={!podeEditar} value={p.vendidaEm} onChange={e => alterar(c.numero, 'vendidaEm', e.target.value)} />

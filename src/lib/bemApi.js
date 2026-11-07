@@ -79,6 +79,7 @@ export const listarConsorcios = () => request('/api/consorcio')
 export const getConsorcio = (bemId) => request(`/api/consorcio?bem_id=${enc(bemId)}`)
 export const salvarConsorcio = (payload) => request('/api/consorcio', { method: 'PUT', body: JSON.stringify(payload) })
 export const salvarPlanoConsorcio = (payload) => request('/api/consorcio', { method: 'PATCH', body: JSON.stringify(payload) })
+export const previaVendaCota = (payload) => post('/api/consorcio-eventos', { acao: 'previa_cota', ...payload })
 export const registrarEventoConsorcio = (payload) => post('/api/consorcio-eventos', { acao: 'registrar', ...payload })
 export const estornarEventoConsorcio = (eventoId) => post('/api/consorcio-eventos', { acao: 'estornar', evento_id: eventoId })
 

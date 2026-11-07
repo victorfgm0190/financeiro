@@ -13,7 +13,7 @@ import { comAmbiente } from './_ambiente.js'
 // PATCH /api/consorcio          → plano de venda: { bem_id, funcao_reserva_id, cotas: [{ numero, plano_mes,
 //                                 plano_valor, vendida_em, vendida_valor }] }. Só previsão: nada de lançamento.
 
-const COLS_COTA = ['valor_carta', 'percentual_parcela', 'valor_parcela_cheia', 'saldo_devedor_informado', 'valor_pago_informado', 'plano_valor', 'vendida_valor']
+const COLS_COTA = ['valor_carta', 'percentual_parcela', 'valor_parcela_cheia', 'saldo_devedor_informado', 'valor_pago_informado', 'plano_valor', 'vendida_valor', 'vendida_custo']
 const cotaParaApi = (c) => ({
   ...c,
   ...Object.fromEntries(COLS_COTA.map(k => [k, c[k] == null ? null : num(c[k])])),
@@ -90,20 +90,25 @@ async function salvar(req, res) {
         textoOuNull(b.indice_reajuste), textoOuNull(b.conta_origem_id), situacao],
     )
     // Editar o cadastro recria as cotas: o plano de venda de cada uma continua, pelo número.
-    const planos = new Map((await q(`SELECT numero, plano_mes, plano_valor, vendida_em, vendida_valor FROM consorcio_cotas WHERE bem_id = $1`, [bemId])).map(p => [p.numero, p]))
+    const planos = new Map((await q(`SELECT numero, plano_mes, plano_valor, vendida_em, vendida_valor, vendida_custo, vendida_evento_id FROM consorcio_cotas WHERE bem_id = $1`, [bemId])).map(p => [p.numero, p]))
+    // Cota com venda registrada só sai pelo estorno: apagar aqui deixaria os lançamentos sem a cota.
+    for (const p of planos.values()) {
+      if (p.vendida_evento_id && !cotas.some(c => textoOuNull(c.numero) === p.numero)) throw Object.assign(new Error(`A cota ${p.numero} tem venda registrada. Estorne a venda antes de removê-la.`), { status: 409 })
+    }
     await q(`DELETE FROM consorcio_cotas WHERE bem_id = $1`, [bemId])
     for (const c of cotas) {
       await q(
         `INSERT INTO consorcio_cotas (bem_id, numero, data_adesao, valor_carta, prazo_meses, percentual_parcela, valor_parcela_cheia,
            saldo_devedor_informado, saldo_devedor_data, parcelas_pagas_informadas, valor_pago_informado,
-           previsao_encerramento, data_ultima_parcela, plano_mes, plano_valor, vendida_em, vendida_valor)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+           previsao_encerramento, data_ultima_parcela, plano_mes, plano_valor, vendida_em, vendida_valor, vendida_custo, vendida_evento_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
         [bemId, textoOuNull(c.numero), textoOuNull(c.data_adesao), Number(c.valor_carta), numeroOuNull(c.prazo_meses), Number(c.percentual_parcela),
           numeroOuNull(c.valor_parcela_cheia) ?? 0, numeroOuNull(c.saldo_devedor_informado), textoOuNull(c.saldo_devedor_data),
           numeroOuNull(c.parcelas_pagas_informadas), numeroOuNull(c.valor_pago_informado),
           textoOuNull(c.previsao_encerramento), textoOuNull(c.data_ultima_parcela),
           planos.get(textoOuNull(c.numero))?.plano_mes ?? null, planos.get(textoOuNull(c.numero))?.plano_valor ?? null,
-          planos.get(textoOuNull(c.numero))?.vendida_em ?? null, planos.get(textoOuNull(c.numero))?.vendida_valor ?? null],
+          planos.get(textoOuNull(c.numero))?.vendida_em ?? null, planos.get(textoOuNull(c.numero))?.vendida_valor ?? null,
+          planos.get(textoOuNull(c.numero))?.vendida_custo ?? null, planos.get(textoOuNull(c.numero))?.vendida_evento_id ?? null],
       )
     }
     await estornarAberturasOrfas(q, bemId, cotas.map(c => textoOuNull(c.numero)))
@@ -136,8 +141,13 @@ async function salvarPlano(req, res) {
     await q(`UPDATE consorcios SET funcao_reserva_id = $2, updated_at = now() WHERE bem_id = $1`, [b.bem_id, funcaoId])
     for (const c of cotas) {
       await q(
-        `UPDATE consorcio_cotas SET plano_mes = $3, plano_valor = $4, vendida_em = $5, vendida_valor = $6 WHERE bem_id = $1 AND numero = $2`,
-        [b.bem_id, c.numero, textoOuNull(c.plano_mes), numeroOuNull(c.plano_valor), textoOuNull(c.vendida_em), numeroOuNull(c.vendida_valor)],
+        `UPDATE consorcio_cotas SET plano_mes = $3, plano_valor = $4 WHERE bem_id = $1 AND numero = $2`,
+        [b.bem_id, c.numero, textoOuNull(c.plano_mes), numeroOuNull(c.plano_valor)],
+      )
+      // Marcação manual: só para cota vendida antes da venda real existir. A venda real não muda por aqui.
+      await q(
+        `UPDATE consorcio_cotas SET vendida_em = $3, vendida_valor = $4 WHERE bem_id = $1 AND numero = $2 AND vendida_evento_id IS NULL`,
+        [b.bem_id, c.numero, textoOuNull(c.vendida_em), numeroOuNull(c.vendida_valor)],
       )
     }
   })

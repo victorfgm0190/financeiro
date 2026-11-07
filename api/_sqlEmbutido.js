@@ -167,5 +167,9 @@ export const MIGRACOES = [
  {
   "nome": "2026-11-06i_reserva_dias_caixa.sql",
   "sql": "-- Aviso de caixa da reserva: quantos dias à frente a projeção olha. Vazio = padrão (60).\n-- Idempotente. Não altera nenhum dado existente.\nALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS reserva_dias_caixa INTEGER;\n"
+ },
+ {
+  "nome": "2026-11-06j_venda_de_cota.sql",
+  "sql": "-- Venda real por cota do consórcio (evento 'vender_cota' em /api/consorcio-eventos). A cota guarda o custo que\n-- saiu do bem e o evento que a vendeu; sem evento, é marcação manual de cota vendida antes desta função.\n-- Idempotente. Não altera nenhum dado existente: só cria colunas e aceita o novo tipo de evento.\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS vendida_custo NUMERIC(14,2);\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS vendida_evento_id TEXT;\nALTER TABLE consorcio_eventos DROP CONSTRAINT IF EXISTS consorcio_eventos_tipo_check;\nALTER TABLE consorcio_eventos ADD CONSTRAINT consorcio_eventos_tipo_check\n  CHECK (tipo IN ('contemplar', 'reajuste', 'vender', 'usar_carta', 'vender_cota'));\n"
  }
 ]

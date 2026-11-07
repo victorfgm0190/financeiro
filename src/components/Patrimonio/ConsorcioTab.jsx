@@ -14,12 +14,15 @@ import {
   agendamentosDoBem, batimento, encerramentoDaCota, fotoDosAgendamentos, parcelaDaCota, parcelasFinupPorCota, planoEncerrar, planoNovaParcela, prazoDaCota, rotuloSituacao, totaisDasCotas,
 } from '../../lib/consorcio'
 import PlanoVendaConsorcio from './PlanoVendaConsorcio'
+import VenderCotaModal from './VenderCotaModal'
 import { isoLocal } from '../../lib/hoje'
 
-const ROTULO_EVENTO = { contemplar: 'Contemplação', reajuste: 'Reajuste', vender: 'Venda', usar_carta: 'Uso da carta' }
+const ROTULO_EVENTO = {
+  vender_cota: 'Venda da cota', contemplar: 'Contemplação', reajuste: 'Reajuste', vender: 'Venda', usar_carta: 'Uso da carta' }
 
 function descricaoEvento(ev) {
   const d = ev.dados || {}
+  if (ev.tipo === 'vender_cota') return `Cota ${d.cota_numero}: recebido ${fmt(d.valor)} · ${d.ganho >= 0 ? 'ganho' : 'perda'} de ${fmt(Math.abs(d.ganho))}`
   if (ev.tipo === 'vender') return `Recebido ${fmt(d.valor)} · ${d.ganho >= 0 ? 'ganho' : 'perda'} de ${fmt(Math.abs(d.ganho || 0))}`
   if (ev.tipo === 'usar_carta') return `Bem comprado por ${fmt(d.valor_bem)}`
   return `Nova parcela: ${fmt(d.nova_parcela)}`
@@ -103,6 +106,8 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
 
   const cotas = useMemo(() => consorcio.cotas || [], [consorcio])
   const totais = useMemo(() => totaisDasCotas(cotas), [cotas])
+  const totaisAtivas = useMemo(() => totaisDasCotas(cotas.filter(c => !c.vendida_em)), [cotas])
+  const [vendendoCota, setVendendoCota] = useState(null)
   const resumo = useMemo(() => {
     const bem = extrato?.bens?.[0]
     return bem ? resumoDoBem(bem, extratoDoBem(bem, extrato), extrato.parcelas, extrato.cotas) : null
@@ -200,6 +205,7 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
                 <th className="text-right font-medium py-2 px-2">Restantes</th>
                 <th className="text-left font-medium py-2 px-2">Encerramento</th>
                 <th className="text-right font-medium py-2 pl-2">Saldo devedor</th>
+                {podeEditar && !vendida && <th className="py-2 pl-2" />}
               </tr>
             </thead>
             <tbody>
@@ -208,7 +214,10 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
                 const enc = encerramentoDaCota(c)
                 return (
                 <tr key={c.id} className="border-b border-borda/60">
-                  <td className="py-1.5 pr-3 text-texto-1">{c.numero}</td>
+                  <td className="py-1.5 pr-3 text-texto-1">
+                    {c.numero}
+                    {c.vendida_em && <span className="block text-[11px] text-texto-3" data-testid={`cota-vendida-${c.numero}`}>vendida em {fmtDate(c.vendida_em)}{c.vendida_valor != null ? ` · ${fmt(c.vendida_valor)}` : ''}</span>}
+                  </td>
                   <td className="py-1.5 px-2 text-texto-2">{c.data_adesao ? fmtDate(c.data_adesao) : '—'}</td>
                   <td className="py-1.5 px-2 text-right text-texto-1">{fmt(c.valor_carta)}</td>
                   <td className="py-1.5 px-2 text-right text-texto-1">{fmt(parcelaDaCota(c))} <span className="text-xs text-texto-3">({Number(c.percentual_parcela)}%)</span></td>
@@ -230,6 +239,11 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
                     {c.saldo_devedor_informado == null ? '—' : fmt(c.saldo_devedor_informado)}
                     {c.saldo_devedor_data && <span className="block text-[11px] text-texto-3">em {fmtDate(c.saldo_devedor_data)}</span>}
                   </td>
+                  {podeEditar && !vendida && (
+                    <td className="py-1.5 pl-2 text-right">
+                      {!c.vendida_em && <button type="button" className="btn-secondary text-xs py-0.5 px-2 whitespace-nowrap" onClick={() => setVendendoCota(c)}>Vender cota</button>}
+                    </td>
+                  )}
                 </tr>
                 )
               })}
@@ -239,11 +253,12 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
                 <td className="py-2 pr-3 text-texto-1">Total</td>
                 <td />
                 <td className="py-2 px-2 text-right text-texto-1">{fmt(totais.carta)}</td>
-                <td className="py-2 px-2 text-right text-texto-1">{fmt(totais.parcelaMensal)}</td>
+                <td className="py-2 px-2 text-right text-texto-1">{fmt(totaisAtivas.parcelaMensal)}</td>
                 <td className="py-2 px-2 text-right text-texto-2">{bate ? `${bate.parcelasFinup}/${somaPrazos ?? '—'}` : '—'}</td>
                 <td className="py-2 px-2 text-right text-texto-2">{somaRestantes ?? '—'}</td>
                 <td />
-                <td className="py-2 pl-2 text-right text-texto-1">{fmt(totais.saldoDevedor)}</td>
+                <td className="py-2 pl-2 text-right text-texto-1">{fmt(totaisAtivas.saldoDevedor)}</td>
+                {podeEditar && !vendida && <td />}
               </tr>
             </tfoot>
           </table>
@@ -356,7 +371,14 @@ export default function ConsorcioTab({ bemId, consorcio, tipoBem, onEditar, onMu
           )}
       </div>
 
-      <PlanoVendaConsorcio bemId={bemId} consorcio={consorcio} resumo={resumo} pagasPorCota={pagasPorCota} podeEditar={podeEditar} onMudou={onMudou} avisar={avisar} />
+      {vendendoCota && (
+        <VenderCotaModal
+          bemId={bemId} cota={vendendoCota} cotas={cotas} onCancelar={() => setVendendoCota(null)}
+          onVendida={() => { setVendendoCota(null); avisar('Venda da cota registrada.'); onMudou() }}
+        />
+      )}
+
+      <PlanoVendaConsorcio key={cotas.map(c => `${c.numero}:${c.vendida_em || ''}`).join('|')} bemId={bemId} consorcio={consorcio} resumo={resumo} pagasPorCota={pagasPorCota} podeEditar={podeEditar} onMudou={onMudou} avisar={avisar} />
 
       {marcando && (
         <Modal open onClose={() => setMarcando(null)} title={marcando.soCredito ? 'Registrar crédito ou rendimento' : 'Marcar parcela como paga'}>

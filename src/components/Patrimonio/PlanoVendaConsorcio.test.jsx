@@ -61,7 +61,7 @@ describe('Plano de venda na tela', () => {
   it('marcar a cota como vendida tira da projeção na hora; salvar manda por cota', async () => {
     const cotas = [cota('1', { plano_mes: proximo(1), plano_valor: 5000 }), cota('2', { plano_mes: proximo(1), plano_valor: 6000 })]
     montar({ cotas })
-    fireEvent.click(screen.getAllByLabelText(/Já vendida/)[0])
+    fireEvent.click(screen.getAllByLabelText(/Vendida antes/)[0])
     expect(screen.getByTestId('plano-resultado').textContent).not.toMatch(/Cota 1/)
     fireEvent.click(screen.getByRole('button', { name: /Salvar plano/ }))
     await waitFor(() => expect(api.salvar).toHaveBeenCalledTimes(1))
@@ -69,6 +69,11 @@ describe('Plano de venda na tela', () => {
     expect(b.bem_id).toBe('bem')
     expect(b.cotas[0].vendida_em).toBeTruthy()
     expect(b.cotas[1]).toMatchObject({ numero: '2', vendida_em: null, plano_valor: 6000 })
+  })
+  it('venda real: mostra a data, sem a marcação manual', () => {
+    montar({ cotas: [cota('1', { vendida_em: '2026-10-01', vendida_evento_id: 'cev1', vendida_custo: 100 }), cota('2')] })
+    expect(screen.getByTestId('plano-venda-real-1').textContent).toMatch(/01\/10\/2026/)
+    expect(screen.getAllByLabelText(/Vendida antes/)).toHaveLength(1)
   })
   it('sem permissão, não salva nem edita', () => {
     montar({ cotas: [cota('1')] }, { podeEditar: false })
