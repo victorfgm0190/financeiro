@@ -1,6 +1,9 @@
 import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import { useState, useRef, useMemo, useEffect } from 'react'
-import { Info, X, History, AlertTriangle } from 'lucide-react'
+import { Info, History, AlertTriangle } from 'lucide-react'
+import OcorrenciaEditModal from './OcorrenciaEditModal'
+import PreviaParcelada from './PreviaParcelada'
+import CampoParcelamento from './CampoParcelamento'
 import HelpCampo from '../shared/HelpCampo'
 import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
 import { HELP_CAMPOS } from '../../lib/helpCampos'
@@ -40,13 +43,13 @@ import DateInput from '../shared/DateInput'
 import { controleGerencialAtivo, grupoComChaveDesligada, travaGerencial } from '../../lib/controleGerencial'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
-import { baixaNoPeriodo, mensagemConflitoPulo } from '../../lib/conflitoPeriodo'
+import { baixaNoPeriodo } from '../../lib/conflitoPeriodo'
 import { perguntaFluxoPrincipal, considerarFluxoParaGravar } from '../../lib/fluxoPrincipal'
 import InputMoeda from '../shared/InputMoeda'
 import {
-  ehParcelado, ehUnicaParcelada, frequenciaExibida, normalizarUnica, permiteParcelamento, maxParcelas, erroLimiteParcelas,
-  textoDivisao, parcelaDaData, valorBaseDaChave, agruparPorOcorrencia, planoParcelamento, erroEdicaoOcorrencia, temOcorrenciaDepois,
-  temConsumo, situacaoDaOcorrencia, aposMudarInicio, ESCOPO_OCORRENCIA, MSG_DATA_BLOQUEADA,
+  ehParcelado, ehUnicaParcelada, frequenciaExibida, normalizarUnica, permiteParcelamento, erroLimiteParcelas,
+  textoDivisao, parcelaDaData, valorBaseDaChave, planoParcelamento, temConsumo, situacaoDaOcorrencia,
+  comoNovaParcelada, edicaoDoParcelamento, aplicarEdicaoParcelamento, ESCOPO_OCORRENCIA, MSG_DATA_BLOQUEADA,
 } from '../../lib/parcelasOcorrencia'
 
 const datasFeitas = (s) => new Set([...(s.registered || []), ...(s.skipped || [])])
@@ -93,96 +96,6 @@ function Toggle({ value, onChange }) {
     >
       <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
     </button>
-  )
-}
-
-function OccEditModal({ originalDate, override, isSkipped, defaultAmount, baixaNoMes = null, titulo = null, onSave, onClose }) {
-  const [date, setDate] = useState(override?.date || originalDate)
-  const [amount, setAmount] = useState(String(override?.amount ?? defaultAmount))
-  const [skip, setSkip] = useState(isSkipped || false)
-  // Marcar "Pular" num mês que já tem baixa gravada com outra data (src/lib/conflitoPeriodo.js)
-  // pede confirmação antes; Cancelar é o padrão.
-  const [confirmandoPulo, setConfirmandoPulo] = useState(false)
-  const alternarPulo = (marcar) => {
-    if (marcar && baixaNoMes && !isSkipped) { setConfirmandoPulo(true); return }
-    setSkip(marcar)
-  }
-  const fmtD = (d) => d.split('-').reverse().join('/')
-  const stopEnter = (e) => { if (e.key === 'Enter') e.preventDefault() }
-
-  return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
-      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-64 p-4">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-texto-1">{titulo || `Ocorrência de ${fmtD(originalDate)}`}</p>
-          <button type="button" onClick={onClose} className="text-texto-3 hover:text-texto-2 p-0.5 rounded transition-colors">
-            <X size={14} />
-          </button>
-        </div>
-
-        <label className="flex items-center gap-2.5 mb-3.5 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={skip}
-            onChange={e => alternarPulo(e.target.checked)}
-            className="w-4 h-4 rounded accent-primary cursor-pointer"
-          />
-          <span className="text-sm text-texto-2">Pular esta ocorrência</span>
-        </label>
-
-        {confirmandoPulo && (
-          <div role="alert" className="mb-3.5 rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2.5 text-xs space-y-2">
-            <p className="text-texto-1">⚠ {mensagemConflitoPulo(baixaNoMes)}</p>
-            <div className="flex gap-2">
-              <button type="button" className="btn-secondary flex-1 text-xs py-1.5" onClick={() => setConfirmandoPulo(false)}>Cancelar</button>
-              <button type="button" className="btn-danger flex-1 text-xs py-1.5" onClick={() => { setSkip(true); setConfirmandoPulo(false) }}>Pular mesmo assim</button>
-            </div>
-          </div>
-        )}
-
-        {!skip && (
-          <div className="space-y-2.5">
-            <div>
-              <label className="label">Nova data</label>
-              <DateInput
-                className="input"
-                value={date}
-                onChange={e => setDate(e.target.value)}
-                onKeyDown={stopEnter}
-                hoje
-              />
-            </div>
-            <div>
-              <label className="label">Valor (R$)</label>
-              <InputMoeda
-                min="0"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                onKeyDown={stopEnter}
-              />
-            </div>
-          </div>
-        )}
-
-        <div className="flex gap-2 mt-4">
-          <button type="button" className="btn-secondary flex-1 text-xs py-1.5" onClick={onClose}>
-            Cancelar
-          </button>
-          <button
-            type="button"
-            className="btn-primary flex-1 text-xs py-1.5"
-            onClick={() => onSave({
-              skip,
-              date: skip ? originalDate : date,
-              amount: skip ? defaultAmount : Number(amount),
-            })}
-          >
-            Confirmar
-          </button>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -513,13 +426,13 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   // Recorrência parcelada: a prévia mostra o total/N digitados, ainda sem gravar nada.
   const previewSchedule = (() => {
     const normal = normalizarUnica(previewBase)
-    if (!parcelavaAntes || !occAlvoParcela) return normal
+    // Sem mudança de total/N não há recálculo: ele apagaria os valores próprios das parcelas.
+    if (!parcelavaAntes || !occAlvoParcela || !edicaoDoParcelamento(serieBase, { total: Number(form.amount) || 0, n: nForm }).mudancas.length) return normal
     try {
       return planoParcelamento(normal, { dataOcorrencia: occAlvoParcela, total: Number(form.amount) || 0, n: nForm, escopo: ESCOPO_OCORRENCIA.PROXIMAS })
     } catch { return normal }
   })()
   const preview = form.startDate && form.frequency ? getNextOccurrences(previewSchedule, parcForm ? Math.max(36, nForm * 3) : 12) : []
-  const gruposPrevia = parcForm ? agruparPorOcorrencia(previewSchedule, preview) : []
   // "x/N" de cada card: com as puladas REAIS do formulário (pulada consome a posição).
   const scheduleParcela = { ...previewSchedule, installments: Number(form.installments) || 0, skipped: form.skipped }
 
@@ -687,14 +600,14 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       const numericos = mudancas.filter(m => m.campo === 'valorTotalOcorrencia' || m.campo === 'parcelasPorOcorrencia')
       const demais = mudancas.filter(m => m !== numericos[0] && m !== numericos[1])
       // Sem nenhuma baixa, mudar início ou frequência recomeça a série: nada ficou preso às datas antigas.
-      const recomeco = parcelavaAntes && !temConsumo(serieBase) && (data.startDate !== serieBase.startDate || data.frequency !== serieBase.frequency)
-      const escopoOcc = decisao?.escopo === ESCOPO.PARCELA && !recomeco ? ESCOPO_OCORRENCIA.SO_ESTA : ESCOPO_OCORRENCIA.PROXIMAS
-      let baseParc = base
-      if (recomeco) {
-        baseParc = aposMudarInicio({ ...base, amount: Number(form.amount), parcelasPorOcorrencia: nForm, nextOccurrence: data.startDate }, null)
-      } else if (parcelavaAntes && numericos.length) {
-        baseParc = planoParcelamento(base, { dataOcorrencia: occAlvoParcela, total: Number(form.amount), n: nForm, escopo: escopoOcc })
-      }
+      const aplicado = parcelavaAntes
+        ? aplicarEdicaoParcelamento(base, serieBase, {
+          total: Number(form.amount), n: nForm, escopo: decisao?.escopo, inicio: data.startDate, frequencia: data.frequency,
+          edicao: edicaoDoParcelamento(serieBase, { total: Number(form.amount), n: nForm }),
+        })
+        : { schedule: base, recomeco: false, escopo: ESCOPO_OCORRENCIA.PROXIMAS }
+      const { recomeco, escopo: escopoOcc } = aplicado
+      const baseParc = aplicado.schedule
       // "Só nesta ocorrência" com outros campos alterados: valem para as parcelas pendentes desta ocorrência.
       let planoSchedule = baseParc
       let afetadas
@@ -836,9 +749,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     }
     // Série comum sem baixas que passa a ser parcelada: nasce na próxima data e sem as exceções antigas.
     if (initial?.id && !parcelavaAntes && nForm > 1) {
-      const inicio = form.startDate === serieBase.startDate && ancoraSalva ? ancoraSalva : form.startDate
-      Object.assign(data, aposMudarInicio({ ...data, startDate: inicio, overrides: {} }, null))
-      data.nextOccurrence = inicio
+      Object.assign(data, comoNovaParcelada(data, serieBase, ancoraSalva))
     }
     // Criar vs editar se decide pelo `id`, NÃO pela presença de `initial`: o DuplicateButton
     // ("Duplicar → Criar Agendamento") passa um `initial` só com os campos pré-preenchidos do
@@ -858,21 +769,12 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       const ctx = contextoSerie()
       // Recorrência parcelada: "Valor" aqui é o total da ocorrência; total e N têm pergunta própria.
       if (parcelavaAntes) {
-        const mTotal = mudancas.find(m => m.campo === 'amount')
-        const nAntes = parcelaDaData(serieBase, ancoraSalva)?.total ?? (Number(serieBase.parcelasPorOcorrencia) || 1)
-        const numericos = [
-          ...(mTotal ? [{ ...mTotal, campo: 'valorTotalOcorrencia' }] : []),
-          ...(nAntes !== nForm ? [{ campo: 'parcelasPorOcorrencia', de: nAntes, para: nForm }] : []),
-        ]
-        mudancas = [...numericos, ...mudancas.filter(m => m.campo !== 'amount')]
-        if (numericos.length) {
-          if (!occAlvoParcela) { setErroParcelamento('Esta série não tem parcela pendente para recalcular.'); return }
-          const motivoErro = erroEdicaoOcorrencia(serieBase, occAlvoParcela, { total: Number(form.amount), n: nForm })
-          if (motivoErro) { setErroParcelamento(motivoErro); return }
-          if (!decisao && temOcorrenciaDepois(serieBase, occAlvoParcela)) {
-            setEscopoPendente({ parcelamento: true, mudancas, nProximas: ctx.nProximas, nPendentes: ctx.nPendentes, conflitos: [] })
-            return
-          }
+        const edicao = edicaoDoParcelamento(serieBase, { total: Number(form.amount), n: nForm })
+        mudancas = [...edicao.mudancas, ...mudancas.filter(m => m.campo !== 'amount')]
+        if (edicao.erro) { setErroParcelamento(edicao.erro); return }
+        if (!decisao && edicao.perguntar) {
+          setEscopoPendente({ parcelamento: true, mudancas, nProximas: ctx.nProximas, nPendentes: ctx.nPendentes, conflitos: [] })
+          return
         }
       }
       ctxRateio = ctx
@@ -1434,25 +1336,14 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Parcelamento: cada ocorrência dividida em N parcelas mensais (seguro anual em 12x). */}
         {parcelamentoDisponivel && (
-          <div data-guia="agendamento-form.parcelas-por-ocorrencia" className="sm:col-span-2">
-            <LabelTip tip={TIPS.parcelasPorOcorrencia}>Parcelamento</LabelTip>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-texto-2">
-              <span>{form.frequency === 'once' ? 'Dividir em' : 'Dividir cada ocorrência em'}</span>
-              <input
-                className="input text-center w-20"
-                type="number"
-                min="1"
-                max={maxParcelas(form.frequency)}
-                aria-label="Número de parcelas por ocorrência"
-                value={form.parcelasPorOcorrencia}
-                onChange={e => { setErroParcelamento(''); set('parcelasPorOcorrencia', e.target.value) }}
-                disabled={!!trava || parcelamentoBloqueado}
-              />
-              <span>parcelas mensais</span>
-            </div>
-            {parcelamentoBloqueado && <p className="text-[11px] text-texto-3 mt-1">Este agendamento já tem ocorrências baixadas e não pode virar parcelado. Crie um novo agendamento parcelado a partir da próxima ocorrência.</p>}
-            {(erroLimite || erroParcelamento) && <p className="text-xs text-perigo mt-1" role="alert">{erroLimite || erroParcelamento}</p>}
-          </div>
+          <CampoParcelamento
+            frequency={form.frequency}
+            value={form.parcelasPorOcorrencia}
+            onChange={v => { setErroParcelamento(''); set('parcelasPorOcorrencia', v) }}
+            disabled={!!trava}
+            bloqueado={parcelamentoBloqueado}
+            erro={erroLimite || erroParcelamento}
+          />
         )}
 
         {/* Automações */}
@@ -1570,37 +1461,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
               <span className="ml-1.5 text-texto-3 text-[10px] normal-case font-normal">— clique para editar</span>
             </label>
             {parcForm ? (
-              <div className="space-y-1.5">
-                {gruposPrevia.map((g, gi) => (
-                  <details key={g.ocorrencia} open={gi === 0} className="rounded-lg border border-borda-forte/60">
-                    <summary className="cursor-pointer select-none px-3 py-2 text-xs text-texto-1 flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium">{frequenciaExibida(previewSchedule) === 'once' ? 'Parcelas' : `Ocorrência ${g.ano}`}</span>
-                      <span className="text-texto-2">{fmt(g.total)} · {g.n}x{g.parcelas.length < g.n ? ` · ${g.parcelas.length} pendente${g.parcelas.length !== 1 ? 's' : ''}` : ''}</span>
-                    </summary>
-                    <ul className="divide-y divide-borda/40 border-t border-borda/40">
-                      {g.parcelas.map(p => {
-                        const pulada = form.skipped.includes(p.data)
-                        const ef = occEfetiva(previewSchedule, p.data)
-                        const editada = !pulada && (!!form.overrides[p.data]?.date || Math.abs(Number(ef.amount) - p.valor) > 0.005)
-                        const dataBR = (d) => d.split('-').reverse().join('/')
-                        const fatura = isCredit && form.transactionType === 'expense' && selectedAccount?.closingDay
-                          ? computeFaturaRef(new Date(ef.date + 'T12:00:00'), selectedAccount.closingDay) : null
-                        return (
-                          <li key={p.data}>
-                            <button type="button" onClick={() => setEditingOcc(p.data)} title="Clique para editar esta parcela"
-                              className="w-full flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5 text-xs text-left hover:bg-surface-hover/40 transition-colors">
-                              <span className="w-10 text-texto-3 tabular-nums">{p.numero}/{p.total}</span>
-                              <span className={`text-texto-2 tabular-nums ${pulada ? 'line-through opacity-50' : ''}`}>{dataBR(pulada ? p.data : ef.date)}</span>
-                              <span className="flex-1 text-texto-3">{fatura ? `fatura ${fatura}` : ''}{pulada ? ' · Pulada' : editada ? ' · Editada' : ''}</span>
-                              <span className="text-texto-1 font-medium tabular-nums">{fmt(Number(ef.amount) || 0)}</span>
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </details>
-                ))}
-              </div>
+              <PreviaParcelada schedule={previewSchedule} datas={preview} skipped={form.skipped} conta={selectedAccount} onEditar={setEditingOcc} />
             ) : (
             <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
               {preview.map((date, i) => {
@@ -1668,7 +1529,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       </form>
 
       {editingOcc && (
-        <OccEditModal
+        <OcorrenciaEditModal
           originalDate={editingOcc}
           override={form.overrides[editingOcc]}
           isSkipped={form.skipped.includes(editingOcc)}

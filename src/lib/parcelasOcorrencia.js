@@ -181,12 +181,17 @@ export function agruparPorOcorrencia(s, datas = []) {
   return [...grupos.values()]
 }
 
+// Primeira parcela pendente da série (a ocorrência dela é a que os formulários editam). null = acabou.
+export function proximaParcela(s) {
+  const feitas = consumidas(s)
+  return parcelasDaSerie(s, { limite: 1, aceitar: d => !feitas.has(d) })[0] || null
+}
+
 // Valor da PRÓXIMA parcela pendente (para comparar com um lançamento ou mostrar numa lista). Não
 // parcelado → o amount, como sempre. Sem pendentes → o amount.
 export function valorDeReferencia(s) {
   if (!ehParcelado(s)) return s?.amount
-  const feitas = new Set([...(s.registered || []), ...(s.skipped || [])])
-  const p = parcelasDaSerie(s, { limite: 1, aceitar: d => !feitas.has(d) })[0]
+  const p = proximaParcela(s)
   if (!p) return s.amount
   const ov = s.overrides?.[p.data]
   return ov?.amount != null ? Number(ov.amount) : p.valor
@@ -194,7 +199,18 @@ export function valorDeReferencia(s) {
 
 // ── Edição do total / do N ─────────────────────────────────────────────────────────────────────
 
-const consumidas = (s) => new Set([...(s.registered || []), ...(s.skipped || [])])
+// Efetivações de provisão: a parcela efetivada virou um agendamento à parte e fica em `efetivacoes`,
+// não em `registered`. Para o parcelamento, as duas contam como paga. Map(chave → valor real).
+const efetivadasDe = (s) => new Map((s?.efetivacoes || []).filter(e => e?.ocorrencia).map(e => [e.ocorrencia, Number(e.valor)]))
+const consumidas = (s) => new Set([...(s.registered || []), ...(s.skipped || []), ...efetivadasDe(s).keys()])
+// Valor pago de uma parcela (já paga): o efetivado, o realizado na baixa ou o previsto dela.
+const valorPago = (s, p) => {
+  const efetivado = efetivadasDe(s).get(p.data)
+  if (efetivado != null) return r2(efetivado)
+  const realizado = s.registeredMeta?.[p.data]?.valor_realizado
+  return realizado != null ? r2(realizado) : valorDaParcela(s, p)
+}
+const estaPaga = (s, data) => (s.registered || []).includes(data) || efetivadasDe(s).has(data)
 // Valor efetivo de uma parcela (exceção "só esta parcela" ou o valor base).
 const valorDaParcela = (s, p) => {
   const ov = s.overrides?.[p.data]
@@ -205,7 +221,6 @@ const valorDaParcela = (s, p) => {
 // pulada) e as chaves dela.
 export function situacaoDaOcorrencia(s, dataOcorrencia) {
   const { n } = dadosDaOcorrencia(s, dataOcorrencia)
-  const reg = new Set(s.registered || [])
   const pul = new Set(s.skipped || [])
   let pago = 0, nPagas = 0, maiorPaga = 0, maiorConsumida = 0
   const chaves = []
@@ -213,10 +228,8 @@ export function situacaoDaOcorrencia(s, dataOcorrencia) {
     const data = dataDaParcela(s, dataOcorrencia, k)
     if (!data) continue
     chaves.push(data)
-    if (reg.has(data)) {
-      const p = parcelaDaData(s, data)
-      const realizado = s.registeredMeta?.[data]?.valor_realizado
-      pago = r2(pago + (realizado != null ? Number(realizado) : valorDaParcela(s, p)))
+    if (estaPaga(s, data)) {
+      pago = r2(pago + valorPago(s, parcelaDaData(s, data)))
       nPagas++
       maiorPaga = k
       maiorConsumida = k
@@ -240,7 +253,7 @@ export function erroEdicaoOcorrencia(s, dataOcorrencia, { total, n }) {
     return `Já foram pagos ${pago.toFixed(2).replace('.', ',')} nesta ocorrência: o novo total não pode ser menor que isso.`
   }
   // Pendentes depois da mudança: as N menos as pagas e as puladas que continuam dentro das N.
-  const feitas = new Set([...(s.registered || []), ...(s.skipped || [])])
+  const feitas = consumidas(s)
   const consumidasDentro = chaves.filter((d, i) => i < n && feitas.has(d)).length
   if (nPagas > 0 && n === consumidasDentro && r2(total) !== pago) {
     return `Todas as ${n} parcelas já foram pagas ou puladas: não há parcela pendente para receber a diferença.`
@@ -251,7 +264,6 @@ export function erroEdicaoOcorrencia(s, dataOcorrencia, { total, n }) {
 // Valores das N parcelas com o novo total: as pagas ficam como foram, as puladas ficam zeradas e as
 // pendentes dividem o resto (diferença de centavos na 1ª pendente).
 function valoresRecalculados(s, dataOcorrencia, { total, n }) {
-  const reg = new Set(s.registered || [])
   const pul = new Set(s.skipped || [])
   const antes = dadosDaOcorrencia(s, dataOcorrencia)
   const valores = new Array(n).fill(0)
@@ -259,10 +271,8 @@ function valoresRecalculados(s, dataOcorrencia, { total, n }) {
   let pago = 0
   for (let k = 1; k <= n; k++) {
     const data = k <= antes.n ? dataDaParcela(s, dataOcorrencia, k) : null
-    if (data && reg.has(data)) {
-      const p = parcelaDaData(s, data)
-      const realizado = s.registeredMeta?.[data]?.valor_realizado
-      valores[k - 1] = realizado != null ? r2(realizado) : valorDaParcela(s, p)
+    if (data && estaPaga(s, data)) {
+      valores[k - 1] = valorPago(s, parcelaDaData(s, data))
       pago = r2(pago + valores[k - 1])
     } else if (data && pul.has(data)) {
       valores[k - 1] = 0
@@ -279,10 +289,9 @@ function valoresRecalculados(s, dataOcorrencia, { total, n }) {
 // pendentes (o recálculo manda neles). A data própria de uma parcela continua.
 function limparPendentesDaOcorrencia(s, chaves, chavesNovas) {
   const novas = new Set(chavesNovas)
-  const reg = new Set(s.registered || [])
   const overrides = { ...s.overrides }
   for (const d of chaves) {
-    if (reg.has(d) || !overrides[d]) continue
+    if (estaPaga(s, d) || !overrides[d]) continue
     if (!novas.has(d)) { delete overrides[d]; continue }
     const resto = { ...overrides[d] }
     delete resto.amount
@@ -368,13 +377,77 @@ export function temOcorrenciaDepois(s, dataOcorrencia) {
 // Algo já foi baixado ou pulado? Enquanto não, a série inteira pode mudar de data.
 export const temConsumo = (s) => (consumidas(s).size + (s?.efetivacoes?.length || 0)) > 0
 
-// Série parcelada que passou a nascer noutro início ou deixou de ter baixas: as exceções e pulos por
-// data ficam sem parcela correspondente, e next_occurrence precisa apontar a primeira pendente.
-export function aposMudarInicio(s, inicioAnterior) {
-  if (!s?.startDate || s.startDate === inicioAnterior) return s
+// Série que recomeça (outro início/frequência, sem nenhuma baixa): as exceções e pulos por data ficam
+// sem parcela correspondente.
+export function semExcecoesDeData(s) {
   const { _parcelamento: _x, ...resto } = s.overrides || {} // eslint-disable-line no-unused-vars
   const overrides = Object.fromEntries(Object.entries(resto).filter(([k]) => !/^\d{4}-\d{2}-\d{2}$/.test(k)))
   return { ...s, overrides, skipped: [] }
+}
+
+// Série comum sem baixas que passa a ser parcelada: nasce na próxima data e sem as exceções antigas.
+export function comoNovaParcelada(dados, serie, ancora) {
+  const inicio = dados.startDate === serie.startDate && ancora ? ancora : dados.startDate
+  return { ...semExcecoesDeData({ ...dados, overrides: {} }), startDate: inicio, nextOccurrence: inicio }
+}
+
+// O que uma edição de total/N significa para a série: o que mudou (para o histórico), a ocorrência
+// alvo, o motivo de recusa e se precisa perguntar "só nesta / nesta e nas próximas".
+export function edicaoDoParcelamento(serie, { total, n }) {
+  const prox = proximaParcela(serie)
+  const nAntes = prox?.total ?? (Number(serie.parcelasPorOcorrencia) || 1)
+  const totalAntes = prox?.valorTotal ?? r2(serie.amount)
+  const mudancas = [
+    ...(r2(total) !== totalAntes ? [{ campo: 'valorTotalOcorrencia', de: totalAntes, para: r2(total) }] : []),
+    ...(Number(n) !== nAntes ? [{ campo: 'parcelasPorOcorrencia', de: nAntes, para: Number(n) }] : []),
+  ]
+  const ocorrencia = prox?.ocorrencia || null
+  if (!mudancas.length) return { mudancas, ocorrencia, erro: null, perguntar: false }
+  if (!ocorrencia) return { mudancas, ocorrencia, erro: 'Esta série não tem parcela pendente para recalcular.', perguntar: false }
+  const erro = erroEdicaoOcorrencia(serie, ocorrencia, { total, n })
+  return { mudancas, ocorrencia, erro, perguntar: !erro && temOcorrenciaDepois(serie, ocorrencia) }
+}
+
+// Aplica a edição: `base` = a série com os campos novos, mas ainda com o total/N antigos.
+//   • sem nenhuma baixa e com outro início/frequência → recomeça a série;
+//   • senão, se total ou N mudaram → planoParcelamento no escopo escolhido.
+// Devolve { schedule, recomeco, escopo } com o escopo realmente usado.
+export function aplicarEdicaoParcelamento(base, serie, { total, n, escopo = null, inicio, frequencia, edicao }) {
+  const recomeco = !temConsumo(serie) && (inicio !== serie.startDate || frequencia !== serie.frequency)
+  if (recomeco) {
+    return {
+      schedule: semExcecoesDeData({ ...base, startDate: inicio, frequency: frequencia, amount: r2(total), parcelasPorOcorrencia: Number(n), nextOccurrence: inicio }),
+      recomeco, escopo: ESCOPO_OCORRENCIA.PROXIMAS,
+    }
+  }
+  const esc = escopo === ESCOPO_OCORRENCIA.SO_ESTA ? ESCOPO_OCORRENCIA.SO_ESTA : ESCOPO_OCORRENCIA.PROXIMAS
+  const schedule = edicao.mudancas.length
+    ? planoParcelamento(base, { dataOcorrencia: edicao.ocorrencia, total, n, escopo: esc })
+    : base
+  return { schedule, recomeco, escopo: esc }
+}
+
+// Soma real de uma ocorrência: pagas pelo valor pago, puladas zeradas e as demais pelo valor efetivo.
+export function somaDaOcorrencia(s, dataOcorrencia) {
+  const { n } = dadosDaOcorrencia(s, dataOcorrencia)
+  const pul = new Set(s.skipped || [])
+  let soma = 0
+  for (let k = 1; k <= n; k++) {
+    const data = dataDaParcela(s, dataOcorrencia, k)
+    if (!data) continue
+    const p = parcelaDaData(s, data)
+    if (estaPaga(s, data)) soma += Math.round(valorPago(s, p) * 100)
+    else if (!pul.has(data)) soma += Math.round(valorDaParcela(s, p) * 100)
+  }
+  return soma / 100
+}
+
+// Aviso da prévia quando a soma da ocorrência deixou de bater com o total. null = bate.
+export function avisoSomaOcorrencia(s, dataOcorrencia, fmtMoeda) {
+  const { total } = dadosDaOcorrencia(s, dataOcorrencia)
+  const soma = somaDaOcorrencia(s, dataOcorrencia)
+  if (Math.abs(soma - total) < 0.005) return null
+  return `A soma desta ocorrência (${fmtMoeda(soma)}) está diferente do total (${fmtMoeda(total)})`
 }
 
 export const MSG_DATA_BLOQUEADA = 'Esta série parcelada já tem parcela baixada: as baixas estão ligadas às datas atuais. Para mudar um vencimento, edite só a parcela na prévia abaixo.'

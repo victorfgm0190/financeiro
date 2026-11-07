@@ -199,7 +199,7 @@ export function computeFluxoCaixa({
             if (m1) {
               if (antes) agendamentosAntes = round2(agendamentosAntes + m1.entrada - m1.saida)
               else out.push({
-                date, description: `Resgate reserva — ${s.description || 'provisão'}`, type: 'transfer',
+                date, description: `Resgate reserva — ${s.description || 'provisão'}${rotuloDaParcela(s, origDate) ? ` (${rotuloDaParcela(s, origDate)})` : ''}`, type: 'transfer',
                 fromAccountId: reservaAccId, toAccountId: principalId, categoryId: null,
                 reservaFuncaoId: s.reservaFuncaoId || null,
                 entrada: m1.entrada, saida: m1.saida, status: 'Projetado', real: false,

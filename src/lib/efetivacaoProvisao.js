@@ -10,6 +10,7 @@
 // Efetivações antigas (feitas antes deste vínculo) não têm registro e NÃO são desfeitas pelo botão:
 // nada aqui tenta descobrir o vínculo por descrição, data ou valor.
 import { datasDaSerie, diaVencimentoDe, FREQ_MENSAIS, computeOccurrences } from './occurrences.js'
+import { ehParcelado } from './parcelasOcorrencia.js'
 
 // Campos da provisão que a efetivação altera (e o desfazer devolve).
 export const CAMPOS_ESTADO = ['amount', 'startDate', 'nextOccurrence', 'provisaoEfetivada', 'provisaoEfetivadaUntil', 'autoRegister']
@@ -57,6 +58,14 @@ function comDiaVencimento(s, dia) {
 // a coluna efetivacoes: efetiva do mesmo jeito, mas sem vínculo (não poderá ser desfeita).
 export function provisaoEfetivada(prov, { valor, dataReal, ocorrencia, aplicarProximas = false, registro = null }) {
   let novo
+  if (ehParcelado(prov)) {
+    // Recorrência parcelada: a série sai sempre da Data de Início, então nada re-ancora. A parcela
+    // efetivada sai das pendentes por `efetivacoes` (datasConsumidas); a próxima vem do motor.
+    novo = { ...prov, provisaoEfetivadaUntil: null }
+    if (registro) novo.efetivacoes = [...(prov.efetivacoes || []), registro]
+    novo.nextOccurrence = computeOccurrences(novo, 1)[0] || null
+    return novo
+  }
   if (ehUmaVez(prov)) {
     novo = { ...prov, amount: valor, startDate: dataReal, provisaoEfetivada: true, autoRegister: true }
   } else {
@@ -91,7 +100,8 @@ export function aplicarEfetivacao(schedules, provId, {
   if (!prov) return { schedules, provisao: null, registro: null }
   const umaVez = ehUmaVez(prov)
   const occ = dia10(umaVez ? prov.startDate : ocorrencia) || dia10(dataReal)
-  const aplicar = !umaVez && !!aplicarProximas && dia10(dataReal) !== occ
+  // Parcela: a data real vale só para ela; a série não muda de data depois de ter baixa.
+  const aplicar = !umaVez && !ehParcelado(prov) && !!aplicarProximas && dia10(dataReal) !== occ
   const registro = comVinculo ? {
     id, em, ocorrencia: occ, dataReal: dia10(dataReal), valor: Number(valor),
     aplicarProximas: aplicar,
@@ -165,9 +175,11 @@ export function desfazerEfetivacao(schedules, scheduleId) {
   const { provisao: prov, registro } = sit
   const ant = registro.anterior || {}
   const restaurado = { ...prov }
-  for (const c of CAMPOS_ESTADO) if (c in ant) restaurado[c] = ant[c]
-  const final = ehUmaVez(prov) ? restaurado : comDiaVencimento(restaurado, ant.diaVencimento ?? null)
+  // Recorrência parcelada: a efetivação não moveu nada, e o total pode ter sido editado depois.
+  if (!ehParcelado(prov)) for (const c of CAMPOS_ESTADO) if (c in ant) restaurado[c] = ant[c]
+  const final = ehUmaVez(prov) || ehParcelado(prov) ? restaurado : comDiaVencimento(restaurado, ant.diaVencimento ?? null)
   final.efetivacoes = (prov.efetivacoes || []).slice(0, -1)
+  if (ehParcelado(prov)) final.nextOccurrence = computeOccurrences(final, 1)[0] || null
   const removidos = [registro.despesaId, registro.resgateId].filter(Boolean)
   const fora = new Set(removidos)
   const out = schedules.filter(s => !fora.has(s.id)).map(s => (s.id === prov.id ? final : s))

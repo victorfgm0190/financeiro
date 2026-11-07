@@ -2,9 +2,11 @@
 // Futuro, do plano de venda do consórcio e do aviso de caixa da reserva.
 //   deposito: transferência entrando na conta de reserva, na parte da função (entrada prevista);
 //   resgate:  transferência saindo da conta de reserva, na parte da função;
-//   provisao: provisão de despesa ligada à função, a próxima ainda não efetivada (saída prevista).
+//   provisao: provisão de despesa ligada à função, a próxima ainda não efetivada (saída prevista). Na
+//             recorrência parcelada, todas as parcelas pendentes da janela: o resgate sai mês a mês.
 // Cada item: { tipo, date, amount, label, schedule, itemFluxo }. Em ordem de data.
 import { occEfetiva } from './fluxoCaixa.js'
+import { ehParcelado, rotuloDaParcela } from './parcelasOcorrencia.js'
 import { parteDaFuncao, parteDaFuncaoNaOcorrencia, itemSaidaFluxo } from './resgateComposicao.js'
 
 export function previsoesDasFuncoes(funcoes, { accounts = [], schedules = [], scheduleReservaFuncoes = [], getNextOccurrences }, { ini, fim }) {
@@ -21,6 +23,16 @@ export function previsoesDasFuncoes(funcoes, { accounts = [], schedules = [], sc
     const itens = []
     for (const p of provisoes) {
       if (p.reservaFuncaoId !== f.id) continue
+      if (ehParcelado(p)) {
+        for (const base of getNextOccurrences(p, 140)) {
+          const ef = occEfetiva(p, base)
+          const amount = Number(ef.amount) || 0
+          if (!amount || ef.date < ini || ef.date > fim) continue
+          const label = `${p.description || 'Resgate (provisão)'} (${rotuloDaParcela(p, base)})`
+          itens.push({ tipo: 'provisao', date: ef.date, amount, label, schedule: p, itemFluxo: { date: ef.date, label, amount } })
+        }
+        continue
+      }
       const occs = getNextOccurrences(p, 24)
       const until = p.provisaoEfetivadaUntil || null
       // `until` compara datas-base (chave); a janela e o valor usam a ocorrência EFETIVA.

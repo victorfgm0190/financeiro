@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   dividirTotal, textoDivisao, ehParcelado, ehUnicaParcelada, frequenciaExibida, normalizarUnica, maxParcelas, erroLimiteParcelas,
   parcelasDaSerie, parcelaDaData, dataDaParcela, agruparPorOcorrencia, planoParcelamento, erroEdicaoOcorrencia,
-  temOcorrenciaDepois, valorDeReferencia, ESCOPO_OCORRENCIA,
+  temOcorrenciaDepois, valorDeReferencia, ESCOPO_OCORRENCIA, somaDaOcorrencia, avisoSomaOcorrencia, situacaoDaOcorrencia, proximaParcela,
+  edicaoDoParcelamento,
 } from './parcelasOcorrencia'
 import { computeOccurrences, computePendingUpTo, registerAndAdvance } from './occurrences'
 import { occEfetiva } from './fluxoCaixa'
@@ -284,5 +285,51 @@ describe('data da série no Fluxo de Caixa', () => {
     const op = opcoesAplicarData(s, '2027-04-25', '2027-04-28', '2027-04-25')
     expect(op.serie.ok).toBe(false)
     expect(op.serie.motivo).toMatch('parcela baixada')
+  })
+})
+
+describe('soma da ocorrência', () => {
+  const f = (v) => `R$ ${v.toFixed(2)}`
+  const occ = '2027-03-25'
+  it('sem exceção bate com o total e não avisa', () => {
+    expect(somaDaOcorrencia(seguro(), occ)).toBe(2800)
+    expect(avisoSomaOcorrencia(seguro(), occ, f)).toBeNull()
+  })
+  it('valor próprio de uma parcela: avisa com a soma e o total', () => {
+    const s = seguro({ overrides: { '2027-05-25': { amount: 250 } } })
+    expect(somaDaOcorrencia(s, occ)).toBe(2816.67)
+    expect(avisoSomaOcorrencia(s, occ, f)).toBe('A soma desta ocorrência (R$ 2816.67) está diferente do total (R$ 2800.00)')
+    expect(avisoSomaOcorrencia(s, '2028-03-25', f)).toBeNull()
+  })
+  it('só a data mudou: continua batendo', () => {
+    expect(avisoSomaOcorrencia(seguro({ overrides: { '2027-05-25': { date: '2027-05-30' } } }), occ, f)).toBeNull()
+  })
+  it('pulada conta zero; paga conta o valor pago', () => {
+    expect(somaDaOcorrencia(seguro({ skipped: ['2027-05-25'] }), occ)).toBe(2566.67)
+    const paga = seguro({ registered: ['2027-03-25'], registeredMeta: { '2027-03-25': { valor_realizado: 240 } } })
+    expect(somaDaOcorrencia(paga, occ)).toBe(2806.63)
+  })
+})
+
+describe('provisão: parcela efetivada conta como paga', () => {
+  const ef = (ocorrencia, valor) => ({ ocorrencia, valor })
+  const s = seguro({ efetivacoes: [ef('2027-03-25', 240), ef('2027-04-25', 233.33)] })
+  it('sai das pendentes e entra no já pago, pelo valor real', () => {
+    expect(computeOccurrences(s, 1)).toEqual(['2027-05-25'])
+    expect(proximaParcela(s).numero).toBe(3)
+    expect(situacaoDaOcorrencia(s, '2027-03-25')).toMatchObject({ pago: 473.33, nPagas: 2, maiorPaga: 2 })
+    expect(somaDaOcorrencia(s, '2027-03-25')).toBe(2806.63)
+  })
+  it('novo total: as efetivadas ficam, as pendentes dividem o resto', () => {
+    const r = planoParcelamento(s, { dataOcorrencia: '2027-03-25', total: 3000, n: 12, escopo: ESCOPO_OCORRENCIA.SO_ESTA })
+    const v = parcelasDaSerie(r, { limite: 12 }).map(p => p.valor)
+    expect(v.slice(0, 2)).toEqual([240, 233.33])
+    expect(soma(v)).toBe(3000)
+  })
+  it('N abaixo das efetivadas é recusado', () => {
+    expect(edicaoDoParcelamento(s, { total: 2800, n: 1 }).erro).toMatch('não pode ser menor que 2')
+  })
+  it('sem mudança, nada a perguntar', () => {
+    expect(edicaoDoParcelamento(s, { total: 2800, n: 12 })).toMatchObject({ mudancas: [], perguntar: false, erro: null })
   })
 })

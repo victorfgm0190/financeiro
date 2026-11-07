@@ -30,7 +30,7 @@ import ComposicaoParcelaResumo from '../Contratos/ComposicaoParcelaResumo'
 import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
 import { rotuloParcela } from '../../lib/numeroParcela'
-import { ehParcelado, frequenciaExibida, valorDeReferencia } from '../../lib/parcelasOcorrencia'
+import { ehParcelado, frequenciaExibida, valorDeReferencia, valorBaseDaChave } from '../../lib/parcelasOcorrencia'
 import FilterBar from './FilterBar'
 import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { ehPagamentoDeCartao, contaEhCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
@@ -1645,7 +1645,8 @@ export function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }
   const occDate = isOnce ? null : getProximaProvisaoOccurrence(schedule)
   const ov = !isOnce && occDate ? schedule.overrides?.[occDate] : null
 
-  const [amount, setAmount] = useState(String(ov?.amount ?? schedule.amount ?? ''))
+  const parcelada = ehParcelado(schedule)
+  const [amount, setAmount] = useState(String(ov?.amount ?? (occDate ? valorBaseDaChave(schedule, occDate) : schedule.amount) ?? ''))
   const vencimento = ov?.date || (isOnce ? schedule.startDate : occDate) || null
   const [date, setDate] = useState(vencimento || format(new Date(), 'yyyy-MM-dd'))
   // "Não, só esta" é o padrão.
@@ -1657,7 +1658,8 @@ export function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }
   const contaReserva = func?.accountId ? accounts.find(a => a.id === func.accountId) : null
   const valido = Number(amount) > 0 && !!date
   // A pergunta só aparece em provisão recorrente com data real diferente da data da ocorrência.
-  const perguntar = !isOnce && !!occDate && !!date && date !== vencimento
+  // Recorrência parcelada: a data real vale só para esta parcela, sem pergunta.
+  const perguntar = !isOnce && !parcelada && !!occDate && !!date && date !== vencimento
   const opts = { ocorrencia: occDate, dataReal: date }
   const previaSoEsta = perguntar ? previaProximas(schedule, { ...opts, aplicarProximas: false }, 3) : []
   const previaTambem = perguntar ? previaProximas(schedule, { ...opts, aplicarProximas: true }, 3) : []
@@ -1685,7 +1687,7 @@ export function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }
             <p className="text-sm text-texto-1 font-medium">{schedule.description}</p>
             {!isOnce && occDate && (
               <p className="text-xs text-texto-2 mt-1">
-                Ocorrência de {fmtDate(vencimento || occDate)} · {FREQ_LABELS[frequenciaExibida(schedule)] || schedule.frequency}
+                {parcelada ? `Parcela ${rotuloParcela(schedule, occDate)} de` : 'Ocorrência de'} {fmtDate(vencimento || occDate)} · {FREQ_LABELS[frequenciaExibida(schedule)] || schedule.frequency}
               </p>
             )}
           </div>
