@@ -1,6 +1,5 @@
 import { AvisoOperacao } from './components/shared/ContaCentralAvisos'
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { differenceInDays, parseISO } from 'date-fns'
 import { alertasVencimentoCartao } from './lib/dashboardHoje'
 import { useHoje } from './hooks/useHoje'
 import { AppProvider, useApp } from './context/AppContext'
@@ -28,7 +27,7 @@ import SchedulePanel from './components/Schedule/SchedulePanel'
 import ImportPanel from './components/Import/ImportPanel'
 import ImportarLancamentosPanel from './components/ImportarLancamentos/ImportarLancamentosPanel'
 import CashFlowPanel from './components/CashFlow/CashFlowPanel'
-import { proximaEfetiva } from './lib/fluxoCaixa'
+import { lembretesAgendamentos } from './lib/lembretesAgendamentos'
 import ReservasPanel from './components/Reservas/ReservasPanel'
 import EnvelopesPanel from './components/Envelopes/EnvelopesPanel'
 import BudgetPanel from './components/Budget/BudgetPanel'
@@ -171,18 +170,9 @@ function AppContent() {
   // `hoje` vira sozinho (useHoje): o contador acompanha a virada do dia com o app aberto.
   const hoje = useHoje()
   const alertCount = useMemo(() => {
-    const today = new Date()
-    // Cartões: mesma regra da página de Alertas, do Dashboard e de Contas (lib/dashboardHoje).
+    // Cartões e lembretes: as mesmas regras da página de Alertas (dias de calendário).
     const creditCount = alertasVencimentoCartao(accounts, hoje).length
-    const schedCount = schedules.filter(s => {
-      const remindDays = s.remindDaysBefore ?? 3
-      if (remindDays <= 0) return false
-      // Data EFETIVA da próxima ocorrência (override): o lembrete conta até o dia em que ela cai.
-      const next = proximaEfetiva(s, getNextOccurrences)
-      if (!next) return false
-      const days = differenceInDays(parseISO(next.date), today)
-      return days >= 0 && days <= remindDays
-    }).length
+    const schedCount = lembretesAgendamentos(schedules, getNextOccurrences, hoje).length
     return creditCount + schedCount
   }, [accounts, schedules, getNextOccurrences, hoje])
 

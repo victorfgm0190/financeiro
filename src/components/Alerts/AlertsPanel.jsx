@@ -3,10 +3,10 @@ import { ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMo
 import { Bell, CreditCard, Calendar, AlertTriangle, CheckCircle, Zap, ShieldCheck } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
-import { differenceInDays, format, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { alertasVencimentoCartao, vencimentoDoCartao } from '../../lib/dashboardHoje'
 import { useHoje } from '../../hooks/useHoje'
-import { proximaEfetiva } from '../../lib/fluxoCaixa'
+import { lembretesAgendamentos } from '../../lib/lembretesAgendamentos'
 import IntegridadePanel from './IntegridadePanel'
 
 // Vencimento do cartão: mesma função do Dashboard e do selo de Contas (lib/dashboardHoje) — dias de
@@ -23,29 +23,18 @@ function getDueAlerts(accounts, hoje) {
   }))
 }
 
-function getScheduleAlerts(schedules, getNextOccurrences) {
-  const today = new Date()
-  const alerts = []
-  for (const schedule of schedules) {
-    const remindDays = schedule.remindDaysBefore ?? 3
-    if (remindDays <= 0) continue
-    // Data e valor EFETIVOS da próxima ocorrência (override); a data-base fica só no id.
-    const next = proximaEfetiva(schedule, getNextOccurrences)
-    if (!next) continue
-    const dueDate = parseISO(next.date)
-    const daysUntilDue = differenceInDays(dueDate, today)
-    if (daysUntilDue < 0 || daysUntilDue > remindDays) continue
-    alerts.push({
-      id: `sched_${schedule.id}_${next.base}`,
-      kind: 'schedule',
-      type: daysUntilDue === 0 ? 'due_today' : 'upcoming',
-      schedule,
-      dueDate,
-      daysUntilDue,
-      amount: next.amount,
-    })
-  }
-  return alerts
+function getScheduleAlerts(schedules, getNextOccurrences, hoje) {
+  // Data e valor EFETIVOS da próxima ocorrência (override); a data-base fica só no id. Dias de
+  // calendário (lib/lembretesAgendamentos, a mesma do contador do menu).
+  return lembretesAgendamentos(schedules, getNextOccurrences, hoje).map(({ schedule, next, dias }) => ({
+    id: `sched_${schedule.id}_${next.base}`,
+    kind: 'schedule',
+    type: dias === 0 ? 'due_today' : 'upcoming',
+    schedule,
+    dueDate: parseISO(next.date),
+    daysUntilDue: dias,
+    amount: next.amount,
+  }))
 }
 
 // Ocorrências que o registro automático deixou pendentes por achar um lançamento parecido
@@ -96,7 +85,7 @@ function VencimentosPanel({ setActivePage }) {
 
   const hoje = useHoje()
   const creditAlerts = getDueAlerts(accounts, hoje).filter(a => !dismissed.includes(a.id))
-  const scheduleAlerts = getScheduleAlerts(schedules, getNextOccurrences).filter(a => !dismissed.includes(a.id))
+  const scheduleAlerts = getScheduleAlerts(schedules, getNextOccurrences, hoje).filter(a => !dismissed.includes(a.id))
   const alerts = [...scheduleAlerts, ...creditAlerts]
 
   const requestNotifications = async () => {

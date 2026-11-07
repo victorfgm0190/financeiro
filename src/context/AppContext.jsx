@@ -5608,7 +5608,9 @@ export function AppProvider({ children }) {
         // 2. Create new schedule for new group
         if (newIsNumbered) {
           if (!newGrupo?.defaultAccountId) continue
-          const dueDateStr = `${yyyy}-${mm}-${String(dueDay).padStart(2, '0')}`
+          // faturaToDate (a mesma de reconcileFaturaState): dia inexistente no mês → último dia. A
+          // concatenação direta gravava '2027-02-31', que a reconciliação não reconhecia.
+          const dueDateStr = faturaToDate(`${yyyy}-${mm}`, dueDay)
           const gerKeyI = `ger_num_${newGrupoId}_${accountId}_${dueDateStr}`
           const existingIdx = schedules.findIndex(s => s.overrides?._gerencialKey === gerKeyI)
           if (existingIdx >= 0) {
@@ -5894,7 +5896,8 @@ export function AppProvider({ children }) {
           }
         } else if (typeof grupo.number === 'number') {
           const [fmm, fyyyy] = faturaRef.split('/')
-          const dueDate = `${fyyyy}-${fmm}-${String(dueDay).padStart(2, '0')}`
+          // faturaToDate: mesma data da chave gravada (ajustarParcelasGrupoGerencial) e da reconciliação.
+          const dueDate = faturaToDate(`${fyyyy}-${fmm}`, dueDay)
           const gerKey = `ger_num_${parcela.grupoGerencial}_${parcela.accountId}_${dueDate}`
           applyToSchedule(schedules.find(s => s.overrides?._gerencialKey === gerKey))
         }

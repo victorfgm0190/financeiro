@@ -13,7 +13,7 @@ const mesSeguinte = (yyyymm) => {
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 }
 // Dias de calendário entre duas datas YYYY-MM-DD (data contra data, sem hora nem horário de verão).
-const diasEntre = (de, ate) => {
+export const diasEntre = (de, ate) => {
   const utc = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d) }
   return Math.round((utc(ate) - utc(de)) / 86400000)
 }

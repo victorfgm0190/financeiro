@@ -3,6 +3,7 @@
 // ou depois da janela [cicloStart, cicloEnd] de financialMonthMode/financialMonthStartDay.
 // Fatura do ciclo atual ganha a etapa A pelo motor; fatura FUTURA fica para o "Executar
 // Gerenciais" (ato explícito do usuário); passada não recebe nada retroativo.
+import { faturaToDate } from './parcelas.js'
 
 function janelaDoCiclo(financialMonthStartDay, financialMonthMode, ref = new Date()) {
   const startDay = financialMonthStartDay || 1
@@ -19,8 +20,9 @@ function janelaDoCiclo(financialMonthStartDay, financialMonthMode, ref = new Dat
 export function posicaoDaFatura(faturaMonthYear, dueDay, financialMonthStartDay, financialMonthMode, ref = new Date()) {
   if (!faturaMonthYear) return null
   const { cicloStart, cicloEnd } = janelaDoCiclo(financialMonthStartDay, financialMonthMode, ref)
-  const [fy, fm] = faturaMonthYear.split('-')
-  const venc = new Date(`${fy}-${fm}-${String(dueDay || 10).padStart(2, '0')}T00:00:00`)
+  // faturaToDate (a mesma do motor e das telas): dia inexistente no mês → último dia. Antes,
+  // '2027-02-31T00:00:00' virava 03/03 e a fatura de fevereiro caía no ciclo de março.
+  const venc = new Date(`${faturaToDate(faturaMonthYear, dueDay || 10)}T00:00:00`)
   return venc < cicloStart ? 'passada' : venc > cicloEnd ? 'futura' : 'atual'
 }
 
