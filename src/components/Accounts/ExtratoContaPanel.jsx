@@ -1012,7 +1012,6 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     return { entrada: Math.round(entrada * 100) / 100, saida: Math.round(saida * 100) / 100 }
   }, [rowsWithBalance, account.id])
 
-  const finalBalance = rowsWithBalance[rowsWithBalance.length - 1]?.runningBalance ?? startBalance
 
   const colGroup = (
     <colgroup>

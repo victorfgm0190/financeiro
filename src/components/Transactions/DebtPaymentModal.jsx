@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { CheckCircle, AlertCircle, TrendingDown, ArrowRight } from 'lucide-react'
+import { CheckCircle, AlertCircle, TrendingDown } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import InputMoeda from '../shared/InputMoeda'

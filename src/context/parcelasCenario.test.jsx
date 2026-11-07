@@ -99,7 +99,6 @@ describe('cenário do seguro no modal real e no motor real', () => {
 
     // Motor real: um resgate por fatura, no mês da fatura (fechamento 14: 25/03 cai em abr).
     await waitFor(() => expect(app.schedules.filter(s => s.tipo === 'resgate_reserva').length).toBeGreaterThanOrEqual(24), { timeout: 15000 })
-    const resgates = app.schedules.filter(s => s.tipo === 'resgate_reserva').sort((a, b) => a.faturaMesAno.localeCompare(b.faturaMesAno))
 
     // Fluxo Futuro de Reservas: mesma função que a tela usa (previsoesDasFuncoes), sem o corte da janela.
     const prev = previsoesDasFuncoes(app.reserveFunctions.filter(f => f.id === 'fn_seg'), {

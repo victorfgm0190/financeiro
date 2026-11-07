@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line
+  PieChart, Pie, Cell, Legend
 } from 'recharts'
-import { subMonths, format, startOfMonth, endOfMonth, parseISO } from 'date-fns'
+import { subMonths, format, startOfMonth, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileSpreadsheet, Users, Wallet, Landmark } from 'lucide-react'
 import { useApp } from '../../context/AppContext'

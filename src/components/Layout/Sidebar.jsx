@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CreditCard, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
-  Wallet, Loader, Layers, Package, Cloud, AlertTriangle, User, Building2, Gem, Briefcase, FileSpreadsheet, FileSignature, LifeBuoy,
+  Wallet, Loader, Layers, Package, Cloud, AlertTriangle, Gem, Briefcase, FileSpreadsheet, FileSignature, LifeBuoy,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from './RodapeIdentidade'

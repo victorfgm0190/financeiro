@@ -603,7 +603,6 @@ export default function SettingsPanel() {
     setGroupForm({ name: '', alias: '', defaultAccountId: '' })
   }
 
-  const expenseCategories = categories.filter(c => c.type === 'expense' || c.type === 'both')
   const nonCreditAccounts = accounts.filter(a => a.type !== 'credit')
 
   // Compute next group number for display in "new group" button

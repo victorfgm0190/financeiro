@@ -6,7 +6,7 @@ import AvisoPreLancamentos from '../Assistente/AvisoPreLancamentos'
 import { useMemo, useState } from 'react'
 import {
   TrendingUp, TrendingDown, Wallet, PiggyBank,
-  ArrowDownCircle, ArrowUpCircle, CreditCard, AlertTriangle, Calendar, ChevronRight, X,
+  ArrowDownCircle, ArrowUpCircle, CreditCard, AlertTriangle, Calendar, ChevronRight,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO } from 'date-fns'
@@ -180,7 +180,6 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
 
   // Upcoming & overdue schedules (next 7 days + overdue)
   const upcomingSchedules = useMemo(() => {
-    const today = hojeStr()
     const in7 = hojeStr(new Date(Date.now() + 7 * 86400000))
     const items = []
     schedules.forEach(s => {

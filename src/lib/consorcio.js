@@ -197,7 +197,8 @@ export function planoNovaParcela(schedules, { valor, data }, getOcorrencias) {
       if (occ >= data) {
         // Valor próprio da ocorrência daria prioridade ao antigo: a nova parcela substitui.
         if (overrides[occ]?.amount != null) {
-          const { amount: _amount, ...resto } = overrides[occ]
+          const resto = { ...overrides[occ] }
+          delete resto.amount
           if (Object.keys(resto).length) overrides[occ] = resto
           else delete overrides[occ]
         }

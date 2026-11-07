@@ -338,8 +338,8 @@ export async function loadFromSupabase(defaultData) {
   // Schema existe — carrega tudo em paralelo
   try {
     const [
-      { data: accs, error: e1 },
-      { data: txs, error: e2 },
+      { data: accs },
+      { data: txs },
       { data: scheds },
       { data: cats },
       { data: buds },

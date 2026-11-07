@@ -963,7 +963,7 @@ function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
 
 function ScheduleRow({
   schedule, nextDate, futureItems = [], isSerie = false, cols = 8, categories, accounts, gerencialGroups,
-  addTransaction, markScheduleRegistered, registerScheduleOccurrence, skipScheduleOccurrence,
+  addTransaction, markScheduleRegistered, skipScheduleOccurrence,
   deleteSchedule, getNextOccurrences, onToast,
   onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
   selectionMode, isSelected, onToggleSelect,

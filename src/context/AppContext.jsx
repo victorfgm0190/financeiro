@@ -1,9 +1,9 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { registrarContas } from '../lib/rotuloMovimento'
-import { addMonths, addWeeks, addDays, addYears, format } from 'date-fns'
+import { format } from 'date-fns'
 import {
   loadFromDb, seedDefaults, pingDb, fetchUltimaAlteracao,
-  accountToRow, txToRow, scheduleToRow,
+  txToRow, scheduleToRow,
   saveRateios, deleteRateios,
   bulkUpdateTransactionsApi,
   fetchReservePeriods, createReservePeriod, deleteReservePeriodApi,
@@ -38,7 +38,7 @@ import { mudancasEntre, mesclarNaFila, removerEnviadas, aplicarFilaSobreDados, e
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
-import { computeOccurrences, registerAndAdvance } from '../lib/occurrences'
+import { computeOccurrences } from '../lib/occurrences'
 import { ehParcelado } from '../lib/parcelasOcorrencia'
 import { aplicarRenomeacao, nomeFavorecido } from '../lib/favorecidos'
 import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada, lancamentosVinculados, ocorrenciaDaCobranca, baixarPeloValor, reabrirBaixasDoLancamento } from '../lib/scheduleBaixa'
@@ -1160,7 +1160,7 @@ export function AppProvider({ children }) {
       // Migração: funções de reserva do localStorage → Neon.
       // O localStorage só é limpo quando o banco já tem as funções (evita perda em reload
       // antes do sync concluir).
-      let legado = []
+      let legado
       try { legado = JSON.parse(localStorage.getItem('finup_reserve_funcs') || '[]') } catch { legado = [] }
       if (merged.reserveFunctions.length === 0 && Array.isArray(legado) && legado.length > 0) {
         merged.reserveFunctions = legado.map((f, i) => ({
@@ -1206,7 +1206,7 @@ export function AppProvider({ children }) {
       setErroEnvio(null)
       mudarDbStatus('connected')
       if (noAmbientePrincipal()) {
-        try { await seedDefaults(defaultData) } catch {}
+        try { await seedDefaults(defaultData) } catch { /* falha ao semear os padrões não interrompe a conexão (comportamento de antes) */ }
         enfileirar(mudancasEntre(EMPTY_PREV, dataRef.current))
       }
       fetchTiposDocumento().then(l => setTiposDocumento(ordenarTipos(l))).catch(() => {})
@@ -1355,7 +1355,7 @@ export function AppProvider({ children }) {
     const aoCair = () => { if (dbStatusRef.current === 'connected' || dbStatusRef.current === 'servidor') mudarDbStatus('local') }
     window.addEventListener('offline', aoCair)
     return () => window.removeEventListener('offline', aoCair)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   // "Enviar agora" (barra lateral / painel): reconecta se preciso, envia a fila e devolve o erro
   // REAL quando não deu: { ok: true } | { ok: false, erro }.

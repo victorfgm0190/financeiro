@@ -87,7 +87,8 @@ describe('agendamentos do consórcio', () => {
     const [foto] = fotoDosAgendamentos([s])
     const [p] = planoEncerrar([s])
     const depois = { ...s, ...p.mudancas }
-    const { id: _id, ...campos } = foto
+    const campos = { ...foto }
+    delete campos.id
     expect(computeOccurrences({ ...depois, ...campos }, 2)).toEqual(['2026-09-05', '2026-10-05'])
   })
   it('só as transferências para o bem', () => {

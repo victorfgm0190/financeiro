@@ -95,7 +95,7 @@ describe('Importar Fatura × lançamentos que já existem', () => {
     expect(r1[0]).toMatchObject({ _parecido: true, selected: false })
     expect(r1[0]._jaLancadoOpcoes.map(t => t.id)).toEqual(['farm'])
     expect(resumoRevisao(r1).parecidos).toBe(1)
-    const vinc = revisar([{ ...r1[0], _jaLancadoEscolha: 'farm' }].map(({ _parecido, _jaLancadoOpcoes, ...r }) => r), [FARMACIA])
+    const vinc = revisar([{ ...r1[0], _jaLancadoEscolha: 'farm' }].map(l => { const r = { ...l }; delete r._parecido; delete r._jaLancadoOpcoes; return r }), [FARMACIA])
     expect(vinc[0]).toMatchObject({ _isDuplicate: true, _dbTx: FARMACIA })
     const novo = revisar([linha({ _id: 'p', description: 'FARMACIA PAGUE MENOS', amount: 140, date: '2026-10-21', _jaLancadoEscolha: 'novo' })], [FARMACIA])
     expect(linhasAImportar(novo).map(r => r._id)).toEqual(['p'])

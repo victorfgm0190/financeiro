@@ -77,7 +77,7 @@ describe('ia_uso: marca de imagem (a imagem nunca é gravada)', () => {
     expect(chamadas[0].params).toEqual(['vm', 'registrar_lancamento', 100, 20, true, null, null, null, null, 0, 0])
     expect(JSON.stringify(chamadas)).not.toMatch(/base64|data:image/)
     const semColuna = []
-    const q2 = async (sql, params) => {
+    const q2 = async (sql) => {
       semColuna.push(sql)
       if (/com_imagem/.test(sql)) { const e = new Error('coluna'); e.code = '42703'; throw e }
     }

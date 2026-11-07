@@ -300,7 +300,7 @@ async function exportExcel(report, showTx, from, to, filtros = []) {
 
 // ─── Multi-select panel ──────────────────────────────────────────────────────
 
-function MultiSelectPanel({ label, items, selected, onChange }) {
+function MultiSelectPanel({ items, selected, onChange }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const searchRef = useRef(null)

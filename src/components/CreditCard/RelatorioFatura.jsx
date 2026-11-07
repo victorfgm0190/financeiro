@@ -77,17 +77,10 @@ function getBillPeriod(dateStr, closingDay) {
 }
 
 export default function RelatorioFatura({ initialCardId }) {
-  const { accounts, transactions, categories, gerencialGroups, reserveFunctions, settings, rateiosByLancamento } = useApp()
+  const { accounts, transactions, categories, gerencialGroups, settings, rateiosByLancamento } = useApp()
   // Controle gerencial desligado: sem totais por grupo nem coluna Ger. (o grupo gravado fica no banco).
   const gerencialLigado = controleGerencialAtivo(settings)
   useScrollScope('credit:relatorio')
-
-  // Lookup id → nome da função de reserva (reserve_functions já está no contexto).
-  const reserveFuncName = useMemo(() => {
-    const idx = {}
-    for (const f of reserveFunctions || []) idx[f.id] = f.name
-    return idx
-  }, [reserveFunctions])
 
   const creditCards = accounts.filter(a => a.type === 'credit')
   const [selectedCardId, setSelectedCardId] = useState(initialCardId || creditCards[0]?.id || '')

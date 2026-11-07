@@ -8,7 +8,7 @@ import {
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
 import { faturaDoCartao } from '../../lib/fatura'
-import { fmt, fmtSinal, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, computeReconciledTotals } from '../shared/utils'
+import { fmt, fmtSinal, fmtDate, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, computeReconciledTotals } from '../shared/utils'
 import { ORIGIN } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
@@ -74,7 +74,7 @@ function AccountPickerButton({ a, onSelect }) {
   )
 }
 
-function AccountPicker({ accounts, accountGroups, onSelect }) {
+function AccountPicker({ accounts, onSelect }) {
   const [showAll, setShowAll] = useState(false)
   const top = accounts.filter(a => accountPriority(a) === 0)
   const mid = accounts.filter(a => accountPriority(a) === 1)
