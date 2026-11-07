@@ -289,7 +289,8 @@ export function competenciasDoRepasse(contrato, { hoje, indices, confirmados = {
   const cobradas = lista.filter(v => !v.semCobranca)
   const total = contrato.data_fim ? cobradas.length : null
   const ultimoCiclo = lista.length ? cicloDaCompetencia(contrato, lista.at(-1).competencia) : 0
-  const bases = basesPorCiclo(contrato, ultimoCiclo, { indices, confirmados })
+  // Reajuste confirmado no modo repasse fica no contrato (bases_confirmadas): vale do ciclo em diante.
+  const bases = basesPorCiclo(contrato, ultimoCiclo, { indices, confirmados: { ...confirmados, ...basesConfirmadasDe(contrato) } })
   const ctx = { bases, bonifValor: r2(contrato.bonificacao_valor), bonifMeses: Number(contrato.bonificacao_meses) || 0, rot: rotulosContrato(contrato) }
   const projecao = refProjecao(contrato, indices)
   const linhas = new Map((contrato.competencias || []).map(c => [c.competencia, c]))
@@ -314,6 +315,24 @@ export function competenciasDoRepasse(contrato, { hoje, indices, confirmados = {
 }
 
 export { repassesRegistrados }
+
+// { ciclo: aluguel } confirmados no modo repasse (contratos.bases_confirmadas, chaves em texto).
+export function basesConfirmadasDe(contrato) {
+  const out = {}
+  for (const [k, v] of Object.entries(contrato?.bases_confirmadas || {})) if (Number(v) > 0) out[Number(k)] = r2(v)
+  return out
+}
+
+// Reajuste a confirmar no modo repasse: o 1º ciclo projetado (competência aberta, dentro do saldo).
+// → { ciclo, competencia, base (projetada), baseAnterior } ou null.
+export function reajustePendenteRepasse(contrato, { hoje, indices } = {}) {
+  if (!ehModoRepasse(contrato)) return null
+  const l = competenciasDoRepasse(contrato, { hoje, indices }).find(x => x.valorStatus === 'projetado' && x.linha?.status !== 'fechada')
+  if (!l) return null
+  const ciclo = cicloDaCompetencia(contrato, l.competencia)
+  const bases = basesPorCiclo(contrato, ciclo, { indices, confirmados: basesConfirmadasDe(contrato) })
+  return { ciclo, competencia: l.competencia, base: bases[ciclo].base, baseAnterior: bases[ciclo - 1]?.base ?? null }
+}
 
 // Parcela do plano → agendamento do app (camelCase, como em src/lib/db.js rowToSchedule).
 export function agendamentoDaParcela(contrato, p) {

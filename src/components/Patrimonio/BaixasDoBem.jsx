@@ -46,7 +46,8 @@ export default function BaixasDoBem({ baixas = [], onMudou }) {
                 {[fmtDate(b.data), b.cota_numero && `Cota ${b.cota_numero}`, b.favorecido, b.descricao, b.lancamento_id && 'com receita no Demonstrativo'].filter(Boolean).join(' · ')}
               </p>
             </div>
-            {podeEditar && (
+            {podeEditar && b.tipo === 'benfeitoria' && <span className="text-[11px] text-texto-3 shrink-0">Altere na composição do contrato</span>}
+            {podeEditar && b.tipo !== 'benfeitoria' && (
               <button type="button" className="btn-secondary text-xs py-1 px-2 flex items-center gap-1 shrink-0" onClick={() => setEstornando(b)}>
                 <RotateCcw size={12} /> Estornar
               </button>

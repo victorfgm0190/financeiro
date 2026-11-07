@@ -15,9 +15,10 @@ const CONTRATO = {
   ] }],
 }
 const salvarCompetenciaRepasse = vi.fn(async () => ({}))
+const registerScheduleOccurrence = vi.fn()
 const app = {
   categories: [{ id: 'cat-adm', name: 'Taxas', type: 'expense' }, { id: 'cat-alug', name: 'Aluguel', type: 'income' }],
-  indicesContratos: {}, schedules: [], transactions: [], accounts: [], salvarCompetenciaRepasse, pode: () => true,
+  indicesContratos: {}, schedules: [], transactions: [], accounts: [], salvarCompetenciaRepasse, pode: () => true, registerScheduleOccurrence,
   activeProfileId: 'pf', categoryGroupOrder: null,
 }
 vi.mock('../../context/AppContext', () => ({ useApp: () => app }))
@@ -26,9 +27,9 @@ const { default: ComposicaoRepasseModal } = await import('./ComposicaoRepasseMod
 const { default: TabelaRepasse } = await import('./TabelaRepasse.jsx')
 
 // Valor em destaque ao lado do rótulo do resumo ("Resultado do mês", "Repasse"…).
-const valorDe = (rotulo) => screen.getAllByText(rotulo, { exact: false }).find(n => n.tagName === 'P' && n.textContent.startsWith(rotulo)).querySelector('strong').textContent.replace(/ /g, ' ')
+const valorDe = (rotulo) => screen.getAllByText(rotulo, { exact: false }).find(n => n.tagName === 'P' && n.textContent.startsWith(rotulo)).querySelector('strong').textContent.replace(/\u00a0/g, ' ')
 
-afterEach(() => { cleanup(); salvarCompetenciaRepasse.mockClear() })
+afterEach(() => { cleanup(); salvarCompetenciaRepasse.mockClear(); registerScheduleOccurrence.mockClear(); app.schedules = [] })
 
 describe('composição do repasse', () => {
   it('tabela por competência: saldos negativos sem repasse, 1º repasse em 06', () => {
@@ -69,5 +70,34 @@ describe('composição do repasse', () => {
     expect(screen.queryByText(/calculado R\$ 58,67/)).toBeNull()
     // 586,67 − 58,67 − 470 − 200 = −142,00
     expect(valorDe('Resultado do mês')).toBe('-R$ 142,00')
+  })
+})
+
+describe('Etapa 4 — registrar pelo contrato', () => {
+  const PARCELA = {
+    id: 'ctr_c9_aluguel_202603', contratoId: 'c9', contratoPapel: 'aluguel', startDate: '2026-04-10', amount: 1020,
+    registered: [], registeredMeta: {}, composicao: { tipo: 'repasse', competencia: '2026-03' },
+  }
+  it('mesmo efeito do Agendamento: registerScheduleOccurrence com data e valor que caiu na conta', () => {
+    app.schedules = [PARCELA]
+    render(<ComposicaoRepasseModal contrato={CONTRATO} competencia="2026-03" onClose={() => {}} />)
+    fireEvent.change(screen.getByLabelText('Valor recebido'), { target: { value: '1.009,35' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar recebimento' }))
+    expect(registerScheduleOccurrence).toHaveBeenCalledWith('ctr_c9_aluguel_202603', '2026-04-10', '2026-04-10', 1009.35)
+  })
+
+  it('com a composição alterada e não gravada, pede para gravar antes', () => {
+    app.schedules = [PARCELA]
+    render(<ComposicaoRepasseModal contrato={CONTRATO} competencia="2026-03" onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: /Despesa do proprietário/ }))
+    expect(screen.getByRole('button', { name: 'Registrar recebimento' }).disabled).toBe(true)
+    expect(screen.getByText('Grave a composição antes de registrar o recebimento.')).toBeTruthy()
+  })
+
+  it('benfeitoria marcada sem bem ligado: avisa', () => {
+    render(<ComposicaoRepasseModal contrato={CONTRATO} competencia="2026-03" onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: /Benfeitoria/ }))
+    fireEvent.click(screen.getByLabelText('Somar ao custo do bem'))
+    expect(screen.getByText('Ligue um bem ao contrato para somar ao custo')).toBeTruthy()
   })
 })

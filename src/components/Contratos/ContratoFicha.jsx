@@ -17,6 +17,8 @@ import { diferencaDoPagamento, esperadoDoPagamento } from '../../lib/contratos/e
 import { rotuloPapel, rotulosContrato, rotuloModalidade, rotuloTipo, ehAluguel } from '../../lib/contratos/rotulos'
 import { ehModoRepasse, mesesDepoisDoRepasse } from '../../lib/contratos/repasse'
 import TabelaRepasse from './TabelaRepasse'
+import { ConfirmarReajusteRepasseModal } from './ConfirmarReajusteModal'
+import { reajustePendenteRepasse } from '../../lib/contratos/parcelas'
 import { BASES_TAXA_ADM } from '../../lib/contratos/composicaoRepasse'
 import ComposicaoBoletoModal from './ComposicaoBoletoModal'
 import { hojeStr, addMesesData, fmtYm } from '../../lib/contratos/datas'
@@ -85,6 +87,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
   const [revisar, setRevisar] = useState(null)
   const [modal, setModal] = useState(acaoInicial === 'rescindir' ? 'rescindir' : null)
   const [reajusteDe, setReajusteDe] = useState(null)
+  const [reajusteRepasse, setReajusteRepasse] = useState(null)
   const [vinculo, setVinculo] = useState(null)
   const [vincularLinha, setVincularLinha] = useState(null)
   const [associarTx, setAssociarTx] = useState(null)
@@ -135,6 +138,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
 
   const conta = accounts.find(a => a.id === contrato.conta_id)
   const repasse = ehModoRepasse(contrato)
+  const reajustePendente = repasse ? reajustePendenteRepasse(contrato, { hoje, indices: indicesContratos }) : null
   const bem = contrato.bem_id ? accounts.find(a => a.id === contrato.bem_id) : null
   const perfil = profiles.find(p => p.id === contrato.perfil_id)
   const cat = categories.find(c => c.id === contrato.categoria_id)
@@ -241,6 +245,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
 
       {podeEditar && (
         <div className="flex flex-wrap gap-2">
+          {repasse && reajustePendente && <button className={btn} onClick={() => setReajusteRepasse(reajustePendente)}><TrendingUp size={12} /> Confirmar reajuste</button>}
           {projetadas.length > 0 && !repasse && <button className={btn} onClick={() => setReajusteDe(projetadas[0])}><TrendingUp size={12} /> Confirmar reajuste</button>}
           <button className={btn} onClick={() => setModal('aditivo')}><Pencil size={12} /> Aditivo / editar</button>
           {contrato.data_fim && <button className={btn} onClick={() => setModal('renovar')}><RefreshCw size={12} /> Renovar</button>}
@@ -533,6 +538,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
           }}
           onClose={() => setInformar(null)} />
       )}
+      {reajusteRepasse && <ConfirmarReajusteRepasseModal contrato={contrato} pendente={reajusteRepasse} onClose={() => setReajusteRepasse(null)} onConfirmado={() => { setAviso('Reajuste confirmado.'); recarregar() }} />}
       {reajusteDe && <ConfirmarReajusteModal contrato={contrato} parcela={reajusteDe} onClose={() => setReajusteDe(null)} onConfirmado={() => { setAviso('Reajuste confirmado.'); recarregar() }} />}
       {vinculo && (
         <VinculoModal contrato={contrato} candidatos={vinculo.candidatos} lancamentos={vinculo.lancamentos} onClose={() => setVinculo(null)}

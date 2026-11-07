@@ -3,6 +3,7 @@ import Modal from '../shared/Modal'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { rotuloContrato } from '../../lib/contratos/parcelas'
+import { fmtYm } from '../../lib/contratos/datas'
 import ComposicaoBoletoModal from './ComposicaoBoletoModal'
 
 // Perguntas do gancho de efetivação (P5), de QUALQUER tela que pagou a parcela (Agendamentos, Fluxo,
@@ -15,7 +16,7 @@ export default function ContratoEfetivacaoHost() {
   const {
     contratosHabilitado, pendenciasContrato, resolverPendenciaContrato, contratoPorId, schedules, transactions,
     confirmarComposicaoContrato, estimarComposicaoContrato, confirmarReajusteContrato, registrarEventoContrato,
-    desligarCreditoDoCondominio,
+    desligarCreditoDoCondominio, responderAjusteRepasse,
   } = useApp()
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -47,6 +48,31 @@ export default function ContratoEfetivacaoHost() {
           <div className="flex flex-col gap-2">
             <button className="btn-primary" disabled={salvando} onClick={fechar}>Manter ligado a esta parcela — quando pagar de novo, não gera outro crédito</button>
             <button className="btn-secondary" disabled={salvando} onClick={avulso}>Tratar como crédito avulso — o próximo pagamento gera crédito novo</button>
+          </div>
+        </div>
+      </Modal>
+    )
+  }
+
+  // Repasse de administradora recebido com valor diferente do calculado (regra C).
+  if (p.tipo === 'ajuste_repasse') {
+    const responderAjuste = async (criar) => {
+      setSalvando(true)
+      try { await responderAjusteRepasse(p, criar); fechar() } catch (err) { setErro(err?.message || 'Falha ao gravar.'); setSalvando(false) }
+    }
+    const x = Math.abs(p.diferenca)
+    return (
+      <Modal open onClose={() => responderAjuste(false)} title="Repasse com valor diferente" size="sm">
+        <div className="space-y-3 text-sm">
+          <p className="text-texto-2">
+            O repasse de <strong className="text-texto-1">{fmtYm(p.competencia)}</strong> de {rotuloContrato(contrato)} foi registrado com
+            <strong className="text-texto-1"> {fmt(p.real)}</strong>; o calculado pela composição era {fmt(p.calculado)}.
+          </p>
+          <p className="text-texto-1 font-medium">Criar ajuste de {p.diferenca < 0 ? '−' : '+'}{fmt(x)} na competência?</p>
+          {erro && <p className="text-xs text-perigo">{erro}</p>}
+          <div className="flex flex-col gap-2">
+            <button className="btn-primary" disabled={salvando} onClick={() => responderAjuste(true)}>Sim — criar o ajuste: o saldo fecha com o que caiu no banco</button>
+            <button className="btn-secondary" disabled={salvando} onClick={() => responderAjuste(false)}>Não — o valor recebido fica e a diferença passa para a competência seguinte</button>
           </div>
         </div>
       </Modal>

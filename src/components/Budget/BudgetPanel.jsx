@@ -15,7 +15,7 @@ import { isoLocal } from '../../lib/hoje'
 import { criarRegraDemonstrativo, filtrarPerfilDemonstrativo, despesaPorCategoria } from '../../lib/regraDemonstrativo'
 
 export default function BudgetPanel() {
-  const { budgets, categories, profileReportTransactions: transactions, profileAccounts, reserveFunctions, activeProfile, addBudget, updateBudget, deleteBudget, getFinancialPeriod, pode } = useApp()
+  const { budgets, categories, profileReportTransactions: transactions, profileAccounts, reserveFunctions, activeProfile, addBudget, updateBudget, deleteBudget, getFinancialPeriod, pode, abridorDeRepasse, contratos } = useApp()
   const podeIncluir = pode('orcamento', 'incluir')
   const podeEditar = pode('orcamento', 'editar')
   const podeExcluir = pode('orcamento', 'excluir')
@@ -24,6 +24,7 @@ export default function BudgetPanel() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [form, setForm] = useState({ categoryId: '', amount: '' })
   const [modoValor, setModoValor] = useState(MODO_VALOR_PADRAO)
+  const [porComposicao, setPorComposicao] = useState(false)
 
   const period = getFinancialPeriod()
 
@@ -40,11 +41,11 @@ export default function BudgetPanel() {
   const [modoDespesas, setModoDespesas] = useModoDespesas()
   const categorySpent = useMemo(() => {
     const ids = activeProfile ? new Set(profileAccounts.map(a => a.id)) : null
-    const txs = filtrarPerfilDemonstrativo(lancamentosNoModo(transactions, modoValor), reserveFunctions, ids)
+    const txs = filtrarPerfilDemonstrativo(lancamentosNoModo(transactions, modoValor, { abrirRepasse: porComposicao && abridorDeRepasse ? abridorDeRepasse() : null }), reserveFunctions, ids)
     return despesaPorCategoria(txs, periodStr, regra, modoDespesas)
   // periodStr é recriado a cada render a partir do período (estável): depende das datas.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transactions, periodStr.start, periodStr.end, modoValor, regra, reserveFunctions, activeProfile, profileAccounts, modoDespesas])
+  }, [transactions, periodStr.start, periodStr.end, modoValor, regra, reserveFunctions, activeProfile, profileAccounts, modoDespesas, porComposicao, abridorDeRepasse, contratos])
 
   const totalBudgeted = budgets.reduce((s, b) => s + b.amount, 0)
   const totalSpent = budgets.reduce((s, b) => s + (categorySpent[b.categoryId] || 0), 0)
@@ -94,7 +95,7 @@ export default function BudgetPanel() {
 
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-texto-2 flex flex-wrap items-center gap-2">
-          Orçamentos por Categoria <SeletorModoValor value={modoValor} onChange={setModoValor} />
+          Orçamentos por Categoria <SeletorModoValor value={modoValor} onChange={setModoValor} porComposicao={porComposicao} onPorComposicao={setPorComposicao} />
           <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
         </h2>
         {podeIncluir && (

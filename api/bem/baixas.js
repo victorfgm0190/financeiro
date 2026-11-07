@@ -43,6 +43,8 @@ async function abertura(req, res, b) {
 async function estornar(req, res, b) {
   const [baixa] = await query(`SELECT * FROM bem_baixas WHERE id = $1 AND estornado_em IS NULL`, [b.baixa_id])
   if (!baixa) return fail(res, 404, 'Baixa não encontrada')
+  // Benfeitoria do contrato é gerida pela composição do repasse (editar/remover o item lá).
+  if (baixa.tipo === 'benfeitoria') return fail(res, 409, 'Benfeitoria de contrato: altere ou remova o item na composição do repasse do contrato.')
   await exigirContaPermitida(query, req.user, baixa.bem_id)
   const efeitos = await withTransaction(q => estornarBaixa(q, baixa))
   return res.json({ success: true, efeitos })

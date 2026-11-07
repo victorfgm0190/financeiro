@@ -49,7 +49,8 @@ export const atualizarCreditoApi = async (credito) => (await chamar('/api/contra
 export const excluirCreditoApi = (id) => chamar(`/api/contrato-creditos?id=${q(id)}`, { method: 'DELETE' })
 
 // Composição do repasse por competência (contrato a receber por administradora).
-export const salvarCompetenciaApi = async (contratoId, comp) =>
-  (await chamar('/api/contrato-competencias', { method: 'PUT', body: { contrato_id: contratoId, ...comp } })).competencia
+// → { competencia, bens: [{ id, saldo }] } (bens = saldos dos bens que a benfeitoria mexeu).
+export const salvarCompetenciaApi = (contratoId, comp) =>
+  chamar('/api/contrato-competencias', { method: 'PUT', body: { contrato_id: contratoId, ...comp } })
 export const excluirCompetenciaApi = (contratoId, competencia) =>
   chamar(`/api/contrato-competencias?contrato_id=${q(contratoId)}&competencia=${q(competencia)}`, { method: 'DELETE' })

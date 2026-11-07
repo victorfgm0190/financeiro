@@ -54,3 +54,34 @@ export function repassesRegistrados(contrato, schedules, transactions = []) {
   }
   return out
 }
+
+// Competências que o repasse de `competencia` quita: as desde o repasse anterior (as sem repasse
+// tiveram o saldo transportado até aqui) até ela. → linhas (em ordem) ou null.
+export function blocoDoRepasse(linhas, competencia) {
+  const i = (linhas || []).findIndex(l => l.competencia === competencia)
+  if (i < 0 || linhas[i].foraDoSaldo) return null
+  let ini = i
+  while (ini > 0 && !linhas[ini - 1].foraDoSaldo && !(linhas[ini - 1].repasse > 0) && linhas[ini - 1].repasseReal == null) ini--
+  return linhas.slice(ini, i + 1)
+}
+
+// RECEBIMENTO ABERTO PELA COMPOSIÇÃO (relatórios em "visão por composição"): o repasse da competência
+// `competencia`, recebido com `valor`, é a soma de tudo o que ele quitou — os itens das competências
+// desde o repasse anterior (inclusive as sem repasse, cujo saldo foi transportado até aqui), o saldo
+// que vinha de antes (saldo inicial ou diferença de um repasse anterior) e a diferença deste repasse
+// (valor real − calculado). A soma das partes é sempre o valor recebido.
+//   linhas: competenciasDoRepasse do contrato.
+// → [{ tipo, descricao, valor, categoria_id, competencia }] ou null (competência fora da conta).
+export function composicaoDoRecebimento(linhas, competencia, valor) {
+  const bloco = blocoDoRepasse(linhas, competencia)
+  if (!bloco) return null
+  const out = bloco.flatMap(l => (l.itens || []).map(it => ({
+    tipo: it.tipo, descricao: it.descricao, valor: r2(it.valor), categoria_id: it.categoria_id || null, competencia: l.competencia,
+  })))
+  const antes = r2(bloco[0].saldo_anterior)
+  if (Math.abs(antes) > POSITIVO) out.push({ tipo: 'saldo_anterior', descricao: 'Saldo anterior com a administradora', valor: antes, categoria_id: null, competencia: bloco[0].competencia })
+  const soma = r2(out.reduce((a, x) => a + x.valor, 0))
+  const dif = r2(Number(valor) - soma)
+  if (Math.abs(dif) > POSITIVO) out.push({ tipo: 'diferenca', descricao: 'Diferença no repasse', valor: dif, categoria_id: null, competencia })
+  return out
+}

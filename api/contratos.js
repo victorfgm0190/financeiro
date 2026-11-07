@@ -8,6 +8,7 @@ import {
   inserirEvento, substituirItens, hojeIso, comNumeros, CAMPOS_CONTRATO, colunasDe, valorColuna,
   repasseSemColuna, MSG_SEM_REPASSE,
 } from './_contratos.js'
+import { sincronizarBenfeitoriasDoContrato, removerBenfeitoriasDoContrato, bensDoMapa } from './_benfeitoriasContrato.js'
 
 // CONTRATOS (módulo opcional do plano). As parcelas são agendamentos com contrato_id — gravados pelo
 // app no /api/sync como qualquer agendamento; esta rota cuida só da ficha.
@@ -145,9 +146,12 @@ async function handler(req, res) {
           )
           : [atual]
         const ev = evento ? await inserirEvento(q, atual.id, evento) : null
-        return { contrato: c, evento: ev }
+        // Bem ligado mudou: as benfeitorias marcadas passam para o bem novo (ou saem).
+        const bens = 'bem_id' in dados && (dados.bem_id || null) !== (atual.bem_id || null)
+          ? bensDoMapa(await sincronizarBenfeitoriasDoContrato(q, c)) : []
+        return { contrato: c, evento: ev, bens }
       })
-      return res.json({ ok: true, contrato: comNumeros(r.contrato), evento: comNumeros(r.evento) })
+      return res.json({ ok: true, contrato: comNumeros(r.contrato), evento: comNumeros(r.evento), bens: r.bens })
     }
 
     if (req.method === 'DELETE') {
@@ -159,8 +163,12 @@ async function handler(req, res) {
         [`ctr\\_${id.replace(/[\\%_]/g, '\\$&')}\\_%`],
       )
       if (pagas?.n > 0) return res.status(409).json({ error: 'Contrato com parcela paga não pode ser excluído — use Rescindir' })
-      await query('DELETE FROM contratos WHERE id = $1', [id])
-      return res.json({ ok: true, excluido: true, id })
+      const bens = await withTransaction(async (q) => {
+        const tocados = await removerBenfeitoriasDoContrato(q, id)
+        await q('DELETE FROM contratos WHERE id = $1', [id])
+        return bensDoMapa(tocados)
+      })
+      return res.json({ ok: true, excluido: true, id, bens })
     }
 
     return res.status(405).end()

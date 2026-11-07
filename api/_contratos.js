@@ -37,6 +37,19 @@ const competencias = (v) => {
   const out = [...new Set(v.map(String))].sort()
   return out.every(m => /^\d{4}-(0[1-9]|1[0-2])$/.test(m)) ? { v: out } : { erro: 'mês inválido (AAAA-MM)' }
 }
+// { "<ciclo>": valor > 0 } — ciclos 1..100.
+const basesConfirmadas = (v) => {
+  if (v == null || v === '') return { v: {} }
+  if (typeof v !== 'object' || Array.isArray(v)) return { erro: 'deve ser um objeto { ciclo: valor }' }
+  const out = {}
+  for (const [k, x] of Object.entries(v)) {
+    const ciclo = Number(k)
+    const n = Math.round(Number(x) * 100) / 100
+    if (!Number.isInteger(ciclo) || ciclo < 1 || ciclo > 100 || !Number.isFinite(n) || n <= 0) return { erro: 'ciclo ou valor inválido' }
+    out[ciclo] = n
+  }
+  return { v: out }
+}
 // Uma competência 'AAAA-MM' (opcional).
 const competencia = (v) => {
   if (v == null || v === '') return { v: null }
@@ -98,6 +111,8 @@ export const CAMPOS_CONTRATO = {
   taxa_adm_pct: numero({ min: 0, max: 100 }),
   taxa_adm_base: umDe(['bruto', 'bruto_menos_taxas'], { obrigatorio: true }),
   categoria_taxa_adm_id: texto(80),
+  // Reajuste confirmado no modo repasse (migração 2026-11-07d): { "<ciclo>": aluguel }.
+  bases_confirmadas: basesConfirmadas,
 }
 const PADROES = { modalidade: 'aluguel', periodicidade: 'mensal', indice_reajuste: 'IPCA', status: 'ativo', credito_abatimento: 'mes_seguinte', taxa_adm_base: 'bruto' }
 
@@ -106,15 +121,15 @@ const PADROES = { modalidade: 'aluguel', periodicidade: 'mensal', indice_reajust
 export const COLS_REPASSE = {
   modo_repasse: false, contraparte_nome: null, contraparte_documento: null, bem_id: null, dia_repasse: null,
   repasse_meses_depois: 1, valor_primeiro_mes: null, saldo_inicial_adm: null, saldo_inicial_competencia: null,
-  taxa_adm_pct: null, taxa_adm_base: 'bruto', categoria_taxa_adm_id: null,
+  taxa_adm_pct: null, taxa_adm_base: 'bruto', categoria_taxa_adm_id: null, bases_confirmadas: {},
 }
 export const MSG_SEM_REPASSE = 'O banco deste ambiente ainda não tem a atualização de contrato a receber por administradora. Nada foi gravado — avise o suporte para atualizar o banco.'
 // Campos do repasse com valor de verdade que o banco não tem → lista (vazia = pode gravar).
 export const repasseSemColuna = (dados, existem) =>
-  Object.keys(COLS_REPASSE).filter(k => k in dados && !existem.has(k) && (dados[k] ?? null) !== COLS_REPASSE[k])
+  Object.keys(COLS_REPASSE).filter(k => k in dados && !existem.has(k) && JSON.stringify(dados[k] ?? null) !== JSON.stringify(COLS_REPASSE[k]))
 
 // Colunas JSONB: o pg mandaria a lista como array do Postgres; vai como texto JSON.
-const JSONB = new Set(['meses_sem_cobranca', 'itens', 'valores_parcelas'])
+const JSONB = new Set(['meses_sem_cobranca', 'itens', 'valores_parcelas', 'bases_confirmadas'])
 export const valorColuna = (k, v) => (JSONB.has(k) && v != null ? JSON.stringify(v) : v)
 
 // Colunas que o banco do ambiente já tem (as da migração 2026-11-03 só existem depois de aplicada):
@@ -244,10 +259,12 @@ export function normalizarCompetencia(b) {
     if (origem === 'auto') Object.assign(item, { informado: i.informado === true, valor_calculado: calc })
     if (tipo.v === 'despesa') item.natureza = NATUREZAS.includes(i.natureza) ? i.natureza : 'outra'
     if (tipo.v === 'benfeitoria') item.somar_ao_bem = i.somar_ao_bem === true
+    // Ajuste criado no registro do repasse (Etapa 4): sai junto se o lançamento for estornado.
+    if (origem === 'manual' && i.lancamento_id) item.lancamento_id = String(i.lancamento_id).slice(0, 120)
     itens.push(item)
   }
   const obs = texto(2000)(b.observacao)
-  return { dados: { competencia: comp.v, status: status.v, itens, observacao: obs.v } }
+  return { dados: { competencia: comp.v, status: status.v, itens, observacao: obs.v, repasse_lancamento_id: texto(120)(b.repasse_lancamento_id).v } }
 }
 export const MSG_SEM_COMPOSICAO = 'O banco deste ambiente ainda não tem a atualização da composição do repasse. Nada foi gravado — avise o suporte para atualizar o banco.'
 

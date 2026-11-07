@@ -149,3 +149,64 @@ describe('composição do repasse', () => {
     expect(g[0]).toEqual({ chave: 'adm', tipo: 'taxa_adm', descricao: 'Taxa', valor: -11.67, categoria_id: null, dedutivel_ir: false, origem: 'auto', informado: true, valor_calculado: -58.67 })
   })
 })
+
+describe('caso de referência + reajuste fictício em 02/2027 (5%)', () => {
+  // Mesmo contrato, vigência até 03/2027 e reajuste anual: o aniversário de 21/02/2026 é 02/2027.
+  const BASE = { ...CONTRATO, data_fim: '2027-03-31' }
+  const hoje = '2026-02-25'
+
+  it('projeção pelo índice: aluguel e taxa de adm. mudam a partir de 02/2027 (selo Projetado)', () => {
+    const m = porComp(competenciasDoRepasse({ ...BASE, indice_reajuste: 'FIXO', percentual_fixo: 5 }, { hoje }))
+    expect(m['2027-01']).toMatchObject({ bruto: 2200, resultado: 1977, valorStatus: 'confirmado' })
+    expect(m['2027-02'].itens.find(i => i.tipo === 'aluguel').valor).toBe(2310)
+    expect(m['2027-02'].itens.find(i => i.tipo === 'taxa_adm').valor).toBe(-231)
+    expect(m['2027-02']).toMatchObject({ resultado: 2076, repasse: 2076, valorStatus: 'projetado' })
+    // Saldos de 02 a 09/2026 continuam os do caso de referência.
+    expect(m['2026-06'].saldo).toBe(1370.65)
+    const plano = gerarPlanoParcelas({ ...BASE, indice_reajuste: 'FIXO', percentual_fixo: 5 }, { hoje })
+    expect(plano.find(p => p.competencia === '2027-02')).toMatchObject({ valor: 2076, valorStatus: 'projetado' })
+  })
+
+  it('confirmado uma vez (bases_confirmadas): vale dali em diante, sem selo; conferida não muda', () => {
+    const c = {
+      ...BASE, indice_reajuste: 'IPCA', bases_confirmadas: { 1: 2310 },
+      competencias: [...CONTRATO.competencias, {
+        competencia: '2027-03', status: 'fechada', itens: [
+          { chave: 'aluguel', tipo: 'aluguel', valor: 2200, origem: 'auto' },
+          { chave: 'adm', tipo: 'taxa_adm', valor: -220, origem: 'auto' },
+          { chave: 'tarifa:tf', tipo: 'tarifa', valor: -3, origem: 'auto' },
+        ],
+      }],
+    }
+    const m = porComp(competenciasDoRepasse(c, { hoje, indices: { IPCA: { acumulado_12m: 4.5, competencia: '2026-12' } } }))
+    expect(m['2027-02']).toMatchObject({ bruto: 2310, resultado: 2076, valorStatus: 'confirmado' })
+    expect(m['2027-02'].itens.find(i => i.tipo === 'taxa_adm').valor).toBe(-231)
+    // 03/2027 conferida antes do reajuste: fica como gravada.
+    expect(m['2027-03']).toMatchObject({ bruto: 2200, resultado: 1977 })
+  })
+
+  it('reajuste pendente: 1º ciclo projetado, com a base anterior', async () => {
+    const { reajustePendenteRepasse } = await import('./parcelas.js')
+    expect(reajustePendenteRepasse({ ...BASE, indice_reajuste: 'FIXO', percentual_fixo: 5 }, { hoje }))
+      .toEqual({ ciclo: 1, competencia: '2027-02', base: 2310, baseAnterior: 2200 })
+    expect(reajustePendenteRepasse({ ...BASE, indice_reajuste: 'FIXO', percentual_fixo: 5, bases_confirmadas: { 1: 2310 } }, { hoje })).toBeNull()
+  })
+})
+
+describe('recebimento aberto pela composição (relatórios)', () => {
+  it('o repasse de 06 quita 02 a 06: soma dos itens = 1.370,65; diferença vira linha própria', async () => {
+    const { composicaoDoRecebimento, blocoDoRepasse } = await import('./saldoRepasse.js')
+    const linhas = competenciasDoRepasse(CONTRATO, { hoje: HOJE })
+    expect(blocoDoRepasse(linhas, '2026-06').map(l => l.competencia)).toEqual(['2026-02', '2026-03', '2026-04', '2026-05', '2026-06'])
+    const partes = composicaoDoRecebimento(linhas, '2026-06', 1370.65)
+    const soma = (ps) => Math.round(ps.reduce((a, p) => a + p.valor, 0) * 100) / 100
+    expect(soma(partes)).toBe(1370.65)
+    expect(partes.filter(p => p.tipo === 'aluguel').map(p => p.valor)).toEqual([586.67, 2200, 2200, 2200, 2200])
+    expect(partes.some(p => p.tipo === 'diferenca')).toBe(false)
+    const comDif = composicaoDoRecebimento(linhas, '2026-06', 1360)
+    expect(comDif.at(-1)).toMatchObject({ tipo: 'diferenca', valor: -10.65 })
+    expect(soma(comDif)).toBe(1360)
+    // 07 só quita 07.
+    expect(blocoDoRepasse(linhas, '2026-07').map(l => l.competencia)).toEqual(['2026-07'])
+  })
+})

@@ -192,6 +192,7 @@ export default function BemResumoTab({ bemId, onMudou }) {
           <Linha label="Pago por terceiros" valor={r.terceiros} />
           {r.foraDoFinup > 0 && <Linha label="Pago fora do Finup" valor={r.foraDoFinup} dica="Conta não controlada, sem lançamento" />}
           {r.abertura > 0 && <Linha label="Histórico de abertura" valor={r.abertura} dica="Pago antes de usar o Finup, sem lançamento" />}
+          {r.benfeitorias > 0 && <Linha label="Benfeitorias (contrato)" valor={r.benfeitorias} dica="Feitas pelo inquilino e abatidas do aluguel" />}
           {r.creditos > 0 && <Linha label="Créditos e rendimentos" valor={r.creditos} dica="Não saiu do seu bolso" />}
           <Linha label="Devoluções recebidas" valor={r.devolucoes} />
           <Linha label="Custo próprio líquido" valor={r.custoProprioLiquido} destaque="font-semibold" dica="O que saiu do seu bolso, menos devoluções" />

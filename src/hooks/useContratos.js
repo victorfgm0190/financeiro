@@ -7,12 +7,14 @@ import {
   listarCreditosApi, criarCreditoApi, atualizarCreditoApi, excluirCreditoApi,
   salvarCompetenciaApi, excluirCompetenciaApi,
 } from '../lib/contratosApi'
-import { taxaDoItem } from '../lib/contratos/composicaoRepasse'
+import { taxaDoItem, itensParaGravar } from '../lib/contratos/composicaoRepasse'
 import { ehModoRepasse } from '../lib/contratos/repasse'
+import { blocoDoRepasse, composicaoDoRecebimento } from '../lib/contratos/saldoRepasse'
 import {
   gerarPlanoParcelas, planejarSincronizacao, confirmadosDe, cobertasDoContrato, inicioDasParcelas,
   ehParcelaGerada, parcelaPaga, planoConfirmacaoReajuste, proximoReajuste, r2, rotuloContrato,
   planoManutencao, idParcela, parcelaDeVinculo, ehParcelaDeVinculo, repassesRegistrados,
+  competenciasDoRepasse, competenciaDaParcela,
 } from '../lib/contratos/parcelas'
 import { planoVinculo, planoDesvinculo } from '../lib/contratos/vinculo'
 import { mapaVinculos } from '../lib/vinculo'
@@ -88,6 +90,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   const contratosRef = useRef([])
   // Definidos mais abaixo e usados por ações declaradas antes deles.
   const notificarEfetivacaoRef = useRef(null)
+  const adicionarPendenciaRef = useRef(null)
   // persistirAgora do AppContext (função nova a cada render): lida na hora pela ref.
   const persistirRef = useRef(persistirAgora)
   useEffect(() => { persistirRef.current = persistirAgora })
@@ -276,24 +279,149 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   // refaz os repasses pendentes — o saldo com a administradora muda desta competência em diante.
   // A geração vai pelo menos até a competência editada (quem mexe num mês espera ver o repasse dele).
   //   comp: { competencia, itens, status, observacao }; remover = volta ao padrão do contrato.
-  const salvarCompetenciaRepasse = useCallback(async (contratoId, comp, { remover = false } = {}) => {
+  // Saldos dos bens que o servidor mexeu (benfeitoria no custo do bem): o app só copia — senão o sync
+  // regravaria o saldo antigo (mesma regra das baixas sem movimento do Patrimônio).
+  const copiarSaldosBens = useCallback((bens) => {
+    const porId = new Map((bens || []).map(b => [b.id, b.saldo]))
+    if (!porId.size) return
+    update(d => ({ ...d, accounts: d.accounts.map(a => (porId.has(a.id) ? { ...a, balance: porId.get(a.id) } : a)) }))
+  }, [update])
+
+  // Grava VÁRIAS competências (lista: [{ comp, remover }]) e refaz os repasses UMA vez.
+  const gravarCompetencias = useCallback(async (contratoId, lista, { motivo = null } = {}) => {
     if (faltaRecurso(recursosRef.current, 'contratoRepasse')) throw new Error(MSG_REPASSE)
     const atual = contratosRef.current.find(c => c.id === contratoId)
     if (!atual || !ehModoRepasse(atual)) throw new Error('Contrato a receber por administradora não encontrado.')
-    let row = null
-    if (remover) await excluirCompetenciaApi(contratoId, comp.competencia)
-    else row = await salvarCompetenciaApi(contratoId, comp)
-    const competencias = [...(atual.competencias || []).filter(x => x.competencia !== comp.competencia), ...(row ? [row] : [])]
-      .sort((a, b) => a.competencia.localeCompare(b.competencia))
+    let competencias = [...(atual.competencias || [])]
+    const bens = []
+    for (const { comp, remover = false } of lista) {
+      const r = remover ? await excluirCompetenciaApi(contratoId, comp.competencia) : await salvarCompetenciaApi(contratoId, comp)
+      bens.push(...(r?.bens || []))
+      competencias = [...competencias.filter(x => x.competencia !== comp.competencia), ...(r?.competencia ? [r.competencia] : [])]
+    }
+    competencias.sort((a, b) => a.competencia.localeCompare(b.competencia))
+    copiarSaldosBens(bens)
     const novo = { ...atual, competencias }
     trocarNaLista({ id: contratoId, competencias })
     contratosRef.current = contratosRef.current.map(c => (c.id === contratoId ? novo : c))
+    const menor = lista.map(x => x.comp.competencia).sort()[0]
     const inicio = inicioDasParcelas(novo, dataRef.current.schedules)
-    const apartirDe = !inicio || comp.competencia < inicio ? comp.competencia : inicio
+    const apartirDe = !inicio || menor < inicio ? menor : inicio
     const plano = await planejarParcelas(novo, { apartirDe })
-    await aplicarParcelas(plano, { motivo: `Contrato ${rotuloContrato(novo)}: composição do repasse ${fmtYm(comp.competencia)}` })
-    return row
-  }, [dataRef, planejarParcelas, aplicarParcelas])
+    await aplicarParcelas(plano, { motivo: motivo || `Contrato ${rotuloContrato(novo)}: composição do repasse ${fmtYm(menor)}` })
+    return novo
+  }, [dataRef, planejarParcelas, aplicarParcelas, copiarSaldosBens])
+
+  //   comp: { competencia, itens, status, observacao }; remover = volta ao padrão do contrato.
+  const salvarCompetenciaRepasse = useCallback((contratoId, comp, { remover = false } = {}) =>
+    gravarCompetencias(contratoId, [{ comp, remover }]), [gravarCompetencias])
+
+  // Competências do repasse com o estado de agora (composição, saldo e repasses já registrados).
+  const linhasRepasse = useCallback(async (contrato) => {
+    const idx = await indicesPara(contrato)
+    const est = dataRef.current
+    return competenciasDoRepasse(contrato, {
+      hoje: hojeStr(), indices: idx, confirmados: confirmadosDe(contrato, est.schedules),
+      repassesReais: repassesRegistrados(contrato, est.schedules, est.transactions),
+    })
+  }, [dataRef, indicesPara])
+
+  // Repasse registrado (pelo Agendamento ou pelo Contrato): as competências que ele quita ficam
+  // fechadas com a composição de agora e ligadas ao lançamento. ajuste ≠ 0 = item "Ajuste" na
+  // competência do repasse, para o saldo fechar com o que caiu no banco (regra C, resposta "Sim").
+  const fecharBlocoRepasse = useCallback(async (contrato, competencia, tx, ajuste = 0) => {
+    const bloco = blocoDoRepasse(await linhasRepasse(contrato), competencia)
+    if (!bloco) return
+    const lista = bloco.map(l => {
+      const itens = itensParaGravar(l.itens)
+      if (l.competencia === competencia && Math.abs(ajuste) > 0.005) {
+        itens.push({
+          chave: `aj:${tx.id}`, tipo: 'ajuste', descricao: 'Ajuste do repasse (valor recebido)', valor: r2(ajuste), origem: 'manual',
+          categoria_id: contrato.categoria_id || null, dedutivel_ir: false, lancamento_id: tx.id,
+        })
+      }
+      return { comp: { competencia: l.competencia, itens, status: 'fechada', observacao: l.linha?.observacao || null, repasse_lancamento_id: tx.id } }
+    })
+    await gravarCompetencias(contrato.id, lista, { motivo: `Contrato ${rotuloContrato(contrato)}: repasse ${fmtYm(competencia)} recebido` })
+  }, [linhasRepasse, gravarCompetencias])
+
+  // Pago com valor diferente do calculado → pergunta (ContratoEfetivacaoHost); igual → fecha direto.
+  const efetivarRepasse = useCallback(async ({ contrato, parcela, tx }) => {
+    const competencia = competenciaDaParcela(parcela)
+    const l = (await linhasRepasse(contrato)).find(x => x.competencia === competencia)
+    if (!l) return
+    const diferenca = r2(Number(tx.amount) - l.repasse)
+    if (Math.abs(diferenca) > 0.005) {
+      adicionarPendenciaRef.current?.({
+        chave: `repasse:${tx.id}`, tipo: 'ajuste_repasse', contratoId: contrato.id, parcelaId: parcela.id, txId: tx.id,
+        competencia, calculado: l.repasse, real: r2(tx.amount), diferenca,
+      })
+      return
+    }
+    await fecharBlocoRepasse(contrato, competencia, tx, 0)
+  }, [linhasRepasse, fecharBlocoRepasse])
+
+  // Resposta da regra C: criar = item "Ajuste" de (real − calculado); senão o real fica e a diferença
+  // passa para a competência seguinte.
+  const responderAjusteRepasse = useCallback(async (p, criar) => {
+    const contrato = contratosRef.current.find(c => c.id === p.contratoId)
+    const tx = dataRef.current.transactions.find(t => t.id === p.txId)
+    if (!contrato || !tx) return
+    await fecharBlocoRepasse(contrato, p.competencia, tx, criar ? p.diferenca : 0)
+  }, [dataRef, fecharBlocoRepasse])
+
+  // Estorno/exclusão do lançamento do repasse: as competências que ele fechou voltam a abertas e o
+  // ajuste criado por ele sai.
+  const reabrirRepasse = useCallback(async (tx) => {
+    const contrato = contratosRef.current.find(c => c.id === tx?.contratoId)
+    if (!contrato || !ehModoRepasse(contrato)) return
+    const linhas = (contrato.competencias || []).filter(r => r.repasse_lancamento_id === tx.id)
+    if (!linhas.length) return
+    await gravarCompetencias(contrato.id, linhas.map(r => ({
+      comp: {
+        competencia: r.competencia, itens: (r.itens || []).filter(i => i.lancamento_id !== tx.id), status: 'aberta',
+        observacao: r.observacao || null, repasse_lancamento_id: null,
+      },
+    })), { motivo: `Contrato ${rotuloContrato(contrato)}: repasse estornado` })
+  }, [gravarCompetencias])
+
+  // Confirmar reajuste no modo repasse: o aluguel do ciclo vale dali em diante (bases_confirmadas);
+  // os ciclos seguintes reprojetam a partir dele e a taxa de administração recalcula sobre o bruto.
+  // Competência conferida (fechada) não muda.
+  const confirmarReajusteRepasse = useCallback(async (contrato, { ciclo, competencia, novoBase, baseAnterior = null }) => {
+    const base = r2(novoBase)
+    const bases = { ...(contrato.bases_confirmadas || {}), [ciclo]: base }
+    const percentual = baseAnterior ? Math.round((base / baseAnterior - 1) * 1e6) / 1e4 : null
+    const salvo = await atualizarContrato(contrato.id, { bases_confirmadas: bases }, {
+      tipo: baseAnterior != null && base === r2(baseAnterior) ? 'confirmacao_valor' : 'reajuste', data_evento: hojeStr(),
+      indice: contrato.indice_reajuste, percentual, valor_anterior: baseAnterior, valor_novo: base,
+      detalhes: { ciclo, competencia, modo: 'repasse' },
+    })
+    const inicio = inicioDasParcelas(salvo, dataRef.current.schedules)
+    const plano = await planejarParcelas(salvo, { apartirDe: !inicio || competencia < inicio ? competencia : inicio })
+    await aplicarParcelas(plano, { motivo: `Contrato ${rotuloContrato(salvo)}: reajuste confirmado (${fmtYm(competencia)})` })
+    return salvo
+  }, [atualizarContrato, dataRef, planejarParcelas, aplicarParcelas])
+
+  // Relatórios em "visão por composição": abre o lançamento do repasse nas partes (aluguel bruto,
+  // deduções, saldo anterior, diferença). Uma função nova por cálculo (guarda as competências de
+  // cada contrato só durante ele).
+  const abridorDeRepasse = useCallback(() => {
+    const cache = new Map()
+    const est = dataRef.current
+    return (tx) => {
+      if (tx?.composicao?.tipo !== 'repasse' || !tx.contratoId) return null
+      const c = contratosRef.current.find(x => x.id === tx.contratoId)
+      if (!c) return null
+      if (!cache.has(c.id)) {
+        cache.set(c.id, competenciasDoRepasse(c, {
+          hoje: hojeStr(), indices: indicesRef.current, confirmados: confirmadosDe(c, est.schedules),
+          repassesReais: repassesRegistrados(c, est.schedules, est.transactions),
+        }))
+      }
+      return composicaoDoRecebimento(cache.get(c.id), tx.composicao.competencia, tx.amount)
+    }
+  }, [dataRef])
 
   // Vínculo (D2) de séries existentes + geração das parcelas, num só update().
   //   selecoes: [{ schedule, papel }]; valoresMantidos: { papel: { 'AAAA-MM': valor } }.
@@ -896,6 +1024,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   const adicionarPendencia = useCallback((p) => {
     setPendencias(prev => (prev.some(x => x.chave === p.chave) ? prev : [...prev, p]))
   }, [])
+  useEffect(() => { adicionarPendenciaRef.current = adicionarPendencia }, [adicionarPendencia])
   const resolverPendencia = useCallback((chave) => setPendencias(prev => prev.filter(p => p.chave !== chave)), [])
 
   // posEfetivacaoContrato(agendamento, lançamento): o que acontece depois que uma parcela é paga.
@@ -919,6 +1048,11 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
         .catch(err => console.warn('[contratos] previsão do condomínio:', err.message))
     }
     if (plano.lancamento) updateTransaction(tx.id, plano.lancamento)
+    // Repasse de administradora: fecha as competências quitadas (ou pergunta do ajuste, regra C).
+    if (parcela.composicao?.tipo === 'repasse' && ehModoRepasse(contrato)) {
+      await efetivarRepasse({ contrato, parcela, tx })
+      return
+    }
     if (plano.compensar.length) {
       await compensarCreditos(plano.compensar, tx, parcela)
       redistribuirCreditos()
@@ -928,7 +1062,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     }
     if (plano.pedirComposicao) adicionarPendencia({ chave: `composicao:${tx.id}`, tipo: 'composicao', contratoId: contrato.id, parcelaId: parcela.id, txId: tx.id })
     if (plano.estimar) await estimarComposicao({ contrato, parcela, tx })
-  }, [updateTransaction, compensarCreditos, redistribuirCreditos, adicionarPendencia, estimarComposicao, atualizarPrevisaoCondominio, dataRef, gravarComposicaoCondominio])
+  }, [updateTransaction, compensarCreditos, redistribuirCreditos, adicionarPendencia, estimarComposicao, atualizarPrevisaoCondominio, dataRef, gravarComposicaoCondominio, efetivarRepasse])
 
   // Fila do gancho: { scheduleId, occurrenceDate, lancamentoId, auto }. Processada quando o estado
   // já tem o agendamento e o lançamento (o update() do ponto de efetivação é assíncrono).
@@ -972,6 +1106,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
       const ctr = contratosRef.current.find(c => c.id === daBaixa.contratoId)
       if (ctr) await atualizarPrevisaoCondominio(ctr, est, { excluirTx: tx.id }).catch(err => console.warn('[contratos] previsão do condomínio:', err.message))
     }
+    await reabrirRepasse(tx).catch(err => console.warn('[contratos] repasse não reaberto:', err.message))
     const informadas = new Set(est.schedules.filter(temComposicaoInformada).map(s => s.id))
     const r = planejarReversao({ tx, creditos: creditosRef.current, informadas })
     if (!r.reabrir.length && !r.remover.length && !r.manter.length && !r.voltarPrevisto.length) return
@@ -1009,7 +1144,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
         detalhes: { acao: 'reversao_creditos', lancamento_id: tx.id, creditos_reabertos: r.reabrir, creditos_removidos: r.remover, creditos_mantidos: r.manter, creditos_previstos: r.voltarPrevisto },
       }).catch(err => console.warn('[contratos] evento de reversão não gravado:', err.message))
     }
-  }, [habilitado, setCreditos, redistribuirCreditos, registrarEvento, atualizarPrevisaoCondominio, dataRef, adicionarPendencia]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [habilitado, setCreditos, redistribuirCreditos, registrarEvento, atualizarPrevisaoCondominio, dataRef, adicionarPendencia, reabrirRepasse]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Uma vez por sessão, depois do load do banco, para cada contrato ativo:
   //   • sem data de fim: estende as parcelas até 12 meses à frente (ids determinísticos: outro
@@ -1080,7 +1215,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     contratosHabilitado: habilitado,
     contratos, contratosCarregados: carregados, indicesContratos: indices, contratoPorId,
     recarregarContratos, carregarIndice, criarContrato, atualizarContrato, excluirContrato, salvarItensContrato: salvarItens,
-    salvarCompetenciaRepasse,
+    salvarCompetenciaRepasse, confirmarReajusteRepasse, responderAjusteRepasse, abridorDeRepasse,
     registrarEventoContrato: registrarEvento, planejarParcelasContrato: planejarParcelas, aplicarParcelasContrato: aplicarParcelas,
     vincularEGerarContrato: vincularEGerar, desvincularDoContrato: desvincular, confirmarReajusteContrato: confirmarReajuste,
     excluirParcelaContrato: excluirParcela, rescindirContrato: rescindir, estornarLancamentoContrato,

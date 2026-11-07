@@ -24,10 +24,12 @@ export const CLASSE = {
   FORA: 'fora',
   CREDITO: 'credito',
   ABERTURA: 'abertura',
+  // Benfeitoria feita pelo inquilino e abatida do repasse (contrato a receber): custo do bem, sem caixa.
+  BENFEITORIA: 'benfeitoria',
 }
 
 // Baixa sem movimento em conta (bem_baixas.tipo) → classe do extrato.
-const CLASSE_DA_BAIXA = { terceiro: CLASSE.TERCEIRO, conta_externa: CLASSE.FORA, credito: CLASSE.CREDITO, abertura: CLASSE.ABERTURA }
+const CLASSE_DA_BAIXA = { terceiro: CLASSE.TERCEIRO, conta_externa: CLASSE.FORA, credito: CLASSE.CREDITO, abertura: CLASSE.ABERTURA, benfeitoria: CLASSE.BENFEITORIA }
 
 export const MOTIVOS_BAIXA = [
   { id: 'terceiro', rotulo: 'Paga por terceiro' },
@@ -39,6 +41,7 @@ export const SELO_BAIXA = {
   conta_externa: 'Paga fora do Finup',
   credito: 'Crédito ou rendimento',
   abertura: 'Histórico de abertura',
+  benfeitoria: 'Benfeitoria do contrato',
 }
 
 export const ROTULO_CLASSE = {
@@ -53,6 +56,7 @@ export const ROTULO_CLASSE = {
   fora: 'Pago fora do Finup',
   credito: 'Crédito ou rendimento',
   abertura: 'Histórico de abertura',
+  benfeitoria: 'Benfeitoria',
 }
 
 export const ORIGEM = { PROPRIOS: 'proprios', TERCEIRO: 'terceiro' }
@@ -171,10 +175,11 @@ export function resumoDoBem(bem, linhas, parcelas = [], cotas = []) {
   const semPagamentos = !linhas.some(l => PAGAMENTOS.includes(l.classe))
   if (semPagamentos && bem.valor_pago_manual != null) {
     const informado = r2(bem.valor_pago_manual)
+    const benf = somar(linhas, CLASSE.BENFEITORIA)
     return {
       valorBem, pagoSemJuros: informado, pagoComJuros: informado, terceiros: 0, proprios: informado, foraDoFinup: 0, creditos: 0, abertura: 0,
-      devolucoes: 0, custoProprioLiquido: informado, jurosPagos: 0, descontos: 0, faltaPagar: 0,
-      custoFinalRealizado: valorBem, custoFinalProjetado: valorBem, valorInformado: true, ehConsorcio,
+      benfeitorias: benf, devolucoes: 0, custoProprioLiquido: r2(informado + benf), jurosPagos: 0, descontos: 0, faltaPagar: 0,
+      custoFinalRealizado: r2(valorBem + benf), custoFinalProjetado: r2(valorBem + benf), valorInformado: true, ehConsorcio,
     }
   }
 
@@ -187,6 +192,9 @@ export function resumoDoBem(bem, linhas, parcelas = [], cotas = []) {
   const foraDoFinup = somar(linhas, CLASSE.FORA)
   const creditos = somar(linhas, CLASSE.CREDITO)
   const abertura = somar(linhas, CLASSE.ABERTURA)
+  // Benfeitoria abatida do aluguel: não é pagamento do bem (fica fora do pago e do batimento do
+  // consórcio), mas é custo dele — entra no custo próprio e no custo final.
+  const benfeitorias = somar(linhas, CLASSE.BENFEITORIA)
   const pagoSemJuros = r2(principal + terceiros + troca + foraDoFinup + creditos + abertura)
   const pagoComJuros = r2(pagoSemJuros + juros)
   const proprios = r2(principal + troca + juros)
@@ -200,16 +208,18 @@ export function resumoDoBem(bem, linhas, parcelas = [], cotas = []) {
     foraDoFinup,
     creditos,
     abertura,
+    benfeitorias,
     devolucoes,
     // O que saiu do bolso: o histórico de abertura e o pago fora do Finup também. Terceiro e crédito não.
-    custoProprioLiquido: r2(proprios + foraDoFinup + abertura - devolucoes),
+    // Benfeitoria abatida do aluguel também (é aluguel que o proprietário deixou de receber).
+    custoProprioLiquido: r2(proprios + foraDoFinup + abertura + benfeitorias - devolucoes),
     jurosPagos: juros,
     descontos,
     faltaPagar: ehConsorcio ? saldoInformado : faltaPagar(parcelas),
     // juros_pago já vem líquido do desconto: subtrair de novo contaria o desconto duas vezes.
     // Consórcio: o que já pagou, e o que já pagou mais o saldo informado.
-    custoFinalRealizado: ehConsorcio ? pagoComJuros : r2(valorBem + juros),
-    custoFinalProjetado: ehConsorcio ? r2(pagoComJuros + saldoInformado) : r2(valorBem + jurosPrevistos - descontos),
+    custoFinalRealizado: r2((ehConsorcio ? pagoComJuros : valorBem + juros) + benfeitorias),
+    custoFinalProjetado: r2((ehConsorcio ? pagoComJuros + saldoInformado : valorBem + jurosPrevistos - descontos) + benfeitorias),
     valorInformado: false,
     ehConsorcio,
   }

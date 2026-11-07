@@ -7,7 +7,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
 import CampoValor from './CampoValor'
 import { fmtYm, hojeStr } from '../../lib/contratos/datas'
-import { competenciasDoRepasse, confirmadosDe, repassesRegistrados } from '../../lib/contratos/parcelas'
+import { competenciasDoRepasse, confirmadosDe, repassesRegistrados, ehParcelaGerada, parcelaPaga, competenciaDaParcela } from '../../lib/contratos/parcelas'
 import {
   TIPOS_ITEM_REPASSE, TIPOS_MANUAIS, NATUREZAS_DESPESA, resumoComposicao, taxaAdmCalculada, itensParaGravar, novoItemManual,
   dedutivelPadrao,
@@ -33,7 +33,7 @@ function comAdmRecalculada(contrato, linhas) {
 // contrato_competencias (fonte da verdade); o valor do repasse e o saldo com a administradora são
 // recalculados desta competência em diante (useContratos.salvarCompetenciaRepasse).
 export default function ComposicaoRepasseModal({ contrato, competencia, onClose }) {
-  const { categories, indicesContratos, schedules, transactions, salvarCompetenciaRepasse, pode, accounts } = useApp()
+  const { categories, indicesContratos, schedules, transactions, salvarCompetenciaRepasse, pode, accounts, registerScheduleOccurrence } = useApp()
   const podeEditar = pode('contratos', 'editar')
   const doContrato = useMemo(() => schedules.filter(s => s.contratoId === contrato.id), [schedules, contrato.id])
   const linha = useMemo(() => competenciasDoRepasse(contrato, {
@@ -47,6 +47,13 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const bem = contrato.bem_id ? accounts.find(a => a.id === contrato.bem_id) : null
+  // Recebimento desta competência (agendamento gerado pelo contrato).
+  const parcela = doContrato.find(s => ehParcelaGerada(s, contrato.id) && (s.contratoPapel || 'aluguel') === 'aluguel' && competenciaDaParcela(s) === competencia) || null
+  const paga = !!parcela && parcelaPaga(parcela)
+  const dataPaga = paga ? parcela.registered[0] : null
+  const txPaga = paga ? transactions.find(t => t.id === parcela.registeredMeta?.[dataPaga]?.lancamento_id) || transactions.find(t => t.scheduleId === parcela.id) || null : null
+  const [recebimento, setRecebimento] = useState(() => ({ data: parcela?.startDate || hojeStr(), texto: valorBRFormatado(parcela?.amount ?? 0) }))
+  const inicial = useMemo(() => JSON.stringify(itensParaGravar((linha?.itens || []))), [linha])
 
   if (!linha) {
     return (
@@ -88,6 +95,16 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
   }
 
   const tipoCategoria = (l) => (l.sinal > 0 ? 'income' : 'expense')
+  const alterado = JSON.stringify(itensParaGravar(itens)) !== inicial
+  // Registrar pelo Contrato = mesmo efeito do Agendamento (registerScheduleOccurrence → gancho P5:
+  // fecha as competências quitadas e pergunta do ajuste se o valor for outro).
+  const registrar = () => {
+    const valor = parseValorBR(recebimento.texto)
+    if (!(valor > 0)) return setErro('Informe o valor recebido.')
+    if (!recebimento.data) return setErro('Informe a data do recebimento.')
+    registerScheduleOccurrence(parcela.id, recebimento.data, parcela.startDate, r2(valor))
+    onClose()
+  }
   return (
     <Modal open onClose={onClose} title={`Composição do repasse — ${fmtYm(competencia)}`} size="lg">
       <div className="space-y-3 text-sm">
@@ -141,11 +158,14 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
                       Dedutível IR
                     </label>
                   )}
-                  {l.tipo === 'benfeitoria' && bem && (
-                    <label className="flex items-center gap-1 whitespace-nowrap" title="O custo entra no bem quando a ligação com o Patrimônio for ativada">
+                  {l.tipo === 'benfeitoria' && (
+                    <label className="flex items-center gap-1 whitespace-nowrap" title={bem ? `Soma no custo de ${bem.apelido || bem.name} (sem lançamento de caixa)` : 'Ligue um bem ao contrato para somar ao custo'}>
                       <input type="checkbox" className="accent-primary" checked={!!l.somar_ao_bem} disabled={!podeEditar} onChange={e => mudar(i, { somar_ao_bem: e.target.checked })} />
                       Somar ao custo do bem
                     </label>
+                  )}
+                  {l.tipo === 'benfeitoria' && l.somar_ao_bem && !bem && (
+                    <span className="text-aviso">Ligue um bem ao contrato para somar ao custo</span>
                   )}
                 </div>
                 <div>
@@ -182,6 +202,30 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
             </>
           )}
         </div>
+
+        {paga && (
+          <p className="text-xs text-receita">
+            Recebido em {fmtDate(txPaga?.date || dataPaga)}: {fmt(txPaga ? txPaga.amount : parcela.amount)} — uma linha só na conta; esta é a composição.
+          </p>
+        )}
+        {parcela && !paga && podeEditar && (
+          <div className="p-3 rounded-lg border border-borda space-y-2">
+            <p className="text-xs font-semibold text-texto-2">Registrar recebimento do repasse</p>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="text-[11px] text-texto-3">Data
+                <input type="date" className="input py-1 text-sm" value={recebimento.data} onChange={e => setRecebimento(r => ({ ...r, data: e.target.value }))} aria-label="Data do recebimento" />
+              </label>
+              <label className="text-[11px] text-texto-3">Valor que caiu na conta
+                <CampoValor className="input py-1 text-sm" value={recebimento.texto} onChange={v => setRecebimento(r => ({ ...r, texto: v }))} aria-label="Valor recebido" />
+              </label>
+              <button type="button" className="btn-primary text-xs" disabled={alterado || salvando} onClick={registrar}
+                title={alterado ? 'Grave a composição antes de registrar' : 'Mesmo efeito de registrar pelo Agendamento'}>
+                Registrar recebimento
+              </button>
+            </div>
+            {alterado && <p className="text-[11px] text-aviso">Grave a composição antes de registrar o recebimento.</p>}
+          </div>
+        )}
 
         <label className="flex items-center gap-2 text-xs text-texto-2">
           <input type="checkbox" className="accent-primary" checked={fechada} disabled={!podeEditar} onChange={e => setFechada(e.target.checked)} />

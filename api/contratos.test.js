@@ -425,3 +425,88 @@ describe('migração 2026-11-07c: composição do repasse e taxas da administrad
     expect(regraDaRota('/api/contrato-competencias', 'PUT')).toEqual({ modulo: 'contratos', acao: 'editar' })
   })
 })
+
+describe('migração 2026-11-07d: benfeitoria no custo do bem e reajuste do repasse', () => {
+  const ler = (n) => readFileSync(new URL(`../supabase/migrations/${n}`, import.meta.url), 'utf-8')
+  const preparar = async () => {
+    await estado.db.exec(`ALTER TABLE contas ADD COLUMN type TEXT; ALTER TABLE contas ADD COLUMN balance NUMERIC DEFAULT 0;
+      INSERT INTO contas (id, profile_id, type, balance) VALUES ('bem-x', 'pf', 'asset', 100000), ('bem-y', 'pf', 'asset', 0);
+      CREATE TABLE IF NOT EXISTS financing_installments (id TEXT PRIMARY KEY);`)
+    for (const n of ['2026-11-06d_bem_baixas.sql', '2026-11-07b_contratos_repasse.sql', '2026-11-07c_contratos_composicao_repasse.sql', '2026-11-07d_contratos_benfeitoria_reajuste.sql', '2026-11-07d_contratos_benfeitoria_reajuste.sql']) {
+      await estado.db.exec(ler(n))
+    }
+  }
+  // Dados fictícios.
+  const REPASSE = {
+    ...CONTRATO, tipo: 'receber', objeto: 'Imóvel Exemplo', favorecido: 'Administradora Exemplo', bonificacao_valor: 0, bonificacao_meses: 0,
+    modo_repasse: true, dia_repasse: 10, bem_id: 'bem-x', contraparte_nome: 'Inquilino Exemplo',
+  }
+  const benf = (valor, extra = {}) => ({ chave: 'm:b1', tipo: 'benfeitoria', descricao: 'Reparo', valor: -valor, origem: 'manual', somar_ao_bem: true, ...extra })
+  const put = (id, itens, comp = '2026-03') => chamar(competencias, 'PUT', { url: '/api/contrato-competencias', body: { contrato_id: id, competencia: comp, itens } })
+  const linhasBem = async () => (await estado.db.query("SELECT bem_id, tipo, valor::float AS valor, descricao, origem_ref FROM bem_baixas ORDER BY origem_ref")).rows
+  const saldo = async (id) => (await estado.db.query('SELECT balance::float AS b FROM contas WHERE id = $1', [id])).rows[0].b
+
+  it('marcada e com bem: um movimento no bem, sem lançamento; editar atualiza; desmarcar remove; nunca duplica', async () => {
+    await preparar()
+    const id = (await chamar(contratos, 'POST', { body: { contrato: REPASSE } })).body.contrato.id
+    const r = await put(id, [benf(4799.49)])
+    expect(r.statusCode).toBe(200)
+    expect(r.body.bens).toEqual([{ id: 'bem-x', saldo: 104799.49 }])
+    expect(await linhasBem()).toEqual([{
+      bem_id: 'bem-x', tipo: 'benfeitoria', valor: 4799.49, origem_ref: `ctr:${id}:2026-03:m:b1`,
+      descricao: 'Benfeitoria — contrato Imóvel Exemplo, competência 03/2026 · Reparo',
+    }])
+    await put(id, [benf(4799.49)])
+    expect(await linhasBem()).toHaveLength(1)
+    await put(id, [benf(5000)])
+    expect(await saldo('bem-x')).toBe(105000)
+    expect((await linhasBem())[0].valor).toBe(5000)
+    await put(id, [benf(5000, { somar_ao_bem: false })])
+    expect(await linhasBem()).toEqual([])
+    expect(await saldo('bem-x')).toBe(100000)
+    expect((await estado.db.query('SELECT count(*)::int AS n FROM lancamentos')).rows[0].n).toBe(0)
+  })
+
+  it('excluir o item, voltar ao padrão e trocar o bem do contrato mexem no movimento', async () => {
+    await preparar()
+    const id = (await chamar(contratos, 'POST', { body: { contrato: REPASSE } })).body.contrato.id
+    await put(id, [benf(1000), { ...benf(200), chave: 'm:b2' }])
+    expect(await saldo('bem-x')).toBe(101200)
+    await put(id, [benf(1000)])
+    expect(await saldo('bem-x')).toBe(101000)
+    const troca = await chamar(contratos, 'PUT', { body: { id, contrato: { bem_id: 'bem-y' } } })
+    expect(troca.body.bens).toEqual(expect.arrayContaining([{ id: 'bem-x', saldo: 100000 }, { id: 'bem-y', saldo: 1000 }]))
+    expect((await linhasBem()).map(l => l.bem_id)).toEqual(['bem-y'])
+    const del = await chamar(competencias, 'DELETE', { url: `/api/contrato-competencias?contrato_id=${id}&competencia=2026-03` })
+    expect(del.body.bens).toEqual([{ id: 'bem-y', saldo: 0 }])
+    expect(await linhasBem()).toEqual([])
+  })
+
+  it('sem bem ligado a marcação só fica guardada; contrato excluído leva as benfeitorias', async () => {
+    await preparar()
+    const semBem = (await chamar(contratos, 'POST', { body: { contrato: { ...REPASSE, bem_id: null } } })).body.contrato.id
+    const r = await put(semBem, [benf(300)])
+    expect(r.body.competencia.itens[0]).toMatchObject({ somar_ao_bem: true })
+    expect(await linhasBem()).toEqual([])
+    const id = (await chamar(contratos, 'POST', { body: { contrato: REPASSE } })).body.contrato.id
+    await put(id, [benf(300)])
+    expect(await saldo('bem-x')).toBe(100300)
+    const ex = await chamar(contratos, 'DELETE', { url: `/api/contratos?id=${id}` })
+    expect(ex.body.bens).toEqual([{ id: 'bem-x', saldo: 100000 }])
+    expect(await linhasBem()).toEqual([])
+  })
+
+  it('reajuste confirmado no contrato (bases_confirmadas) e ajuste ligado ao lançamento', async () => {
+    await preparar()
+    const id = (await chamar(contratos, 'POST', { body: { contrato: REPASSE } })).body.contrato.id
+    const ok = await chamar(contratos, 'PUT', { body: { id, contrato: { bases_confirmadas: { 1: 2310 } } } })
+    expect(ok.body.contrato.bases_confirmadas).toEqual({ 1: 2310 })
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { bases_confirmadas: { 0: 1 } } } })).statusCode).toBe(400)
+    const aj = await chamar(competencias, 'PUT', { url: '/api/contrato-competencias', body: {
+      contrato_id: id, competencia: '2026-06', status: 'fechada', repasse_lancamento_id: 'tx_1',
+      itens: [{ chave: 'aj:tx_1', tipo: 'ajuste', descricao: 'Ajuste do repasse', valor: -10.65, origem: 'manual', lancamento_id: 'tx_1' }],
+    } })
+    expect(aj.body.competencia).toMatchObject({ status: 'fechada', repasse_lancamento_id: 'tx_1' })
+    expect(aj.body.competencia.itens[0].lancamento_id).toBe('tx_1')
+  })
+})

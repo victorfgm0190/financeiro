@@ -56,3 +56,50 @@ export default function ConfirmarReajusteModal({ contrato, parcela, onClose, onC
     </Modal>
   )
 }
+
+// "Confirmar reajuste" no contrato a receber por administradora: o aluguel bruto do ciclo vale dali
+// em diante (os ciclos seguintes reprojetam a partir dele) e a taxa de administração recalcula
+// sobre ele. Competência conferida não muda.
+//   pendente: reajustePendenteRepasse → { ciclo, competencia, base, baseAnterior }.
+export function ConfirmarReajusteRepasseModal({ contrato, pendente, onClose, onConfirmado }) {
+  const { confirmarReajusteRepasse } = useApp()
+  const [valor, setValor] = useState(valorBRFormatado(pendente?.base))
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  if (!contrato || !pendente) return null
+  const confirmar = async () => {
+    const v = parseValorBR(valor)
+    if (!(v > 0)) return setErro('Informe um valor válido.')
+    setSalvando(true)
+    try {
+      await confirmarReajusteRepasse(contrato, { ciclo: pendente.ciclo, competencia: pendente.competencia, novoBase: v, baseAnterior: pendente.baseAnterior })
+      onConfirmado?.()
+      onClose()
+    } catch (err) {
+      setErro(err?.message || 'Falha ao confirmar.')
+      setSalvando(false)
+    }
+  }
+  const comp = `${pendente.competencia.slice(5, 7)}/${pendente.competencia.slice(0, 4)}`
+  return (
+    <Modal open onClose={onClose} title="Confirmar reajuste" size="sm">
+      <div className="space-y-3 text-sm">
+        <p className="text-texto-2">
+          Reajuste a partir da competência {comp} (ciclo {pendente.ciclo}). Aluguel anterior {fmt(pendente.baseAnterior)};
+          projeção <strong className="text-texto-1">{fmt(pendente.base)}</strong>
+          {contrato.indice_reajuste !== 'FIXO' && contrato.indice_reajuste !== 'NENHUM' ? ` pelo ${contrato.indice_reajuste}` : ''}.
+        </p>
+        <div>
+          <label className="label">Aluguel bruto reajustado</label>
+          <CampoValor value={valor} onChange={v => { setErro(''); setValor(v) }} autoFocus aria-label="Aluguel reajustado" />
+          <p className="text-[11px] text-texto-3 mt-1">Vale de {comp} em diante; a taxa de administração recalcula sobre ele. Competências conferidas não mudam.</p>
+        </div>
+        {erro && <p className="text-xs text-perigo">{erro}</p>}
+        <div className="flex gap-2 justify-end">
+          <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button className="btn-primary" disabled={salvando} onClick={confirmar}>Confirmar</button>
+        </div>
+      </div>
+    </Modal>
+  )
+}

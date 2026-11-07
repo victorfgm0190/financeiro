@@ -21,7 +21,7 @@ import { useThemeColors } from '../../hooks/useTheme'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { corSerie, estiloTooltip } from '../../lib/chartPalette'
 import SeletorModoValor from '../Contratos/SeletorModoValor'
-import { lancamentosNoModo, MODO_VALOR_PADRAO, CATEGORIA_CREDITO_PROPRIETARIO } from '../../lib/contratos/despesaReal'
+import { lancamentosNoModo, MODO_VALOR_PADRAO, categoriaEspecial } from '../../lib/contratos/despesaReal'
 import { isoLocal } from '../../lib/hoje'
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -37,7 +37,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function ReportsPanel() {
-  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, reserveFunctions } = useApp()
+  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, reserveFunctions, abridorDeRepasse, contratos } = useApp()
   const cor = useThemeColors()
   const isMobile = useIsMobile()
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
@@ -52,6 +52,7 @@ export default function ReportsPanel() {
   const [selectedMonth, setSelectedMonth] = useState(0)
   const [showBens, setShowBens] = useState(false)
   const [modoValor, setModoValor] = useState(MODO_VALOR_PADRAO)
+  const [porComposicao, setPorComposicao] = useState(false)
   const [showRelatorioFatura, setShowRelatorioFatura] = useState(false)
   const [showDemonstrativo, setShowDemonstrativo] = useState(false)
   const [showFavorecido, setShowFavorecido] = useState(false)
@@ -78,20 +79,20 @@ export default function ReportsPanel() {
   const categoryData = useMemo(() => {
     if (!currentMonthData) return []
     const totals = {}
-    lancamentosNoModo(transactions, modoValor)
+    lancamentosNoModo(transactions, modoValor, { abrirRepasse: porComposicao && abridorDeRepasse ? abridorDeRepasse() : null })
       .filter(tx => countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet) && tx.date >= currentMonthData.start && tx.date <= currentMonthData.end && tx.categoryId)
       .forEach(tx => {
         totals[tx.categoryId] = (totals[tx.categoryId] || 0) + tx.amount
       })
     return Object.entries(totals)
       .map(([id, value]) => {
-        const cat = id === CATEGORIA_CREDITO_PROPRIETARIO.id ? CATEGORIA_CREDITO_PROPRIETARIO : categories.find(c => c.id === id)
+        const cat = categoriaEspecial(id) || categories.find(c => c.id === id)
         return { name: cat ? [cat.icon, cat.name].filter(Boolean).join(' ') : id, value }
       })
       .filter(c => c.value > 0.005)
       .sort((a, b) => b.value - a.value)
       .slice(0, 10)
-  }, [transactions, categories, currentMonthData, aplicSet, reservaDespesaFuncSet, reservaSet, modoValor])
+  }, [transactions, categories, currentMonthData, aplicSet, reservaDespesaFuncSet, reservaSet, modoValor, porComposicao, abridorDeRepasse, contratos])
 
   const totalIncome = last6Months.reduce((s, m) => s + m.income, 0) / 6
   const totalExpense = last6Months.reduce((s, m) => s + m.expense, 0) / 6
@@ -275,7 +276,7 @@ export default function ReportsPanel() {
         <div data-guia="reports.despesas-categoria" className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-texto-2">Despesas por Categoria</h2>
-            <SeletorModoValor value={modoValor} onChange={setModoValor} />
+            <SeletorModoValor value={modoValor} onChange={setModoValor} porComposicao={porComposicao} onPorComposicao={setPorComposicao} />
             <select
               data-guia="reports.mes"
               className="input w-auto text-xs py-1.5"
