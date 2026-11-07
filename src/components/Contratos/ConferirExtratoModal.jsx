@@ -11,7 +11,7 @@ import { NATUREZAS_DESPESA } from '../../lib/contratos/composicaoRepasse'
 import { saldoTaxasUnicas } from '../../lib/contratos/taxaUnica'
 import {
   TIPOS_EXTRATO, ROTULOS_TIPO_EXTRATO, linhasDaLeitura, linhasDoProjetado, compararComProjetado, conferirSaldoAnterior,
-  linhaAjusteSaldo, avisosTaxasUnicas, montarConferencia, taxasUnicasDo,
+  linhaAjusteSaldo, avisosTaxasUnicas, montarConferencia, taxasUnicasDo, conferirRepasse, linhaAjusteRepasse,
 } from '../../lib/contratos/conferenciaExtrato'
 import { extrairExtratoDeImagem } from '../../lib/contratos/imagemBoleto'
 
@@ -50,6 +50,8 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
   const [lendo, setLendo] = useState(false)
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
+  // Líquido do extrato ≠ itens conferidos: o usuário escolhe (ajuste aqui ou passar adiante) antes de confirmar.
+  const [passarDif, setPassarDif] = useState(null)
   const arquivoRef = useRef(null)
 
   if (!linha) {
@@ -125,8 +127,13 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
   const mudar = (i, campos) => { setErro(''); setLinhas(prev => prev.map((l, j) => (j === i ? { ...l, ...campos } : l))) }
   const incluir = () => setLinhas(prev => [...prev, paraTela({ id: `n${Date.now().toString(36)}`, descricao: '', valor: -0, tipo: 'despesa', natureza: 'outra', taxa_id: null })])
   const criarAjuste = () => setLinhas(prev => [...prev, { ...paraTela(linhaAjusteSaldo(difSaldo.diferenca)), ajusteSaldo: true }])
+  // "Passar adiante" vale para a diferença escolhida; se os números mudarem, pergunta de novo.
+  const difRepasse = linha.foraDoSaldo ? null : conferirRepasse(numOuNull(cab.repasse), montado.resumo.saldo)
+  const decidido = !difRepasse || (passarDif != null && Math.abs(passarDif - difRepasse.diferenca) < 0.005)
+  const ajustarRepasse = () => { setPassarDif(null); setLinhas(prev => [...prev, paraTela(linhaAjusteRepasse(difRepasse.diferenca))]) }
 
   const confirmar = async () => {
+    if (!decidido) return setErro('Escolha o que fazer com a diferença entre o líquido do extrato e os itens conferidos.')
     const sem = itensTela.find(l => !String(l.descricao || '').trim())
     if (sem) return setErro('Informe a descrição de todos os itens.')
     setSalvando(true)
@@ -227,6 +234,27 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
           </tbody>
         </table>
 
+        {difRepasse && (
+          <div role="alert" data-testid="aviso-repasse" className="p-2 rounded-lg border border-aviso/50 bg-aviso/10 text-xs text-texto-1 space-y-2">
+            <p className="flex items-start gap-1">
+              <AlertTriangle size={14} className="text-aviso shrink-0" />
+              O líquido do extrato ({fmt(difRepasse.extrato)}) não bate com os itens conferidos ({fmt(difRepasse.calculado)}) — diferença de {fmt(difRepasse.diferenca)}. Falta algum item?
+            </p>
+            {podeEditar && (
+              <div className="flex flex-wrap gap-3">
+                <label className="flex items-center gap-1">
+                  <input type="radio" name="dif-repasse" className="accent-primary" checked={false} onChange={ajustarRepasse} />
+                  Criar ajuste de {fmt(difRepasse.diferenca)} nesta competência
+                </label>
+                <label className="flex items-center gap-1">
+                  <input type="radio" name="dif-repasse" className="accent-primary" checked={decidido} onChange={() => setPassarDif(difRepasse.diferenca)} />
+                  Passar a diferença para a competência seguinte
+                </label>
+              </div>
+            )}
+          </div>
+        )}
+
         {avisos.map(a => <p key={a} className="text-xs text-aviso flex items-start gap-1"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> {a}</p>)}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-lg bg-surface-2/60 text-xs" data-testid="resumo-conferencia">
@@ -242,7 +270,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
         {erro && <p role="alert" className="text-xs text-perigo">{erro}</p>}
         <div className="flex justify-end gap-2 pt-2 border-t border-borda">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-          {podeEditar && <button type="button" className="btn-primary" disabled={salvando} onClick={confirmar}>Confirmar conferência</button>}
+          {podeEditar && <button type="button" className="btn-primary" disabled={salvando || !decidido} title={decidido ? undefined : 'Escolha o que fazer com a diferença do repasse'} onClick={confirmar}>Confirmar conferência</button>}
         </div>
       </div>
     </Modal>

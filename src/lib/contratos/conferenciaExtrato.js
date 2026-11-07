@@ -173,3 +173,20 @@ export function lembreteDaParcela(contrato, competencia, hoje) {
   if (diaNoMes(addMeses(competencia, meses), DIA_LEMBRETE_EXTRATO) > hoje) return null
   return `Extrato de ${fmtYm(competencia)} da ${contrato.favorecido || 'administradora'} ainda não conferido`
 }
+
+// Líquido do extrato × itens conferidos: o repasse informado no extrato deve ser o saldo (saldo
+// anterior do Finup + itens). → null (bate, ou extrato sem líquido) ou { extrato, calculado, diferenca }
+// (diferenca = extrato − calculado: o ajuste que faz os itens chegarem no líquido). Sem repasse no
+// extrato (0) e saldo ≤ 0 também bate (não há repasse).
+export function conferirRepasse(repasseExtrato, saldoCalculado) {
+  if (repasseExtrato == null || repasseExtrato === '' || !Number.isFinite(Number(repasseExtrato))) return null
+  const extrato = r2(repasseExtrato)
+  const calculado = r2(saldoCalculado)
+  if (extrato <= ZERO && calculado <= ZERO) return null
+  const diferenca = r2(extrato - calculado)
+  return Math.abs(diferenca) > ZERO ? { extrato, calculado, diferenca } : null
+}
+
+export const linhaAjusteRepasse = (diferenca) => ({
+  id: `ar${Date.now().toString(36)}`, descricao: 'Ajuste do repasse (líquido do extrato)', valor: r2(diferenca), tipo: 'ajuste', natureza: null, taxa_id: null,
+})

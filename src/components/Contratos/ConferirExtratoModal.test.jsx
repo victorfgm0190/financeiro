@@ -78,3 +78,49 @@ describe('Conferir extrato', () => {
     expect(screen.getByText(/desconta R\$ 2\.500,00, mas faltavam R\$ 2\.200,00/)).toBeTruthy()
   })
 })
+
+describe('Conferir extrato — líquido do extrato diferente dos itens conferidos', () => {
+  const abrirJunho = () => {
+    render(<ConferirExtratoModal contrato={CONTRATO} competencia="2026-06" onClose={() => {}} ler={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Digitar/ }))
+    fireEvent.change(screen.getByLabelText('Valor do repasse do extrato'), { target: { value: '1.360,00' } })
+  }
+  const confirmarBtn = () => screen.getByRole('button', { name: 'Confirmar conferência' })
+  const soma = (itens) => Math.round(itens.reduce((a, i) => a + i.valor, 0) * 100) / 100
+
+  it('pergunta antes de confirmar; sem escolher não confirma; "passar adiante" grava o líquido sem ajuste', async () => {
+    abrirJunho()
+    const aviso = screen.getByTestId('aviso-repasse')
+    expect(nbsp(aviso.textContent)).toMatch(/O líquido do extrato \(R\$ 1\.360,00\) não bate com os itens conferidos \(R\$ [\d.,]+\) — diferença de -?R\$ [\d.,]+\. Falta algum item\?/)
+    expect(confirmarBtn().disabled).toBe(true)
+    fireEvent.click(confirmarBtn())
+    expect(salvarCompetenciaRepasse).not.toHaveBeenCalled()
+
+    fireEvent.click(within(aviso).getByLabelText('Passar a diferença para a competência seguinte'))
+    expect(confirmarBtn().disabled).toBe(false)
+    // Mudou o líquido: a escolha vale para a diferença anterior → pergunta de novo.
+    fireEvent.change(screen.getByLabelText('Valor do repasse do extrato'), { target: { value: '1.350,00' } })
+    expect(confirmarBtn().disabled).toBe(true)
+    fireEvent.click(within(screen.getByTestId('aviso-repasse')).getByLabelText('Passar a diferença para a competência seguinte'))
+    fireEvent.click(confirmarBtn())
+    await vi.waitFor(() => expect(salvarCompetenciaRepasse).toHaveBeenCalled())
+    const [, comp] = salvarCompetenciaRepasse.mock.calls[0]
+    expect(comp.conferencia.repasse).toBe(1350)
+    expect(comp.itens.some(i => i.tipo === 'ajuste')).toBe(false)
+  })
+
+  it('"Criar ajuste de R$ Z nesta competência": o ajuste entra e os itens fecham com o líquido', async () => {
+    abrirJunho()
+    const aviso = screen.getByTestId('aviso-repasse')
+    const z = nbsp(aviso.textContent).match(/diferença de (-?R\$ [\d.]+,\d{2})/)[1]
+    fireEvent.click(within(aviso).getByLabelText(`Criar ajuste de ${z} nesta competência`))
+    expect(screen.queryByTestId('aviso-repasse')).toBeNull()
+    expect(confirmarBtn().disabled).toBe(false)
+    fireEvent.click(confirmarBtn())
+    await vi.waitFor(() => expect(salvarCompetenciaRepasse).toHaveBeenCalled())
+    const [, comp] = salvarCompetenciaRepasse.mock.calls[0]
+    expect(comp.itens.at(-1)).toMatchObject({ tipo: 'ajuste', descricao: 'Ajuste do repasse (líquido do extrato)', origem: 'manual' })
+    expect(Math.round((comp.conferencia.saldo_anterior_finup + soma(comp.itens)) * 100) / 100).toBe(1360)
+    expect(comp.conferencia.repasse).toBe(1360)
+  })
+})
