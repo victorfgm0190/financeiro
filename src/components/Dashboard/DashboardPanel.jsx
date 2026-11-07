@@ -20,7 +20,7 @@ import { useThemeColors } from '../../hooks/useTheme'
 import { estiloTooltip } from '../../lib/chartPalette'
 import { computeFaturaRef } from '../../lib/fatura'
 import { proximosAgendamentos } from '../../lib/proximosAgendamentos'
-import { dataDoDia, alertasVencimentoCartao } from '../../lib/dashboardHoje'
+import { dataDoDia, alertasVencimentoCartao, textoVencimento } from '../../lib/dashboardHoje'
 import { useHoje } from '../../hooks/useHoje'
 import { escopoFluxoPrincipal, pendentesNoFluxoPrincipal } from '../../lib/fluxoPrincipal'
 import { isInvestAutoOrigin } from '../../lib/origins'
@@ -189,7 +189,8 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     [schedules, getNextOccurrences, hojeDia],
   )
 
-  // Credit card alerts (vencimento em até 5 dias a partir de hoje; vira de dia sozinho)
+  // Credit card alerts: de 5 dias antes até o dia do vencimento, em dias de calendário (lib/dashboardHoje);
+  // vira de dia sozinho (useHoje).
   const creditAlerts = useMemo(() => alertasVencimentoCartao(accounts, hojeDia), [accounts, hojeDia])
 
   // ── Saldo Projetado + Final ──────────────────────────────────────────────────
@@ -310,8 +311,18 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           <AlertTriangle size={18} className="text-aviso shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-aviso">Fatura(s) próximas do vencimento</p>
-            <p className="text-xs text-texto-2 mt-0.5">
-              {creditAlerts.map(a => `${a.name} (vence dia ${a.dueDay})`).join(' · ')}
+            {/* Do mais próximo ao mais distante. O mais próximo leva o destaque do "Próxima fatura"
+                da tela de Contas (selo azul #185FA5, texto branco). */}
+            <p className="text-xs text-texto-2 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="alerta-vencimento-cartao">
+              {creditAlerts.map(({ account: a, dias }, i) => (
+                <span
+                  key={a.id}
+                  className={i === 0 ? 'text-[11px] font-semibold text-white px-2 py-0.5 rounded-full shadow whitespace-nowrap' : 'whitespace-nowrap'}
+                  style={i === 0 ? { backgroundColor: '#185FA5' } : undefined}
+                >
+                  {a.name} · {textoVencimento(dias)}
+                </span>
+              ))}
             </p>
           </div>
           <button data-guia="dashboard.ver-alertas" onClick={() => setActivePage('alerts')} className="ml-auto text-xs text-primary-fg hover:text-texto-1 shrink-0">Ver alertas</button>

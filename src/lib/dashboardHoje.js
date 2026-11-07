@@ -1,4 +1,4 @@
-import { differenceInDays } from 'date-fns'
+import { faturaToDate } from './parcelas'
 
 // Data de hoje (YYYY-MM-DD, de useHoje) como Date local ao meio-dia. Os cálculos do Dashboard que
 // recebiam `new Date()` só usam dia/mês/ano: com o meio-dia o resultado é o mesmo de "agora" no
@@ -8,13 +8,40 @@ export function dataDoDia(iso) {
   return new Date(y, m - 1, d, 12, 0, 0)
 }
 
-// Alerta de vencimento do Dashboard: cartões ativos com vencimento em até 5 dias. Vencimento no
-// dueDay deste mês; se já passou (inclusive o próprio dia, como antes), o do mês seguinte.
-export function alertasVencimentoCartao(accounts, hoje) {
-  const agora = dataDoDia(hoje)
-  return accounts.filter(a => a.type === 'credit' && a.active !== false).filter(a => {
-    let due = new Date(agora.getFullYear(), agora.getMonth(), a.dueDay || 10)
-    if (due < agora) due = new Date(agora.getFullYear(), agora.getMonth() + 1, a.dueDay || 10)
-    return differenceInDays(due, agora) <= 5
-  })
+const mesSeguinte = (yyyymm) => {
+  const [y, m] = yyyymm.split('-').map(Number)
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 }
+// Dias de calendário entre duas datas YYYY-MM-DD (data contra data, sem hora nem horário de verão).
+const diasEntre = (de, ate) => {
+  const utc = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d) }
+  return Math.round((utc(ate) - utc(de)) / 86400000)
+}
+
+export const DIAS_ALERTA_VENCIMENTO = 5
+
+// Próximo vencimento do cartão a partir de `hoje` (YYYY-MM-DD): o do mês corrente enquanto não
+// passou (o próprio dia conta); a partir do dia seguinte, o do mês seguinte. Dia que não existe no
+// mês (ex.: 31 em fevereiro) vira o último dia do mês (faturaToDate). Sem dueDay: dia 10 (como antes).
+export function proximoVencimentoCartao(dueDay, hoje) {
+  const dia = dueDay || 10
+  const mes = hoje.slice(0, 7)
+  const desteMes = faturaToDate(mes, dia)
+  return desteMes >= hoje ? desteMes : faturaToDate(mesSeguinte(mes), dia)
+}
+
+// Alerta de vencimento do Dashboard: cartões ativos que vencem de hoje até 5 dias de calendário à
+// frente (vencimento dia 13 → aparece de 08 a 13). → [{ account, vencimento, dias }], do mais
+// próximo ao mais distante; empate → maior fatura do mês (mesma regra do "Próxima fatura" de Contas).
+export function alertasVencimentoCartao(accounts, hoje) {
+  return accounts
+    .filter(a => a.type === 'credit' && a.active !== false)
+    .map(a => {
+      const vencimento = proximoVencimentoCartao(a.dueDay, hoje)
+      return { account: a, vencimento, dias: diasEntre(hoje, vencimento) }
+    })
+    .filter(x => x.dias <= DIAS_ALERTA_VENCIMENTO)
+    .sort((x, y) => x.dias - y.dias || (y.account.creditMonthBill || 0) - (x.account.creditMonthBill || 0))
+}
+
+export const textoVencimento = (dias) => (dias === 0 ? 'vence hoje' : `vence em ${dias} dia${dias === 1 ? '' : 's'}`)

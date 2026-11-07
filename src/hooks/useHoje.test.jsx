@@ -6,7 +6,7 @@ import { useMemo } from 'react'
 import { renderHook, act, cleanup } from '@testing-library/react'
 import { useHoje } from './useHoje'
 import { proximosAgendamentos, somarDias } from '../lib/proximosAgendamentos'
-import { alertasVencimentoCartao, dataDoDia } from '../lib/dashboardHoje'
+import { alertasVencimentoCartao, dataDoDia, proximoVencimentoCartao, textoVencimento } from '../lib/dashboardHoje'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -49,26 +49,60 @@ describe('useHoje + próximos 7 dias', () => {
     expect(result.current.datas).toEqual(['2026-11-15'])
   })
 
-  it('alerta de vencimento de cartão: entra sozinho quando o vencimento fica a 5 dias, e sai no dia do vencimento', () => {
-    // Regra de antes, mantida: differenceInDays (arredonda para baixo) entre o vencimento (00:00) e
-    // agora ≤ 5. Vencimento dia 14: de 07/11 dá 6 (sem alerta); de 08/11, 5 (alerta).
+  it('alerta de vencimento de cartão (dias de calendário): 07 sem alerta, 08 "vence em 5 dias", 13 "vence hoje", 14 sai', () => {
+    // Vencimento dia 13 → aparece de 08 a 13, inclusive; no dia 14 passa a olhar o de dezembro.
     const cartoes = [
-      { id: 'c14', type: 'credit', dueDay: 14 },
-      { id: 'c30', type: 'credit', dueDay: 30 },            // longe: nunca alerta aqui
+      { id: 'c13', type: 'credit', dueDay: 13 },
+      { id: 'c30', type: 'credit', dueDay: 30 },               // longe: nunca alerta aqui
       { id: 'cx', type: 'credit', dueDay: 13, active: false }, // inativo: nunca alerta
       { id: 'cc', type: 'checking', dueDay: 13 },
     ]
     const useAlertas = () => {
       const hoje = useHoje()
-      return useMemo(() => alertasVencimentoCartao(cartoes, hoje).map(a => a.id), [hoje])
+      return useMemo(() => alertasVencimentoCartao(cartoes, hoje).map(x => `${x.account.id}: ${textoVencimento(x.dias)}`), [hoje])
     }
-    const { result } = renderHook(useAlertas)                // 07/11 23:58
+    const { result } = renderHook(useAlertas)                   // 07/11 23:58
     expect(result.current).toEqual([])
-    act(() => { vi.advanceTimersByTime(3 * 60 * 1000) })    // 08/11 00:01
-    expect(result.current).toEqual(['c14'])
-    vi.setSystemTime(new Date(2026, 10, 14, 8, 0, 0))       // dia do vencimento: passa para dez (como antes)
+    act(() => { vi.advanceTimersByTime(3 * 60 * 1000) })       // 08/11 00:01, pelo timer
+    expect(result.current).toEqual(['c13: vence em 5 dias'])
+    vi.setSystemTime(new Date(2026, 10, 12, 23, 59, 0))        // 12/11, ao voltar para o app
+    act(() => { window.dispatchEvent(new Event('focus')) })
+    expect(result.current).toEqual(['c13: vence em 1 dia'])
+    vi.setSystemTime(new Date(2026, 10, 13, 0, 0, 30))         // 13/11 logo após a meia-noite
+    act(() => { window.dispatchEvent(new Event('focus')) })
+    expect(result.current).toEqual(['c13: vence hoje'])
+    vi.setSystemTime(new Date(2026, 10, 13, 23, 59, 0))        // ainda dia 13 à noite
+    act(() => { window.dispatchEvent(new Event('focus')) })
+    expect(result.current).toEqual(['c13: vence hoje'])
+    vi.setSystemTime(new Date(2026, 10, 14, 0, 1, 0))          // 14/11: sai (próximo é 13/12)
     act(() => { window.dispatchEvent(new Event('focus')) })
     expect(result.current).toEqual([])
+  })
+
+  it('vencimento em dia que não existe no mês usa o último dia do mês (31 em fevereiro e abril)', () => {
+    const c31 = [{ id: 'c31', type: 'credit', dueDay: 31 }]
+    const alerta = (hoje) => alertasVencimentoCartao(c31, hoje).map(x => [x.vencimento, x.dias])
+    expect(proximoVencimentoCartao(31, '2027-02-01')).toBe('2027-02-28')
+    expect(proximoVencimentoCartao(31, '2028-02-01')).toBe('2028-02-29')   // ano bissexto
+    expect(alerta('2027-02-22')).toEqual([])                               // 6 dias: ainda não
+    expect(alerta('2027-02-23')).toEqual([['2027-02-28', 5]])
+    expect(alerta('2027-02-28')).toEqual([['2027-02-28', 0]])              // vence hoje
+    expect(alerta('2027-03-01')).toEqual([])                               // sai; próximo é 31/03
+    expect(proximoVencimentoCartao(31, '2027-03-01')).toBe('2027-03-31')
+    expect(proximoVencimentoCartao(31, '2027-04-30')).toBe('2027-04-30')
+    expect(proximoVencimentoCartao(31, '2027-05-01')).toBe('2027-05-31')
+    expect(alerta('2027-12-29')).toEqual([['2027-12-31', 2]])              // virada de ano
+    expect(proximoVencimentoCartao(5, '2027-12-29')).toBe('2028-01-05')
+  })
+
+  it('vários cartões: do mais próximo ao mais distante; empate → maior fatura do mês', () => {
+    const cs = [
+      { id: 'a', type: 'credit', dueDay: 12, creditMonthBill: 100 },
+      { id: 'b', type: 'credit', dueDay: 10, creditMonthBill: 50 },
+      { id: 'c', type: 'credit', dueDay: 10, creditMonthBill: 900 },
+    ]
+    expect(alertasVencimentoCartao(cs, '2026-11-08').map(x => [x.account.id, textoVencimento(x.dias)]))
+      .toEqual([['c', 'vence em 2 dias'], ['b', 'vence em 2 dias'], ['a', 'vence em 4 dias']])
   })
 
   it('dataDoDia: mesmo dia/mês/ano da data, ao meio-dia local', () => {
