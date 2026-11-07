@@ -1103,6 +1103,7 @@ export async function loadFromDb(defaultData) {
               rodapeTitulo: d.cfg.rodape_titulo ?? null,
               rodapeFrase: d.cfg.rodape_frase ?? null,
               reservaPerguntarVirada: typeof d.cfg.reserva_perguntar_virada === 'boolean' ? d.cfg.reserva_perguntar_virada : null,
+              reservaDiasCaixa: d.cfg.reserva_dias_caixa ?? null,
             }
           : defaultData.settings,
         costCenters: d.cfg?.cost_centers ?? defaultData.costCenters,
@@ -1479,6 +1480,8 @@ export const settingsToRow = (settings, costCenters) => ({
   rodape_frase: settings.rodapeFrase ?? null,
   // Reservas › perguntar sobre a virada de saldo ao entrar na tela. null = padrão (ligada).
   reserva_perguntar_virada: typeof settings.reservaPerguntarVirada === 'boolean' ? settings.reservaPerguntarVirada : null,
+  // Reservas › dias à frente do aviso de caixa. null = padrão (60).
+  reserva_dias_caixa: Number.isInteger(settings.reservaDiasCaixa) && settings.reservaDiasCaixa > 0 ? settings.reservaDiasCaixa : null,
 })
 
 // Coluna de configuracoes → chave do estado do app (inverso do settingsToRow; cost_centers mora
@@ -1500,6 +1503,7 @@ export const CHAVE_APP_DA_CONFIGURACAO = {
   rodape_titulo: 'rodapeTitulo',
   rodape_frase: 'rodapeFrase',
   reserva_perguntar_virada: 'reservaPerguntarVirada',
+  reserva_dias_caixa: 'reservaDiasCaixa',
 }
 
 // Só as colunas alteradas, com camposAlterados (o sinal que a trava do servidor exige).

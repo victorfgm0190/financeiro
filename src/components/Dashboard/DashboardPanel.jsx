@@ -1,4 +1,5 @@
 import { BannerPerfisSemContaCentral } from '../shared/ContaCentralAvisos'
+import AvisosCaixaReserva from '../Reservas/AvisosCaixaReserva'
 import { ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import PrimeirosPassos from '../BoasVindas/PrimeirosPassos'
 import AvisoPreLancamentos from '../Assistente/AvisoPreLancamentos'
@@ -313,6 +314,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       <BannerPerfisSemContaCentral />
       <PrimeirosPassos />
       <AvisoPreLancamentos />
+      {pode?.('reservas', 'ver') && <AvisosCaixaReserva compacto onVer={() => setActivePage('reservas')} />}
       {/* Credit card alert banner */}
       {creditAlerts.length > 0 && (
         <div className="bg-aviso/10 border border-aviso/30 rounded-xl p-4 flex items-start gap-3">

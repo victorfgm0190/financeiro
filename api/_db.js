@@ -241,7 +241,7 @@ export const COLUNAS_OPCIONAIS = {
   lancamentos: ['importacao_id', 'fitid', 'data_ocorrencia', 'contrato_id', 'composicao', 'numero_contrato',
     'moeda', 'valor_original', 'cotacao', 'data_cotacao', 'spread', 'estimado', 'compra_iof_id', 'bem_id'],
   contas: ['spread_cambio', 'iof_linha_separada'],
-  configuracoes: ['iof_compra_internacional', 'reserva_perguntar_virada'],
+  configuracoes: ['iof_compra_internacional', 'reserva_perguntar_virada', 'reserva_dias_caixa'],
   agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato', 'efetivacoes'],
   envelopes: ['tipo_orcamento', 'valor_dia', 'dias_semana', 'descontar_feriados'],
 }

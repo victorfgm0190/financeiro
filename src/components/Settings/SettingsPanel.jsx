@@ -1,4 +1,5 @@
 import HelpCampo from '../shared/HelpCampo'
+import { DIAS_CAIXA_PADRAO } from '../../lib/avisoCaixaReserva'
 import AdicionarCategoriasKit from './AdicionarCategoriasKit'
 import { useState, useRef, useEffect } from 'react'
 import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator, ChevronRight, Smartphone } from 'lucide-react'
@@ -780,6 +781,20 @@ export default function SettingsPanel() {
           <span className="text-sm text-texto-2 select-none">
             Perguntar sobre a virada ao entrar em Reservas
             <span className="block text-xs text-texto-3">Quando um mês financeiro termina sem virada de saldo, a tela de Reservas pergunta se você quer fazê-la. Desligada, a pergunta não aparece, mas o botão "Virar Saldo" continua disponível.</span>
+          </span>
+        </label>
+        <label className="flex items-center gap-2.5 mt-4 text-sm text-texto-2">
+          <input
+            type="number" min="1" max="730" step="1"
+            className="input py-1 w-20"
+            aria-label="Dias à frente do aviso de caixa da reserva"
+            disabled={somenteLeitura}
+            value={settings.reservaDiasCaixa ?? DIAS_CAIXA_PADRAO}
+            onChange={e => { const n = Number(e.target.value); if (Number.isInteger(n) && n > 0) updateSettings({ reservaDiasCaixa: n }) }}
+          />
+          <span>
+            Dias à frente do aviso de caixa da reserva
+            <span className="block text-xs text-texto-3">O aviso compara o saldo da conta de reserva com o que está previsto para sair nesse prazo.</span>
           </span>
         </label>
       </div>

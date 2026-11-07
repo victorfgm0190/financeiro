@@ -163,5 +163,9 @@ export const MIGRACOES = [
  {
   "nome": "2026-11-06h_plano_venda_consorcio.sql",
   "sql": "-- Plano de venda do consórcio: previsão por cota, venda já feita da cota e a função de reserva que paga as\n-- parcelas. Tudo vazio por padrão. Idempotente. Não altera nenhum dado existente.\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS plano_mes TEXT;\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS plano_valor NUMERIC(14,2);\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS vendida_em TEXT;\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS vendida_valor NUMERIC(14,2);\nALTER TABLE consorcios ADD COLUMN IF NOT EXISTS funcao_reserva_id TEXT;\n"
+ },
+ {
+  "nome": "2026-11-06i_reserva_dias_caixa.sql",
+  "sql": "-- Aviso de caixa da reserva: quantos dias à frente a projeção olha. Vazio = padrão (60).\n-- Idempotente. Não altera nenhum dado existente.\nALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS reserva_dias_caixa INTEGER;\n"
  }
 ]

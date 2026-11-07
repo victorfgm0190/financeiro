@@ -25,6 +25,7 @@ import { isoLocal } from '../../lib/hoje'
 import { erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
 import { ehAjusteDeRendimento } from '../../lib/rendimentoReserva'
 import { previsoesDasFuncoes } from '../../lib/previsaoReserva'
+import AvisosCaixaReserva from './AvisosCaixaReserva'
 import { parseValorBR } from '../../lib/valorBR'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 
@@ -2303,6 +2304,8 @@ export default function ReservasPanel() {
       {tab === 'resumo' && viradaStatus?.recalculos?.length > 0 && (
         <AvisoRecalculo itens={viradaStatus.recalculos} functions={functions} onCiente={marcarRecalculosVistos} onRefazer={refazerRecalculo} />
       )}
+
+      {tab === 'resumo' && <AvisosCaixaReserva />}
 
       {tab === 'resumo' && (
         <ResumoTab
