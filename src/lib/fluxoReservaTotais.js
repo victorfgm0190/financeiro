@@ -3,10 +3,10 @@
 const round2 = (n) => Math.round(n * 100) / 100
 const semMenosZero = (n) => round2(n) || 0
 
-// Funções do Fluxo Futuro no filtro de perfil do topo. A função pertence ao perfil da conta reserva
+// Funções de reserva no filtro de perfil do topo (Resumo e Fluxo Futuro). A função pertence ao perfil da conta reserva
 // vinculada; conta sem perfil (ou com perfil que não existe mais, mesma regra do selo
 // perfilDaConta) é "Sem vínculo" e aparece em todos os perfis. Sem perfil ativo ("Tudo"): todas.
-export function funcoesDoFluxoNoPerfil(funcoes, contas, perfis, perfilAtivoId) {
+export function funcoesReservaNoPerfil(funcoes, contas, perfis, perfilAtivoId) {
   const contaPorId = new Map((contas || []).map(a => [a.id, a]))
   const perfilIds = new Set((perfis || []).map(p => p.id))
   const semVinculo = new Set()

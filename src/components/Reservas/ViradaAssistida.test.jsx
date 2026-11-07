@@ -242,7 +242,7 @@ describe('Resumo e Histórico', () => {
   ]
 
   it('valor negativo fica inteiro: sinal "−" tipográfico (não quebra antes do R$) e célula sem quebra de linha', async () => {
-    base({ profileAccounts: [CONTA], reserveFunctions: fns, reservePeriods: periodos })
+    base({ profileAccounts: [CONTA], accounts: [CONTA], reserveFunctions: fns, reservePeriods: periodos })
     api.status = vi.fn(async () => STATUS({ pendentes: [] }))
     render(<ReservasPanel />)
     fireEvent.click(screen.getByRole('button', { name: 'Resumo' }))
@@ -255,6 +255,33 @@ describe('Resumo e Histórico', () => {
       expect(td.textContent).not.toMatch(/-R\$/)
       expect(td.querySelector('.whitespace-nowrap') || td.className.includes('whitespace-nowrap')).toBeTruthy()
     }
+  })
+
+  it('Resumo no perfil: funções do perfil + "Sem vínculo" (com selo); Total = soma das exibidas', async () => {
+    const perfis = [{ id: 'p1', name: 'PF', type: 'pf' }, { id: 'p2', name: 'PJ', type: 'pj' }]
+    const c1 = { ...CONTA, id: 'acc_1', name: 'R1', apelido: 'R1', profileId: 'p1' }
+    const c2 = { ...CONTA, id: 'acc_2', name: 'R2', apelido: 'R2', profileId: 'p2' }
+    const c0 = { ...CONTA, id: 'acc_0', name: 'R0', apelido: 'R0', profileId: null }
+    const fs = [
+      { id: 'a', name: 'Função A', accountId: 'acc_1', saldoInicial: 0, ordem: 0 },
+      { id: 'b', name: 'Função B', accountId: 'acc_2', saldoInicial: 0, ordem: 0 },
+      { id: 's', name: 'Função S', accountId: 'acc_0', saldoInicial: 0, ordem: 0 },
+    ]
+    const per = [
+      { id: 'pa', function_id: 'a', data_inicio: '2026-10-15', saldo_inicial: 100 },
+      { id: 'pb', function_id: 'b', data_inicio: '2026-10-15', saldo_inicial: 1000 },
+      { id: 'ps', function_id: 's', data_inicio: '2026-10-15', saldo_inicial: 10 },
+    ]
+    base({ profileAccounts: [c1], accounts: [c1, c2, c0], profiles: perfis, activeProfileId: 'p1', reserveFunctions: fs, reservePeriods: per })
+    api.status = vi.fn(async () => STATUS({ pendentes: [] }))
+    render(<ReservasPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Resumo' }))
+    expect(screen.getAllByText('Função A').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Função S').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('Função B')).toHaveLength(0)
+    expect(screen.getAllByText('Sem vínculo').length).toBeGreaterThan(0)
+    const total = screen.getByText(/Total reservado:/).parentElement.textContent
+    expect(total).toContain('110,00')
   })
 
   it('Histórico mostra 15/07/2026 → 14/08/2026 mesmo com função sem período anterior', async () => {

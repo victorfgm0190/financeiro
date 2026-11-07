@@ -25,7 +25,10 @@ import { isoLocal } from '../../lib/hoje'
 import { erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
 import { ehAjusteDeRendimento } from '../../lib/rendimentoReserva'
 import { previsoesDasFuncoes } from '../../lib/previsaoReserva'
-import { totaisFluxoFuturo, funcoesDoFluxoNoPerfil } from '../../lib/fluxoReservaTotais'
+import { totaisFluxoFuturo, funcoesReservaNoPerfil } from '../../lib/fluxoReservaTotais'
+import { mesDaData, somarMeses, periodoDaPreferencia, preferenciaDoPeriodo, janelaDoPeriodo } from '../../lib/fluxoPeriodo'
+import { carregarBoasVindas, assinarBoasVindas, estadoBoasVindas, definirPeriodoFluxo } from '../../lib/boasVindasApi'
+import SeletorPeriodoFluxo from './SeletorPeriodoFluxo'
 import ProfileBadge from '../shared/ProfileBadge'
 import AvisosCaixaReserva from './AvisosCaixaReserva'
 import { parseValorBR } from '../../lib/valorBR'
@@ -502,7 +505,7 @@ function ObsIndicator({ text }) {
 }
 
 // ── Tab 1: Resumo ───────────────────────────────────────────────────────────
-function ResumoTab({ functions, accounts, categories = [], accountBalances, adjustmentsByFn = {}, activePeriodByFn = {}, saldosAtualizados, movFuturosByFn = {}, computeSaldo, todayStr, autoBoundsOf, lastFechamento, canUndo, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onAddPeriod, onAddAdjustment, onUpdateAdjustment, onDeleteAdjustment, onVirar, onUndo, onReorder }) {
+function ResumoTab({ functions, semVinculo, accounts, categories = [], accountBalances, adjustmentsByFn = {}, activePeriodByFn = {}, saldosAtualizados, movFuturosByFn = {}, computeSaldo, todayStr, autoBoundsOf, lastFechamento, canUndo, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onAddPeriod, onAddAdjustment, onUpdateAdjustment, onDeleteAdjustment, onVirar, onUndo, onReorder }) {
   // Nível de acesso (src/lib/permissoes.js): funções, saldos iniciais, ajustes e viradas = reservas.
   const { pode } = useApp()
   const podeIncluir = pode('reservas', 'incluir')
@@ -543,7 +546,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
     return result
   }, [functions, accounts])
 
-  const grandTotal = Object.values(saldosAtualizados).reduce((s, v) => s + v, 0)
+  // Total do topo = soma das funções EXIBIDAS (as dos grupos), no perfil do topo.
+  const grandTotal = groups.reduce((t, g) => t + g.fns.reduce((s, f) => s + (saldosAtualizados[f.id] || 0), 0), 0)
 
   const [dragId, setDragId] = useState(null)
   // Coluna "Distribuir": valor (texto) por função; erro e gravação por conta de reserva.
@@ -730,6 +734,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       <span className="text-sm font-medium text-texto-1 inline-flex items-center gap-1.5 min-w-0">
                         <GripVertical size={12} className="text-texto-3 cursor-grab shrink-0" />
                         <span className="truncate">{f.name}</span>
+                        {f.accountId && semVinculo?.has(f.id) && <ProfileBadge account={account} className="shrink-0" />}
                         <DespesaToggle on={!!f.exibirComoDespesa} onToggle={podeEditar ? () => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa }) : null} />
                         {/* Categoria só aparece quando difere do nome da função (evita "IPVA … IPVA" duplicado) */}
                         {catNameOf(f.categoryId) && catNameOf(f.categoryId) !== f.name && <span className="text-xs text-texto-2 truncate">{catNameOf(f.categoryId)}</span>}
@@ -872,6 +877,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                             <span className="inline-flex items-center gap-1.5">
                               <GripVertical size={11} className="text-texto-3 cursor-grab shrink-0" />
                               {f.name}
+                              {f.accountId && semVinculo?.has(f.id) && <ProfileBadge account={account} />}
                               <DespesaToggle on={!!f.exibirComoDespesa} onToggle={podeEditar ? () => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa }) : null} />
                               {catNameOf(f.categoryId) && <span className="text-xs text-texto-2">{catNameOf(f.categoryId)}</span>}
                             </span>
@@ -1531,16 +1537,17 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
 // Extraídos para serem reusados tanto pelo FluxoTab quanto pelo Resumo (colunas Mov. Futuros /
 // Saldo Futuro) — fonte única, sem duplicar o cálculo.
 
-// Janela deslizante de 12 meses: do mês ANTERIOR ao atual (índice 0) até +10.
-function buildFluxoWindow() {
+// Janela deslizante: do mês ANTERIOR ao atual (índice 0 = saldo de hoje) por `meses` meses. O Resumo
+// usa 12 (até +10); o Fluxo Futuro vai até o "Até" do período escolhido (src/lib/fluxoPeriodo.js).
+function buildFluxoWindow(meses = 12) {
   const now = new Date()
   const base = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const windowMonths = Array.from({ length: 12 }, (_, i) => {
+  const windowMonths = Array.from({ length: meses }, (_, i) => {
     const d = new Date(base.getFullYear(), base.getMonth() + i, 1)
     return { year: d.getFullYear(), month0: d.getMonth(), label: MONTH_LABELS[d.getMonth()], isYearStart: d.getMonth() === 0 && i > 0 }
   })
   const winStart = `${windowMonths[0].year}-${String(windowMonths[0].month0 + 1).padStart(2, '0')}-01`
-  const lastWm = windowMonths[11]
+  const lastWm = windowMonths[windowMonths.length - 1]
   const winEndDate = new Date(lastWm.year, lastWm.month0 + 1, 0)
   const winEnd = `${winEndDate.getFullYear()}-${String(winEndDate.getMonth() + 1).padStart(2, '0')}-${String(winEndDate.getDate()).padStart(2, '0')}`
   const winIndexOf = (dateStr) => {
@@ -1550,25 +1557,28 @@ function buildFluxoWindow() {
   return { windowMonths, winStart, winEnd, winIndexOf }
 }
 
-// Dep/Res/Prov por função/mês (arrays de 12) a partir dos AGENDAMENTOS reais + provisões.
+// Dep/Res/Prov por função/mês (um valor por mês da janela) a partir dos AGENDAMENTOS reais + provisões.
 // Resgates com detalhamento (schedule_reserva_funcoes) projetam UMA saída por função (valor da
 // linha); os demais usam reservaFuncaoId único + schedule.amount. Ver comentários originais.
 function computeScheduledByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win) {
   const { winStart, winEnd, winIndexOf } = win
-  const round2 = (n) => Math.round(n * 100) / 100
-  const previsoes = previsoesDasFuncoes(linked, { accounts, schedules, scheduleReservaFuncoes, getNextOccurrences }, { ini: winStart, fim: winEnd })
+  const n = win.windowMonths.length
+  const round2 = (x) => Math.round(x * 100) / 100
+  // Janela longa: mais ocorrências por agendamento (semanal ≈ 4,4 por mês). Até 2 anos segue 140.
+  const ocorrencias = Math.max(140, n * 5)
+  const previsoes = previsoesDasFuncoes(linked, { accounts, schedules, scheduleReservaFuncoes, getNextOccurrences }, { ini: winStart, fim: winEnd, ocorrencias })
   const result = {}
   for (const f of linked) {
-    const deps = new Array(12).fill(0)
-    const ress = new Array(12).fill(0)
-    const provs = new Array(12).fill(0)
+    const deps = new Array(n).fill(0)
+    const ress = new Array(n).fill(0)
+    const provs = new Array(n).fill(0)
     // Itens individuais (ocorrências) para o modal de detalhamento. Coletados só para os meses
     // FUTUROS (idx >= 1; idx 0 é o mês anterior/referência) — casam com o total dos arrays.
     const depItems = []  // { date, label, amount }
     const resItems = []  // { date, label, amount, resgateScheduleId? } (resgates reais + provisões)
     for (const p of previsoes[f.id] || []) {
       const idx = winIndexOf(p.date)
-      if (idx < 0 || idx > 11) continue
+      if (idx < 0 || idx > n - 1) continue
       const coluna = p.tipo === 'deposito' ? deps : p.tipo === 'resgate' ? ress : provs
       coluna[idx] = round2(coluna[idx] + p.amount)
       if (idx >= 1) (p.tipo === 'deposito' ? depItems : resItems).push(p.itemFluxo)
@@ -1600,47 +1610,62 @@ function futureMovimentosByFunction(linked, accounts, schedules, scheduleReserva
 const totalOuTraco = (v) => (v === 0 ? '—' : fmt(v))
 
 // ── Tab 2: Fluxo Futuro ─────────────────────────────────────────────────────
-function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizados, schedules, scheduleReservaFuncoes, getNextOccurrences }) {
-  const linked = functions.filter(f => f.accountId)
+function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizados, schedules, scheduleReservaFuncoes, getNextOccurrences, periodoAberto }) {
+  // Memo: com 60 meses o cálculo pesa, e um array novo a cada render o refazia sempre.
+  const linked = useMemo(() => functions.filter(f => f.accountId), [functions])
   const round2 = (n) => Math.round(n * 100) / 100
   // Célula (função × mês × Dep/Res) cujo detalhamento está aberto. Declarado aqui em cima
   // porque o componente tem `return` antecipado quando não há função vinculada — um useState
   // depois dele quebraria a ordem dos hooks entre renders.
   const [detalhe, setDetalhe] = useState(null)
 
-  // Janela deslizante de 12 meses a partir do mês ANTERIOR ao atual.
-  const windowMonths = useMemo(() => {
-    const now = new Date()
-    const base = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    return Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(base.getFullYear(), base.getMonth() + i, 1)
-      return { year: d.getFullYear(), month0: d.getMonth(), label: MONTH_LABELS[d.getMonth()], isYearStart: d.getMonth() === 0 && i > 0 }
-    })
+  // Período escolhido (src/lib/fluxoPeriodo.js), guardado por usuário em boas_vindas_usuario.progresso.
+  // `atual` = mês do período ABERTO do Controle de Reservas (o do topo); "De" não vai antes dele.
+  const atual = periodoAberto
+  const [prefPeriodo, setPrefPeriodo] = useState(() => estadoBoasVindas()?.progresso?.fluxoPeriodo ?? null)
+  useEffect(() => {
+    let vivo = true
+    carregarBoasVindas().then(e => { if (vivo && e) setPrefPeriodo(e.progresso?.fluxoPeriodo ?? null) })
+    const sair = assinarBoasVindas(e => { if (e) setPrefPeriodo(e.progresso?.fluxoPeriodo ?? null) })
+    return () => { vivo = false; sair() }
   }, [])
-
-  const winStart = `${windowMonths[0].year}-${String(windowMonths[0].month0 + 1).padStart(2, '0')}-01`
-  const lastWm = windowMonths[11]
-  const winEndDate = new Date(lastWm.year, lastWm.month0 + 1, 0)
-  const winEnd = `${winEndDate.getFullYear()}-${String(winEndDate.getMonth() + 1).padStart(2, '0')}-${String(winEndDate.getDate()).padStart(2, '0')}`
-  const winIndexOf = (dateStr) => {
-    const d = new Date(dateStr + 'T00:00:00')
-    return (d.getFullYear() - windowMonths[0].year) * 12 + (d.getMonth() - windowMonths[0].month0)
+  const periodo = useMemo(() => periodoDaPreferencia(prefPeriodo, atual), [prefPeriodo, atual])
+  const aplicarPeriodo = (p) => {
+    const pref = preferenciaDoPeriodo(p, atual)
+    setPrefPeriodo(pref)
+    definirPeriodoFluxo(pref)
   }
+
+  // Janela calculada: do mês de calendário ANTERIOR ao de hoje (índice 0 = saldo de hoje) até o
+  // "Até" — a mesma âncora de sempre (buildFluxoWindow). A projeção começa sempre hoje; as colunas
+  // antes do "De" (índice `ini`) só ficam escondidas.
+  const inicioJanela = somarMeses(mesDaData(new Date()), -1)
+  const janela = useMemo(() => janelaDoPeriodo(periodo, inicioJanela), [periodo, inicioJanela])
+  const ini = janela.primeiro
+  const win = useMemo(() => buildFluxoWindow(janela.meses), [janela.meses])
+  const { winIndexOf } = win
+  const nMeses = win.windowMonths.length
+  // Meses exibidos. Divisória de ano relativa ao que aparece (a 1ª coluna já mostra o ano).
+  const windowMonths = useMemo(
+    () => win.windowMonths.slice(ini).map((wm, i) => ({ ...wm, isYearStart: wm.month0 === 0 && i > 0 })),
+    [win, ini],
+  )
 
   // Dep/Res por função/mês a partir dos AGENDAMENTOS reais (não dos campos de planejamento).
   // Lógica extraída para computeScheduledByFunction (compartilhada com o Resumo).
   const scheduledByFunction = useMemo(
-    () => computeScheduledByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, { winStart, winEnd, winIndexOf }),
-    [linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, winStart, winEnd], // eslint-disable-line react-hooks/exhaustive-deps
+    () => computeScheduledByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win),
+    [linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win],
   )
 
-  const projections = useMemo(() => {
+  // Projeção em toda a janela calculada (mesma conta de antes, só mais longa)…
+  const projecoesCompletas = useMemo(() => {
     return linked.map(f => {
       const account = accounts.find(a => a.id === f.accountId)
       const start = saldosAtualizados[f.id] ?? round2(f.saldoInicial + f.entradas - f.saidas)
-      const schd = scheduledByFunction[f.id] || { deps: new Array(12).fill(0), ress: new Array(12).fill(0), provs: new Array(12).fill(0) }
+      const schd = scheduledByFunction[f.id] || { deps: new Array(nMeses).fill(0), ress: new Array(nMeses).fill(0), provs: new Array(nMeses).fill(0) }
       let bal = start
-      const monthly = windowMonths.map((wm, i) => {
+      const monthly = win.windowMonths.map((wm, i) => {
         const dep = schd.deps[i]
         const res = schd.ress[i]
         const prov = schd.provs[i]
@@ -1649,10 +1674,16 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
         if (i > 0) bal = round2(bal + dep - res - prov)
         return { dep, res, prov, saldo: bal, neg: bal < 0, ...wm }
       })
-      const hasAlert = monthly.some(d => d.neg)
-      return { f, account, monthly, hasAlert }
+      return { f, account, monthly }
     })
-  }, [linked, accounts, saldosAtualizados, scheduledByFunction, windowMonths])
+  }, [linked, accounts, saldosAtualizados, scheduledByFunction, win, nMeses])
+  // …e o recorte exibido: linhas, TOTAL GERAL e Excel usam só os meses do período. O alerta conta
+  // também a função que já está negativa hoje (saldo do índice 0 = Total Investido), para nenhuma
+  // ficar escondida pelo período escolhido.
+  const projections = useMemo(() => projecoesCompletas.map(p => {
+    const monthly = p.monthly.slice(ini).map((d, i) => ({ ...d, isYearStart: windowMonths[i].isYearStart }))
+    return { ...p, monthly, hasAlert: p.monthly[0].neg || monthly.some(d => d.neg) }
+  }), [projecoesCompletas, ini, windowMonths])
 
   const totalInvested = linked.reduce((s, f) => s + (saldosAtualizados[f.id] || 0), 0)
   const totalGeral = useMemo(() => totaisFluxoFuturo(projections, f => saldosAtualizados[f.id] || 0), [projections, saldosAtualizados])
@@ -1661,7 +1692,6 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
   useSubtelaGuia('reservas:fluxo')
 
   const yy = (y) => String(y).slice(2)
-  const rangeLabel = `${windowMonths[0].label}/${yy(windowMonths[0].year)} – ${lastWm.label}/${yy(lastWm.year)}`
 
   const catById = new Map((categories || []).map(c => [c.id, c]))
   // Categoria da função = categoria vinculada à conta de reserva (reservaType 'especifica').
@@ -1714,7 +1744,12 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
   }
 
   const alertCount = projections.filter(p => p.hasAlert).length
-  const visibleMonths = [mobilePage, mobilePage + 1, mobilePage + 2]
+  // Celular: até 3 meses por página, percorrendo o período escolhido.
+  const porPagina = Math.min(3, windowMonths.length)
+  const ultimaPagina = windowMonths.length - porPagina
+  const pagina = Math.min(mobilePage, ultimaPagina)
+  const visibleMonths = Array.from({ length: porPagina }, (_, k) => pagina + k)
+  const gradeMeses = { gridTemplateColumns: `repeat(${porPagina}, minmax(0, 1fr))` }
 
   // Ocorrências que somam aquela célula. `depItems`/`resItems` já vêm de
   // computeScheduledByFunction com a data de cada ocorrência — aqui só recorta pelo mês da
@@ -1723,7 +1758,7 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
     const sched = scheduledByFunction[f.id]
     const brutos = (tipo === 'deps' ? sched?.depItems : sched?.resItems) || []
     const items = brutos
-      .filter(it => winIndexOf(it.date) === mi)
+      .filter(it => winIndexOf(it.date) === mi + ini)
       .sort((a, b) => a.date.localeCompare(b.date))
     const wm = windowMonths[mi]
     setDetalhe({
@@ -1735,9 +1770,10 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
     })
   }
 
-  // O mês de índice 0 é o ANTERIOR ao atual, e computeScheduledByFunction só coleta ocorrências
-  // de idx >= 1 — abrir a célula dele mostraria lista vazia com um total diferente de zero.
-  const celulaClicavel = (mi, valor) => mi >= 1 && valor > 0
+  // O mês de índice 0 da janela é o ANTERIOR ao atual, e computeScheduledByFunction só coleta
+  // ocorrências de idx >= 1 — abrir a célula dele mostraria lista vazia com total diferente de zero.
+  // `mi` é o índice exibido; na janela é mi + ini.
+  const celulaClicavel = (mi, valor) => mi + ini >= 1 && valor > 0
 
   return (
     <div className="space-y-4">
@@ -1757,7 +1793,7 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
           </span>
         )}
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs text-texto-3">{rangeLabel}</span>
+          <SeletorPeriodoFluxo periodo={periodo} atual={atual} onAplicar={aplicarPeriodo} />
           <button data-guia="reservas:fluxo.exportar" onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1">
             <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
           </button>
@@ -1769,8 +1805,8 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
         {/* Month navigator */}
         <div className="flex items-center justify-between gap-2" data-guia="reservas:fluxo.meses">
           <button
-            onClick={() => setMobilePage(p => Math.max(0, p - 1))}
-            disabled={mobilePage === 0}
+            onClick={() => setMobilePage(Math.max(0, pagina - 1))}
+            disabled={pagina === 0}
             className="p-1.5 rounded bg-surface-2 text-texto-2 disabled:opacity-30 hover:bg-surface-hover transition-colors"
           >
             <ChevronLeft size={16} />
@@ -1779,8 +1815,8 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
             {visibleMonths.map(mi => `${windowMonths[mi].label}/${yy(windowMonths[mi].year)}`).join(' · ')}
           </span>
           <button
-            onClick={() => setMobilePage(p => Math.min(9, p + 1))}
-            disabled={mobilePage >= 9}
+            onClick={() => setMobilePage(Math.min(ultimaPagina, pagina + 1))}
+            disabled={pagina >= ultimaPagina}
             className="p-1.5 rounded bg-surface-2 text-texto-2 disabled:opacity-30 hover:bg-surface-hover transition-colors"
           >
             <ChevronRight size={16} />
@@ -1806,7 +1842,7 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
             </div>
 
             {/* 3 month columns */}
-            <div className="grid grid-cols-3 divide-x divide-borda">
+            <div className="grid divide-x divide-borda" style={gradeMeses}>
               {visibleMonths.map(mi => {
                 const d = monthly[mi]
                 return (
@@ -1865,7 +1901,7 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
               {totalOuTraco(totalGeral.investido)}
             </span>
           </div>
-          <div className="grid grid-cols-3 divide-x divide-borda">
+          <div className="grid divide-x divide-borda" style={gradeMeses}>
             {visibleMonths.map(mi => {
               const t = totalGeral.monthly[mi]
               const wm = windowMonths[mi]
@@ -2193,7 +2229,8 @@ export default function ReservasPanel() {
   const todayStr = localDateStr(_now)
   // Mês de referência do ajuste LEGADO (ajuste_override JSONB): só para a observação exibida.
   const currentMonthKey = todayStr.slice(0, 7)
-  // Período financeiro do cabeçalho: só a aba Contas Reserva o usa (Resumo e Fluxo, não).
+  // Período financeiro do cabeçalho: a aba Contas Reserva usa o intervalo; o Fluxo Futuro, o mês
+  // dele (período aberto = mínimo do "De" do seletor de período).
   const period = getFinancialPeriod()
   const periodStart = isoLocal(period.start)
   const periodEnd = isoLocal(period.end)
@@ -2327,18 +2364,19 @@ export default function ReservasPanel() {
 
   // Movimentos FUTUROS por função — mesma lógica/janela do Fluxo Futuro. { [fid]: { liquido,
   // deps, ress, totalDeps, totalRess } }. Alimenta as colunas Mov. Futuros / Saldo Futuro e o modal.
+  // Contas de todos os perfis (como o Fluxo): a conta "Sem vínculo" não está nas do perfil do topo.
   const movFuturosByFn = useMemo(
-    () => futureMovimentosByFunction(effectiveFunctions.filter(f => f.accountId), accounts, schedules, scheduleReservaFuncoes, getNextOccurrences),
-    [effectiveFunctions, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences],
+    () => futureMovimentosByFunction(effectiveFunctions.filter(f => f.accountId), todasContas, schedules, scheduleReservaFuncoes, getNextOccurrences),
+    [effectiveFunctions, todasContas, schedules, scheduleReservaFuncoes, getNextOccurrences],
   )
 
   const nonCreditAccounts = accounts.filter(a => a.type !== 'credit')
-  // Fluxo Futuro: funções do perfil do topo (lib/fluxoReservaTotais). Contas de TODOS os perfis,
-  // porque a conta "Sem vínculo" não está nas contas do perfil e a função dela aparece em todos —
-  // em "Tudo" é a mesma lista de contas de antes.
-  const fluxoContas = useMemo(() => todasContas.filter(a => a.type !== 'credit'), [todasContas])
-  const fluxoFiltro = useMemo(
-    () => funcoesDoFluxoNoPerfil(effectiveFunctions, todasContas, profiles, activeProfileId),
+  // Resumo e Fluxo Futuro: funções do perfil do topo (lib/fluxoReservaTotais). Contas de TODOS os
+  // perfis, porque a conta "Sem vínculo" não está nas contas do perfil e a função dela aparece em
+  // todos — em "Tudo" é a mesma lista de contas de antes.
+  const contasDoFiltro = useMemo(() => todasContas.filter(a => a.type !== 'credit'), [todasContas])
+  const filtroPerfil = useMemo(
+    () => funcoesReservaNoPerfil(effectiveFunctions, todasContas, profiles, activeProfileId),
     [effectiveFunctions, todasContas, profiles, activeProfileId],
   )
   const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva), [accounts])
@@ -2389,8 +2427,9 @@ export default function ReservasPanel() {
 
       {tab === 'resumo' && (
         <ResumoTab
-          functions={effectiveFunctions}
-          accounts={nonCreditAccounts}
+          functions={filtroPerfil.funcoes}
+          semVinculo={filtroPerfil.semVinculo}
+          accounts={contasDoFiltro}
           categories={categories}
           accountBalances={accountBalances}
           adjustmentsByFn={adjustmentsByFn}
@@ -2419,14 +2458,15 @@ export default function ReservasPanel() {
 
       {tab === 'fluxo' && (
         <FluxoTab
-          functions={fluxoFiltro.funcoes}
-          semVinculo={fluxoFiltro.semVinculo}
-          accounts={fluxoContas}
+          functions={filtroPerfil.funcoes}
+          semVinculo={filtroPerfil.semVinculo}
+          accounts={contasDoFiltro}
           categories={categories}
           saldosAtualizados={saldosAtualizados}
           schedules={schedules}
           scheduleReservaFuncoes={scheduleReservaFuncoes}
           getNextOccurrences={getNextOccurrences}
+          periodoAberto={mesDaData(period.start)}
         />
       )}
 

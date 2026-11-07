@@ -5,6 +5,7 @@ import { comAmbiente } from './_ambiente.js'
 import { TELAS_COM_GUIA, ETAPAS_CHECKLIST } from '../src/lib/ajudaTelas.js'
 import { TODAS_AS_TAREFAS } from '../src/lib/tarefasGuiadas.js'
 import { ETAPAS_JORNADA, ETAPAS_REFAZER_JORNADA, IDS_OBJETIVOS } from '../src/lib/onboardingSteps.js'
+import { normalizarPreferenciaPeriodo } from '../src/lib/fluxoPeriodo.js'
 
 // Etapas que aceitam estado: as do checklist e as da jornada guiada (src/lib/onboardingSteps.js).
 const ETAPAS_ACEITAS = new Set([...ETAPAS_CHECKLIST, ...ETAPAS_JORNADA])
@@ -18,7 +19,8 @@ const ETAPAS_ACEITAS = new Set([...ETAPAS_CHECKLIST, ...ETAPAS_JORNADA])
 //   POST { jornadaRefazer: true }         → zera só as etapas da jornada (os dados não mudam)
 //   POST { jornadaExpandida: true|false } → painel compacto ou com as fases (progresso.jornadaExpandida)
 //   POST { jornadaObjetivo: '<id>'|null } → atalho por objetivo (progresso.objetivo)
-//   POST { guiaReativar: '<tela>' }       → o tour desta tela volta a abrir sozinho
+//   POST { fluxoPeriodo: {de, meses}|{de, ate}|null } → período do Fluxo Futuro (progresso.fluxoPeriodo)
+//   POST { guiaReativar: '<tela>' }      → o tour desta tela volta a abrir sozinho
 //   POST { etapa: '<id>', estado }        → checklist "Primeiros passos": 'pulada' | 'nao-se-aplica' |
 //                                           'feita' (etapas sem dado próprio, ex.: usou o Assistente) |
 //                                           null (desfaz). Fica em progresso.etapas.<id> = { estado, em }.
@@ -148,6 +150,22 @@ export async function gravarPreferenciaJornada(q, userId, { expandida, objetivo 
   return linhaParaJson(r)
 }
 
+// Período do Fluxo Futuro (Reservas) em `progresso.fluxoPeriodo`, relativo ao mês atual
+// (src/lib/fluxoPeriodo.js). null = padrão (tira a chave). Formato inválido → null (400).
+export async function gravarPeriodoFluxo(q, userId, pref) {
+  const p = normalizarPreferenciaPeriodo(pref)
+  if (p === undefined) return null
+  const sql = p === null
+    ? `INSERT INTO boas_vindas_usuario (user_id) VALUES ($1)
+       ON CONFLICT (user_id) DO UPDATE SET progresso = COALESCE(boas_vindas_usuario.progresso, '{}'::jsonb) - 'fluxoPeriodo', updated_at = now()`
+    : `INSERT INTO boas_vindas_usuario (user_id, progresso) VALUES ($1, jsonb_build_object('fluxoPeriodo', $2::jsonb))
+       ON CONFLICT (user_id) DO UPDATE SET progresso = COALESCE(boas_vindas_usuario.progresso, '{}'::jsonb) || jsonb_build_object('fluxoPeriodo', $2::jsonb), updated_at = now()`
+  const [r] = await q(`${sql}
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
+  p === null ? [userId] : [userId, JSON.stringify(p)])
+  return linhaParaJson(r)
+}
+
 export async function gravarAjudaCampos(q, userId, ligada) {
   const [r] = await q(
     `INSERT INTO boas_vindas_usuario (user_id, ajuda_campos) VALUES ($1, $2)
@@ -232,6 +250,10 @@ async function handler(req, res) {
       if (typeof body?.jornadaExpandida === 'boolean' || 'jornadaObjetivo' in (body || {})) {
         const r = await gravarPreferenciaJornada(query, userId, { expandida: body.jornadaExpandida, objetivo: body.jornadaObjetivo })
         if (!r) return res.status(400).json({ error: 'Preferência da jornada inválida' })
+        fez = true
+      }
+      if (body && 'fluxoPeriodo' in body) {
+        if (!(await gravarPeriodoFluxo(query, userId, body.fluxoPeriodo))) return res.status(400).json({ error: 'Período do Fluxo Futuro inválido' })
         fez = true
       }
       if (typeof body?.tarefaConcluida === 'string') {

@@ -86,7 +86,14 @@ export const definirGuiasLigados = (ligados) => gravar('POST', { guiasLigados: !
 export const definirAjudaCampos = (ligada) => gravar('POST', { ajudaCampos: !!ligada }, () => ({ ajudaCampos: !!ligada }))
 export const definirJornadaExpandida = (expandida) => gravar('POST', { jornadaExpandida: !!expandida }, (e) => ({ progresso: { ...(e.progresso || {}), jornadaExpandida: !!expandida } }))
 export const definirObjetivoJornada = (objetivo) => gravar('POST', { jornadaObjetivo: objetivo }, (e) => ({ progresso: { ...(e.progresso || {}), objetivo } }))
-export const definirJornadaLigada = (ligada) => gravar('POST', { jornadaLigada: !!ligada }, () => ({ jornadaLigada: !!ligada }))
+// Período do Fluxo Futuro (Reservas), relativo ao mês atual (src/lib/fluxoPeriodo.js). null = padrão.
+export const definirPeriodoFluxo = (pref) => gravar('POST', { fluxoPeriodo: pref ?? null }, (e) => {
+  const progresso = { ...(e.progresso || {}) }
+  if (pref) progresso.fluxoPeriodo = pref
+  else delete progresso.fluxoPeriodo
+  return { progresso }
+})
+export const definirJornadaLigada =(ligada) => gravar('POST', { jornadaLigada: !!ligada }, () => ({ jornadaLigada: !!ligada }))
 // Zera só as etapas da jornada (`ids`), localmente igual ao servidor.
 export const refazerJornada = (ids = []) => gravar('POST', { jornadaRefazer: true }, (e) => {
   const etapas = { ...(e.progresso?.etapas || {}) }

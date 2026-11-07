@@ -4,12 +4,13 @@
 //   resgate:  transferência saindo da conta de reserva, na parte da função;
 //   provisao: provisão de despesa ligada à função, a próxima ainda não efetivada (saída prevista). Na
 //             recorrência parcelada, todas as parcelas pendentes da janela: o resgate sai mês a mês.
-// Cada item: { tipo, date, amount, label, schedule, itemFluxo }. Em ordem de data.
+// Cada item: { tipo, date, amount, label, schedule, itemFluxo }. Em ordem de data. `ocorrencias` = quantas
+// ocorrências futuras olhar por agendamento recorrente (janelas longas pedem mais).
 import { occEfetiva } from './fluxoCaixa.js'
 import { ehParcelado, rotuloDaParcela } from './parcelasOcorrencia.js'
 import { parteDaFuncao, parteDaFuncaoNaOcorrencia, itemSaidaFluxo } from './resgateComposicao.js'
 
-export function previsoesDasFuncoes(funcoes, { accounts = [], schedules = [], scheduleReservaFuncoes = [], getNextOccurrences }, { ini, fim }) {
+export function previsoesDasFuncoes(funcoes, { accounts = [], schedules = [], scheduleReservaFuncoes = [], getNextOccurrences }, { ini, fim, ocorrencias = 140 }) {
   const accById = new Map(accounts.map(a => [a.id, a]))
   const detBySchedule = new Map()
   for (const srf of scheduleReservaFuncoes || []) {
@@ -24,7 +25,7 @@ export function previsoesDasFuncoes(funcoes, { accounts = [], schedules = [], sc
     for (const p of provisoes) {
       if (p.reservaFuncaoId !== f.id) continue
       if (ehParcelado(p)) {
-        for (const base of getNextOccurrences(p, 140)) {
+        for (const base of getNextOccurrences(p, ocorrencias)) {
           const ef = occEfetiva(p, base)
           const amount = Number(ef.amount) || 0
           if (!amount || ef.date < ini || ef.date > fim) continue
@@ -52,7 +53,7 @@ export function previsoesDasFuncoes(funcoes, { accounts = [], schedules = [], sc
       // ocorrência EFETIVA (data e valor do override).
       const det = detBySchedule.get(s.id)
       if (!parteDaFuncao(s, det, f.id).valor) continue
-      for (const base of getNextOccurrences(s, 140)) {
+      for (const base of getNextOccurrences(s, ocorrencias)) {
         const { date, valor: amount } = parteDaFuncaoNaOcorrencia(s, det, f.id, base)
         if (!amount || date < ini || date > fim) continue
         const label = s.description || (isDep ? 'Depósito' : 'Resgate')

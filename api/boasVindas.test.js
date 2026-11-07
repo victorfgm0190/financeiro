@@ -1,6 +1,6 @@
 // /api/boas-vindas: gravação só dos campos pedidos (tour visto não volta a ficar vazio). Sem banco.
 import { describe, it, expect } from 'vitest'
-import { DDL_BOAS_VINDAS, DDL_AJUDA_CAMPOS, DDL_JORNADA, gravarBoasVindas, gravarAjudaCampos, gravarJornadaLigada, refazerJornada, gravarEtapa, gravarPreferenciaJornada } from './boas-vindas.js'
+import { DDL_BOAS_VINDAS, DDL_AJUDA_CAMPOS, DDL_JORNADA, gravarBoasVindas, gravarAjudaCampos, gravarJornadaLigada, refazerJornada, gravarEtapa, gravarPreferenciaJornada, gravarPeriodoFluxo } from './boas-vindas.js'
 import { ETAPAS_JORNADA } from '../src/lib/onboardingSteps.js'
 
 const fakeQ = () => {
@@ -74,5 +74,19 @@ describe('/api/boas-vindas', () => {
     expect(await gravarPreferenciaJornada(q, 'u1', {})).toBeNull()
     await refazerJornada(q, 'u1')
     expect(chamadas.at(-1).sql).toContain("- 'objetivo'")
+  })
+
+  it('período do Fluxo Futuro: guardado relativo em progresso.fluxoPeriodo; null tira a chave; inválido → 400', async () => {
+    const chamadas = []
+    const q = async (sql, params) => { chamadas.push({ sql, params }); return [{ progresso: {} }] }
+    expect(await gravarPeriodoFluxo(q, 'u1', { de: 0, meses: 24 })).not.toBeNull()
+    expect(chamadas[0].sql).toContain("|| jsonb_build_object('fluxoPeriodo', $2::jsonb)")
+    expect(chamadas[0].params).toEqual(['u1', JSON.stringify({ de: 0, meses: 24 })])
+    expect(await gravarPeriodoFluxo(q, 'u1', null)).not.toBeNull()
+    expect(chamadas[1].sql).toContain("- 'fluxoPeriodo'")
+    expect(chamadas[1].params).toEqual(['u1'])
+    expect(await gravarPeriodoFluxo(q, 'u1', { de: 0, meses: 999 })).toBeNull()
+    expect(await gravarPeriodoFluxo(q, 'u1', 'x')).toBeNull()
+    expect(chamadas).toHaveLength(2)
   })
 })
