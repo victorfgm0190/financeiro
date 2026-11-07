@@ -6,6 +6,7 @@ import { useMemo } from 'react'
 import { renderHook, act, cleanup } from '@testing-library/react'
 import { useHoje } from './useHoje'
 import { proximosAgendamentos, somarDias } from '../lib/proximosAgendamentos'
+import { alertasVencimentoCartao, dataDoDia } from '../lib/dashboardHoje'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -46,6 +47,33 @@ describe('useHoje + próximos 7 dias', () => {
     act(() => { document.dispatchEvent(new Event('visibilitychange')) })
     expect(result.current.hoje).toBe('2026-11-08')
     expect(result.current.datas).toEqual(['2026-11-15'])
+  })
+
+  it('alerta de vencimento de cartão: entra sozinho quando o vencimento fica a 5 dias, e sai no dia do vencimento', () => {
+    // Regra de antes, mantida: differenceInDays (arredonda para baixo) entre o vencimento (00:00) e
+    // agora ≤ 5. Vencimento dia 14: de 07/11 dá 6 (sem alerta); de 08/11, 5 (alerta).
+    const cartoes = [
+      { id: 'c14', type: 'credit', dueDay: 14 },
+      { id: 'c30', type: 'credit', dueDay: 30 },            // longe: nunca alerta aqui
+      { id: 'cx', type: 'credit', dueDay: 13, active: false }, // inativo: nunca alerta
+      { id: 'cc', type: 'checking', dueDay: 13 },
+    ]
+    const useAlertas = () => {
+      const hoje = useHoje()
+      return useMemo(() => alertasVencimentoCartao(cartoes, hoje).map(a => a.id), [hoje])
+    }
+    const { result } = renderHook(useAlertas)                // 07/11 23:58
+    expect(result.current).toEqual([])
+    act(() => { vi.advanceTimersByTime(3 * 60 * 1000) })    // 08/11 00:01
+    expect(result.current).toEqual(['c14'])
+    vi.setSystemTime(new Date(2026, 10, 14, 8, 0, 0))       // dia do vencimento: passa para dez (como antes)
+    act(() => { window.dispatchEvent(new Event('focus')) })
+    expect(result.current).toEqual([])
+  })
+
+  it('dataDoDia: mesmo dia/mês/ano da data, ao meio-dia local', () => {
+    const d = dataDoDia('2026-12-31')
+    expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()]).toEqual([2026, 11, 31, 12])
   })
 
   it('no mesmo dia não muda nada', () => {

@@ -20,9 +20,9 @@ import { useThemeColors } from '../../hooks/useTheme'
 import { estiloTooltip } from '../../lib/chartPalette'
 import { computeFaturaRef } from '../../lib/fatura'
 import { proximosAgendamentos } from '../../lib/proximosAgendamentos'
+import { dataDoDia, alertasVencimentoCartao } from '../../lib/dashboardHoje'
 import { useHoje } from '../../hooks/useHoje'
 import { escopoFluxoPrincipal, pendentesNoFluxoPrincipal } from '../../lib/fluxoPrincipal'
-import { hojeStr } from '../../lib/saldos'
 import { isInvestAutoOrigin } from '../../lib/origins'
 import Modal from '../shared/Modal'
 import { CardEnvelopesMes } from '../Envelopes/EnvelopeResumo'
@@ -137,9 +137,10 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
 
   // Valor "Projetado" reutilizado do modal "Como chegamos aqui"
   // (getSaldoPrincipal().projetado.total), que já desconta os envelopes restantes.
-  const projetadoModal = useMemo(() => getSaldoPrincipal()?.projetado?.total ?? null, [getSaldoPrincipal])
+  // Data de referência = hoje (useHoje): com o app aberto, os dois valores viram de dia sozinhos.
+  const projetadoModal = useMemo(() => getSaldoPrincipal(dataDoDia(hojeDia))?.projetado?.total ?? null, [getSaldoPrincipal, hojeDia])
   // Valor "Final Ciclo" reutilizado do mesmo modal (getSaldoPrincipal().finalCiclo.total).
-  const finalCicloModal = useMemo(() => getSaldoPrincipal()?.finalCiclo?.total ?? null, [getSaldoPrincipal])
+  const finalCicloModal = useMemo(() => getSaldoPrincipal(dataDoDia(hojeDia))?.finalCiclo?.total ?? null, [getSaldoPrincipal, hojeDia])
 
   // Saldos do ciclo exibidos no card abaixo do Principal (Final Ciclo · Projetado · Atual Cal.
   // · Final Cal.). Atual Cal./Final Cal. sempre visíveis no modo custom — mesmo quando coincidem
@@ -168,17 +169,18 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       : { badge: 'text-perigo bg-perigo-bg', barra: 'bg-perigo' }
   const budgetLabel = budgetPct < 70 ? '✓ Saudável' : budgetPct < 90 ? '⚠ Atenção' : '⚠ Acima do limite'
 
-  // 6-month chart
+  // 6-month chart (termina no mês de hoje; vira de mês sozinho com useHoje)
   const last6Months = useMemo(() => {
+    const ref = dataDoDia(hojeDia)
     return Array.from({ length: 6 }, (_, i) => {
-      const d = subMonths(new Date(), 5 - i)
+      const d = subMonths(ref, 5 - i)
       const start = isoLocal(startOfMonth(d))
       const end = isoLocal(endOfMonth(d))
       const label = format(d, "MMM'/'yy", { locale: ptBR })
       const { income: inc, expense: exp } = totaisDoPeriodo(transactions, { start, end }, cls, modoDespesas)
       return { label, income: inc, expense: exp }
     })
-  }, [transactions, cls, modoDespesas])
+  }, [transactions, cls, modoDespesas, hojeDia])
 
   // Upcoming & overdue schedules (next 7 days + overdue). `hojeDia` vira sozinho (useHoje): com o
   // app aberto de um dia para o outro, a janela de 7 dias anda junto.
@@ -187,15 +189,8 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     [schedules, getNextOccurrences, hojeDia],
   )
 
-  // Credit card alerts
-  const creditAlerts = useMemo(() => {
-    const today = new Date()
-    return accounts.filter(a => a.type === 'credit' && a.active !== false).filter(a => {
-      let due = new Date(today.getFullYear(), today.getMonth(), a.dueDay || 10)
-      if (due < today) due = new Date(today.getFullYear(), today.getMonth() + 1, a.dueDay || 10)
-      return differenceInDays(due, today) <= 5
-    })
-  }, [accounts])
+  // Credit card alerts (vencimento em até 5 dias a partir de hoje; vira de dia sozinho)
+  const creditAlerts = useMemo(() => alertasVencimentoCartao(accounts, hojeDia), [accounts, hojeDia])
 
   // ── Saldo Projetado + Final ──────────────────────────────────────────────────
   const saldoProjetado = useMemo(() => {
@@ -206,7 +201,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     // "Considerar no Fluxo de Caixa principal?" do agendamento (lib/fluxoPrincipal) — contas do perfil.
     const fluxo = escopoFluxoPrincipal(accounts, principalIds)
 
-    const todayStr = hojeStr()
+    const todayStr = hojeDia
     let pendingIncome = 0
     let pendingExpense = 0
     let pendingCount = 0
@@ -252,9 +247,9 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       pendingCount,
       futureDelta,
     }
-  }, [accounts, schedules, transactions, getNextOccurrences, periodStr.end, saldoPrincipal, etapaAPrevistas])
+  }, [accounts, schedules, transactions, getNextOccurrences, periodStr.end, saldoPrincipal, etapaAPrevistas, hojeDia])
 
-  const today = hojeStr()
+  const today = hojeDia
 
   // Last tx date per fluxo account (single pass, both sides of transfers)
   const lastTxByFluxoAccount = useMemo(() => {
@@ -275,10 +270,10 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     return result
   }, [accounts, transactions])
 
-  // Last expense date per credit card within current fatura period
+  // Last expense date per credit card within current fatura period (fatura de hoje, via useHoje)
   const lastCreditTxByCard = useMemo(() => {
     const result = {}
-    const now = new Date()
+    const now = dataDoDia(hojeDia)
     for (const card of accounts.filter(a => a.type === 'credit')) {
       const closingDay = card.closingDay || 14
       const currentRef = computeFaturaRef(now, closingDay)
@@ -292,7 +287,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       result[card.id] = maxDate
     }
     return result
-  }, [accounts, transactions])
+  }, [accounts, transactions, hojeDia])
 
   // ── P17: Maiores Despesas / Ranking ───────────────────────────────────────
   // Período (meses financeiros) e modo Cheio/Líquido compartilhados pela pizza e pelo ranking;
