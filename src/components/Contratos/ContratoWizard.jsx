@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Check, Plus, Trash2 } from 'lucide-react'
 import HelpCampo from '../shared/HelpCampo'
 import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
@@ -16,7 +16,8 @@ import { faltaRecurso } from '../../lib/recursosBanco'
 import TaxasRepasse from './TaxasRepasse'
 import { taxaParaForm, formParaTaxa, erroTaxa, taxaParaItem, chaveTaxas } from '../../lib/contratos/taxasRepasseForm'
 import { taxaDoItem, BASES_TAXA_ADM } from '../../lib/contratos/composicaoRepasse'
-import { validarEtapa, sugerirCategoria } from '../../lib/contratos/validacao'
+import { validarEtapaCampo, sugerirCategoria } from '../../lib/contratos/validacao'
+import { useRolarAoTopo, rolarAteElemento } from '../shared/rolagemModal'
 import { candidatosVinculo } from '../../lib/contratos/vinculo'
 import { MODALIDADES, ehAluguel, rotuloPapel, rotulosContrato } from '../../lib/contratos/rotulos'
 import { REGRAS_ABATIMENTO } from '../../lib/contratos/creditos'
@@ -152,10 +153,22 @@ function MesesSemCobranca({ valor = [], onChange, inicio, fim }) {
   )
 }
 
-// `help`: chave do ⓘ do campo (src/lib/helpCampos.js).
-const Campo = ({ label, children, className = '', help }) => (
-  <div className={className}><label className="label">{label}{help && <HelpCampo campo={help} />}</label>{children}</div>
-)
+// Campo barrado na validação (validarEtapaCampo): o Campo com a mesma chave fica destacado e mostra o erro.
+const CampoErroContext = createContext(null)
+// Erros que apontam para um campo exibido junto de outro (competência do saldo inicial fica no mesmo bloco).
+const CAMPO_DO_ERRO = { saldo_inicial_competencia: 'saldo_inicial_valor' }
+
+// `help`: chave do ⓘ do campo (src/lib/helpCampos.js). `campo`: chave do formulário (rolagem/destaque do erro).
+const Campo = ({ label, children, className = '', help, campo }) => {
+  const falha = useContext(CampoErroContext)
+  const comErro = !!campo && falha?.campo === campo
+  return (
+    <div className={`${className}${comErro ? ' rounded-lg ring-2 ring-perigo ring-offset-2 ring-offset-surface' : ''}`} data-campo={campo} data-erro={comErro ? '' : undefined}>
+      <label className="label">{label}{help && <HelpCampo campo={help} />}</label>{children}
+      {comErro && <p role="alert" className="text-xs text-perigo mt-1">{falha.erro}</p>}
+    </div>
+  )
+}
 
 // Cadastro em etapas (novo) e Aditivo (edição com prévia do que muda nas parcelas pendentes).
 export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
@@ -215,7 +228,23 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   // Tarifas e taxa única da administradora (contrato_itens com tipo_repasse).
   const [taxasForm, setTaxasForm] = useState(() => (contrato?.itens_repasse || []).map(taxaParaForm))
   const [etapa, setEtapa] = useState(0)
-  const [erro, setErro] = useState('')
+  const [erro, setErroTexto] = useState('')
+  // Campo barrado + contador (a mesma falha repetida rola de novo até o campo).
+  const [falha, setFalha] = useState({ campo: null, n: 0 })
+  const setErro = (msg, campo = null) => {
+    setErroTexto(msg)
+    setFalha(p => (msg ? { campo: CAMPO_DO_ERRO[campo] || campo, n: p.n + 1 } : p.campo ? { ...p, campo: null } : p))
+  }
+  const raizRef = useRef(null)
+  // Troca de etapa (Avançar, Voltar ou a abinha): o corpo do modal volta ao topo.
+  useRolarAoTopo(etapa)
+  // Validação barrou: rola até o campo destacado (ou, sem campo, até a mensagem) — depois da rolagem ao topo.
+  useEffect(() => {
+    if (!falha.n) return
+    const raiz = raizRef.current
+    const alvo = (falha.campo && raiz?.querySelector(`[data-campo="${falha.campo}"]`)) || raiz?.querySelector('[data-erro-wizard]')
+    rolarAteElemento(alvo, { focar: !!falha.campo })
+  }, [falha])
   const [salvando, setSalvando] = useState(false)
   // "Gerar a partir de": escolhido à mão ou, sem escolha, o mês de hoje (no modo repasse, a competência
   // cujo repasse ainda vem — hoje menos a defasagem), nunca antes do início.
@@ -270,7 +299,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   useEffect(() => {
     if (etapa !== ULTIMA || !edicao) return
     let vivo = true
-    planejarParcelasContrato({ ...contrato, ...dados }).then(p => { if (vivo) setPlanoEdicao(p) }).catch(e => setErro(e.message))
+    planejarParcelasContrato({ ...contrato, ...dados }).then(p => { if (vivo) setPlanoEdicao(p) }).catch(e => { setErroTexto(e.message); setFalha(p => ({ ...p, campo: null })) })
     return () => { vivo = false }
   }, [etapa, edicao, contrato, dados, planejarParcelasContrato])
 
@@ -283,8 +312,9 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   }, [edicao, dados.meses_sem_cobranca, schedules, contrato])
 
   const avancar = () => {
-    const e = validarEtapa(etapa, f)
-    if (e) return setErro(e)
+    const { erro: e, campo } = validarEtapaCampo(etapa, f)
+    if (e) return setErro(e, campo)
+    setErro('')
     setEtapa(x => proxima(x))
   }
   const itensPayload = () => [
@@ -298,8 +328,8 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
   const confirmar = async () => {
     for (let i = 0; i < 4; i++) {
-      const e = validarEtapa(i, f)
-      if (e) { setEtapa(i); return setErro(e) }
+      const { erro: e, campo } = validarEtapaCampo(i, f)
+      if (e) { setEtapa(i); return setErro(e, campo) }
     }
     if (encargosIncompletos(encargosForm, numeroProxima).length) {
       setEtapa(1)
@@ -360,12 +390,13 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
   const proxReaj = proximoReajuste(dados, hoje)
   return (
-    <div className="space-y-4">
+    <CampoErroContext.Provider value={erro && falha.campo ? { campo: falha.campo, erro } : null}>
+    <div ref={raizRef} className="space-y-4">
       {!contrato && <AvisoPrerequisitos funcao="contrato" onIr={onClose} />}
       <ol data-guia="contrato-form.etapas" className="flex flex-wrap gap-1.5 text-[11px]">
         {etapasVisiveis.map((e, pos) => (
           <li key={e.i}>
-            <button type="button" onClick={() => (e.i < etapa ? setEtapa(e.i) : null)}
+            <button type="button" onClick={() => { if (e.i < etapa) { setErro(''); setEtapa(e.i) } }}
               className={`px-2 py-1 rounded-full border ${e.i === etapa ? 'border-primary bg-primary/15 text-primary-fg font-semibold' : e.i < etapa ? 'border-borda-forte text-texto-2 hover:bg-surface-hover' : 'border-borda text-texto-3 cursor-default'}`}>
               {pos + 1}. {e.nome(f)}
             </button>
@@ -375,7 +406,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
       {etapa === 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Campo label="Modalidade" help="contrato.modalidade">
+          <Campo campo="modalidade" label="Modalidade" help="contrato.modalidade">
             <select data-guia="contrato-form.modalidade" className="input" value={f.modalidade} onChange={e => trocarModalidade(e.target.value)}>
               <option value="">Escolha a finalidade do contrato…</option>
               {Object.entries(MODALIDADES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -396,7 +427,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               <option value="receber">{rot.tipoReceber}</option>
             </select>
           </Campo>
-          <Campo label="Perfil">
+          <Campo campo="perfil_id" label="Perfil">
             <select data-guia="contrato-form.perfil" className="input" value={f.perfil_id} onChange={e => set('perfil_id', e.target.value)}>
               <option value="">Escolha…</option>
               {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -423,7 +454,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               </label>
             </Campo>
           )}
-          <Campo label={rot.favorecido} className="sm:col-span-2">
+          <Campo campo="favorecido" label={rot.favorecido} className="sm:col-span-2">
             <FavorecidoAutocomplete value={f.favorecido} onChange={v => set('favorecido', v)} suggestions={payees || []} />
           </Campo>
           {repasse && (
@@ -436,10 +467,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               </Campo>
             </>
           )}
-          <Campo label="Início da vigência">
+          <Campo campo="data_inicio" label="Início da vigência">
             <input data-guia="contrato-form.inicio" autoComplete="off" type="date" className="input" value={f.data_inicio} onChange={e => set('data_inicio', e.target.value)} />
           </Campo>
-          <Campo label="Fim da vigência">
+          <Campo campo="data_fim" label="Fim da vigência">
             <input autoComplete="off" type="date" className="input" value={f.sem_fim ? '' : f.data_fim} disabled={f.sem_fim} onChange={e => set('data_fim', e.target.value)} />
             <label className="flex items-center gap-2 text-xs text-texto-2 mt-1">
               <input autoComplete="off" type="checkbox" className="accent-primary" checked={f.sem_fim} onChange={e => set('sem_fim', e.target.checked)} />
@@ -455,7 +486,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               Renovação automática
             </label>
           </Campo>
-          <Campo label="Link do contrato (anexo)" className="sm:col-span-2">
+          <Campo campo="link_anexo" label="Link do contrato (anexo)" className="sm:col-span-2">
             <input autoComplete="off" className="input" value={f.link_anexo} onChange={e => set('link_anexo', e.target.value)} placeholder="https://drive.google.com/…" />
           </Campo>
           <Campo label="Observação" className="sm:col-span-2">
@@ -466,17 +497,17 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
       {etapa === 1 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Campo label={rot.conta} help="contrato.contaPagamento">
+          <Campo campo="conta_id" label={rot.conta} help="contrato.contaPagamento">
             <select data-guia="contrato-form.conta" className="input" value={f.conta_id} onChange={e => set('conta_id', e.target.value)}>
               <option value="">Escolha…</option>
               {contas.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
             </select>
             <p className="text-[11px] text-texto-3 mt-1">Cartão de crédito não é aceito nesta versão.</p>
           </Campo>
-          <Campo label={rot.categoria}>
+          <Campo campo="categoria_id" label={rot.categoria}>
             <CategorySelect categories={categories} value={f.categoria_id} onChange={e => set('categoria_id', e.target.value)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
           </Campo>
-          <Campo label={rot.valorPrincipal} help="contrato.valorPrincipal">
+          <Campo campo="valor_base" label={rot.valorPrincipal} help="contrato.valorPrincipal">
             <CampoValor data-guia="contrato-form.valor" value={f.valor_base} onChange={v => set('valor_base', v)} placeholder="0,00" />
           </Campo>
           <Campo label="Periodicidade" help="contrato.periodicidade">
@@ -485,7 +516,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               <option value="semestral">Semestral</option><option value="anual">Anual</option><option value="unica">Única</option>
             </select>
           </Campo>
-          <Campo label={rot.diaVencimento} help="contrato.diaVencimento">
+          <Campo campo="dia_vencimento" label={rot.diaVencimento} help="contrato.diaVencimento">
             <input autoComplete="off" type="number" min="1" max="31" data-guia="contrato-form.dia-vencimento" className="input" value={f.dia_vencimento} onChange={e => set('dia_vencimento', e.target.value)} />
           </Campo>
           <Campo label="Tipo de documento" help="contrato.tipoDocumento">
@@ -503,10 +534,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           <div />
           {repasse && <CamposRepasse f={f} set={set} categories={categories} />}
           {repasse && <TaxasRepasse linhas={taxasForm} onChange={(v) => { setErro(''); setTaxasForm(v) }} categories={categories} perfilId={f.perfil_id} inicio={ymDe(f.data_inicio)} />}
-          <Campo label={`${rot.desconto} por mês (desconto)`} help="contrato.desconto">
+          <Campo campo="bonificacao_valor" label={`${rot.desconto} por mês (desconto)`} help="contrato.desconto">
             <CampoValor value={f.bonificacao_valor} onChange={v => set('bonificacao_valor', v)} placeholder="Desconto em cada parcela (opcional)" />
           </Campo>
-          <Campo label={`${rot.desconto} nas primeiras (parcelas cobradas)`} help="contrato.desconto">
+          <Campo campo="bonificacao_meses" label={`${rot.desconto} nas primeiras (parcelas cobradas)`} help="contrato.desconto">
             <input autoComplete="off" type="number" min="0" className="input" value={f.bonificacao_meses} onChange={e => set('bonificacao_meses', e.target.value)} placeholder="Quantas parcelas têm o desconto" />
           </Campo>
           {num(f.bonificacao_valor) > 0 && num(f.valor_base) > 0 && (
@@ -515,7 +546,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </p>
           )}
           <EncargosNaParcela linhas={encargosForm} onChange={(v) => { setErro(''); setEncargosForm(v) }} proxima={numeroProxima} />
-          <Campo label="Meses sem cobrança" className="sm:col-span-2" help="contrato.mesesSemCobranca">
+          <Campo campo="meses_sem_cobranca" label="Meses sem cobrança" className="sm:col-span-2" help="contrato.mesesSemCobranca">
             <div data-guia="contrato-form.meses-sem-cobranca">
               <MesesSemCobranca valor={f.meses_sem_cobranca || []} onChange={v => set('meses_sem_cobranca', v)} inicio={f.data_inicio} fim={f.sem_fim ? null : f.data_fim} />
             </div>
@@ -544,7 +575,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             )}
           </Campo>
           {f.indice_reajuste === 'FIXO' && (
-            <Campo label="Percentual fixo ao ano (%)">
+            <Campo campo="percentual_fixo" label="Percentual fixo ao ano (%)">
               <input autoComplete="off" className="input" inputMode="decimal" value={f.percentual_fixo} onChange={e => set('percentual_fixo', e.target.value)} placeholder="Ex.: 5,00" />
             </Campo>
           )}
@@ -597,13 +628,13 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
                 <Campo label="Favorecido do condomínio" className="sm:col-span-2">
                   <FavorecidoAutocomplete value={f.favorecido_condominio} onChange={v => set('favorecido_condominio', v)} suggestions={payees || []} placeholder="Digite o nome do favorecido" />
                 </Campo>
-                <Campo label="Valor previsto">
+                <Campo campo="valor_condominio_previsto" label="Valor previsto">
                   <CampoValor value={f.valor_condominio_previsto} onChange={v => set('valor_condominio_previsto', v)} placeholder="0,00" />
                 </Campo>
-                <Campo label="Dia de vencimento do condomínio">
+                <Campo campo="dia_vencimento_condominio" label="Dia de vencimento do condomínio">
                   <input autoComplete="off" type="number" min="1" max="31" className="input" value={f.dia_vencimento_condominio} onChange={e => set('dia_vencimento_condominio', e.target.value)} placeholder={f.dia_vencimento || ''} />
                 </Campo>
-                <Campo label="Categoria do condomínio" className="sm:col-span-2">
+                <Campo campo="categoria_condominio_id" label="Categoria do condomínio" className="sm:col-span-2">
                   <CategorySelect categories={categories} value={f.categoria_condominio_id} onChange={e => set('categoria_condominio_id', e.target.value)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
                 </Campo>
                 <Campo label="Créditos do proprietário: abater" className="sm:col-span-2">
@@ -690,9 +721,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
         </div>
       )}
 
-      {erro && <p className="text-xs text-perigo">{erro}</p>}
+      {/* Erro de um campo aparece junto dele (Campo); aqui, só os que não têm campo. */}
+      {erro && !falha.campo && <p data-erro-wizard="" role="alert" className="text-xs text-perigo">{erro}</p>}
       <div className="flex justify-between gap-2 pt-2 border-t border-borda">
-        <button type="button" className="btn-secondary flex items-center gap-1" onClick={() => (etapa === 0 ? onClose() : setEtapa(x => anterior(x)))}>
+        <button type="button" className="btn-secondary flex items-center gap-1" onClick={() => { if (etapa === 0) return onClose(); setErro(''); setEtapa(x => anterior(x)) }}>
           <ChevronLeft size={14} /> {etapa === 0 ? 'Cancelar' : 'Voltar'}
         </button>
         {etapa < ULTIMA ? (
@@ -704,6 +736,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
         )}
       </div>
     </div>
+    </CampoErroContext.Provider>
   )
 }
 
@@ -718,7 +751,7 @@ function CamposRepasse({ f, set, categories }) {
     ? dataRepasse({ dia_repasse: dr, repasse_meses_depois: int(f.repasse_meses_depois) ?? 1 }, comp) : null
   return (
     <>
-      <Campo label="Dia do repasse">
+      <Campo campo="dia_repasse" label="Dia do repasse">
         <input autoComplete="off" type="number" min="1" max="31" data-guia="contrato-form.dia-repasse" className="input" value={f.dia_repasse} onChange={e => set('dia_repasse', e.target.value)} />
       </Campo>
       <Campo label="Repasse acontece">
@@ -727,7 +760,7 @@ function CamposRepasse({ f, set, categories }) {
         </select>
         {exemplo && <p className="text-[11px] text-texto-3 mt-1">Ex.: aluguel de {fmtYm(comp)} → repasse em {fmtDate(exemplo)}.</p>}
       </Campo>
-      <Campo label="Taxa de administração (%)">
+      <Campo campo="taxa_adm_pct" label="Taxa de administração (%)">
         <input autoComplete="off" className="input" inputMode="decimal" data-guia="contrato-form.taxa-adm" value={f.taxa_adm_pct}
           onChange={e => set('taxa_adm_pct', e.target.value)} placeholder="Ex.: 10" />
       </Campo>
@@ -740,7 +773,7 @@ function CamposRepasse({ f, set, categories }) {
       <Campo label="Categoria da taxa de administração" className="sm:col-span-2">
         <CategorySelect categories={categories} value={f.categoria_taxa_adm_id} onChange={e => set('categoria_taxa_adm_id', e.target.value)} type="expense" perfilId={f.perfil_id || null} searchable />
       </Campo>
-      <Campo label="Aluguel do 1º mês" className="sm:col-span-2">
+      <Campo campo="valor_primeiro_mes" label="Aluguel do 1º mês" className="sm:col-span-2">
         <CampoValor value={f.valor_primeiro_mes} onChange={v => set('valor_primeiro_mes', v)} placeholder={pm ? valorBRFormatado(pm.calculado) : 'Mês cheio'} />
         <p className="text-[11px] text-texto-3 mt-1">
           {pm
@@ -748,7 +781,7 @@ function CamposRepasse({ f, set, categories }) {
             : 'Início no dia 1: o 1º mês é cheio. Preencha só se o valor combinado for diferente.'}
         </p>
       </Campo>
-      <Campo label="Saldo inicial com a administradora (opcional)" className="sm:col-span-2">
+      <Campo campo="saldo_inicial_valor" label="Saldo inicial com a administradora (opcional)" className="sm:col-span-2">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <select className="input" value={f.saldo_inicial_sinal} onChange={e => set('saldo_inicial_sinal', e.target.value)} aria-label="Sentido do saldo inicial">
             <option value="credor">A administradora me deve</option>

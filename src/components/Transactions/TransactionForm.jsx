@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { useRolarAoTopo } from '../shared/rolagemModal'
 import ComposicaoCard from '../Contratos/ComposicaoCard'
 import { PiggyBank, Repeat, Pencil, Check, X, History, Link2 } from 'lucide-react'
 import HelpCampo from '../shared/HelpCampo'
@@ -245,6 +246,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   })
 
   const [step, setStep] = useState('form')
+  // Cada passo (parecidos, série, parcelas, reserva…) começa no topo do corpo do modal.
+  useRolarAoTopo(step)
   // Repetição vinda do cartão do agendamento: aplicada ao estado durante o render quando muda, sem
   // recriar o formulário (o que foi digitado na despesa fica).
   const chaveRepExt = repeticaoExterna ? JSON.stringify(repeticaoExterna) : ''

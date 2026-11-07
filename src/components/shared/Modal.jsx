@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { GuardaFechamentoContext } from './guardaFechamento'
 import { useCamadaModal, CamadaContext } from '../../context/atalhosHooks'
 import { focaveis } from '../../lib/foco'
+import { CorpoModalContext, rolarCorpoAoTopo } from './rolagemModal'
 
 // Modais abertos, do mais antigo ao do topo: Tab e Esc valem só para o do topo.
 const pilha = []
@@ -14,7 +15,16 @@ const MAX_WIDTHS = {
   xl: 'md:max-w-4xl',
 }
 
-export default function Modal({ open, onClose, title, children, size = 'md' }) {
+// `chaveRolagem`: em modal com etapas montado pelo próprio dono, trocar o valor rola o corpo ao topo
+// (filhos usam useRolarAoTopo, de ./rolagemModal).
+export default function Modal({ open, onClose, title, children, size = 'md', chaveRolagem }) {
+  const corpoRef = useRef(null)
+  const chaveAnterior = useRef(chaveRolagem)
+  useEffect(() => {
+    if (Object.is(chaveAnterior.current, chaveRolagem)) return
+    chaveAnterior.current = chaveRolagem
+    rolarCorpoAoTopo(corpoRef.current)
+  }, [chaveRolagem])
   const guardas = useRef(new Set())
   const registrarGuarda = useCallback((fn) => {
     guardas.current.add(fn)
@@ -97,9 +107,11 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
             <X size={18} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto max-md:overflow-x-hidden p-5">
+        <div ref={corpoRef} data-modal-corpo="" className="flex-1 overflow-y-auto max-md:overflow-x-hidden p-5">
           <CamadaContext.Provider value={camadaId}>
-            <GuardaFechamentoContext.Provider value={registrarGuarda}>{children}</GuardaFechamentoContext.Provider>
+            <GuardaFechamentoContext.Provider value={registrarGuarda}>
+              <CorpoModalContext.Provider value={corpoRef}>{children}</CorpoModalContext.Provider>
+            </GuardaFechamentoContext.Provider>
           </CamadaContext.Provider>
         </div>
       </div>

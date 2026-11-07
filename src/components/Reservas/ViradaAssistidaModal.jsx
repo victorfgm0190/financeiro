@@ -221,7 +221,7 @@ export default function ViradaAssistidaModal({ status, bloqueiosTela = [], hoje,
   }
 
   return (
-    <Modal open onClose={passo === PASSO.RESULTADO ? onFechar : (manual ? onFechar : onAgoraNao)} title={titulo} size={passo === PASSO.PERGUNTA ? 'sm' : 'xl'}>
+    <Modal open onClose={passo === PASSO.RESULTADO ? onFechar : (manual ? onFechar : onAgoraNao)} title={titulo} size={passo === PASSO.PERGUNTA ? 'sm' : 'xl'} chaveRolagem={`${passo}:${indice}`}>
       <div className="space-y-3" data-testid="virada-modal">
         {passo === PASSO.PERGUNTA && (
           <>
