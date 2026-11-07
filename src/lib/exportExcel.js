@@ -16,7 +16,8 @@
 //            último 'grupo' (fórmula).
 //   resumo:  [{ rotulo, cor?, soma?: chave, onde?: [{ coluna, valor }], contar?: true, valor?: número fixo, numero?: true,
 //               partes?: [{ sinal: 1|-1, soma | valor, onde }] }] → fórmulas SOMA/SOMASES sobre a tabela.
-//   totais:  { rotulo?: (n) => string, somar: [chaves] } | false
+//   totais:  { titulo?: string (padrão 'TOTAL'), rotulo?: (n) => string, somar: [chaves],
+//              comCor?: true (aplica coluna.cor ao total, com o valor somado na chave da coluna) } | false
 // exportarExcel({ ...aba, nomeArquivo } | { abas: [aba...], nomeArquivo })
 
 export const VERDE = '0F6E56'
@@ -293,13 +294,15 @@ function montarAba(ws, aba, { logoId, ident, agora }) {
       const ref = `${letra(i + 1)}${rr}`
       let valor = ''
       const estilo = { fill: VERDE_CLARO, border: topo, font: { bold: true }, alignment: { vertical: 'middle' } }
-      if (i === 0) valor = 'TOTAL'
+      if (i === 0) valor = aba.totais.titulo || 'TOTAL'
       else if (i === 1 && !somar.has(c.chave)) valor = rotulo
       if (somar.has(c.chave)) {
         const { f, v } = formulaDe({ soma: c.chave })
         valor = { formula: f, result: Math.round(v * 100) / 100 }
         estilo.numFmt = c.tipo === 'moeda' ? FMT.moeda : FMT.numero
         estilo.alignment.horizontal = 'right'
+        const cor = aba.totais.comCor ? c.cor?.({ [c.chave]: v }) : null
+        if (cor && COR_VALOR[cor]) estilo.font.color = { argb: `FF${COR_VALOR[cor]}` }
       }
       cel(ref, valor, estilo)
     })

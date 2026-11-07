@@ -25,6 +25,7 @@ import { isoLocal } from '../../lib/hoje'
 import { erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
 import { ehAjusteDeRendimento } from '../../lib/rendimentoReserva'
 import { previsoesDasFuncoes } from '../../lib/previsaoReserva'
+import { totaisFluxoFuturo } from '../../lib/fluxoReservaTotais'
 import AvisosCaixaReserva from './AvisosCaixaReserva'
 import { parseValorBR } from '../../lib/valorBR'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
@@ -1595,6 +1596,8 @@ function futureMovimentosByFunction(linked, accounts, schedules, scheduleReserva
   return out
 }
 
+const totalOuTraco = (v) => (v === 0 ? '—' : fmt(v))
+
 // ── Tab 2: Fluxo Futuro ─────────────────────────────────────────────────────
 function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedules, scheduleReservaFuncoes, getNextOccurrences }) {
   const linked = functions.filter(f => f.accountId)
@@ -1651,6 +1654,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
   }, [linked, accounts, saldosAtualizados, scheduledByFunction, windowMonths])
 
   const totalInvested = linked.reduce((s, f) => s + (saldosAtualizados[f.id] || 0), 0)
+  const totalGeral = useMemo(() => totaisFluxoFuturo(projections, f => saldosAtualizados[f.id] || 0), [projections, saldosAtualizados])
   const hasProvisao = projections.some(p => p.monthly.some(m => m.prov > 0))
   const [mobilePage, setMobilePage] = useState(0)
   useSubtelaGuia('reservas:fluxo')
@@ -1675,7 +1679,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
       colsMes.push(
         { chave: `dep${i}`, titulo: `${lbl} Dep`, tipo: 'moeda', cor: () => 'receita' },
         { chave: `res${i}`, titulo: `${lbl} Res`, tipo: 'moeda', cor: () => 'despesa' },
-        { chave: `saldo${i}`, titulo: `${lbl} Saldo`, tipo: 'moeda' },
+        { chave: `saldo${i}`, titulo: `${lbl} Saldo`, tipo: 'moeda', cor: (l) => l[`saldo${i}`] < 0 ? 'despesa' : null },
       )
     })
     const linhas = projections.map(({ f, account, monthly }) => {
@@ -1690,10 +1694,10 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
       resumo: [{ rotulo: 'Total investido', soma: 'investido' }],
       colunas: [
         { chave: 'funcao', titulo: 'Função' }, { chave: 'conta', titulo: 'Conta' }, { chave: 'categoria', titulo: 'Categoria' },
-        { chave: 'reserva', titulo: 'Conta Reserva' }, { chave: 'investido', titulo: 'Total Investido', tipo: 'moeda' }, ...colsMes,
+        { chave: 'reserva', titulo: 'Conta Reserva' }, { chave: 'investido', titulo: 'Total Investido', tipo: 'moeda', cor: (l) => l.investido < 0 ? 'despesa' : null }, ...colsMes,
       ],
       linhas,
-      totais: { rotulo: (n) => `${n} ${n === 1 ? 'função' : 'funções'}`, somar: ['investido', ...colsMes.map(c => c.chave)] },
+      totais: { titulo: 'TOTAL GERAL', rotulo: () => '', comCor: true, somar: ['investido', ...colsMes.map(c => c.chave)] },
       nomeArquivo: { relatorio: 'Reservas-Fluxo-Futuro', periodo: mesAtualArquivo() },
     })
   }
@@ -1850,15 +1854,48 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
             </div>
           </div>
         ))}
+
+        {/* Total geral: fixo no fim da área de rolagem, sem precisar rolar a lista. */}
+        <div className="card p-0 overflow-hidden sticky bottom-0 z-20 bg-surface-2 border-t-2 border-t-borda-forte shadow-2xl">
+          <div className="px-3 py-2 border-b border-borda flex items-center gap-2">
+            <span className="text-sm font-bold text-texto-1 flex-1">TOTAL GERAL</span>
+            <span className={`text-xs font-bold shrink-0 ${totalGeral.investido < 0 ? 'text-despesa' : totalGeral.investido === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
+              {totalOuTraco(totalGeral.investido)}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 divide-x divide-borda">
+            {visibleMonths.map(mi => {
+              const t = totalGeral.monthly[mi]
+              const wm = windowMonths[mi]
+              return (
+                <div key={mi} className={`px-2 py-2 ${t.saldo < 0 ? 'bg-despesa/10' : ''} ${wm.isYearStart ? 'border-l-2 border-l-primary' : ''}`}>
+                  <p className="text-[10px] text-texto-3 font-semibold uppercase mb-1">
+                    {wm.label}{wm.isYearStart || mi === 0 ? ` ${yy(wm.year)}` : ''}
+                  </p>
+                  <p className={`text-xs font-bold ${t.dep > 0 ? 'text-receita' : 'text-texto-3'}`}>↓ {totalOuTraco(t.dep)}</p>
+                  <p className={`text-xs font-bold ${t.res > 0 ? 'text-despesa' : 'text-texto-3'}`}>↑ {totalOuTraco(t.res)}</p>
+                  {t.prov > 0 && (
+                    <p className="text-[11px] italic font-bold text-texto-2" title="Resgate futuro (provisão) — estimativa">↑ ~{fmt(t.prov)}</p>
+                  )}
+                  <p className={`text-xs font-bold mt-1 ${t.saldo < 0 ? 'text-despesa' : t.saldo === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
+                    {totalOuTraco(t.saldo)}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       {/* ── Desktop layout (hidden below md) ── */}
       <div className="hidden md:block card p-0 overflow-hidden" data-guia="reservas:fluxo.tabela">
-        <div className="overflow-x-auto">
-          <table className="text-xs border-collapse" style={{ minWidth: 'max-content' }}>
-            <thead>
-              <tr className="border-b border-borda bg-surface">
-                <th className="text-left px-3 py-2.5 text-texto-2 font-medium whitespace-nowrap" style={{ minWidth: 160 }}>Função</th>
+        {/* Rolagem própria nos dois eixos: é o que permite cabeçalho e rodapé fixos na mesma tabela.
+            border-separate porque, com border-collapse, as bordas não acompanham células sticky. */}
+        <div className="overflow-auto max-h-[max(20rem,calc(100dvh-16rem))]">
+          <table className="text-xs border-separate border-spacing-0" style={{ minWidth: 'max-content' }}>
+            <thead className="sticky top-0 z-20">
+              <tr className="bg-surface [&>th]:border-b [&>th]:border-borda">
+                <th className="sticky left-0 z-10 bg-surface border-r border-r-borda text-left px-3 py-2.5 text-texto-2 font-medium whitespace-nowrap" style={{ minWidth: 160 }}>Função</th>
                 <th className="text-left px-3 py-2.5 text-texto-2 font-medium" style={{ minWidth: 80 }}>Conta</th>
                 <th className="text-right px-3 py-2.5 text-texto-2 font-medium" style={{ minWidth: 100 }}>Total Investido</th>
                 {windowMonths.map((wm, i) => (
@@ -1872,8 +1909,8 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
                   </th>
                 ))}
               </tr>
-              <tr className="border-b border-borda-forte bg-surface/80">
-                <th /><th /><th />
+              <tr className="bg-surface [&>th]:border-b [&>th]:border-b-borda-forte">
+                <th className="sticky left-0 z-10 bg-surface border-r border-r-borda" /><th /><th />
                 {windowMonths.map((wm, i) => (
                   <Fragment key={i}>
                     <th className={`text-right px-2 py-1.5 text-receita font-medium whitespace-nowrap ${wm.isYearStart ? 'border-l-2 border-l-primary' : 'border-l border-borda'}`} style={{ minWidth: 62 }}>Dep</th>
@@ -1885,8 +1922,9 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
             </thead>
             <tbody>
               {projections.map(({ f, account, monthly, hasAlert }) => (
-                <tr key={f.id} className={`border-b border-borda/50 hover:bg-surface-hover/20 transition-colors ${hasAlert ? 'bg-aviso/5' : ''}`}>
-                  <td className="px-3 py-2 text-texto-1 whitespace-nowrap">
+                <tr key={f.id} className={`group [&>td]:border-b [&>td]:border-b-borda/50 hover:bg-surface-hover/20 transition-colors ${hasAlert ? 'bg-aviso/5' : ''}`}>
+                  {/* Fundo opaco (a coluna passa por cima das outras) com o mesmo tom do alerta/hover da linha. */}
+                  <td className={`sticky left-0 z-10 border-r border-r-borda px-3 py-2 text-texto-1 whitespace-nowrap group-hover:bg-[color-mix(in_srgb,var(--color-surface-hover)_20%,var(--color-surface))] ${hasAlert ? 'bg-[color-mix(in_srgb,var(--color-aviso)_5%,var(--color-surface))]' : 'bg-surface'}`}>
                     {hasAlert && <AlertTriangle size={10} className="inline text-aviso mr-1" />}
                     {f.name}
                   </td>
@@ -1938,6 +1976,36 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
                 </tr>
               ))}
             </tbody>
+            <tfoot className="sticky bottom-0 z-20">
+              <tr className="bg-surface-2 font-bold [&>td]:border-t-2 [&>td]:border-t-borda-forte">
+                <td className="sticky left-0 z-10 bg-surface-2 border-r border-r-borda px-3 py-2.5 text-texto-1 whitespace-nowrap">TOTAL GERAL</td>
+                <td className="px-3 py-2.5" />
+                <td className={`px-3 py-2.5 text-right ${totalGeral.investido < 0 ? 'text-despesa' : totalGeral.investido === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
+                  {totalOuTraco(totalGeral.investido)}
+                </td>
+                {totalGeral.monthly.map((t, mi) => {
+                  const wm = windowMonths[mi]
+                  return (
+                    <Fragment key={mi}>
+                      <td className={`px-2 py-2.5 text-right ${wm.isYearStart ? 'border-l-2 border-l-primary' : 'border-l border-l-borda'} ${t.dep > 0 ? 'text-receita' : 'text-texto-3'}`}>
+                        {totalOuTraco(t.dep)}
+                      </td>
+                      <td className={`px-2 py-2.5 text-right ${t.res > 0 ? 'text-despesa' : 'text-texto-3'}`}>
+                        {totalOuTraco(t.res)}
+                        {t.prov > 0 && (
+                          <span className="block text-[10px] italic text-texto-2" title="Resgate futuro (provisão) — estimativa">
+                            ~{fmt(t.prov)}
+                          </span>
+                        )}
+                      </td>
+                      <td className={`px-2 py-2.5 text-right ${t.saldo < 0 ? 'text-despesa bg-despesa/15' : t.saldo === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
+                        {totalOuTraco(t.saldo)}
+                      </td>
+                    </Fragment>
+                  )
+                })}
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>

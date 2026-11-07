@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import ExcelJS from 'exceljs'
 import { readFileSync } from 'node:fs'
-import { montarPlanilha, nomeArquivoFinup, corDoSelo, definirIdentidadeExport, identidadeExport } from './exportExcel'
+import { montarPlanilha, VERDE, nomeArquivoFinup, corDoSelo, definirIdentidadeExport, identidadeExport } from './exportExcel'
 
 const LOGO = readFileSync(new URL('../../public/brand/finup-logo.png', import.meta.url))
 const AGORA = new Date(2026, 9, 31, 14, 5)
@@ -110,6 +110,28 @@ describe('exportExcel: layout padrão', () => {
     expect(ws.getCell('B9').value.result).toBe(30)
     expect(ws.getCell('B9').value.formula).toContain('"D"')
     expect(ws.getColumn(4).hidden).toBe(true)
+  })
+
+  it('total com título próprio, Conta vazia, SOMA por fórmula e cor pelo valor somado', async () => {
+    const ws = (await ler(montarPlanilha(ExcelJS, {
+      titulo: 'Fluxo',
+      colunas: [
+        { chave: 'n', titulo: 'Função' }, { chave: 'c', titulo: 'Conta' },
+        { chave: 'd', titulo: 'Dep', tipo: 'moeda', cor: () => 'receita' },
+        { chave: 's', titulo: 'Saldo', tipo: 'moeda', cor: (l) => l.s < 0 ? 'despesa' : null },
+      ],
+      linhas: [{ n: 'a', c: 'X', d: 10, s: 5 }, { n: 'b', c: 'Y', d: 20, s: -8 }],
+      totais: { titulo: 'TOTAL GERAL', rotulo: () => '', comCor: true, somar: ['d', 's'] },
+    }, { ident, agora: AGORA }))).worksheets[0]
+    const r = 8
+    expect(ws.getCell(`A${r}`).value).toBe('TOTAL GERAL')
+    expect(ws.getCell(`A${r}`).font.bold).toBe(true)
+    expect(ws.getCell(`B${r}`).value || '').toBe('')
+    expect(ws.getCell(`C${r}`).value.formula).toMatch(/^SUM\(/)
+    expect(ws.getCell(`C${r}`).value.result).toBe(30)
+    expect(ws.getCell(`C${r}`).font.color.argb).toBe(`FF${VERDE}`)
+    expect(ws.getCell(`D${r}`).value.result).toBe(-3)
+    expect(ws.getCell(`D${r}`).font.color.argb).toBe('FF953D18')
   })
 
   it('várias abas e nome do arquivo sem acento/espaço', () => {
