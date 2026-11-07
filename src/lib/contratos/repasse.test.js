@@ -67,7 +67,7 @@ describe('repasse — parcelas (agendamentos de recebimento)', () => {
       ['ctr_c1_aluguel_202607', '2026-08-12', 3000], ['ctr_c1_aluguel_202608', '2026-09-12', 3000],
     ])
     expect(plano[0].composicao.itens).toEqual([{ tipo: 'base', desc: 'Aluguel contratual — proporcional 22 dias', valor: 2200, proporcional: true }])
-    expect(plano[0].composicao.competencia).toBe('2026-03')
+    expect(plano[0].composicao).toMatchObject({ competencia: '2026-03', bruto: true })
     const informado = gerarPlanoParcelas({ ...CONTRATO, valor_primeiro_mes: 2150.5 }, { hoje: HOJE })
     expect(informado[0]).toMatchObject({ valor: 2150.5 })
     expect(informado[0].composicao.itens[0].desc).toBe('Aluguel contratual — 1º mês (informado)')

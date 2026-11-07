@@ -22,6 +22,8 @@ export default function SeloContrato({ schedule = null, contratoId = null, comPr
   const rotulo = n ? `Contrato ${n}${t ? `/${t}` : ''}` : 'Contrato'
   const abrir = (e) => { e.stopPropagation(); abrirFichaContrato(id) }
   const projetado = comProjetado && schedule?.valorStatus === 'projetado' && !parcelaPaga(schedule)
+  // Repasse sem deduções calculadas: o valor ainda é o aluguel bruto.
+  const bruto = comProjetado && !!schedule?.composicao?.bruto && !parcelaPaga(schedule)
   return (
     <>
       <button
@@ -40,6 +42,16 @@ export default function SeloContrato({ schedule = null, contratoId = null, comPr
           className="inline-flex items-center text-xs bg-surface-2 text-aviso outline-dashed outline-1 -outline-offset-1 outline-borda-forte px-1.5 py-0.5 rounded whitespace-nowrap font-medium hover:bg-surface-hover transition-colors shrink-0"
         >
           Projetado
+        </button>
+      )}
+      {bruto && (
+        <button
+          type="button"
+          onClick={abrir}
+          title="Valor bruto do aluguel — as deduções da administradora ainda não foram aplicadas"
+          className="inline-flex items-center text-xs bg-surface-2 text-aviso outline-dashed outline-1 -outline-offset-1 outline-borda-forte px-1.5 py-0.5 rounded whitespace-nowrap font-medium hover:bg-surface-hover transition-colors shrink-0"
+        >
+          Valor bruto
         </button>
       )}
     </>

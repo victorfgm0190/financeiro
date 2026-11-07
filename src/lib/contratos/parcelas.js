@@ -229,7 +229,7 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
     const composicao = mantida('aluguel', v.competencia, {
       ciclo, base, itens, total: somaItens(itens), numero: v.numero, total_parcelas: totalAluguel,
       ...(status === 'projetado' ? { projecao } : {}),
-      ...(repasse ? { competencia: v.competencia } : {}),
+      ...(repasse ? { competencia: v.competencia, bruto: true } : {}),
     })
     out.push({
       id: idParcela(contrato.id, 'aluguel', v.competencia), papel: 'aluguel', numero: v.numero, total: totalAluguel,

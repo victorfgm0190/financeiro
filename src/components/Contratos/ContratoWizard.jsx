@@ -12,6 +12,7 @@ import { buscarContratoApi } from '../../lib/contratosApi'
 import { gerarPlanoParcelas, proximoReajuste, r2, rotuloContrato, textoProjecao, ehParcelaGerada, parcelaPaga, competenciaDaParcela } from '../../lib/contratos/parcelas'
 import { primeiroMes, dataRepasse } from '../../lib/contratos/repasse'
 import { ehBemParametrizado } from '../../lib/patrimonio'
+import { faltaRecurso } from '../../lib/recursosBanco'
 import { validarEtapa, sugerirCategoria } from '../../lib/contratos/validacao'
 import { candidatosVinculo } from '../../lib/contratos/vinculo'
 import { MODALIDADES, ehAluguel, rotuloPapel, rotulosContrato } from '../../lib/contratos/rotulos'
@@ -152,8 +153,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   const {
     profiles, accounts, categories, payees, costCenters, tiposDocumento, activeProfileId, schedules,
     criarContrato, atualizarContrato, salvarItensContrato, carregarIndice, indicesContratos,
-    planejarParcelasContrato, aplicarParcelasContrato, vincularEGerarContrato,
+    planejarParcelasContrato, aplicarParcelasContrato, vincularEGerarContrato, recursosBanco,
   } = useApp()
+  // Banco sem a migração do repasse: a opção nem aparece (a API recusa de novo, como segunda trava).
+  const semRepasse = faltaRecurso(recursosBanco, 'contratoRepasse')
   const edicao = !!contrato
   const hoje = hojeStr()
   const tipoCtr = tiposDocumento.find(t => t.sigla === 'CTR' && t.ativo !== false)
@@ -380,7 +383,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             <input data-guia="contrato-form.objeto" autoComplete="off" className="input" value={f.objeto} onChange={e => set('objeto', e.target.value)} maxLength={200}
               placeholder={aluguel ? 'Imóvel do contrato (ex.: Apto 302 — Ed. Sol)' : 'O que o contrato cobre (ex.: manutenção mensal, plano anual)'} />
           </Campo>
-          {aluguel && f.tipo === 'receber' && (
+          {aluguel && f.tipo === 'receber' && !semRepasse && (
             <Campo label="Como o aluguel chega" className="sm:col-span-2">
               <label className="flex items-start gap-2 text-sm text-texto-2 mt-1">
                 <input autoComplete="off" type="checkbox" className="accent-primary mt-0.5" data-guia="contrato-form.modo-repasse" checked={!!f.modo_repasse}
@@ -632,6 +635,9 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           {(f.meses_sem_cobranca || []).length > 0 && (
             <p className="text-xs text-texto-2">Sem cobrança: {f.meses_sem_cobranca.map(fmtYm).join(', ')}.</p>
           )}
+          {repasse && planoNovo.some(p => p.composicao?.bruto) && (
+            <p className="text-xs text-aviso">Valor bruto — as deduções da administradora entram na composição de cada mês.</p>
+          )}
           <PreviaTabela linhas={planoNovo} contrato={dados} />
         </div>
       )}
@@ -744,6 +750,7 @@ function PreviaTabela({ linhas, contrato }) {
               <td className="px-2 py-1.5 text-texto-3"><Composicao c={p.composicao} /></td>
               <td className="px-2 py-1.5 text-right whitespace-nowrap">
                 <span className="text-texto-1 font-medium">{fmt(p.valor)}</span>
+                {p.composicao?.bruto && <span className="ml-1.5 text-[10px] text-aviso outline-dashed outline-1 outline-borda-forte rounded px-1">Valor bruto</span>}
                 {p.valorStatus === 'projetado' && <span className="ml-1.5 text-[10px] text-aviso outline-dashed outline-1 outline-borda-forte rounded px-1">Projetado</span>}
               </td>
             </tr>

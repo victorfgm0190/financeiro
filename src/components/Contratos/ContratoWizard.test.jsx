@@ -172,6 +172,18 @@ describe('ContratoWizard — aluguel a receber por administradora', () => {
     expect(itens).toEqual([])
   })
 
+  it('banco sem a migração do repasse: a opção não aparece', () => {
+    app.recursosBanco = { contratoRepasse: false }
+    try {
+      render(<ContratoWizard onClose={() => {}} onSalvo={() => {}} />)
+      modalidade('aluguel')
+      fireEvent.change(campo('Tipo').querySelector('select'), { target: { value: 'receber' } })
+      expect(screen.queryByText(/Recebo por uma administradora/)).toBeNull()
+    } finally {
+      app.recursosBanco = null
+    }
+  })
+
   it('a receber sem administradora e a pagar ficam como antes (campos neutros)', async () => {
     render(<ContratoWizard onClose={() => {}} onSalvo={() => {}} />)
     modalidade('aluguel')
