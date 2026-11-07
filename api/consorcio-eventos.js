@@ -3,7 +3,7 @@ import { requireAuth } from './_auth.js'
 import { exigirContaPermitida } from './_permissoesApi.js'
 import { pode } from '../src/lib/permissoes.js'
 import { dadosDoExtrato, genId, num, round2, fail, explicarErro, isIsoDate, criarLancamentoCategorizado } from './_bem.js'
-import { custoEstimadoPorCota } from '../src/lib/consorcio.js'
+import { custoEstimadoPorCota, avisoCustoAcimaDoSaldo } from '../src/lib/consorcio.js'
 import { LIMITE_ISENCAO_PEQUENO_VALOR, AVISO_ISENCAO } from '../src/lib/planoVendaConsorcio.js'
 import { extratoDoBem, resumoDoBem } from '../src/lib/extratoBem.js'
 import { comAmbiente } from './_ambiente.js'
@@ -71,7 +71,9 @@ async function vender(q, { bem, consorcio, data, dados }) {
   }
 }
 
-// As contas da venda da cota, iguais na prévia e na gravação.
+// As contas da venda da cota, iguais na prévia e na gravação. O que sai do bem é exatamente o custo usado no
+// resultado: valor recebido = custo baixado + ganho (ou − perda) + custos da venda. A última cota leva o saldo
+// restante, e nenhuma outra passa dele.
 async function contasDaCota(q, { bem, consorcio, dados, data }) {
   const cotas = (await q(`SELECT * FROM consorcio_cotas WHERE bem_id = $1 ORDER BY created_at, numero`, [bem.id]))
   const cota = cotas.find(c => c.numero === dados.cota_numero)
@@ -82,7 +84,10 @@ async function contasDaCota(q, { bem, consorcio, dados, data }) {
   const resumo = resumoDoBem(bemExtrato, extratoDoBem(bemExtrato, extrato), extrato.parcelas)
   const estimado = custoEstimadoPorCota(cotas, resumo.pagoSemJuros, extrato.baixas || [])[cotas.indexOf(cota)]
   const informado = dados.custo_cota === '' || dados.custo_cota == null ? null : round2(Number(dados.custo_cota))
-  const custo = informado ?? estimado
+  const saldoBem = Math.max(0, num(bem.balance))
+  const ultima = cotas.every(x => x.numero === cota.numero || x.vendida_em)
+  const pedido = informado ?? estimado
+  const custo = ultima ? saldoBem : Math.min(pedido, saldoBem)
   const valor = round2(Number(dados.valor) || 0)
   const custos = round2(Number(dados.custos_valor) || 0)
   const mes = String(data || '').slice(0, 7)
@@ -90,7 +95,10 @@ async function contasDaCota(q, { bem, consorcio, dados, data }) {
   const [fn] = consorcio.funcao_reserva_id && dados.conta_destino_id
     ? await q(`SELECT id, name FROM reserve_functions WHERE id = $1 AND account_id = $2`, [consorcio.funcao_reserva_id, dados.conta_destino_id])
     : []
-  return { cota, cotas, estimado, custo, valor, custos, resultado: round2(valor - custos - custo), vendasDoMes, funcao: fn || null }
+  return {
+    cota, cotas, estimado, custo, valor, custos, resultado: round2(valor - custos - custo), vendasDoMes, funcao: fn || null,
+    ultima, saldoBem, acimaDoSaldo: !ultima && pedido > saldoBem, informadoAcima: !ultima && informado != null && informado > saldoBem,
+  }
 }
 
 const QUAL_BEM = async (bemId) => {
@@ -112,6 +120,10 @@ async function previaCota(req, res, b) {
     custo_estimado: c.estimado,
     custo: c.custo,
     resultado: c.resultado,
+    ultima: c.ultima,
+    saldo_bem: c.saldoBem,
+    diferenca_estimativa: c.ultima ? round2(c.custo - c.estimado) : null,
+    aviso_custo: c.acimaDoSaldo ? avisoCustoAcimaDoSaldo(c.saldoBem) : null,
     vendas_do_mes: totalDoMes,
     aviso_isencao: totalDoMes > LIMITE_ISENCAO_PEQUENO_VALOR ? AVISO_ISENCAO : null,
     categorias: { ganho: bem.categoria_ganho_bem_id || null, perda: bem.categoria_perda_bem_id || null },
@@ -126,6 +138,7 @@ async function venderCota(q, { bem, consorcio, data, dados, eventoId }) {
   const [destino] = await q(`SELECT id, type FROM contas WHERE id = $1`, [dados.conta_destino_id])
   if (!destino || ['asset', 'liability', 'credit', 'gerencial'].includes(destino.type)) throw erro(400, 'Conta de destino inválida.')
   if (c.custo < 0) throw erro(400, 'Custo da cota inválido.')
+  if (c.informadoAcima) throw erro(400, avisoCustoAcimaDoSaldo(c.saldoBem))
   if (c.custos > 0 && !dados.custos_categoria_id) throw erro(400, 'Escolha a categoria dos custos da venda.')
   const categoria = dados.categoria_resultado_id || (c.resultado > 0 ? bem.categoria_ganho_bem_id : bem.categoria_perda_bem_id)
   if (c.resultado !== 0 && !categoria) throw erro(400, `Escolha a categoria de ${c.resultado > 0 ? 'ganho' : 'perda'} do bem antes de vender.`)
@@ -156,9 +169,9 @@ async function venderCota(q, { bem, consorcio, data, dados, eventoId }) {
     `UPDATE consorcio_cotas SET vendida_em = $3, vendida_valor = $4, vendida_custo = $5, vendida_evento_id = $6 WHERE bem_id = $1 AND numero = $2`,
     [bem.id, c.cota.numero, data, c.valor, c.custo, eventoId],
   )
-  // Era a última cota: o consórcio foi vendido por inteiro, e o resíduo da estimativa não fica no bem.
-  const ultima = c.cotas.every(x => x.numero === c.cota.numero || x.vendida_em)
-  const saldo = ultima ? 0 : Math.max(0, round2(num(bem.balance) - c.custo))
+  // Era a última cota: o consórcio foi vendido por inteiro.
+  const { ultima } = c
+  const saldo = round2(num(bem.balance) - c.custo)
   await q(`UPDATE contas SET balance = $2${ultima ? ', foi_vendido = TRUE, data_venda = $3' : ''} WHERE id = $1`, ultima ? [bem.id, saldo, data] : [bem.id, saldo])
   if (ultima) await q(`UPDATE consorcios SET situacao = 'vendida', updated_at = now() WHERE bem_id = $1`, [bem.id])
   return {

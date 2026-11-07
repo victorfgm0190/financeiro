@@ -1,3 +1,4 @@
+import { formatarMoedaBR } from './valorBR.js'
 // Regras do tipo de bem Consórcio. PURO: quem chama lê os dados e grava o resultado.
 // Antes da contemplação o bem é o DIREITO à carta: entra no PL pelo pago acumulado, e o saldo devedor
 // informado pela administradora é compromisso, não dívida (não subtrai do PL).
@@ -150,6 +151,8 @@ export function custoEstimadoPorCota(cotas = [], pagoAcumulado = 0, baixas = [])
   saida[ultima] = Math.max(0, r2(saida[ultima] + total - soma))
   return saida
 }
+
+export const avisoCustoAcimaDoSaldo = (saldo) => `O custo não pode passar do saldo do bem (R$ ${formatarMoedaBR(saldo)})`
 
 // O que a venda de uma cota muda nos agendamentos. Por cota (a descrição cita a cota, ou há um agendamento por
 // cota ativa, com o valor da parcela dela): encerra o da cota. Cobrindo várias: reduz na proporção da cota vendida,

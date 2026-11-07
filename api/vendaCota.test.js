@@ -125,6 +125,67 @@ describe('venda de uma cota', () => {
   }, 60_000)
 })
 
+describe('o bem e o resultado fecham', () => {
+  const saldoBem = async () => (await q("SELECT balance::float AS b FROM contas WHERE id = 'bem'"))[0].b
+  const fecha = (r, antes, depois) => {
+    const d = r.body.dados
+    expect(Math.round((antes - depois) * 100) / 100).toBe(d.custo_cota) // o que saiu do bem é o custo usado
+    expect(Math.round((d.custo_cota + d.ganho + d.custos_valor) * 100) / 100).toBe(d.valor) // entrada = custo + resultado + custos
+  }
+  const sobraUma = async (saldo) => {
+    await vender('1', 5000)
+    await vender('2', 5000)
+    await q("UPDATE contas SET balance = $1 WHERE id = 'bem'", [saldo])
+  }
+
+  it('última cota com saldo menor que a estimativa: o custo é o saldo, ganho maior', async () => {
+    await sobraUma(2500)
+    const p = await previa('3', 5000, { custo_cota: 99 })
+    expect(p.body).toMatchObject({ ultima: true, custo: 2500, custo_estimado: 3000, diferenca_estimativa: -500, resultado: 2500, aviso_custo: null })
+    const r = await vender('3', 5000, { custo_cota: 99, custos_valor: 100, custos_categoria_id: 'cust' })
+    expect(r.body.dados).toMatchObject({ custo_cota: 2500, ganho: 2400 })
+    fecha(r, 2500, await saldoBem())
+    expect(await saldoBem()).toBe(0)
+  }, 60_000)
+  it('última cota com saldo maior que a estimativa: o custo é o saldo, com perda', async () => {
+    await sobraUma(4000)
+    const p = await previa('3', 1000)
+    expect(p.body).toMatchObject({ custo: 4000, diferenca_estimativa: 1000, resultado: -3000 })
+    const r = await vender('3', 1000)
+    expect(r.body.dados.ganho).toBe(-3000)
+    fecha(r, 4000, await saldoBem())
+    expect(await resultado()).toContainEqual({ type: 'expense', v: 3000, category_id: 'perda', bem_id: 'bem', account_id: null })
+    const e = await chamar(eventos, { acao: 'estornar', evento_id: r.body.evento_id })
+    expect(e.body.efeitos.saldo).toBe(4000)
+    expect(await saldoBem()).toBe(4000)
+  }, 60_000)
+  it('custo informado acima do saldo: a prévia avisa e limita; a venda é recusada e nada muda', async () => {
+    const p = await previa('1', 5000, { custo_cota: 9000.01 })
+    expect(p.body.custo).toBe(9000)
+    expect(p.body.saldo_bem).toBe(9000)
+    expect(p.body.aviso_custo).toBe('O custo não pode passar do saldo do bem (R$ 9.000,00)')
+    const antes = await estado()
+    const r = await vender('1', 5000, { custo_cota: 9000.01 })
+    expect(r.statusCode).toBe(400)
+    expect(r.body.error).toBe('O custo não pode passar do saldo do bem (R$ 9.000,00)')
+    expect(await estado()).toBe(antes)
+  }, 60_000)
+  it('custo igual ao saldo é aceito e fecha', async () => {
+    const r = await vender('1', 5000, { custo_cota: 9000 })
+    expect(r.body.dados).toMatchObject({ custo_cota: 9000, ganho: -4000 })
+    fecha(r, 9000, await saldoBem())
+  }, 60_000)
+  it('estimativa acima do saldo: usa o saldo, com o aviso, sem ninguém ter informado', async () => {
+    await q("UPDATE contas SET balance = 1000 WHERE id = 'bem'")
+    const p = await previa('1', 5000)
+    expect(p.body).toMatchObject({ custo_estimado: 3000, custo: 1000, resultado: 4000 })
+    expect(p.body.aviso_custo).toMatch(/R\$ 1\.000,00/)
+    const r = await vender('1', 5000)
+    expect(r.statusCode).toBe(200)
+    fecha(r, 1000, await saldoBem())
+  }, 60_000)
+})
+
 describe('aviso de isenção', () => {
   it('2 cotas no mesmo mês acima de R$ 35.000: avisa na prévia da segunda', async () => {
     await vender('1', 20000)

@@ -7,7 +7,7 @@ import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import { fmt, fmtSinal } from '../shared/utils'
 import { useApp } from '../../context/AppContext'
 import { previaVendaCota, registrarEventoConsorcio } from '../../lib/bemApi'
-import { agendamentosDoBem, fotoDosAgendamentos, planoVendaDaCota } from '../../lib/consorcio'
+import { agendamentosDoBem, avisoCustoAcimaDoSaldo, fotoDosAgendamentos, planoVendaDaCota } from '../../lib/consorcio'
 import { isoLocal } from '../../lib/hoje'
 
 // Venda real de uma cota. Quem calcula e grava é o servidor; o que muda nos agendamentos é do estado do app,
@@ -27,7 +27,15 @@ export default function VenderCotaModal({ bemId, cota, cotas, onCancelar, onVend
   const [previa, setPrevia] = useState(null)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
+  const [limitou, setLimitou] = useState(false)
   const campo = (k) => (e) => setF(p => ({ ...p, [k]: e?.target ? e.target.value : e }))
+  // O campo não passa do saldo do bem: o servidor recusa o que passar.
+  const mudarCusto = (e) => {
+    const saldo = previa?.saldo_bem
+    const passou = saldo != null && Number(e.target.value) > saldo
+    setLimitou(passou)
+    setF(p => ({ ...p, custoCota: passou ? String(saldo) : e.target.value }))
+  }
 
   useEffect(() => {
     let vivo = true
@@ -47,6 +55,7 @@ export default function VenderCotaModal({ bemId, cota, cotas, onCancelar, onVend
   const resultado = previa?.resultado ?? 0
   const categoriaDoBem = resultado > 0 ? previa?.categorias?.ganho : previa?.categorias?.perda
   const faltaCategoria = resultado !== 0 && !categoriaDoBem && !f.categoriaResultado
+  const avisoCusto = limitou ? avisoCustoAcimaDoSaldo(previa?.saldo_bem) : previa?.aviso_custo
   const pronto = f.data && Number(f.valor) > 0 && f.conta && !(Number(f.custos) > 0 && !f.custosCat) && !faltaCategoria && previa
 
   const confirmar = async () => {
@@ -58,7 +67,7 @@ export default function VenderCotaModal({ bemId, cota, cotas, onCancelar, onVend
         bem_id: bemId, tipo: 'vender_cota', data: f.data, agendamentos: fotoDosAgendamentos(afetados),
         dados: {
           cota_numero: cota.numero, valor: f.valor, conta_destino_id: f.conta, comprador: f.comprador, custos_valor: f.custos || 0, custos_categoria_id: f.custosCat || null,
-          custo_cota: f.custoCota === '' ? null : f.custoCota, observacao: f.observacao, categoria_resultado_id: f.categoriaResultado || null,
+          custo_cota: f.custoCota === '' || previa?.ultima ? null : f.custoCota, observacao: f.observacao, categoria_resultado_id: f.categoriaResultado || null,
         },
       })
       const ef = r.efeitos || {}
@@ -95,10 +104,13 @@ export default function VenderCotaModal({ bemId, cota, cotas, onCancelar, onVend
               <CategorySelect categories={categories} type="expense" value={f.custosCat} onChange={campo('custosCat')} className="input mt-1" />
             </label>
           )}
-          <label className="label">Custo da cota
-            <InputMoeda className="input mt-1" value={f.custoCota === '' ? (previa?.custo_estimado ?? '') : f.custoCota} onChange={campo('custoCota')} />
-            <span className="block text-[11px] text-texto-3 mt-0.5 font-normal">Estimado: pago próprio, por terceiro, abertura e créditos atribuídos à cota. Corrija se souber o valor exato.</span>
-          </label>
+          {!previa?.ultima && (
+            <label className="label">Custo da cota
+              <InputMoeda className="input mt-1" value={f.custoCota === '' ? (previa?.custo ?? '') : f.custoCota} max={previa?.saldo_bem} onChange={mudarCusto} />
+              <span className="block text-[11px] text-texto-3 mt-0.5 font-normal">Estimado: pago próprio, por terceiro, abertura e créditos atribuídos à cota. Corrija se souber o valor exato.</span>
+              {avisoCusto && <span className="block text-[11px] text-aviso mt-0.5 font-normal" role="status" data-testid="cota-aviso-custo">{avisoCusto}</span>}
+            </label>
+          )}
         </div>
         <label className="label block">Observação<input className="input mt-1" value={f.observacao} onChange={campo('observacao')} /></label>
 
@@ -106,7 +118,8 @@ export default function VenderCotaModal({ bemId, cota, cotas, onCancelar, onVend
           <div className="rounded-lg bg-surface-2/40 p-3 space-y-0.5" data-testid="cota-previa">
             <Linha rotulo="Valor recebido">{fmt(Number(f.valor) || 0)}</Linha>
             {Number(f.custos) > 0 && <Linha rotulo="Custos da venda">{fmtSinal(-Number(f.custos))}</Linha>}
-            <Linha rotulo="Custo da cota">{fmtSinal(-previa.custo)}</Linha>
+            <Linha rotulo={previa.ultima ? 'Custo: saldo restante do bem' : 'Custo da cota'}>{fmtSinal(-previa.custo)}</Linha>
+            {previa.ultima && <Linha rotulo="Diferença em relação à estimativa">{fmtSinal(previa.diferenca_estimativa)}</Linha>}
             <Linha rotulo={resultado >= 0 ? 'Ganho na venda' : 'Perda na venda'} destaque>{fmt(Math.abs(resultado))}</Linha>
             {previa.funcao && <p className="text-[11px] text-texto-3 pt-1">O valor entra na função {previa.funcao.nome}, vinculada ao consórcio.</p>}
           </div>
