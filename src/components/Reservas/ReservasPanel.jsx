@@ -1610,7 +1610,7 @@ function futureMovimentosByFunction(linked, accounts, schedules, scheduleReserva
 const totalOuTraco = (v) => (v === 0 ? '—' : fmt(v))
 
 // ── Tab 2: Fluxo Futuro ─────────────────────────────────────────────────────
-function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizados, schedules, scheduleReservaFuncoes, getNextOccurrences, periodoAberto }) {
+function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizados, schedules, schedulesSemVinculo = schedules, scheduleReservaFuncoes, getNextOccurrences, periodoAberto }) {
   // Memo: com 60 meses o cálculo pesa, e um array novo a cada render o refazia sempre.
   const linked = useMemo(() => functions.filter(f => f.accountId), [functions])
   const round2 = (n) => Math.round(n * 100) / 100
@@ -1653,10 +1653,11 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
 
   // Dep/Res por função/mês a partir dos AGENDAMENTOS reais (não dos campos de planejamento).
   // Lógica extraída para computeScheduledByFunction (compartilhada com o Resumo).
-  const scheduledByFunction = useMemo(
-    () => computeScheduledByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win),
-    [linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win],
-  )
+  // Função "Sem vínculo": todos os agendamentos (o valor não depende do perfil do topo).
+  const scheduledByFunction = useMemo(() => ({
+    ...computeScheduledByFunction(linked.filter(f => !semVinculo?.has(f.id)), accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win),
+    ...computeScheduledByFunction(linked.filter(f => semVinculo?.has(f.id)), accounts, schedulesSemVinculo, scheduleReservaFuncoes, getNextOccurrences, win),
+  }), [linked, semVinculo, accounts, schedules, schedulesSemVinculo, scheduleReservaFuncoes, getNextOccurrences, win])
 
   // Projeção em toda a janela calculada (mesma conta de antes, só mais longa)…
   const projecoesCompletas = useMemo(() => {
@@ -2215,6 +2216,7 @@ export default function ReservasPanel() {
     addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment,
     recarregarHistoricoReservas, reserveHistoryLoaded, dbStatus, syncing, filaPendentes, pode,
     accounts: todasContas = [], profiles, activeProfileId,
+    transactions: todosLancamentos = [], schedules: todosAgendamentos = [],
   } = useApp()
   const { functions, accountBalances, addFunction, updateFunction, deleteFunction, setAccountBalance } = useReservas()
   const [tab, setTab] = useState('contas')
@@ -2327,11 +2329,24 @@ export default function ReservasPanel() {
     () => indexarReserva({ periods: reservePeriods, adjustments: reserveAdjustments, transactions }),
     [reservePeriods, reserveAdjustments, transactions],
   )
+  // Função "Sem vínculo" (conta sem perfil): o saldo é o dinheiro da conta dela, igual em qualquer
+  // filtro — calculado com TODOS os lançamentos e agendamentos, não só os do perfil do topo. O filtro
+  // só decide quais funções aparecem. Funções com perfil seguem com os dados do perfil. Em "Tudo" as
+  // duas fontes são a mesma.
+  const semVinculoIds = useMemo(
+    () => funcoesReservaNoPerfil(functions, todasContas, profiles, null).semVinculo,
+    [functions, todasContas, profiles],
+  )
+  const reservaIdxTodos = useMemo(
+    () => (activeProfileId ? indexarReserva({ periods: reservePeriods, adjustments: reserveAdjustments, transactions: todosLancamentos }) : reservaIdx),
+    [activeProfileId, reservePeriods, reserveAdjustments, todosLancamentos, reservaIdx],
+  )
+  const agendamentosSemVinculo = activeProfileId ? todosAgendamentos : schedules
 
   // Funções EFETIVAS no dia de hoje: tudo do início do período vigente até hoje (nada futuro).
   // Durante o mês as colunas acumulam; depois da virada recomeçam no período novo.
   const effectiveFunctions = useMemo(() => functions.map(f => {
-    const s = saldoDaFuncao(f, todayStr, reservaIdx)
+    const s = saldoDaFuncao(f, todayStr, semVinculoIds.has(f.id) ? reservaIdxTodos : reservaIdx)
     const adjs = (adjustmentsByFn[f.id] || []).filter(a => !ehAjusteDeRendimento(a))
     const semRegistros = (adjustmentsByFn[f.id] || []).length === 0
     return {
@@ -2347,7 +2362,7 @@ export default function ReservasPanel() {
       hasPeriod: !!activePeriodByFn[f.id],
       hasAdjustments: adjs.length > 0,
     }
-  }), [functions, reservaIdx, todayStr, currentMonthKey, activePeriodByFn, adjustmentsByFn])
+  }), [functions, reservaIdx, reservaIdxTodos, semVinculoIds, todayStr, currentMonthKey, activePeriodByFn, adjustmentsByFn])
 
   // Intervalo do modal "Origem" (Entradas/Saídas): início do período vigente até hoje.
   const autoBoundsOf = useMemo(() => {
@@ -2365,10 +2380,14 @@ export default function ReservasPanel() {
   // Movimentos FUTUROS por função — mesma lógica/janela do Fluxo Futuro. { [fid]: { liquido,
   // deps, ress, totalDeps, totalRess } }. Alimenta as colunas Mov. Futuros / Saldo Futuro e o modal.
   // Contas de todos os perfis (como o Fluxo): a conta "Sem vínculo" não está nas do perfil do topo.
-  const movFuturosByFn = useMemo(
-    () => futureMovimentosByFunction(effectiveFunctions.filter(f => f.accountId), todasContas, schedules, scheduleReservaFuncoes, getNextOccurrences),
-    [effectiveFunctions, todasContas, schedules, scheduleReservaFuncoes, getNextOccurrences],
-  )
+  // "Sem vínculo" com todos os agendamentos (ver semVinculoIds).
+  const movFuturosByFn = useMemo(() => {
+    const vinc = effectiveFunctions.filter(f => f.accountId)
+    return {
+      ...futureMovimentosByFunction(vinc.filter(f => !semVinculoIds.has(f.id)), todasContas, schedules, scheduleReservaFuncoes, getNextOccurrences),
+      ...futureMovimentosByFunction(vinc.filter(f => semVinculoIds.has(f.id)), todasContas, agendamentosSemVinculo, scheduleReservaFuncoes, getNextOccurrences),
+    }
+  }, [effectiveFunctions, semVinculoIds, todasContas, schedules, agendamentosSemVinculo, scheduleReservaFuncoes, getNextOccurrences])
 
   const nonCreditAccounts = accounts.filter(a => a.type !== 'credit')
   // Resumo e Fluxo Futuro: funções do perfil do topo (lib/fluxoReservaTotais). Contas de TODOS os
@@ -2464,6 +2483,7 @@ export default function ReservasPanel() {
           categories={categories}
           saldosAtualizados={saldosAtualizados}
           schedules={schedules}
+          schedulesSemVinculo={agendamentosSemVinculo}
           scheduleReservaFuncoes={scheduleReservaFuncoes}
           getNextOccurrences={getNextOccurrences}
           periodoAberto={mesDaData(period.start)}

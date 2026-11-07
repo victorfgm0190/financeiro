@@ -284,6 +284,48 @@ describe('Resumo e Histórico', () => {
     expect(total).toContain('110,00')
   })
 
+  it('função "Sem vínculo": saldo, Dep/Res e projeção iguais em Tudo, Perfil A e Perfil B', async () => {
+    const { computeOccurrences } = await import('../../lib/occurrences')
+    const perfis = [{ id: 'p1', name: 'A', type: 'pf' }, { id: 'p2', name: 'B', type: 'pj' }]
+    const c1 = { ...CONTA, id: 'acc_1', name: 'C1', apelido: 'C1', isReserva: false, profileId: 'p1' }
+    const c2 = { ...CONTA, id: 'acc_2', name: 'C2', apelido: 'C2', isReserva: false, profileId: 'p2' }
+    const c0 = { ...CONTA, id: 'acc_0', name: 'R0', apelido: 'R0', profileId: null }
+    const contas = [c1, c2, c0]
+    const fs = [{ id: 's', name: 'Função S', accountId: 'acc_0', saldoInicial: 0, ordem: 0 }]
+    const per = [{ id: 'ps', function_id: 's', data_inicio: '2026-10-15', saldo_inicial: 10 }]
+    const txs = [
+      { id: 't1', type: 'transfer', accountId: 'acc_1', toAccountId: 'acc_0', amount: 100, date: '2026-11-01', reservaFuncaoId: 's' },
+      { id: 't2', type: 'transfer', accountId: 'acc_2', toAccountId: 'acc_0', amount: 50, date: '2026-11-02', reservaFuncaoId: 's' },
+    ]
+    const scheds = [{ id: 'ag', description: 'Depósito B', transactionType: 'transfer', accountId: 'acc_2', toAccountId: 'acc_0', amount: 30, frequency: 'monthly', startDate: '2026-12-05', reservaFuncaoId: 's', registered: [], skipped: [] }]
+    const linhas = {}
+    for (const perfil of [null, 'p1', 'p2']) {
+      const doPerfil = perfil ? contas.filter(a => a.profileId === perfil) : contas
+      const ids = new Set(doPerfil.map(a => a.id))
+      base({
+        accounts: contas, profiles: perfis, activeProfileId: perfil, reserveFunctions: fs, reservePeriods: per,
+        profileAccounts: doPerfil, transactions: txs, schedules: scheds,
+        profileTransactions: txs.filter(t => ids.has(t.accountId) || ids.has(t.toAccountId)),
+        profileSchedules: scheds.filter(s => ids.has(s.accountId) || ids.has(s.toAccountId)),
+        getOccurrencesProjecao: (s, n = 12) => computeOccurrences(s, n),
+        getNextOccurrences: (s, n = 12) => computeOccurrences(s, n), settings: {},
+      })
+      api.status = vi.fn(async () => STATUS({ pendentes: [] }))
+      render(<ReservasPanel />)
+      fireEvent.click(screen.getByRole('button', { name: 'Resumo' }))
+      const resumo = screen.getAllByText('Função S').map(el => el.closest('tr')).find(Boolean).textContent
+      const total = screen.getByText(/Total reservado:/).parentElement.textContent
+      fireEvent.click(screen.getByRole('button', { name: 'Fluxo Futuro' }))
+      const fluxo = screen.getAllByText('Função S').map(el => el.closest('tr')).find(Boolean).textContent.replace('Sem vínculo', '')
+      linhas[perfil || 'tudo'] = { resumo, total, fluxo }
+      cleanup()
+    }
+    expect(linhas.tudo.total).toContain('160,00') // 10 + 100 (de A) + 50 (de B)
+    expect(linhas.tudo.fluxo).toContain('190,00') // + 30 agendado em Dez/26 (conta do perfil B)
+    expect(linhas.p1).toEqual(linhas.tudo)
+    expect(linhas.p2).toEqual(linhas.tudo)
+  })
+
   it('Histórico mostra 15/07/2026 → 14/08/2026 mesmo com função sem período anterior', async () => {
     const snaps = [
       { id: 's1', function_id: 'f_pos', function_name: 'Viagem', data_inicio: '2026-07-15', data_fim: '2026-08-14', saldo_inicial: 1, entradas: 0, saidas: 0, ajuste: 0, rendimentos: 0, saldo: 1, saldo_atualizado: 1 },
