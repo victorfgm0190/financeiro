@@ -30,18 +30,30 @@ export function proximoVencimentoCartao(dueDay, hoje) {
   return desteMes >= hoje ? desteMes : faturaToDate(mesSeguinte(mes), dia)
 }
 
-// Alerta de vencimento do Dashboard: cartões ativos que vencem de hoje até 5 dias de calendário à
-// frente (vencimento dia 13 → aparece de 08 a 13). → [{ account, vencimento, dias }], do mais
-// próximo ao mais distante; empate → maior fatura do mês (mesma regra do "Próxima fatura" de Contas).
-export function alertasVencimentoCartao(accounts, hoje) {
+// Fonte ÚNICA do "próximo vencimento" do cartão nas telas (Dashboard, selo "Próxima fatura" de
+// Contas, Alertas e o contador do menu): { vencimento: 'YYYY-MM-DD', dias } — dias de calendário
+// de hoje até o vencimento (0 = vence hoje).
+export function vencimentoDoCartao(dueDay, hoje) {
+  const vencimento = proximoVencimentoCartao(dueDay, hoje)
+  return { vencimento, dias: diasEntre(hoje, vencimento) }
+}
+
+// Cartões ativos ordenados do vencimento mais próximo ao mais distante; empate → maior fatura do
+// mês (creditMonthBill). → [{ account, vencimento, dias }].
+export function cartoesPorVencimento(accounts, hoje) {
   return accounts
     .filter(a => a.type === 'credit' && a.active !== false)
-    .map(a => {
-      const vencimento = proximoVencimentoCartao(a.dueDay, hoje)
-      return { account: a, vencimento, dias: diasEntre(hoje, vencimento) }
-    })
-    .filter(x => x.dias <= DIAS_ALERTA_VENCIMENTO)
+    .map(a => ({ account: a, ...vencimentoDoCartao(a.dueDay, hoje) }))
     .sort((x, y) => x.dias - y.dias || (y.account.creditMonthBill || 0) - (x.account.creditMonthBill || 0))
 }
+
+// Alerta de vencimento: cartões ativos que vencem de hoje até 5 dias de calendário à frente
+// (vencimento dia 13 → aparece de 08 a 13), na ordem de cartoesPorVencimento.
+export function alertasVencimentoCartao(accounts, hoje) {
+  return cartoesPorVencimento(accounts, hoje).filter(x => x.dias <= DIAS_ALERTA_VENCIMENTO)
+}
+
+// Texto curto do selo "Próxima fatura" (Contas): "vence hoje" / "1 dia" / "N dias".
+export const textoDiasCurto = (dias) => (dias === 0 ? 'vence hoje' : `${dias} dia${dias === 1 ? '' : 's'}`)
 
 export const textoVencimento = (dias) => (dias === 0 ? 'vence hoje' : `vence em ${dias} dia${dias === 1 ? '' : 's'}`)

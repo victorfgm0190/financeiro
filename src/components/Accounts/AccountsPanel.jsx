@@ -10,6 +10,8 @@ import { checarRemocaoContaCentral } from '../../lib/contaCentral'
 import { fmt, fmtSinal, accountsForView, creditBillKey, creditBillStatus } from '../shared/utils'
 import { valorPatrimonial } from '../../lib/patrimonio'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useHoje } from '../../hooks/useHoje'
+import { cartoesPorVencimento, textoDiasCurto } from '../../lib/dashboardHoje'
 import { useScrollSaver } from '../../hooks/useScrollRestoration'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -54,17 +56,6 @@ const TYPE_COLORS = {
   cash: 'from-amber-700 to-amber-800',
   asset: 'from-teal-700 to-teal-800',
   liability: 'from-rose-700 to-rose-900',
-}
-
-// Dias (>= 0) até o próximo vencimento do cartão (dueDay). Se o dueDay já passou
-// no mês atual, conta para o mês seguinte. Hoje == dueDay → 0.
-function daysUntilDue(dueDay) {
-  const d = dueDay || 1
-  const now = new Date()
-  const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  let due = new Date(now.getFullYear(), now.getMonth(), d)
-  if (due < t0) due = new Date(now.getFullYear(), now.getMonth() + 1, d)
-  return Math.round((due - t0) / 86400000)
 }
 
 function UpdateValueModal({ account, onClose }) {
@@ -355,7 +346,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
           className="absolute text-[10px] font-semibold text-white px-2 py-0.5 rounded-full shadow whitespace-nowrap"
           style={{ top: '-11px', left: '14px', backgroundColor: '#185FA5' }}
         >
-          Próxima fatura · {nextDueDays === 0 ? 'hoje' : `${nextDueDays} dia${nextDueDays !== 1 ? 's' : ''}`}
+          Próxima fatura · {textoDiasCurto(nextDueDays)}
         </span>
       )}
       {account.isMain && (
@@ -713,20 +704,14 @@ export default function AccountsPanel({ setActivePage }) {
     return m
   }, [accounts, getAccountSaldos, creditUsage])
 
-  // Cartão de crédito com vencimento mais próximo (menor nº de dias até o dueDay);
-  // empate → maior fatura atual (creditMonthBill). Destacado entre os cards de cartão.
+  // Cartão de crédito com vencimento mais próximo (dias de calendário, mesma função do Dashboard e
+  // dos Alertas — lib/dashboardHoje); empate → maior fatura atual (creditMonthBill). Destacado entre
+  // os cards de cartão. Vira de dia sozinho com o app aberto (useHoje).
+  const hoje = useHoje()
   const { nextDueCardId, nextDueDays } = useMemo(() => {
-    let best = null
-    for (const c of accounts) {
-      if (c.type !== 'credit' || c.active === false) continue
-      const days = daysUntilDue(c.dueDay)
-      const bill = c.creditMonthBill || 0
-      if (!best || days < best.days || (days === best.days && bill > best.bill)) {
-        best = { id: c.id, days, bill }
-      }
-    }
-    return { nextDueCardId: best?.id ?? null, nextDueDays: best?.days ?? null }
-  }, [accounts])
+    const best = cartoesPorVencimento(accounts, hoje)[0]
+    return { nextDueCardId: best?.account.id ?? null, nextDueDays: best?.dias ?? null }
+  }, [accounts, hoje])
 
   const sortedGroups = [...activeAccountGroups].sort((a, b) => a.order - b.order)
   const financialGroups = sortedGroups.filter(g => g.type === 'financeiro')

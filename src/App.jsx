@@ -1,7 +1,8 @@
 import { AvisoOperacao } from './components/shared/ContaCentralAvisos'
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { differenceInDays, parseISO } from 'date-fns'
-import { dueDateInMonth } from './lib/fatura'
+import { alertasVencimentoCartao } from './lib/dashboardHoje'
+import { useHoje } from './hooks/useHoje'
 import { AppProvider, useApp } from './context/AppContext'
 import { FabProvider } from './context/FabContext'
 import { AtalhosProvider } from './context/AtalhosContext'
@@ -167,16 +168,12 @@ function AppContent() {
   }, [getSaldoPrincipal])
   const saldoPrincipal = saldosPrincipais.saldoAtual
 
+  // `hoje` vira sozinho (useHoje): o contador acompanha a virada do dia com o app aberto.
+  const hoje = useHoje()
   const alertCount = useMemo(() => {
     const today = new Date()
-    const creditCount = accounts.filter(a => {
-      if (a.type !== 'credit') return false
-      // dueDateInMonth clampa o dia ao último do mês — dueDay 31 em fevereiro fazia
-      // rollover silencioso para março e o alerta contava os dias até a data errada.
-      let due = dueDateInMonth(today.getFullYear(), today.getMonth(), a.dueDay || 10)
-      if (due < today) due = dueDateInMonth(today.getFullYear(), today.getMonth() + 1, a.dueDay || 10)
-      return differenceInDays(due, today) <= 5
-    }).length
+    // Cartões: mesma regra da página de Alertas, do Dashboard e de Contas (lib/dashboardHoje).
+    const creditCount = alertasVencimentoCartao(accounts, hoje).length
     const schedCount = schedules.filter(s => {
       const remindDays = s.remindDaysBefore ?? 3
       if (remindDays <= 0) return false
@@ -187,7 +184,7 @@ function AppContent() {
       return days >= 0 && days <= remindDays
     }).length
     return creditCount + schedCount
-  }, [accounts, schedules, getNextOccurrences])
+  }, [accounts, schedules, getNextOccurrences, hoje])
 
   // Pendências abertas do Motor de Integridade — somam no mesmo badge de Alertas. Recarrega quando
   // a aba Integridade varre/ignora/reabre (evento disparado pelos helpers de db.js).

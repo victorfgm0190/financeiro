@@ -6,7 +6,9 @@ import { useMemo } from 'react'
 import { renderHook, act, cleanup } from '@testing-library/react'
 import { useHoje } from './useHoje'
 import { proximosAgendamentos, somarDias } from '../lib/proximosAgendamentos'
-import { alertasVencimentoCartao, dataDoDia, proximoVencimentoCartao, textoVencimento } from '../lib/dashboardHoje'
+import {
+  alertasVencimentoCartao, cartoesPorVencimento, dataDoDia, proximoVencimentoCartao, textoDiasCurto, textoVencimento, vencimentoDoCartao,
+} from '../lib/dashboardHoje'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -103,6 +105,64 @@ describe('useHoje + próximos 7 dias', () => {
     ]
     expect(alertasVencimentoCartao(cs, '2026-11-08').map(x => [x.account.id, textoVencimento(x.dias)]))
       .toEqual([['c', 'vence em 2 dias'], ['b', 'vence em 2 dias'], ['a', 'vence em 4 dias']])
+  })
+
+  it('selo "Próxima fatura" de Contas: vira de dia com o app aberto ("2 dias" → "1 dia" → "vence hoje" → passa ao outro cartão)', () => {
+    const cartoes = [
+      { id: 'c13', type: 'credit', dueDay: 13, creditMonthBill: 10 },
+      { id: 'c20', type: 'credit', dueDay: 20, creditMonthBill: 10 },
+    ]
+    const useSelo = () => {
+      const hoje = useHoje()
+      return useMemo(() => {
+        const best = cartoesPorVencimento(cartoes, hoje)[0]
+        return `${best.account.id} · ${textoDiasCurto(best.dias)}`
+      }, [hoje])
+    }
+    vi.setSystemTime(new Date(2026, 10, 11, 23, 58, 0))   // 11/11 23:58
+    const { result } = renderHook(useSelo)
+    expect(result.current).toBe('c13 · 2 dias')
+    act(() => { vi.advanceTimersByTime(3 * 60 * 1000) })  // 12/11 00:01, pelo timer
+    expect(result.current).toBe('c13 · 1 dia')
+    vi.setSystemTime(new Date(2026, 10, 13, 7, 0, 0))     // 13/11, ao voltar para o app
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(result.current).toBe('c13 · vence hoje')
+    vi.setSystemTime(new Date(2026, 10, 14, 7, 0, 0))     // 14/11: c13 passa para 13/12; c20 é o mais próximo
+    act(() => { window.dispatchEvent(new Event('focus')) })
+    expect(result.current).toBe('c20 · 6 dias')
+  })
+
+  it('selo de Contas com vencimento dia 31 em fevereiro: conta até 28/02 (antes ia para 03/03)', () => {
+    const c31 = [{ id: 'c31', type: 'credit', dueDay: 31 }]
+    const selo = (hoje) => { const b = cartoesPorVencimento(c31, hoje)[0]; return [b.vencimento, textoDiasCurto(b.dias)] }
+    expect(selo('2027-02-20')).toEqual(['2027-02-28', '8 dias'])
+    expect(selo('2027-02-27')).toEqual(['2027-02-28', '1 dia'])
+    expect(selo('2027-02-28')).toEqual(['2027-02-28', 'vence hoje'])
+    expect(selo('2027-03-01')).toEqual(['2027-03-31', '30 dias'])
+  })
+
+  it('item 4: para vencimento em dia que existe no mês, o selo de Contas dá os mesmos dias de antes', () => {
+    // Fórmula antiga do selo (AccountsPanel daysUntilDue), com "agora" fixado em cada dia.
+    const antigo = (dueDay, agora) => {
+      const t0 = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate())
+      let due = new Date(agora.getFullYear(), agora.getMonth(), dueDay)
+      if (due < t0) due = new Date(agora.getFullYear(), agora.getMonth() + 1, dueDay)
+      return Math.round((due - t0) / 86400000)
+    }
+    const fimDoMes = (y, m) => new Date(y, m + 1, 0).getDate()
+    let comparados = 0
+    let diferentes = 0
+    for (let d = new Date(2026, 0, 1, 15); d.getFullYear() < 2029; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 15)) {
+      const hoje = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      for (let dueDay = 1; dueDay <= 31; dueDay++) {
+        const novo = vencimentoDoCartao(dueDay, hoje).dias
+        // Só muda quando o dia do vencimento não existe no mês corrente ou no seguinte.
+        const curto = dueDay > fimDoMes(d.getFullYear(), d.getMonth()) || dueDay > fimDoMes(d.getFullYear(), d.getMonth() + 1)
+        if (!curto) { expect(novo).toBe(antigo(dueDay, d)); comparados++ } else if (novo !== antigo(dueDay, d)) diferentes++
+      }
+    }
+    expect(comparados).toBeGreaterThan(30000)
+    expect(diferentes).toBeGreaterThan(0) // os casos 29/30/31 em mês curto (a correção)
   })
 
   it('dataDoDia: mesmo dia/mês/ano da data, ao meio-dia local', () => {

@@ -17,7 +17,8 @@ import { useScrollSaver } from '../../hooks/useScrollRestoration'
 import Modal from '../shared/Modal'
 import DataPagamentoField from '../shared/DataPagamentoField'
 import { dataPadraoPagamento, hojeSP } from '../../lib/dataPagamento'
-import { dueDateInMonth, faturaDoCartao } from '../../lib/fatura'
+import { faturaDoCartao } from '../../lib/fatura'
+import { faturaToDate } from '../../lib/parcelas'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
@@ -489,9 +490,9 @@ export default function CreditCardPanel() {
   // fim do mês): data padrão do "Pagar Fatura". Sem dueDay cadastrado não há vencimento.
   const vencimentoFatura = useMemo(() => {
     if (!billKey || !selectedCard?.dueDay) return null
+    // faturaToDate: a mesma do motor das faturas e de proximoVencimentoCartao (lib/dashboardHoje).
     const [y, m] = billKey.split('-').map(Number)
-    const d = dueDateInMonth(y, m - 1, Number(selectedCard.dueDay))
-    return `${y}-${String(m).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return faturaToDate(`${y}-${String(m).padStart(2, '0')}`, Number(selectedCard.dueDay))
   }, [billKey, selectedCard])
 
   // ── Revisar › Competência fora do lugar ─────────────────────────────────────

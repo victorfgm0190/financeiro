@@ -4,34 +4,23 @@ import { Bell, CreditCard, Calendar, AlertTriangle, CheckCircle, Zap, ShieldChec
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import { differenceInDays, format, parseISO } from 'date-fns'
-import { dueDateInMonth } from '../../lib/fatura'
+import { alertasVencimentoCartao, vencimentoDoCartao } from '../../lib/dashboardHoje'
+import { useHoje } from '../../hooks/useHoje'
 import { proximaEfetiva } from '../../lib/fluxoCaixa'
 import IntegridadePanel from './IntegridadePanel'
 
-function getDueAlerts(accounts) {
-  const today = new Date()
-  const alerts = []
-  accounts
-    .filter(a => a.type === 'credit' && a.active !== false)
-    .forEach(account => {
-      const dueDay = account.dueDay || 10
-      // dueDateInMonth clampa o dia ao último do mês (dueDay 31 + fevereiro).
-      let dueDate = dueDateInMonth(today.getFullYear(), today.getMonth(), dueDay)
-      if (dueDate < today) dueDate = dueDateInMonth(today.getFullYear(), today.getMonth() + 1, dueDay)
-      const daysUntilDue = differenceInDays(dueDate, today)
-      if (daysUntilDue <= 5) {
-        alerts.push({
-          id: `credit_${account.id}`,
-          kind: 'credit',
-          type: daysUntilDue === 0 ? 'due_today' : daysUntilDue < 0 ? 'overdue' : 'upcoming',
-          account,
-          dueDate,
-          daysUntilDue,
-          amount: account.creditMonthBill || 0,
-        })
-      }
-    })
-  return alerts
+// Vencimento do cartão: mesma função do Dashboard e do selo de Contas (lib/dashboardHoje) — dias de
+// calendário, de 5 dias antes até o próprio dia (inclusive); dia inexistente no mês → último dia.
+function getDueAlerts(accounts, hoje) {
+  return alertasVencimentoCartao(accounts, hoje).map(({ account, vencimento, dias }) => ({
+    id: `credit_${account.id}`,
+    kind: 'credit',
+    type: dias === 0 ? 'due_today' : 'upcoming',
+    account,
+    dueDate: parseISO(vencimento),
+    daysUntilDue: dias,
+    amount: account.creditMonthBill || 0,
+  }))
 }
 
 function getScheduleAlerts(schedules, getNextOccurrences) {
@@ -105,7 +94,8 @@ function VencimentosPanel({ setActivePage }) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(Notification?.permission === 'granted')
   const [dismissed, setDismissed] = useState([])
 
-  const creditAlerts = getDueAlerts(accounts).filter(a => !dismissed.includes(a.id))
+  const hoje = useHoje()
+  const creditAlerts = getDueAlerts(accounts, hoje).filter(a => !dismissed.includes(a.id))
   const scheduleAlerts = getScheduleAlerts(schedules, getNextOccurrences).filter(a => !dismissed.includes(a.id))
   const alerts = [...scheduleAlerts, ...creditAlerts]
 
@@ -240,10 +230,9 @@ function VencimentosPanel({ setActivePage }) {
         <h3 className="text-sm font-semibold text-texto-2 mb-3">Calendário de Vencimentos — Cartões</h3>
         <div className="space-y-2">
           {accounts.filter(a => a.type === 'credit' && a.active !== false).map(acc => {
-            const today = new Date()
-            let dueDate = dueDateInMonth(today.getFullYear(), today.getMonth(), acc.dueDay || 10)
-            if (dueDate < today) dueDate = dueDateInMonth(today.getFullYear(), today.getMonth() + 1, acc.dueDay || 10)
-            const days = differenceInDays(dueDate, today)
+            // Mesma função do Dashboard e de Contas (dias de calendário; o próprio dia = "Hoje").
+            const { vencimento, dias: days } = vencimentoDoCartao(acc.dueDay, hoje)
+            const dueDate = parseISO(vencimento)
             return (
               <div key={acc.id} className="flex items-center justify-between bg-surface-2 rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2">

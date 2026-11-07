@@ -16,7 +16,7 @@ import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { contaEhCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment } from '../../lib/installments'
-import { buildSeries, clampDateToFatura, newSerieId, valoresDasParcelas } from '../../lib/parcelas'
+import { buildSeries, clampDateToFatura, faturaToDate, newSerieId, valoresDasParcelas } from '../../lib/parcelas'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
@@ -2163,8 +2163,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               const txDate = form.date ? new Date(form.date + 'T00:00:00') : new Date()
               const faturaRef = computeFaturaRef(txDate, selectedAccount?.closingDay || 14)
               const [fmm, fyyyy] = faturaRef.split('/')
-              const dueDay = String(selectedAccount?.dueDay || 10).padStart(2, '0')
-              const scheduleDate = `${fyyyy}-${fmm}-${dueDay}`
+              // Prévia do agendamento: mesma data do motor (faturaToDate; dia inexistente → último do mês).
+              const scheduleDate = faturaToDate(`${fyyyy}-${fmm}`, selectedAccount?.dueDay || 10)
               return (
                 <div className="space-y-2">
                   {selectedAccount?.type === 'credit' && contaCentralPara(accounts, profiles, selectedAccount).erro && (
@@ -2213,7 +2213,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             const txDate3 = form.date ? new Date(form.date + 'T00:00:00') : new Date()
             const faturaRef3 = computeFaturaRef(txDate3, selectedAccount?.closingDay || 14)
             const [fmm3, fyyyy3] = faturaRef3.split('/')
-            const dueDate3 = `${fyyyy3}-${fmm3}-${String(selectedAccount?.dueDay || 10).padStart(2, '0')}`
+            const dueDate3 = faturaToDate(`${fyyyy3}-${fmm3}`, selectedAccount?.dueDay || 10)
             return (
               <div className="space-y-2">
                 {acc ? (
