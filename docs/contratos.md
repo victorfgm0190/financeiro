@@ -116,3 +116,10 @@ Contratos de aluguel (e serviço) ligados aos agendamentos. O plano completo est
 - **Contrato a receber sem administradora:** entra com o aluguel das parcelas geradas (recebido = lançamento; senão previsto), sem deduções e sem saldo.
 - **Demonstrativo:** ganhou o seletor "Repasse: linha única / Por composição" (as partes passam no filtro de categoria pela categoria do lançamento de origem).
 - `recursos.contratoRepasse` exige 07b + 07c + 07d + 07e (vão juntas para os outros ambientes).
+
+## Wizard do repasse: tarifas/taxas em cartões e erros junto do campo (07/11/2026)
+
+- Tarifas e taxas da administradora viram cartões com resumo em uma linha (`resumoTaxa`), Editar/Excluir e "OK" (que só fecha sem erro); a taxa única mostra a soma das parcelas ao digitar (`somaParcelasTexto`). Os botões "+ Tarifa fixa"/"+ Taxa única" têm ⓘ e explicação. Gravação continua só no Confirmar / Salvar aditivo.
+- Validação (`validarEtapaCampo`) devolve o campo: o wizard destaca o bloco (borda vermelha + texto), rola até ele e foca. Encargos e taxas também são conferidos ao Avançar da etapa Valores.
+- Troca de etapa rola o corpo do Modal ao topo (`useRolarAoTopo` / `chaveRolagem` em `shared/rolagemModal.js`).
+- **Pendente para a Etapa 6:** aditivo no modo repasse que traz o início para o passado hoje só avisa ("Mudar o início para o passado não gera os meses anteriores…"); na Etapa 6 ele deve oferecer gerar as competências passadas, com o vínculo aos lançamentos já existentes.

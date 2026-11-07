@@ -9,6 +9,52 @@ const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100
 
 export const TIPOS_TAXA = { tarifa_fixa: 'Tarifa / taxa fixa (todo mês)', taxa_unica: 'Taxa única em parcelas' }
 
+// Botões "+ Tarifa fixa" / "+ Taxa única": rótulo e explicação (ⓘ e linha sob o botão).
+export const BOTOES_TAXA = {
+  tarifa_fixa: { rotulo: 'Tarifa fixa', explicacao: 'Valor igual descontado todo mês no repasse, enquanto valer (ex.: tarifa bancária). Informe o valor e o mês de início; o fim é opcional.' },
+  taxa_unica: { rotulo: 'Taxa única', explicacao: 'Cobrança feita uma vez só no contrato, com total fechado, descontada em uma ou mais parcelas de valores livres (ex.: intermediação = 1º aluguel em 3 parcelas).' },
+}
+
+const reais = (v) => `R$ ${valorBRFormatado(v)}`
+const mesAno = (ym) => (YM.test(String(ym || '')) ? `${ym.slice(5, 7)}/${ym.slice(0, 4)}` : '')
+
+// Conferência das parcelas da taxa única enquanto digita: "3 parcelas · soma R$ 2.200,00 ✓" ou
+// "soma R$ 2.100,00 — diferente do total R$ 2.200,00". null sem parcelas válidas.
+export function somaParcelasTexto(l) {
+  const v = parcelasDoTexto(l.parcelas)
+  if (!v?.length) return null
+  const soma = r2(v.reduce((a, x) => a + x, 0))
+  const total = num(l.valor)
+  const qtd = `${v.length} ${v.length === 1 ? 'parcela' : 'parcelas'}`
+  if (!(total > 0)) return { ok: true, texto: `${qtd} · soma ${reais(soma)}` }
+  if (Math.abs(soma - r2(total)) < 0.005) return { ok: true, texto: `${qtd} · soma ${reais(soma)} ✓` }
+  return { ok: false, texto: `soma ${reais(soma)} — diferente do total ${reais(total)}` }
+}
+
+// Resumo em uma linha do cartão da taxa:
+//   "Intermediação · R$ 2.200,00 em 3 parcelas (470,00 + 865,00 + 865,00) a partir de 02/2026 · dedutível IR"
+//   "Tarifa bancária · R$ 3,00/mês de 06/2026 em diante"
+export function resumoTaxa(l) {
+  const nome = String(l.descricao || '').trim() || 'Sem descrição'
+  const valor = num(l.valor)
+  const ini = mesAno(l.vigencia_inicio)
+  const partes = [nome]
+  if (l.tipo_repasse === 'taxa_unica') {
+    const v = parcelasDoTexto(l.parcelas)
+    let t = valor > 0 ? reais(valor) : 'total não informado'
+    if (v?.length) t += ` em ${v.length} ${v.length === 1 ? 'parcela' : 'parcelas'} (${v.map(valorBRFormatado).join(' + ')})`
+    if (ini) t += ` a partir de ${ini}`
+    partes.push(t)
+  } else {
+    const fim = mesAno(l.vigencia_fim)
+    let t = valor > 0 ? `${reais(valor)}/mês` : 'valor não informado'
+    if (ini) t += fim ? ` de ${ini} a ${fim}` : ` de ${ini} em diante`
+    partes.push(t)
+  }
+  if (l.dedutivel_ir) partes.push('dedutível IR')
+  return partes.join(' · ')
+}
+
 export const novaTaxaForm = (tipo = 'tarifa_fixa', vigencia_inicio = '') => ({
   id: null, tipo_repasse: tipo, descricao: '', valor: '', vigencia_inicio, vigencia_fim: '', parcelas: '',
   categoria_id: '', dedutivel_ir: dedutivelPadrao(tipo === 'taxa_unica' ? 'taxa_unica' : 'tarifa'),

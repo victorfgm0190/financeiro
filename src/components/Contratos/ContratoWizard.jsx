@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Check, Plus, Trash2 } from 'lucide-react'
 import HelpCampo from '../shared/HelpCampo'
 import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
@@ -14,6 +14,7 @@ import { primeiroMes, dataRepasse } from '../../lib/contratos/repasse'
 import { ehBemParametrizado } from '../../lib/patrimonio'
 import { faltaRecurso } from '../../lib/recursosBanco'
 import TaxasRepasse from './TaxasRepasse'
+import { CampoErroContext, CLASSE_ERRO } from './campoErro'
 import { taxaParaForm, formParaTaxa, erroTaxa, taxaParaItem, chaveTaxas } from '../../lib/contratos/taxasRepasseForm'
 import { taxaDoItem, BASES_TAXA_ADM } from '../../lib/contratos/composicaoRepasse'
 import { validarEtapaCampo, sugerirCategoria } from '../../lib/contratos/validacao'
@@ -153,18 +154,18 @@ function MesesSemCobranca({ valor = [], onChange, inicio, fim }) {
   )
 }
 
-// Campo barrado na validação (validarEtapaCampo): o Campo com a mesma chave fica destacado e mostra o erro.
-const CampoErroContext = createContext(null)
 // Erros que apontam para um campo exibido junto de outro (competência do saldo inicial fica no mesmo bloco).
+const AVISO_INICIO_PASSADO = 'Mudar o início para o passado não gera os meses anteriores. Para lançar meses passados, cadastre um contrato novo com o início correto.'
 const CAMPO_DO_ERRO = { saldo_inicial_competencia: 'saldo_inicial_valor' }
 
 // `help`: chave do ⓘ do campo (src/lib/helpCampos.js). `campo`: chave do formulário (rolagem/destaque do erro).
+// Sem `label`: só o bloco (destaque/rolagem), para seções com título próprio (ex.: encargos).
 const Campo = ({ label, children, className = '', help, campo }) => {
   const falha = useContext(CampoErroContext)
   const comErro = !!campo && falha?.campo === campo
   return (
-    <div className={`${className}${comErro ? ' rounded-lg ring-2 ring-perigo ring-offset-2 ring-offset-surface' : ''}`} data-campo={campo} data-erro={comErro ? '' : undefined}>
-      <label className="label">{label}{help && <HelpCampo campo={help} />}</label>{children}
+    <div className={`${className}${comErro ? ` ${CLASSE_ERRO}` : ''}`} data-campo={campo} data-erro={comErro ? '' : undefined}>
+      {label != null && <label className="label">{label}{help && <HelpCampo campo={help} />}</label>}{children}
       {comErro && <p role="alert" className="text-xs text-perigo mt-1">{falha.erro}</p>}
     </div>
   )
@@ -311,9 +312,21 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       && (ehParcelaGerada(s, contrato.id) ? parcelaPaga(s) && meses.has(competenciaDaParcela(s)) : (s.registered || []).some(d => meses.has(ymDe(d)))))
   }, [edicao, dados.meses_sem_cobranca, schedules, contrato])
 
+  // Encargos e taxas da administradora (etapa Valores): a taxa com problema abre o cartão.
+  const erroListasValores = () => {
+    if (encargosIncompletos(encargosForm, numeroProxima).length) {
+      return { erro: 'Encargos e descontos na parcela: preencha descrição, valor, número de parcelas e o início (ou remova a linha).', campo: 'encargos' }
+    }
+    const i = repasse ? taxasForm.findIndex(l => formParaTaxa(l) && erroTaxa(l)) : -1
+    if (i < 0) return null
+    setTaxasForm(ls => ls.map((l, j) => (j === i ? { ...l, _editando: true } : l)))
+    return { erro: erroTaxa(taxasForm[i]), campo: `taxa:${i}` }
+  }
   const avancar = () => {
     const { erro: e, campo } = validarEtapaCampo(etapa, f)
     if (e) return setErro(e, campo)
+    const lista = etapa === 1 ? erroListasValores() : null
+    if (lista) return setErro(lista.erro, lista.campo)
     setErro('')
     setEtapa(x => proxima(x))
   }
@@ -331,12 +344,8 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       const { erro: e, campo } = validarEtapaCampo(i, f)
       if (e) { setEtapa(i); return setErro(e, campo) }
     }
-    if (encargosIncompletos(encargosForm, numeroProxima).length) {
-      setEtapa(1)
-      return setErro('Encargos e descontos na parcela: preencha descrição, valor, número de parcelas e o início (ou remova a linha).')
-    }
-    const erroTaxas = repasse ? taxasForm.filter(l => formParaTaxa(l)).map(erroTaxa).find(Boolean) : ''
-    if (erroTaxas) { setEtapa(1); return setErro(erroTaxas) }
+    const lista = erroListasValores()
+    if (lista) { setEtapa(1); return setErro(lista.erro, lista.campo) }
     setSalvando(true)
     setErro('')
     try {
@@ -389,6 +398,9 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   }
 
   const proxReaj = proximoReajuste(dados, hoje)
+  // Aditivo no modo repasse que traz o início para antes do atual: os meses anteriores não são gerados
+  // (até a Etapa 6 — lançar meses passados).
+  const inicioNoPassado = edicao && repasse && !!contrato?.data_inicio && !!f.data_inicio && f.data_inicio < contrato.data_inicio
   return (
     <CampoErroContext.Provider value={erro && falha.campo ? { campo: falha.campo, erro } : null}>
     <div ref={raizRef} className="space-y-4">
@@ -469,6 +481,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           )}
           <Campo campo="data_inicio" label="Início da vigência">
             <input data-guia="contrato-form.inicio" autoComplete="off" type="date" className="input" value={f.data_inicio} onChange={e => set('data_inicio', e.target.value)} />
+            {inicioNoPassado && <p className="text-[11px] text-aviso mt-1" data-testid="aviso-inicio-passado">⚠ {AVISO_INICIO_PASSADO}</p>}
           </Campo>
           <Campo campo="data_fim" label="Fim da vigência">
             <input autoComplete="off" type="date" className="input" value={f.sem_fim ? '' : f.data_fim} disabled={f.sem_fim} onChange={e => set('data_fim', e.target.value)} />
@@ -533,7 +546,11 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           </Campo>
           <div />
           {repasse && <CamposRepasse f={f} set={set} categories={categories} />}
-          {repasse && <TaxasRepasse linhas={taxasForm} onChange={(v) => { setErro(''); setTaxasForm(v) }} categories={categories} perfilId={f.perfil_id} inicio={ymDe(f.data_inicio)} />}
+          {repasse && (
+            <div className="sm:col-span-2">
+              <TaxasRepasse linhas={taxasForm} onChange={(v) => { setErro(''); setTaxasForm(v) }} categories={categories} perfilId={f.perfil_id} inicio={ymDe(f.data_inicio)} />
+            </div>
+          )}
           <Campo campo="bonificacao_valor" label={`${rot.desconto} por mês (desconto)`} help="contrato.desconto">
             <CampoValor value={f.bonificacao_valor} onChange={v => set('bonificacao_valor', v)} placeholder="Desconto em cada parcela (opcional)" />
           </Campo>
@@ -545,7 +562,9 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               Parcelas 1 a {int(f.bonificacao_meses) || 0}: {fmt(num(f.valor_base))} − {fmt(num(f.bonificacao_valor))} = <strong className="text-texto-1">{fmt(r2(num(f.valor_base) - num(f.bonificacao_valor)))}</strong>
             </p>
           )}
-          <EncargosNaParcela linhas={encargosForm} onChange={(v) => { setErro(''); setEncargosForm(v) }} proxima={numeroProxima} />
+          <Campo campo="encargos" className="sm:col-span-2">
+            <EncargosNaParcela linhas={encargosForm} onChange={(v) => { setErro(''); setEncargosForm(v) }} proxima={numeroProxima} />
+          </Campo>
           <Campo campo="meses_sem_cobranca" label="Meses sem cobrança" className="sm:col-span-2" help="contrato.mesesSemCobranca">
             <div data-guia="contrato-form.meses-sem-cobranca">
               <MesesSemCobranca valor={f.meses_sem_cobranca || []} onChange={v => set('meses_sem_cobranca', v)} inicio={f.data_inicio} fim={f.sem_fim ? null : f.data_fim} />
@@ -700,6 +719,9 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
         </div>
       )}
 
+      {etapa === ULTIMA && inicioNoPassado && (
+        <p className="text-xs text-aviso p-2 rounded-lg bg-aviso/10">⚠ {AVISO_INICIO_PASSADO}</p>
+      )}
       {etapa === ULTIMA && edicao && (
         <div className="space-y-2">
           {pagasSemCobranca.length > 0 && (

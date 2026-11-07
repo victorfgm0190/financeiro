@@ -27,6 +27,8 @@ export function rolarAteElemento(el, { focar = true } = {}) {
   if (!el) return
   el.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
   if (!focar) return
-  const campo = el.matches?.('input,select,textarea,button') ? el : el.querySelector?.('input:not([type=hidden]),select,textarea,button')
+  // Campo de digitação primeiro (o cartão pode ter botões antes dos campos); botão só se não houver.
+  const campo = el.matches?.('input,select,textarea,button') ? el
+    : el.querySelector?.('input:not([type=hidden]):not([disabled]),select:not([disabled]),textarea:not([disabled])') || el.querySelector?.('button')
   campo?.focus?.({ preventScroll: true })
 }
