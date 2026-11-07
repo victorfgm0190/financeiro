@@ -37,6 +37,11 @@ const competencias = (v) => {
   const out = [...new Set(v.map(String))].sort()
   return out.every(m => /^\d{4}-(0[1-9]|1[0-2])$/.test(m)) ? { v: out } : { erro: 'mês inválido (AAAA-MM)' }
 }
+// Uma competência 'AAAA-MM' (opcional).
+const competencia = (v) => {
+  if (v == null || v === '') return { v: null }
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(v)) ? { v: String(v) } : { erro: 'mês inválido (AAAA-MM)' }
+}
 // Link do anexo vira href na ficha: só http(s), nunca javascript: e afins.
 const link = (v) => {
   if (v == null || v === '') return { v: null }
@@ -79,8 +84,29 @@ export const CAMPOS_CONTRATO = {
   observacao: texto(2000),
   meses_sem_cobranca: competencias,
   credito_abatimento: umDe(['mes_seguinte', 'proximo_pendente'], { obrigatorio: true }),
+  // Contrato a receber por administradora (migração 2026-11-07b): ver COLS_REPASSE.
+  modo_repasse: booleano(false),
+  contraparte_nome: texto(200),
+  contraparte_documento: texto(30),
+  bem_id: texto(80),
+  dia_repasse: inteiro(1, 31),
+  repasse_meses_depois: inteiro(0, 3, { padrao: 1 }),
+  valor_primeiro_mes: numero(),
+  saldo_inicial_adm: numero({ min: -1e12 }),
+  saldo_inicial_competencia: competencia,
 }
 const PADROES = { modalidade: 'aluguel', periodicidade: 'mensal', indice_reajuste: 'IPCA', status: 'ativo', credito_abatimento: 'mes_seguinte' }
+
+// Colunas do modo repasse (migração 2026-11-07b) e o valor "neutro" de cada uma: num banco sem a
+// migração, gravar um valor diferente do neutro é recusado (409) em vez de sumir em silêncio.
+export const COLS_REPASSE = {
+  modo_repasse: false, contraparte_nome: null, contraparte_documento: null, bem_id: null, dia_repasse: null,
+  repasse_meses_depois: 1, valor_primeiro_mes: null, saldo_inicial_adm: null, saldo_inicial_competencia: null,
+}
+export const MSG_SEM_REPASSE = 'O banco deste ambiente ainda não tem a atualização de contrato a receber por administradora. Nada foi gravado — avise o suporte para atualizar o banco.'
+// Campos do repasse com valor de verdade que o banco não tem → lista (vazia = pode gravar).
+export const repasseSemColuna = (dados, existem) =>
+  Object.keys(COLS_REPASSE).filter(k => k in dados && !existem.has(k) && (dados[k] ?? null) !== COLS_REPASSE[k])
 
 // Colunas JSONB: o pg mandaria a lista como array do Postgres; vai como texto JSON.
 const JSONB = new Set(['meses_sem_cobranca', 'itens'])
@@ -111,7 +137,12 @@ export function normalizarContrato(body, { parcial = false } = {}) {
   if ('bonificacao_valor' in dados && dados.bonificacao_valor > 0 && !(dados.bonificacao_meses > 0)) {
     return { erro: 'bonificacao_meses: obrigatório quando há bonificação' }
   }
+  if (dados.modo_repasse && 'tipo' in dados && dados.tipo !== 'receber') return { erro: 'modo_repasse: só em contrato a receber' }
+  if (dados.saldo_inicial_adm && !parcial && !dados.saldo_inicial_competencia) {
+    return { erro: 'saldo_inicial_competencia: obrigatória com saldo inicial' }
+  }
   if (!parcial) {
+    if (dados.modo_repasse && !dados.dia_repasse) return { erro: 'dia_repasse: obrigatório com administradora' }
     if (!dados.categoria_id) return { erro: 'categoria_id: obrigatória' }
     if (dados.tem_condominio && !dados.categoria_condominio_id) return { erro: 'categoria_condominio_id: obrigatória com condomínio' }
   }
@@ -220,7 +251,7 @@ export async function substituirItens(q, contratoId, itens) {
 export const hojeIso = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
 
 // NUMERIC chega do pg como texto: as linhas saem com número de verdade.
-const NUMERICOS = ['valor_base', 'percentual_fixo', 'bonificacao_valor', 'valor_condominio_previsto', 'valor_previsto', 'percentual', 'valor_anterior', 'valor_novo', 'valor', 'creditos_abertos']
+const NUMERICOS = ['valor_primeiro_mes', 'saldo_inicial_adm', 'valor_base', 'percentual_fixo', 'bonificacao_valor', 'valor_condominio_previsto', 'valor_previsto', 'percentual', 'valor_anterior', 'valor_novo', 'valor', 'creditos_abertos']
 export function comNumeros(row) {
   if (!row) return row
   const out = { ...row }

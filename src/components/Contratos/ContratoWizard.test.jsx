@@ -7,11 +7,15 @@ import { render, screen, fireEvent, cleanup, within } from '@testing-library/rea
 const criarContrato = vi.fn(async (dados) => ({ ...dados, id: 'k1' }))
 const app = {
   profiles: [{ id: 'pf', name: 'Pessoal' }],
-  accounts: [{ id: 'cc1', name: 'Itaú', type: 'checking', profileId: 'pf' }],
+  accounts: [
+    { id: 'cc1', name: 'Itaú', type: 'checking', profileId: 'pf' },
+    { id: 'bem-x', name: 'Imóvel Exemplo', type: 'asset', tipoBem: 'bem_imobilizado' },
+  ],
   categories: [
     { id: 'cat-mor', name: 'Moradia', type: 'expense' },
     { id: 'cat-alug', name: 'Aluguel', type: 'expense' },
     { id: 'cat-cond', name: 'Condomínio', type: 'expense' },
+    { id: 'cat-rec', name: 'Moradia', type: 'income' },
   ],
   payees: [], costCenters: [], tiposDocumento: [], activeProfileId: 'pf', schedules: [], categoryGroupOrder: null,
   criarContrato, atualizarContrato: vi.fn(), salvarItensContrato: vi.fn(), carregarIndice: vi.fn(async () => null),
@@ -116,5 +120,66 @@ describe('ContratoWizard — contrato que não é aluguel', () => {
       indice_reajuste: 'NENHUM', meses_sem_cobranca: [], credito_abatimento: 'mes_seguinte', categoria_id: 'cat-alug',
     })
     expect(itens).toEqual([])
+  })
+})
+
+describe('ContratoWizard — aluguel a receber por administradora', () => {
+  it('repasse: administradora, inquilino, dia do repasse, 1º mês proporcional, saldo inicial e bem', async () => {
+    render(<ContratoWizard onClose={() => {}} onSalvo={() => {}} />)
+    modalidade('aluguel')
+    fireEvent.change(campo('Tipo').querySelector('select'), { target: { value: 'receber' } })
+    fireEvent.click(screen.getByText(/Recebo por uma administradora/))
+    expect(screen.getAllByRole('listitem').map(li => li.textContent)).toContain('4. Imóvel')
+    fireEvent.change(screen.getByPlaceholderText('Digite o nome do favorecido'), { target: { value: 'Administradora Exemplo' } })
+    fireEvent.change(screen.getByPlaceholderText('Nome do inquilino (opcional)'), { target: { value: 'Inquilino Exemplo' } })
+    fireEvent.change(campo('Início da vigência').querySelector('input'), { target: { value: '2026-03-10' } })
+    fireEvent.click(screen.getByLabelText(/Sem data de fim/))
+    avancar()
+
+    fireEvent.change(campo('Conta de recebimento').querySelector('select'), { target: { value: 'cc1' } })
+    preencher('Valor do aluguel (contratual)', '3.000,00')
+    fireEvent.change(campo('Dia de vencimento do inquilino').querySelector('input'), { target: { value: '5' } })
+    // Sem o dia do repasse não avança.
+    avancar()
+    expect(screen.getByText('Dia do repasse entre 1 e 31.')).toBeTruthy()
+    fireEvent.change(campo('Dia do repasse').querySelector('input'), { target: { value: '12' } })
+    expect(screen.getByText(/aluguel de 03\/2026 → repasse em 12\/04\/2026/)).toBeTruthy()
+    expect(screen.getByText(/proporcional de 22 dias/)).toBeTruthy()
+    expect(campo('Periodicidade').querySelector('select').disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Sentido do saldo inicial'), { target: { value: 'devedor' } })
+    fireEvent.change(screen.getByLabelText('Valor do saldo inicial'), { target: { value: '150,50' } })
+    avancar()
+    expect(screen.getByText('Informe a competência do saldo inicial.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Competência do saldo inicial'), { target: { value: '2026-03' } })
+    avancar()
+    avancar()
+
+    expect(screen.queryByText(/Tem condomínio/)).toBeNull()
+    fireEvent.change(campo('Bem do Patrimônio (opcional)').querySelector('select'), { target: { value: 'bem-x' } })
+    avancar()
+    fireEvent.change(campo('Gerar repasses a partir da competência').querySelector('input'), { target: { value: '2026-03' } })
+    expect(screen.getByText('Repasse 03/2026')).toBeTruthy()
+    expect(screen.getByText('R$ 2.200,00')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar/ }))
+    await vi.waitFor(() => expect(criarContrato).toHaveBeenCalled())
+    const [dados, itens] = criarContrato.mock.calls[0]
+    expect(dados).toMatchObject({
+      tipo: 'receber', modo_repasse: true, favorecido: 'Administradora Exemplo', contraparte_nome: 'Inquilino Exemplo',
+      dia_vencimento: 5, dia_repasse: 12, repasse_meses_depois: 1, valor_primeiro_mes: null, periodicidade: 'mensal',
+      saldo_inicial_adm: -150.5, saldo_inicial_competencia: '2026-03', bem_id: 'bem-x', tem_condominio: false,
+    })
+    expect(itens).toEqual([])
+  })
+
+  it('a receber sem administradora e a pagar ficam como antes (campos neutros)', async () => {
+    render(<ContratoWizard onClose={() => {}} onSalvo={() => {}} />)
+    modalidade('aluguel')
+    fireEvent.change(campo('Tipo').querySelector('select'), { target: { value: 'receber' } })
+    fireEvent.click(screen.getByText(/Recebo por uma administradora/))
+    // Volta para "a pagar": o repasse desliga.
+    fireEvent.change(campo('Tipo').querySelector('select'), { target: { value: 'pagar' } })
+    expect(screen.queryByText(/Recebo por uma administradora/)).toBeNull()
+    expect(screen.getAllByRole('listitem').map(li => li.textContent)).toContain('4. Imóvel e condomínio')
   })
 })

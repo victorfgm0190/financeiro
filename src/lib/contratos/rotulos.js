@@ -30,11 +30,13 @@ export function rotuloPapel(contrato, papel) {
 export function rotulosContrato(c) {
   const aluguel = ehAluguel(c)
   const receber = c?.tipo === 'receber'
+  // Contrato a receber por administradora: quem paga (favorecido) é a administradora.
+  const repasse = receber && aluguel && !!c?.modo_repasse
   return {
     principal: aluguel ? 'Aluguel' : 'Parcela',
     principalMinusculo: aluguel ? 'aluguel' : 'parcela',
     valorPrincipal: aluguel ? 'Valor do aluguel (contratual)' : 'Valor da parcela',
-    favorecido: aluguel
+    favorecido: repasse ? 'Administradora (quem faz o repasse)' : aluguel
       ? (receber ? 'Inquilino (favorecido)' : 'Favorecido do aluguel (imobiliária / proprietário)')
       : 'Favorecido',
     categoria: aluguel ? 'Categoria do aluguel' : 'Categoria',
@@ -43,5 +45,7 @@ export function rotulosContrato(c) {
     abaCreditos: aluguel ? 'Créditos do proprietário' : 'Créditos a abater',
     tipoPagar: aluguel ? 'A pagar (sou o inquilino)' : 'A pagar',
     tipoReceber: aluguel ? 'A receber (sou o proprietário)' : 'A receber',
+    conta: receber ? 'Conta de recebimento' : 'Conta de pagamento',
+    diaVencimento: repasse ? 'Dia de vencimento do inquilino' : 'Dia de vencimento',
   }
 }

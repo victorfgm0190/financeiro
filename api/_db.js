@@ -296,7 +296,13 @@ export async function recursosDoBanco(q) {
   const enc = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_itens' AND column_name = 'na_parcela'")
   const efet = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'agendamentos' AND column_name = 'efetivacoes'")
   const vir = await q("SELECT to_regclass('reserve_viradas') IS NOT NULL AS tem")
-  return { envelopeDiario, creditoPrevisto, feriados: !!fer[0]?.tem, encargosContrato: enc.length > 0, efetivacoesProvisao: efet.length > 0, viradaAssistida: !!vir[0]?.tem }
+  // Contrato sem a tabela (módulo nunca instalado) não tem o que recusar: true.
+  const rep = await q(`SELECT to_regclass('contratos') IS NULL OR EXISTS (SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema() AND table_name = 'contratos' AND column_name = 'modo_repasse') AS tem`)
+  return {
+    envelopeDiario, creditoPrevisto, feriados: !!fer[0]?.tem, encargosContrato: enc.length > 0, efetivacoesProvisao: efet.length > 0,
+    viradaAssistida: !!vir[0]?.tem, contratoRepasse: !!rep[0]?.tem,
+  }
 }
 
 const cacheColunasOpcionais = new Map()

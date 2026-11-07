@@ -6,6 +6,7 @@ import { contasPermitidas } from './_permissoesApi.js'
 import {
   normalizarContrato, normalizarItem, normalizarEvento, exigirModulo, perfisDoUsuario, contratoVisivel,
   inserirEvento, substituirItens, hojeIso, comNumeros, CAMPOS_CONTRATO, colunasDe, valorColuna,
+  repasseSemColuna, MSG_SEM_REPASSE,
 } from './_contratos.js'
 
 // CONTRATOS (módulo opcional do plano). As parcelas são agendamentos com contrato_id — gravados pelo
@@ -80,6 +81,7 @@ async function handler(req, res) {
       const erroConta = await conferirConta(query, dados.conta_id, perfis)
       if (erroConta) return res.status(400).json({ error: erroConta })
       const existem = await colunasDe(query, 'contratos')
+      if (repasseSemColuna(dados, existem).length) return res.status(409).json({ error: MSG_SEM_REPASSE, codigo: 'banco_desatualizado' })
       const cols = Object.keys(dados).filter(k => existem.has(k))
       const r = await withTransaction(async (q) => {
         const [c] = await q(
@@ -118,6 +120,10 @@ async function handler(req, res) {
       }
       // Colunas = chaves de CAMPOS_CONTRATO (lista fixa do código, nunca do body).
       const existem = await colunasDe(query, 'contratos')
+      if (repasseSemColuna(dados, existem).length) return res.status(409).json({ error: MSG_SEM_REPASSE, codigo: 'banco_desatualizado' })
+      const tipoFinal = 'tipo' in dados ? dados.tipo : atual.tipo
+      const repasseFinal = 'modo_repasse' in dados ? dados.modo_repasse : !!atual.modo_repasse
+      if (repasseFinal && tipoFinal !== 'receber') return res.status(400).json({ error: 'modo_repasse: só em contrato a receber' })
       const cols = Object.keys(dados).filter(k => k in CAMPOS_CONTRATO && existem.has(k))
       const r = await withTransaction(async (q) => {
         const [c] = cols.length

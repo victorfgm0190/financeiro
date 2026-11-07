@@ -1,4 +1,4 @@
-import { faltaRecurso, MSG_CREDITO_PREVISTO, MSG_ENCARGOS } from '../lib/recursosBanco'
+import { faltaRecurso, MSG_CREDITO_PREVISTO, MSG_ENCARGOS, MSG_REPASSE } from '../lib/recursosBanco'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   listarContratosApi, criarContratoApi, atualizarContratoApi, excluirContratoApi, salvarItensContratoApi,
@@ -232,6 +232,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
 
   const criarContrato = useCallback(async (dadosContrato, itens = []) => {
     if (itens.some(i => i.na_parcela) && faltaRecurso(recursosRef.current, 'encargosContrato')) throw new Error(MSG_ENCARGOS)
+    if (dadosContrato.modo_repasse && faltaRecurso(recursosRef.current, 'contratoRepasse')) throw new Error(MSG_REPASSE)
     const r = await criarContratoApi({ ...dadosContrato, proximo_reajuste: proximoReajuste(dadosContrato, hojeStr()) }, itens)
     // Encargos/descontos na parcela vão junto no contrato (o plano das parcelas usa).
     const c = { ...r.contrato, encargos: (r.itens || []).filter(i => i.na_parcela).map(encargoDoItem) }
@@ -243,6 +244,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
   const atualizarContrato = useCallback(async (id, campos, evento = null) => {
     const atual = contratos.find(c => c.id === id) || {}
     const junto = { ...atual, ...campos }
+    if (junto.modo_repasse && faltaRecurso(recursosRef.current, 'contratoRepasse')) throw new Error(MSG_REPASSE)
     const r = await atualizarContratoApi(id, { ...campos, proximo_reajuste: proximoReajuste(junto, hojeStr()) }, evento)
     trocarNaLista(r.contrato)
     // A ref muda na hora: a redistribuição dos créditos logo depois (aditivo da regra de

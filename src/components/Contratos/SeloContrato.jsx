@@ -1,14 +1,13 @@
 import { FileSignature } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { parcelaPaga, rotuloContrato, vencimentos } from '../../lib/contratos/parcelas'
-import { ymDe } from '../../lib/contratos/datas'
+import { parcelaPaga, rotuloContrato, vencimentos, competenciaDaParcela } from '../../lib/contratos/parcelas'
 
 // Nº/total pelo calendário do contrato (competência da parcela): depois de um aditivo de mês sem
 // cobrança, a parcela paga mostra a numeração nova (só na tela). Sem contrato carregado: o gravado.
 function numeracao(c, s) {
   if (!c || !s?.startDate || (s.frequency || 'once') !== 'once') return { n: s?.composicao?.numero, t: s?.composicao?.total_parcelas }
   const lista = vencimentos(c, s.contratoPapel || 'aluguel', { hoje: s.startDate })
-  const v = lista.find(x => x.competencia === ymDe(s.startDate))
+  const v = lista.find(x => x.competencia === competenciaDaParcela(s))
   return { n: v?.numero ?? null, t: c.data_fim ? lista.length : null }
 }
 

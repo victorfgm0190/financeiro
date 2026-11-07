@@ -15,6 +15,7 @@ import { destinosCreditos, REGRAS_ABATIMENTO, regraAbatimento, creditoAAbater } 
 import { ehCondominioAberto, temComposicaoInformada } from '../../lib/contratos/composicaoAberta'
 import { diferencaDoPagamento, esperadoDoPagamento } from '../../lib/contratos/efetivacao'
 import { rotuloPapel, rotulosContrato, rotuloModalidade, rotuloTipo, ehAluguel } from '../../lib/contratos/rotulos'
+import { ehModoRepasse, mesesDepoisDoRepasse } from '../../lib/contratos/repasse'
 import ComposicaoBoletoModal from './ComposicaoBoletoModal'
 import { hojeStr, addMesesData, fmtYm } from '../../lib/contratos/datas'
 import ContratoWizard from './ContratoWizard'
@@ -131,6 +132,8 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
   const linhasAbertas = linhas.filter(l => !l.paga && !l.semCobranca)
 
   const conta = accounts.find(a => a.id === contrato.conta_id)
+  const repasse = ehModoRepasse(contrato)
+  const bem = contrato.bem_id ? accounts.find(a => a.id === contrato.bem_id) : null
   const perfil = profiles.find(p => p.id === contrato.perfil_id)
   const cat = categories.find(c => c.id === contrato.categoria_id)
   const prox = proximaParcela(contrato, schedules)
@@ -265,7 +268,19 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
           {indice?.aviso && contrato.indice_reajuste !== 'FIXO' && <span className="block text-[11px] text-aviso">⚠ {indice.aviso}</span>}
         </Info>
         <Info rotulo={rot.desconto}>{contrato.bonificacao_valor > 0 ? `${fmt(contrato.bonificacao_valor)} × ${contrato.bonificacao_meses} parcelas` : '—'}</Info>
-        {aluguel && <Info rotulo="Condomínio">{contrato.tem_condominio ? `${fmt(contrato.valor_condominio_previsto)} · ${contrato.favorecido_condominio || '—'}` : 'Não'}</Info>}
+        {repasse && (
+          <>
+            <Info rotulo="Inquilino">{contrato.contraparte_nome || '—'}{contrato.contraparte_documento ? ` · ${contrato.contraparte_documento}` : ''}</Info>
+            <Info rotulo="Repasse">
+              dia {contrato.dia_repasse || '—'} · {mesesDepoisDoRepasse(contrato) === 0 ? 'mesmo mês' : mesesDepoisDoRepasse(contrato) === 1 ? 'mês seguinte' : `${mesesDepoisDoRepasse(contrato)} meses depois`}
+            </Info>
+            <Info rotulo="Saldo inicial (adm.)">
+              {contrato.saldo_inicial_adm ? `${fmt(contrato.saldo_inicial_adm)} antes de ${fmtYm(contrato.saldo_inicial_competencia)}` : '—'}
+            </Info>
+          </>
+        )}
+        {aluguel && contrato.tipo === 'receber' && <Info rotulo="Bem do Patrimônio">{bem ? bem.apelido || bem.name : '—'}</Info>}
+        {aluguel && !repasse && <Info rotulo="Condomínio">{contrato.tem_condominio ? `${fmt(contrato.valor_condominio_previsto)} · ${contrato.favorecido_condominio || '—'}` : 'Não'}</Info>}
         <Info rotulo="Aviso prévio">{contrato.aviso_previo_dias} dias{contrato.renovacao_automatica ? ' · renova sozinho' : ''}</Info>
         <Info rotulo="Conta">{conta ? conta.apelido || conta.name : '—'}</Info>
         <Info rotulo="Categoria">{cat?.name || '—'}</Info>

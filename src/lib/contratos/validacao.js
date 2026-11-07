@@ -12,9 +12,11 @@ const YM = /^\d{4}-\d{2}$/
 export function validarEtapa(i, f) {
   const aluguel = ehAluguel(f)
   const rot = rotulosContrato(f)
+  const repasse = aluguel && f.tipo === 'receber' && !!f.modo_repasse
   if (i === 0) {
     if (!f.modalidade) return 'Escolha a modalidade do contrato.'
     if (!f.perfil_id) return 'Escolha o perfil.'
+    if (repasse && !txt(f.favorecido).trim()) return 'Informe a administradora (quem faz o repasse).'
     if (!txt(f.favorecido).trim()) return aluguel ? 'Informe o favorecido (imobiliária ou proprietário).' : 'Informe o favorecido.'
     if (!f.data_inicio) return 'Informe o início da vigência.'
     if (!f.sem_fim && !f.data_fim) return 'Informe o fim da vigência ou marque "Sem data de fim".'
@@ -22,7 +24,7 @@ export function validarEtapa(i, f) {
     if (f.link_anexo && !/^https?:\/\//i.test(f.link_anexo)) return 'O link do anexo deve começar com http:// ou https://.'
   }
   if (i === 1) {
-    if (!f.conta_id) return 'Escolha a conta de pagamento.'
+    if (!f.conta_id) return f.tipo === 'receber' ? 'Escolha a conta de recebimento.' : 'Escolha a conta de pagamento.'
     if (!f.categoria_id) return aluguel ? 'Escolha a categoria do aluguel.' : 'Escolha a categoria.'
     if (!(num(f.valor_base) > 0)) return aluguel ? 'Informe o valor do aluguel.' : 'Informe o valor da parcela.'
     const d = int(f.dia_vencimento)
@@ -31,6 +33,14 @@ export function validarEtapa(i, f) {
     if (bonif == null || bonif < 0) return `${rot.desconto} inválido(a).`
     if (bonif > 0 && !(int(f.bonificacao_meses) > 0)) return `${rot.desconto} maior que zero: informe por quantos meses vale.`
     if (bonif >= num(f.valor_base)) return `${rot.desconto} não pode ser maior ou igual ao valor ${aluguel ? 'do aluguel' : 'da parcela'}.`
+    if (repasse) {
+      const dr = int(f.dia_repasse)
+      if (!(dr >= 1 && dr <= 31)) return 'Dia do repasse entre 1 e 31.'
+      if (txt(f.valor_primeiro_mes).trim() && !(num(f.valor_primeiro_mes) > 0)) return 'Valor do 1º mês inválido (deixe em branco para usar o proporcional).'
+      const saldo = txt(f.saldo_inicial_valor).trim() ? num(f.saldo_inicial_valor) : 0
+      if (saldo == null || saldo < 0) return 'Saldo inicial com a administradora inválido.'
+      if (saldo > 0 && !YM.test(txt(f.saldo_inicial_competencia))) return 'Informe a competência do saldo inicial.'
+    }
     const meses = Array.isArray(f.meses_sem_cobranca) ? f.meses_sem_cobranca : []
     if (meses.some(m => !YM.test(String(m)))) return 'Mês sem cobrança inválido.'
   }

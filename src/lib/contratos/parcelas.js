@@ -3,7 +3,8 @@
 // contratoPapel, id determinístico ctr_<contrato>_<papel>_<AAAAMM> (dois aparelhos gerando a mesma
 // parcela gravam a mesma linha). Contrato = linha da tabela `contratos` (snake_case, como vem da API).
 // Parcela paga (registered) nunca muda; reajuste/aditivo/renovação só mexem nas pendentes.
-import { ymDe, addMeses, diaNoMes, diaDe, hojeStr } from './datas.js'
+import { ymDe, addMeses, diaNoMes, diaDe, hojeStr, fmtYm } from './datas.js'
+import { ehModoRepasse, competenciasRepasse, primeiroMes } from './repasse.js'
 import { itensEncargos } from './encargos.js'
 import { computeOccurrences } from '../occurrences.js'
 import { occEfetiva } from '../fluxoCaixa.js'
@@ -57,11 +58,21 @@ export function competenciaDoId(id) {
   return m ? `${m[1]}-${m[2]}` : null
 }
 
+// Competência ('AAAA-MM') de uma parcela/agendamento do contrato: a parcela gerada leva a competência
+// no id (no modo repasse a data é a do repasse, meses depois); série vinculada usa a data.
+export function competenciaDaParcela(s, data = s?.startDate) {
+  return (String(s?.id || '').startsWith('ctr_') && competenciaDoId(s.id)) || ymDe(data)
+}
+
 // Vencimentos de um papel: { numero, vencimento, competencia }. Com data_fim, a vigência inteira;
 // sem ela, até HORIZONTE_MESES depois do mês de `hoje`. Condomínio é sempre mensal.
 // Mês sem cobrança é pulado SEM consumir número (total e numeração contam só as cobradas); com
 // `comPulados` ele volta na lista como { numero: null, semCobranca: true } (a ficha mostra).
 export function vencimentos(contrato, papel, { hoje, comPulados = false } = {}) {
+  // Modo repasse: uma competência por mês, vencimento = data do repasse (lib/contratos/repasse.js).
+  if (ehModoRepasse(contrato) && papel !== 'condominio') {
+    return competenciasRepasse(contrato, { hoje, horizonte: HORIZONTE_MESES, comPulados, pular: mesesSemCobranca(contrato) })
+  }
   const diaBase = papel === 'condominio'
     ? (contrato.dia_vencimento_condominio || contrato.dia_vencimento)
     : contrato.dia_vencimento
@@ -189,6 +200,8 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
   const bonifMeses = Number(contrato.bonificacao_meses) || 0
   const projecao = refProjecao(contrato, indices)
   const rot = rotulosContrato(contrato)
+  const repasse = ehModoRepasse(contrato)
+  const inicioYm = ymDe(contrato.data_inicio)
 
   const mantida = (papel, ym, comp) => {
     const v = valoresMantidos?.[papel]?.[ym]
@@ -201,6 +214,14 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
     const ciclo = cicloDaCompetencia(contrato, v.competencia)
     const { base, status } = bases[ciclo]
     const itens = [{ tipo: 'base', desc: rot.itemBase, valor: base }]
+    // Modo repasse: 1º mês proporcional (valor / 30 × dias) ou o valor informado no contrato.
+    const pm = repasse && v.competencia === inicioYm ? primeiroMes(contrato, base) : null
+    if (pm) {
+      itens[0] = {
+        tipo: 'base', valor: pm.valor, proporcional: true,
+        desc: pm.informado ? `${rot.itemBase} — 1º mês (informado)` : `${rot.itemBase} — proporcional ${pm.dias} dias`,
+      }
+    }
     // Desconto nas `bonifMeses` primeiras parcelas COBRADAS (o número não conta mês sem cobrança).
     if (bonifValor > 0 && v.numero <= bonifMeses) itens.push({ tipo: 'bonificacao', desc: rot.desconto, valor: -bonifValor })
     // Encargos e descontos do contrato ativos nesta parcela ("Seguro 3/36 +49,06"); sem reajuste.
@@ -208,6 +229,7 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
     const composicao = mantida('aluguel', v.competencia, {
       ciclo, base, itens, total: somaItens(itens), numero: v.numero, total_parcelas: totalAluguel,
       ...(status === 'projetado' ? { projecao } : {}),
+      ...(repasse ? { competencia: v.competencia } : {}),
     })
     out.push({
       id: idParcela(contrato.id, 'aluguel', v.competencia), papel: 'aluguel', numero: v.numero, total: totalAluguel,
@@ -216,7 +238,8 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
     })
   }
 
-  if (contrato.tem_condominio) {
+  // No modo repasse o condomínio não é boleto do proprietário (entra como dedução da composição).
+  if (contrato.tem_condominio && !repasse) {
     const cond = vencimentos(contrato, 'condominio', { hoje })
     const totalCond = contrato.data_fim ? cond.length : null
     const valor = r2(valorCondominio ?? contrato.valor_condominio_previsto)
@@ -238,9 +261,13 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
 // Parcela do plano → agendamento do app (camelCase, como em src/lib/db.js rowToSchedule).
 export function agendamentoDaParcela(contrato, p) {
   const condominio = p.papel === 'condominio'
+  // Modo repasse: a data é a do repasse; a competência do aluguel vai na descrição.
+  const descricao = ehModoRepasse(contrato) && !condominio
+    ? `Repasse aluguel ${fmtYm(p.competencia)} · ${rotuloDoPapel(contrato, p.papel)}`
+    : `${rotuloPapel(contrato, p.papel)} · ${rotuloDoPapel(contrato, p.papel)}`
   return {
     id: p.id,
-    description: `${rotuloPapel(contrato, p.papel)} · ${rotuloDoPapel(contrato, p.papel)}`,
+    description: descricao,
     transactionType: contrato.tipo === 'receber' ? 'income' : 'expense',
     accountId: contrato.conta_id || null,
     toAccountId: null,
@@ -313,7 +340,7 @@ export function planejarSincronizacao(contrato, schedules, plano, { excluidas = 
   const exc = new Set(excluidas)
   const ultima = {}
   for (const s of doContrato) {
-    const ym = ymDe(s.startDate)
+    const ym = competenciaDaParcela(s)
     if (!ultima[s.contratoPapel] || ym > ultima[s.contratoPapel]) ultima[s.contratoPapel] = ym
   }
   const criar = [], atualizar = [], remover = []
@@ -335,7 +362,7 @@ export function planejarSincronizacao(contrato, schedules, plano, { excluidas = 
   if (!soExtender) {
     for (const s of doContrato) {
       if (noPlano.has(s.id) || parcelaPaga(s)) continue
-      if (apartirDe && ymDe(s.startDate) < apartirDe) continue
+      if (apartirDe && competenciaDaParcela(s) < apartirDe) continue
       remover.push(s)
     }
   }
@@ -348,7 +375,7 @@ export const ehParcelaDeVinculo = (s) => s?.composicao?.origem === 'vinculo_lanc
 
 // Primeira competência das parcelas geradas do contrato (onde a geração começou), ou null.
 export function inicioDasParcelas(contrato, schedules) {
-  const yms = (schedules || []).filter(s => ehParcelaGerada(s, contrato.id) && !ehParcelaDeVinculo(s)).map(s => ymDe(s.startDate)).sort()
+  const yms = (schedules || []).filter(s => ehParcelaGerada(s, contrato.id) && !ehParcelaDeVinculo(s)).map(s => competenciaDaParcela(s)).sort()
   return yms[0] || null
 }
 
@@ -419,7 +446,7 @@ export function linhasDoContrato(contrato, schedules, transactions = [], { hoje 
     const linha = (d, paga) => {
       const eff = occEfetiva(s, d)
       const tx = paga ? lancamentoDe(s, d) : null
-      const competencia = ymDe(d)
+      const competencia = unica ? competenciaDaParcela(s, d) : ymDe(d)
       const num = numerar(papel)
       ;(cobertas[papel] || (cobertas[papel] = new Set())).add(competencia)
       return {

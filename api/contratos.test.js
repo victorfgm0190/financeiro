@@ -302,3 +302,50 @@ describe('migração 2026-11-03: contrato genérico, meses sem cobrança e desti
     expect(troca.body.credito.destino_agendamento_id).toBeNull()
   })
 })
+
+describe('migração 2026-11-07b: contrato a receber por administradora (modo repasse)', () => {
+  const MIGRACAO_REP = readFileSync(new URL('../supabase/migrations/2026-11-07b_contratos_repasse.sql', import.meta.url), 'utf-8')
+  // Dados fictícios.
+  const REPASSE = {
+    ...CONTRATO, tipo: 'receber', favorecido: 'Administradora Exemplo', bonificacao_valor: 0, bonificacao_meses: 0,
+    modo_repasse: true, contraparte_nome: 'Inquilino Exemplo', contraparte_documento: '000.000.000-00', bem_id: 'bem-x',
+    dia_repasse: 12, repasse_meses_depois: 1, valor_primeiro_mes: 2100, saldo_inicial_adm: -150.5, saldo_inicial_competencia: '2026-01',
+  }
+
+  it('sem a migração: contrato com repasse → 409 e nada gravado; contrato comum continua gravando', async () => {
+    const r = await chamar(contratos, 'POST', { body: { contrato: REPASSE } })
+    expect(r.statusCode).toBe(409)
+    expect(r.body.codigo).toBe('banco_desatualizado')
+    expect((await estado.db.query('SELECT count(*)::int AS n FROM contratos')).rows[0].n).toBe(0)
+    expect((await chamar(contratos, 'POST', { body: { contrato: CONTRATO } })).statusCode).toBe(200)
+  })
+
+  it('com a migração (idempotente): grava e devolve os campos; contrato existente fica sem repasse', async () => {
+    const antigo = (await chamar(contratos, 'POST', { body: { contrato: CONTRATO } })).body.contrato
+    await estado.db.exec(MIGRACAO_REP)
+    await estado.db.exec(MIGRACAO_REP)
+    const [velho] = (await estado.db.query('SELECT modo_repasse, repasse_meses_depois FROM contratos WHERE id = $1', [antigo.id])).rows
+    expect(velho).toEqual({ modo_repasse: false, repasse_meses_depois: 1 })
+
+    const r = await chamar(contratos, 'POST', { body: { contrato: REPASSE } })
+    expect(r.statusCode).toBe(200)
+    expect(r.body.contrato).toMatchObject({
+      modo_repasse: true, contraparte_nome: 'Inquilino Exemplo', bem_id: 'bem-x', dia_repasse: 12, repasse_meses_depois: 1,
+      valor_primeiro_mes: 2100, saldo_inicial_adm: -150.5, saldo_inicial_competencia: '2026-01',
+    })
+    const id = r.body.contrato.id
+    // Repasse só em contrato a receber.
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { tipo: 'pagar' } } })).statusCode).toBe(400)
+    expect((await chamar(contratos, 'PUT', { body: { id: antigo.id, contrato: { modo_repasse: true } } })).statusCode).toBe(400)
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { repasse_meses_depois: 4 } } })).statusCode).toBe(400)
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { saldo_inicial_competencia: '2026-13' } } })).statusCode).toBe(400)
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { dia_repasse: 5 } } })).body.contrato.dia_repasse).toBe(5)
+  })
+
+  it('validação: repasse exige contrato a receber e dia do repasse; saldo inicial pede a competência', () => {
+    expect(normalizarContrato({ ...REPASSE, tipo: 'pagar' }).erro).toMatch(/modo_repasse/)
+    expect(normalizarContrato({ ...REPASSE, dia_repasse: null }).erro).toMatch(/dia_repasse/)
+    expect(normalizarContrato({ ...REPASSE, saldo_inicial_competencia: null }).erro).toMatch(/saldo_inicial_competencia/)
+    expect(normalizarContrato({ ...CONTRATO }).dados).toMatchObject({ modo_repasse: false, repasse_meses_depois: 1, bem_id: null })
+  })
+})

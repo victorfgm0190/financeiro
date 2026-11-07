@@ -13,3 +13,5 @@ export const MSG_ENCARGOS = 'Não foi possível salvar: o banco deste ambiente a
 export const MSG_EFETIVACAO_SEM_VINCULO = 'O banco deste ambiente ainda não guarda o vínculo da efetivação: esta efetivação não poderá ser desfeita pelo botão. Avise o suporte para atualizar o banco.'
 
 export const faltaRecurso = (recursos, chave) => !!recursos && recursos[chave] === false
+
+export const MSG_REPASSE = 'Não foi possível salvar: o banco deste ambiente ainda não tem a atualização de contrato a receber por administradora. Nada foi alterado — avise o suporte para atualizar o banco.'
