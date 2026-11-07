@@ -1,5 +1,29 @@
 import { describe, it, expect } from 'vitest'
-import { totaisFluxoFuturo } from './fluxoReservaTotais.js'
+import { totaisFluxoFuturo, funcoesDoFluxoNoPerfil } from './fluxoReservaTotais.js'
+
+describe('funcoesDoFluxoNoPerfil', () => {
+  const perfis = [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }]
+  const contas = [
+    { id: 'ra', profileId: 'p1' }, { id: 'rb', profileId: 'p2' },
+    { id: 'rs', profileId: null }, { id: 'rx', profileId: 'perfil-apagado' },
+  ]
+  const funcoes = [
+    { id: 'a', accountId: 'ra' }, { id: 'b', accountId: 'rb' },
+    { id: 's', accountId: 'rs' }, { id: 'x', accountId: 'rx' },
+  ]
+  const ids = (r) => r.funcoes.map(f => f.id)
+
+  it('"Tudo" mostra todas; perfil mostra as dele mais as Sem vínculo', () => {
+    expect(ids(funcoesDoFluxoNoPerfil(funcoes, contas, perfis, null))).toEqual(['a', 'b', 's', 'x'])
+    expect(ids(funcoesDoFluxoNoPerfil(funcoes, contas, perfis, 'p1'))).toEqual(['a', 's', 'x'])
+    expect(ids(funcoesDoFluxoNoPerfil(funcoes, contas, perfis, 'p2'))).toEqual(['b', 's', 'x'])
+    expect(ids(funcoesDoFluxoNoPerfil(funcoes, contas, perfis, 'p3'))).toEqual(['s', 'x'])
+  })
+
+  it('marca como Sem vínculo a conta sem perfil ou com perfil inexistente', () => {
+    expect([...funcoesDoFluxoNoPerfil(funcoes, contas, perfis, 'p1').semVinculo]).toEqual(['s', 'x'])
+  })
+})
 
 const mes = (dep, res, prov, saldo) => ({ dep, res, prov, saldo })
 const saldos = { a: 1000.1, b: -300.2, c: 0 }

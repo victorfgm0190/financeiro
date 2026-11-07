@@ -25,7 +25,8 @@ import { isoLocal } from '../../lib/hoje'
 import { erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
 import { ehAjusteDeRendimento } from '../../lib/rendimentoReserva'
 import { previsoesDasFuncoes } from '../../lib/previsaoReserva'
-import { totaisFluxoFuturo } from '../../lib/fluxoReservaTotais'
+import { totaisFluxoFuturo, funcoesDoFluxoNoPerfil } from '../../lib/fluxoReservaTotais'
+import ProfileBadge from '../shared/ProfileBadge'
 import AvisosCaixaReserva from './AvisosCaixaReserva'
 import { parseValorBR } from '../../lib/valorBR'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
@@ -1599,7 +1600,7 @@ function futureMovimentosByFunction(linked, accounts, schedules, scheduleReserva
 const totalOuTraco = (v) => (v === 0 ? '—' : fmt(v))
 
 // ── Tab 2: Fluxo Futuro ─────────────────────────────────────────────────────
-function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedules, scheduleReservaFuncoes, getNextOccurrences }) {
+function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizados, schedules, scheduleReservaFuncoes, getNextOccurrences }) {
   const linked = functions.filter(f => f.accountId)
   const round2 = (n) => Math.round(n * 100) / 100
   // Célula (função × mês × Dep/Res) cujo detalhamento está aberto. Declarado aqui em cima
@@ -1793,6 +1794,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
             <div className="px-3 py-2.5 border-b border-borda flex items-center gap-2">
               {hasAlert && <AlertTriangle size={11} className="text-aviso shrink-0" />}
               <span className="text-sm font-medium text-texto-1 flex-1 truncate">{f.name}</span>
+              {semVinculo?.has(f.id) && <ProfileBadge account={account} className="shrink-0" />}
               {account && (
                 <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-2 shrink-0">
                   {account.apelido || account.name.slice(0, 8)}
@@ -1927,6 +1929,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
                   <td className={`sticky left-0 z-10 border-r border-r-borda px-3 py-2 text-texto-1 whitespace-nowrap group-hover:bg-[color-mix(in_srgb,var(--color-surface-hover)_20%,var(--color-surface))] ${hasAlert ? 'bg-[color-mix(in_srgb,var(--color-aviso)_5%,var(--color-surface))]' : 'bg-surface'}`}>
                     {hasAlert && <AlertTriangle size={10} className="inline text-aviso mr-1" />}
                     {f.name}
+                    {semVinculo?.has(f.id) && <ProfileBadge account={account} className="ml-1.5 align-middle" />}
                   </td>
                   <td className="px-3 py-2">
                     {account
@@ -2175,6 +2178,7 @@ export default function ReservasPanel() {
     reservePeriods, reserveAdjustments, reserveSnapshots, addReservePeriod,
     addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment,
     recarregarHistoricoReservas, reserveHistoryLoaded, dbStatus, syncing, filaPendentes, pode,
+    accounts: todasContas = [], profiles, activeProfileId,
   } = useApp()
   const { functions, accountBalances, addFunction, updateFunction, deleteFunction, setAccountBalance } = useReservas()
   const [tab, setTab] = useState('contas')
@@ -2329,6 +2333,14 @@ export default function ReservasPanel() {
   )
 
   const nonCreditAccounts = accounts.filter(a => a.type !== 'credit')
+  // Fluxo Futuro: funções do perfil do topo (lib/fluxoReservaTotais). Contas de TODOS os perfis,
+  // porque a conta "Sem vínculo" não está nas contas do perfil e a função dela aparece em todos —
+  // em "Tudo" é a mesma lista de contas de antes.
+  const fluxoContas = useMemo(() => todasContas.filter(a => a.type !== 'credit'), [todasContas])
+  const fluxoFiltro = useMemo(
+    () => funcoesDoFluxoNoPerfil(effectiveFunctions, todasContas, profiles, activeProfileId),
+    [effectiveFunctions, todasContas, profiles, activeProfileId],
+  )
   const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva), [accounts])
   // "Último fechamento": último dia do período fechado mais recente (data_fim do snapshot).
   const lastFechamento = useMemo(() => ultimoCorteDe(reserveSnapshots), [reserveSnapshots])
@@ -2407,8 +2419,9 @@ export default function ReservasPanel() {
 
       {tab === 'fluxo' && (
         <FluxoTab
-          functions={effectiveFunctions}
-          accounts={nonCreditAccounts}
+          functions={fluxoFiltro.funcoes}
+          semVinculo={fluxoFiltro.semVinculo}
+          accounts={fluxoContas}
           categories={categories}
           saldosAtualizados={saldosAtualizados}
           schedules={schedules}
