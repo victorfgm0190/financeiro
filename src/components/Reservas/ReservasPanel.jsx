@@ -25,7 +25,7 @@ import { isoLocal } from '../../lib/hoje'
 import { erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
 import { ehAjusteDeRendimento } from '../../lib/rendimentoReserva'
 import { previsoesDasFuncoes } from '../../lib/previsaoReserva'
-import { totaisFluxoFuturo, funcoesReservaNoPerfil } from '../../lib/fluxoReservaTotais'
+import { totaisFluxoFuturo, funcoesReservaNoPerfil, linhasDasFuncoesNoPerfil } from '../../lib/fluxoReservaTotais'
 import { mesDaData, somarMeses, periodoDaPreferencia, preferenciaDoPeriodo, janelaDoPeriodo } from '../../lib/fluxoPeriodo'
 import { carregarBoasVindas, assinarBoasVindas, estadoBoasVindas, definirPeriodoFluxo } from '../../lib/boasVindasApi'
 import SeletorPeriodoFluxo from './SeletorPeriodoFluxo'
@@ -2058,23 +2058,37 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
 // ── Tab 3: Histórico (snapshots das viradas) ────────────────────────────────
 // Ajuste e Rendimentos em colunas separadas. Fechamentos antigos (rendimentos NULL) somavam os
 // rendimentos no Ajuste: a coluna Rendimentos mostra "—" e uma nota explica (lerSnapshot).
-function HistoricoTab({ snapshots, selFim, onSelFim }) {
+// Filtro de perfil (lib/fluxoReservaTotais): só os fechamentos das funções visíveis; função excluída
+// só em "Tudo". Os valores gravados não mudam — o filtro só escolhe as linhas; o Total soma as da tela.
+function HistoricoTab({ snapshots, funcoes, semVinculo, contas, perfilAtivoId, selFim, onSelFim }) {
   const ajCor = (v) => v > 0 ? 'text-receita' : v < 0 ? 'text-despesa' : 'text-texto-3'
   const iniLabel = (d) => d && d !== '0001-01-01' ? fmtDate(d) : '(início)'
   const sinal = (v) => v !== 0 ? (v > 0 ? '+' : '') + fmt(v) : <span className="text-texto-3">0,00</span>
 
+  const visiveis = useMemo(
+    () => linhasDasFuncoesNoPerfil(snapshots, funcoes, perfilAtivoId),
+    [snapshots, funcoes, perfilAtivoId],
+  )
+  const contaDaFuncao = useMemo(() => {
+    const contaPorId = new Map((contas || []).map(a => [a.id, a]))
+    return new Map((funcoes || []).map(f => [f.id, contaPorId.get(f.accountId)]))
+  }, [funcoes, contas])
+
   // Um grupo por fechamento (lib/viradaReserva agruparFechamentos): rótulo pelo início real do mês.
-  const groups = useMemo(() => agruparFechamentos(snapshots), [snapshots])
+  const groups = useMemo(() => agruparFechamentos(visiveis), [visiveis])
 
   const sel = groups.find(g => g.dataFim === selFim) || groups[0] || null
   useSubtelaGuia('reservas:historico')
 
-  if (!snapshots || snapshots.length === 0) {
+  if (!snapshots || snapshots.length === 0 || visiveis.length === 0) {
+    const nenhuma = !snapshots || snapshots.length === 0
     return (
       <div className="card text-center py-12">
         <RotateCcw size={32} className="text-texto-3 mx-auto mb-3" />
-        <p className="text-texto-3 text-sm">Nenhuma virada registrada ainda.</p>
-        <p className="text-xs text-texto-3 mt-1">Ao usar "Virar Saldo" no Resumo, o período fechado fica guardado aqui.</p>
+        <p className="text-texto-3 text-sm">{nenhuma ? 'Nenhuma virada registrada ainda.' : 'Nenhum fechamento das funções deste perfil.'}</p>
+        <p className="text-xs text-texto-3 mt-1">
+          {nenhuma ? 'Ao usar "Virar Saldo" no Resumo, o período fechado fica guardado aqui.' : 'Escolha "Tudo" no topo para ver os fechamentos de todas as funções.'}
+        </p>
       </div>
     )
   }
@@ -2122,7 +2136,10 @@ function HistoricoTab({ snapshots, selFim, onSelFim }) {
             <tbody>
               {(sel?.snaps || []).map(s => (
                 <tr key={s.id} className="border-b border-borda/50">
-                  <td className="px-4 py-2 text-xs text-texto-1">{s.function_name}</td>
+                  <td className="px-4 py-2 text-xs text-texto-1">
+                    {s.function_name}
+                    {semVinculo?.has(s.function_id) && <ProfileBadge account={contaDaFuncao.get(s.function_id)} className="ml-1.5 align-middle" />}
+                  </td>
                   <td className="px-4 py-2 text-right text-xs text-texto-2">{fmt(s.saldo_inicial)}</td>
                   <td className="px-4 py-2 text-right text-xs font-semibold text-receita">{s.entradas !== 0 ? fmt(s.entradas) : <span className="text-texto-3">0,00</span>}</td>
                   <td className="px-4 py-2 text-right text-xs font-semibold text-despesa">{s.saidas !== 0 ? fmt(s.saidas) : <span className="text-texto-3">0,00</span>}</td>
@@ -2492,14 +2509,25 @@ export default function ReservasPanel() {
 
       {tab === 'razao' && (
         <RazaoDiarioTab
-          functions={effectiveFunctions}
+          functions={filtroPerfil.funcoes}
+          semVinculo={filtroPerfil.semVinculo}
+          contas={todasContas}
+          perfilAtivoId={activeProfileId}
           snapshots={reserveSnapshots}
           onVerPeriodo={dataFim => { setHistFim(dataFim); setTab('historico') }}
         />
       )}
 
       {tab === 'historico' && (
-        <HistoricoTab snapshots={reserveSnapshots} selFim={histFim} onSelFim={setHistFim} />
+        <HistoricoTab
+          snapshots={reserveSnapshots}
+          funcoes={filtroPerfil.funcoes}
+          semVinculo={filtroPerfil.semVinculo}
+          contas={todasContas}
+          perfilAtivoId={activeProfileId}
+          selFim={histFim}
+          onSelFim={setHistFim}
+        />
       )}
 
       <Modal

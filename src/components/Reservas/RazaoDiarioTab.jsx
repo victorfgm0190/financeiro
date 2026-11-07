@@ -7,6 +7,8 @@ import { fetchReserveLedgerMonths, fetchReserveLedgerSummary } from '../../lib/d
 import { fmt, fmtDate } from '../shared/utils'
 import { useThemeColors } from '../../hooks/useTheme'
 import { corSerie } from '../../lib/chartPalette'
+import { linhasDasFuncoesNoPerfil } from '../../lib/fluxoReservaTotais'
+import ProfileBadge from '../shared/ProfileBadge'
 
 // ── Aba "Razão Diário" ──────────────────────────────────────────────────────
 // Lê reserve_daily_ledger (uma linha por função por dia) e mostra evolução + tabela.
@@ -114,12 +116,17 @@ function Th({ col, label, sortCol, sortDesc, onSort, align = 'right', className 
   )
 }
 
-export default function RazaoDiarioTab({ functions: functionsProp = [], snapshots = [], onVerPeriodo }) {
-  // O painel recria o array de funções a cada render (saldos recalculados): aqui só importam id e
-  // nome. Chave textual estável → o gráfico não recebe série/dados "novos" sem mudança real.
-  const chaveFuncoes = functionsProp.map(f => `${f.id}${f.name}`).join('')
-  const functions = useMemo(() => functionsProp.map(f => ({ id: f.id, name: f.name })), [chaveFuncoes]) // eslint-disable-line react-hooks/exhaustive-deps
-  const [ledger, setLedger] = useState([])
+// Filtro de perfil: `functions` já vem filtrada (funcoesReservaNoPerfil) e `semVinculo` marca as
+// funções que recebem o selo. As linhas vêm do servidor com todas as funções e são recortadas aqui
+// pela mesma regra (linhasDasFuncoesNoPerfil); os valores das linhas não mudam com o filtro.
+export default function RazaoDiarioTab({
+  functions: functionsProp = [], semVinculo, contas = [], perfilAtivoId = null, snapshots = [], onVerPeriodo,
+}) {
+  // O painel recria o array de funções a cada render (saldos recalculados): aqui só importam id,
+  // nome e conta. Chave textual estável → o gráfico não recebe série/dados "novos" sem mudança real.
+  const chaveFuncoes = functionsProp.map(f => `${f.id}${f.name}${f.accountId || ""}`).join('')
+  const functions = useMemo(() => functionsProp.map(f => ({ id: f.id, name: f.name, accountId: f.accountId })), [chaveFuncoes]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [ledgerTodo, setLedger] = useState([])
   const [months, setMonths] = useState([])
   const [resumo, setResumo] = useState(null)
   const [selectedMonth, setSelectedMonth] = useState('')      // '' = todos
@@ -147,6 +154,24 @@ export default function RazaoDiarioTab({ functions: functionsProp = [], snapshot
   useEffect(() => { fetchLedger() }, [fetchLedger])
 
   const handleRefresh = () => { setLoading(true); fetchLedger() }
+
+  // Só as linhas das funções do filtro de perfil ("Tudo": todas, inclusive de função excluída).
+  const ledger = useMemo(
+    () => linhasDasFuncoesNoPerfil(ledgerTodo, functions, perfilAtivoId),
+    [ledgerTodo, functions, perfilAtivoId],
+  )
+  // Seleção de funções dos chips limitada às visíveis (trocar de perfil não deixa seleção "fantasma").
+  const selecionadas = useMemo(() => {
+    const ids = new Set(ledger.map(r => r.function_id))
+    return selectedFunctions.filter(id => ids.has(id))
+  }, [ledger, selectedFunctions])
+  const contaDaFuncao = useMemo(() => {
+    const contaPorId = new Map((contas || []).map(a => [a.id, a]))
+    return new Map(functions.map(f => [f.id, contaPorId.get(f.accountId)]))
+  }, [functions, contas])
+  const selo = (fid, className) => (semVinculo?.has(fid)
+    ? <ProfileBadge account={contaDaFuncao.get(fid)} className={className} />
+    : null)
 
   // Nome da função: o join do endpoint (function_name) com fallback na lista em memória —
   // uma função excluída deixa linhas órfãs no razão, e elas devem continuar legíveis.
@@ -197,9 +222,9 @@ export default function RazaoDiarioTab({ functions: functionsProp = [], snapshot
   // Filtros em AND, aplicados sobre os dados já carregados (sem novo fetch).
   const filtered = useMemo(() => ledger.filter(row => {
     const okMes = !selectedMonth || row.snapshot_date.startsWith(selectedMonth)
-    const okFn = selectedFunctions.length === 0 || selectedFunctions.includes(row.function_id)
+    const okFn = selecionadas.length === 0 || selecionadas.includes(row.function_id)
     return okMes && okFn
-  }), [ledger, selectedMonth, selectedFunctions])
+  }), [ledger, selectedMonth, selecionadas])
 
   const sorted = useMemo(() => {
     const rows = filtered.map(r => ({ ...r, _nome: nomeDe(r), _periodo: periodoDe(r) }))
@@ -217,9 +242,9 @@ export default function RazaoDiarioTab({ functions: functionsProp = [], snapshot
 
   // Série do gráfico: uma coluna por função, uma linha por dia (ordem cronológica).
   const { chartData, chartSeries } = useMemo(() => {
-    const series = (selectedFunctions.length === 0
+    const series = (selecionadas.length === 0
       ? funcoesNoRazao
-      : funcoesNoRazao.filter(f => selectedFunctions.includes(f.id))
+      : funcoesNoRazao.filter(f => selecionadas.includes(f.id))
     ).map(f => ({ ...f, color: corDe(f.id) }))
 
     const porDia = new Map()
@@ -229,7 +254,7 @@ export default function RazaoDiarioTab({ functions: functionsProp = [], snapshot
     }
     const data = [...porDia.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
     return { chartData: data, chartSeries: series }
-  }, [filtered, funcoesNoRazao, selectedFunctions, corDe])
+  }, [filtered, funcoesNoRazao, selecionadas, corDe])
 
   const toggleFunction = (fid) => {
     setSelectedFunctions(prev => (prev.includes(fid) ? prev.filter(x => x !== fid) : [...prev, fid]))
@@ -249,7 +274,7 @@ export default function RazaoDiarioTab({ functions: functionsProp = [], snapshot
     }))
     const hoje = new Date()
     const stamp = `${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, '0')}${String(hoje.getDate()).padStart(2, '0')}`
-    const nomesSel = funcoesNoRazao.filter(f => selectedFunctions.includes(f.id)).map(f => f.name)
+    const nomesSel = funcoesNoRazao.filter(f => selecionadas.includes(f.id)).map(f => f.name)
     const moeda = (chave, titulo, cor) => ({ chave, titulo, tipo: 'moeda', ...(cor ? { cor: () => cor } : {}) })
     exportarExcel({
       titulo: 'Razão Diário das Reservas', nome: 'Razão Diário',
@@ -276,7 +301,7 @@ export default function RazaoDiarioTab({ functions: functionsProp = [], snapshot
     }).catch(err => window.alert(`Não consegui exportar: ${err?.message || err}`))
   }
 
-  const temFiltro = !!selectedMonth || selectedFunctions.length > 0
+  const temFiltro = !!selectedMonth || selecionadas.length > 0
 
   return (
     <div className="space-y-4">
@@ -336,7 +361,7 @@ export default function RazaoDiarioTab({ functions: functionsProp = [], snapshot
             <label className="text-xs text-texto-3 shrink-0 pt-1">Funções</label>
             <div className="flex flex-wrap gap-1.5 flex-1" data-guia="reservas:razao.funcoes">
               {funcoesNoRazao.map(f => {
-                const on = selectedFunctions.includes(f.id)
+                const on = selecionadas.includes(f.id)
                 return (
                   <button
                     key={f.id}
@@ -352,6 +377,7 @@ export default function RazaoDiarioTab({ functions: functionsProp = [], snapshot
                       style={{ background: corDe(f.id), opacity: on ? 1 : 0.35 }}
                     />
                     {f.name}
+                    {selo(f.id, 'shrink-0')}
                   </button>
                 )
               })}
@@ -402,6 +428,7 @@ export default function RazaoDiarioTab({ functions: functionsProp = [], snapshot
                       <span className="inline-flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: corDe(r.function_id) }} />
                         {r._nome}
+                        {selo(r.function_id, 'shrink-0')}
                       </span>
                     </td>
                     {/* Azul = entrada, laranja = saída (a paleta do app não usa verde/vermelho). */}
@@ -451,9 +478,11 @@ export default function RazaoDiarioTab({ functions: functionsProp = [], snapshot
         {!loading && sorted.length === 0 && (
           <div className="py-10 text-center">
             <p className="text-sm text-texto-3">
-              {ledger.length === 0 ? 'O razão diário ainda não tem registros.' : 'Nenhuma linha para os filtros escolhidos.'}
+              {ledgerTodo.length === 0
+                ? 'O razão diário ainda não tem registros.'
+                : ledger.length === 0 ? 'Nenhuma linha das funções deste perfil.' : 'Nenhuma linha para os filtros escolhidos.'}
             </p>
-            {ledger.length === 0 && (
+            {ledgerTodo.length === 0 && (
               <p className="text-xs text-texto-3 mt-1">
                 Ele é gravado uma vez por dia ao abrir o app e antes de cada virada de saldo.
               </p>

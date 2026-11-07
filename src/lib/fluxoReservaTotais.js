@@ -20,6 +20,16 @@ export function funcoesReservaNoPerfil(funcoes, contas, perfis, perfilAtivoId) {
   return { funcoes: lista, semVinculo }
 }
 
+// Linhas por função (razão diário, fechamentos) no filtro de perfil: só as das funções visíveis
+// (`funcoesVisiveis` = funcoesReservaNoPerfil(...).funcoes). Em "Tudo" volta tudo, inclusive linhas de
+// função que não existe mais; dentro de um perfil, função excluída não aparece (não tem conta nem
+// perfil). As linhas não são alteradas: o filtro só decide quais aparecem.
+export function linhasDasFuncoesNoPerfil(linhas, funcoesVisiveis, perfilAtivoId) {
+  if (!perfilAtivoId) return linhas || []
+  const ids = new Set((funcoesVisiveis || []).map(f => f.id))
+  return (linhas || []).filter(l => ids.has(l.function_id))
+}
+
 export function totaisFluxoFuturo(projections, investidoDe) {
   const meses = projections[0]?.monthly.length || 0
   const investido = projections.reduce((s, p) => s + (Number(investidoDe(p.f)) || 0), 0)

@@ -13,6 +13,8 @@ vi.mock('../../lib/db', async (orig) => ({
   fetchViradaReservaStatus: (...a) => api.status(...a),
   viradaReservaAcao: (...a) => api.acao(...a),
   fetchReserveFunctionTransactions: async () => ({ transactions: [] }),
+  fetchReserveLedgerMonths: async () => ({ months: api.ledgerMonths || [] }),
+  fetchReserveLedgerSummary: async () => ({ rows: api.ledger || [] }),
 }))
 const { default: ReservasPanel } = await import('./ReservasPanel.jsx')
 
@@ -337,5 +339,79 @@ describe('Resumo e Histórico', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Histórico' }))
     const opcao = screen.getByRole('option')
     expect(opcao.textContent).toBe('15/07/2026 → 14/08/2026')
+  })
+})
+
+describe('Histórico e Razão Diário no filtro de perfil', () => {
+  const CONTA = { type: 'checking', isReserva: true, balance: 0 }
+  const perfis = [{ id: 'pA', name: 'A', type: 'pf' }, { id: 'pB', name: 'B', type: 'pj' }]
+  const contas = [
+    { ...CONTA, id: 'ca', name: 'RA', apelido: 'RA', profileId: 'pA' },
+    { ...CONTA, id: 'cb', name: 'RB', apelido: 'RB', profileId: 'pB' },
+    { ...CONTA, id: 'cs', name: 'RS', apelido: 'RS', profileId: null },
+  ]
+  const fs = [
+    { id: 'a', name: 'Função A', accountId: 'ca', saldoInicial: 0, ordem: 0 },
+    { id: 'b', name: 'Função B', accountId: 'cb', saldoInicial: 0, ordem: 1 },
+    { id: 's', name: 'Função S', accountId: 'cs', saldoInicial: 0, ordem: 2 },
+  ]
+  // 'z' = função já excluída (fechamento e razão órfãos): só em "Tudo".
+  const snap = (id, fid, nome, saldo) => ({ id, function_id: fid, function_name: nome, data_inicio: '2026-09-15', data_fim: '2026-10-14', saldo_inicial: saldo, entradas: 0, saidas: 0, ajuste: 0, rendimentos: 0, saldo, saldo_atualizado: saldo })
+  const snaps = [snap('h1', 'a', 'Função A', 100), snap('h2', 'b', 'Função B', 1000), snap('h3', 's', 'Função S', 10), snap('h4', 'z', 'Função Z', 7)]
+  const lin = (fid, nome, v) => ({ function_id: fid, function_name: nome, snapshot_date: '2026-11-01', entrada_dia: v, saida_dia: 0, ajuste_dia: 0, saldo_acumulado: v, saldo_atualizado: v, divergencia: 0 })
+  const ledger = [lin('a', 'Função A', 100), lin('b', 'Função B', 1000), lin('s', 'Função S', 10), lin('z', 'Função Z', 7)]
+
+  const abrir = async (perfil, aba) => {
+    base({ accounts: contas, profileAccounts: perfil ? contas.filter(c => c.profileId === perfil) : contas, profiles: perfis, activeProfileId: perfil, reserveFunctions: fs, reserveSnapshots: snaps })
+    api.status = vi.fn(async () => STATUS({ pendentes: [] }))
+    api.ledger = ledger
+    render(<ReservasPanel />)
+    fireEvent.click(screen.getByRole('button', { name: aba }))
+  }
+  const linhaDe = (nome) => screen.queryAllByText(nome).map(el => el.closest('tr')).find(Boolean)
+  const nomesNaTabela = () => ['Função A', 'Função B', 'Função S', 'Função Z'].filter(linhaDe)
+
+  it('Histórico: cada perfil vê as suas e a "Sem vínculo" (com selo, mesmo valor); excluída só em Tudo; Total = soma da tela', async () => {
+    const res = {}
+    for (const perfil of [null, 'pA', 'pB']) {
+      await abrir(perfil, 'Histórico')
+      res[perfil || 'tudo'] = {
+        nomes: nomesNaTabela(),
+        s: linhaDe('Função S').textContent.replace('Sem vínculo', ''),
+        selo: linhaDe('Função S').textContent.includes('Sem vínculo'),
+        total: linhaDe('Total').textContent,
+      }
+      cleanup()
+    }
+    expect(res.tudo.nomes).toEqual(['Função A', 'Função B', 'Função S', 'Função Z'])
+    expect(res.pA.nomes).toEqual(['Função A', 'Função S'])
+    expect(res.pB.nomes).toEqual(['Função B', 'Função S'])
+    expect(res.pA.s).toBe(res.tudo.s)
+    expect(res.pB.s).toBe(res.tudo.s)
+    expect(res.tudo.selo && res.pA.selo && res.pB.selo).toBe(true)
+    expect(res.tudo.total).toContain('1.117,00')
+    expect(res.pA.total).toContain('110,00')
+    expect(res.pB.total).toContain('1.010,00')
+  })
+
+  it('Razão Diário: linhas e chips só das funções do perfil; "Sem vínculo" igual em todos; excluída só em Tudo', async () => {
+    const res = {}
+    for (const perfil of [null, 'pA', 'pB']) {
+      await abrir(perfil, 'Razão Diário')
+      await waitFor(() => expect(linhaDe('Função S')).toBeTruthy())
+      res[perfil || 'tudo'] = {
+        nomes: nomesNaTabela(),
+        s: linhaDe('Função S').textContent.replace('Sem vínculo', ''),
+        chips: screen.getAllByRole('button').map(b => b.textContent).filter(t => t.startsWith('Função')),
+      }
+      cleanup()
+    }
+    expect(res.tudo.nomes).toEqual(['Função A', 'Função B', 'Função S', 'Função Z'])
+    expect(res.pA.nomes).toEqual(['Função A', 'Função S'])
+    expect(res.pB.nomes).toEqual(['Função B', 'Função S'])
+    expect(res.pA.s).toBe(res.tudo.s)
+    expect(res.pB.s).toBe(res.tudo.s)
+    expect(res.pA.chips).toEqual(['Função A', 'Função SSem vínculo'])
+    expect(res.pB.chips).toEqual(['Função B', 'Função SSem vínculo'])
   })
 })

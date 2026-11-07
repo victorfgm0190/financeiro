@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { totaisFluxoFuturo, funcoesReservaNoPerfil } from './fluxoReservaTotais.js'
+import { totaisFluxoFuturo, funcoesReservaNoPerfil, linhasDasFuncoesNoPerfil } from './fluxoReservaTotais.js'
 
 describe('funcoesReservaNoPerfil', () => {
   const perfis = [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }]
@@ -22,6 +22,35 @@ describe('funcoesReservaNoPerfil', () => {
 
   it('marca como Sem vínculo a conta sem perfil ou com perfil inexistente', () => {
     expect([...funcoesReservaNoPerfil(funcoes, contas, perfis, 'p1').semVinculo]).toEqual(['s', 'x'])
+  })
+})
+
+describe('linhasDasFuncoesNoPerfil', () => {
+  const perfis = [{ id: 'pA' }, { id: 'pB' }]
+  const contas = [{ id: 'ca', profileId: 'pA' }, { id: 'cb', profileId: 'pB' }, { id: 'cs', profileId: null }]
+  const funcoes = [{ id: 'a', accountId: 'ca' }, { id: 'b', accountId: 'cb' }, { id: 's', accountId: 'cs' }]
+  // 'z' = função excluída (linhas órfãs no razão/histórico).
+  const linhas = [
+    { function_id: 'a', saldo: 100 }, { function_id: 'b', saldo: 200 },
+    { function_id: 's', saldo: 50 }, { function_id: 'z', saldo: 7 },
+  ]
+  const ver = (perfil) => {
+    const { funcoes: vis } = funcoesReservaNoPerfil(funcoes, contas, perfis, perfil)
+    return linhasDasFuncoesNoPerfil(linhas, vis, perfil)
+  }
+  const soma = (ls) => ls.reduce((s, l) => s + l.saldo, 0)
+
+  it('cada perfil vê as suas e a Sem vínculo; excluída só em "Tudo"', () => {
+    expect(ver(null).map(l => l.function_id)).toEqual(['a', 'b', 's', 'z'])
+    expect(ver('pA').map(l => l.function_id)).toEqual(['a', 's'])
+    expect(ver('pB').map(l => l.function_id)).toEqual(['b', 's'])
+  })
+
+  it('a Sem vínculo tem o mesmo valor em qualquer filtro; total = soma do que aparece', () => {
+    for (const p of [null, 'pA', 'pB']) expect(ver(p).find(l => l.function_id === 's')).toBe(linhas[2])
+    expect(soma(ver(null))).toBe(357)
+    expect(soma(ver('pA'))).toBe(150)
+    expect(soma(ver('pB'))).toBe(250)
   })
 })
 
