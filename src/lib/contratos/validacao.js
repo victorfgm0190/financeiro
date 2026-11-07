@@ -36,6 +36,8 @@ export function validarEtapa(i, f) {
     if (repasse) {
       const dr = int(f.dia_repasse)
       if (!(dr >= 1 && dr <= 31)) return 'Dia do repasse entre 1 e 31.'
+      const pct = txt(f.taxa_adm_pct).trim() ? num(f.taxa_adm_pct) : 0
+      if (pct == null || pct < 0 || pct > 100) return 'Taxa de administração entre 0% e 100%.'
       if (txt(f.valor_primeiro_mes).trim() && !(num(f.valor_primeiro_mes) > 0)) return 'Valor do 1º mês inválido (deixe em branco para usar o proporcional).'
       const saldo = txt(f.saldo_inicial_valor).trim() ? num(f.saldo_inicial_valor) : 0
       if (saldo == null || saldo < 0) return 'Saldo inicial com a administradora inválido.'

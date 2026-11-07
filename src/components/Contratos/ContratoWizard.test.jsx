@@ -159,7 +159,8 @@ describe('ContratoWizard — aluguel a receber por administradora', () => {
     avancar()
     fireEvent.change(campo('Gerar repasses a partir da competência').querySelector('input'), { target: { value: '2026-03' } })
     expect(screen.getByText('Repasse 03/2026')).toBeTruthy()
-    expect(screen.getByText('R$ 2.200,00')).toBeTruthy()
+    // 1º mês proporcional 2.200,00 com o saldo inicial de −150,50 (eu devo): repasse 2.049,50.
+    expect(screen.getByText('R$ 2.049,50')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /Confirmar/ }))
     await vi.waitFor(() => expect(criarContrato).toHaveBeenCalled())

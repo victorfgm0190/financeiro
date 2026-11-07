@@ -16,6 +16,8 @@ import { ehCondominioAberto, temComposicaoInformada } from '../../lib/contratos/
 import { diferencaDoPagamento, esperadoDoPagamento } from '../../lib/contratos/efetivacao'
 import { rotuloPapel, rotulosContrato, rotuloModalidade, rotuloTipo, ehAluguel } from '../../lib/contratos/rotulos'
 import { ehModoRepasse, mesesDepoisDoRepasse } from '../../lib/contratos/repasse'
+import TabelaRepasse from './TabelaRepasse'
+import { BASES_TAXA_ADM } from '../../lib/contratos/composicaoRepasse'
 import ComposicaoBoletoModal from './ComposicaoBoletoModal'
 import { hojeStr, addMesesData, fmtYm } from '../../lib/contratos/datas'
 import ContratoWizard from './ContratoWizard'
@@ -239,7 +241,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
 
       {podeEditar && (
         <div className="flex flex-wrap gap-2">
-          {projetadas.length > 0 && <button className={btn} onClick={() => setReajusteDe(projetadas[0])}><TrendingUp size={12} /> Confirmar reajuste</button>}
+          {projetadas.length > 0 && !repasse && <button className={btn} onClick={() => setReajusteDe(projetadas[0])}><TrendingUp size={12} /> Confirmar reajuste</button>}
           <button className={btn} onClick={() => setModal('aditivo')}><Pencil size={12} /> Aditivo / editar</button>
           {contrato.data_fim && <button className={btn} onClick={() => setModal('renovar')}><RefreshCw size={12} /> Renovar</button>}
           <button className={btn} onClick={buscarVinculos}><Search size={12} /> Buscar agendamentos para vincular</button>
@@ -273,6 +275,9 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
             <Info rotulo="Inquilino">{contrato.contraparte_nome || '—'}{contrato.contraparte_documento ? ` · ${contrato.contraparte_documento}` : ''}</Info>
             <Info rotulo="Repasse">
               dia {contrato.dia_repasse || '—'} · {mesesDepoisDoRepasse(contrato) === 0 ? 'mesmo mês' : mesesDepoisDoRepasse(contrato) === 1 ? 'mês seguinte' : `${mesesDepoisDoRepasse(contrato)} meses depois`}
+            </Info>
+            <Info rotulo="Taxa de administração">
+              {Number(contrato.taxa_adm_pct) > 0 ? `${String(Number(contrato.taxa_adm_pct)).replace('.', ',')}% · ${BASES_TAXA_ADM[contrato.taxa_adm_base || 'bruto'].toLowerCase()}` : '—'}
             </Info>
             <Info rotulo="Saldo inicial (adm.)">
               {contrato.saldo_inicial_adm ? `${fmt(contrato.saldo_inicial_adm)} antes de ${fmtYm(contrato.saldo_inicial_competencia)}` : '—'}
@@ -338,6 +343,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
         </p>
       )}
 
+      {repasse ? <TabelaRepasse contrato={contrato} /> : (
       <div>
         <div className="flex flex-wrap gap-1 mb-2">
           {ABAS.map(([k, r]) => (
@@ -441,6 +447,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
           </div>
         )}
       </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>

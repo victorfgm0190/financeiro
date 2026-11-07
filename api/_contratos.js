@@ -94,14 +94,19 @@ export const CAMPOS_CONTRATO = {
   valor_primeiro_mes: numero(),
   saldo_inicial_adm: numero({ min: -1e12 }),
   saldo_inicial_competencia: competencia,
+  // Taxa de administração (migração 2026-11-07c).
+  taxa_adm_pct: numero({ min: 0, max: 100 }),
+  taxa_adm_base: umDe(['bruto', 'bruto_menos_taxas'], { obrigatorio: true }),
+  categoria_taxa_adm_id: texto(80),
 }
-const PADROES = { modalidade: 'aluguel', periodicidade: 'mensal', indice_reajuste: 'IPCA', status: 'ativo', credito_abatimento: 'mes_seguinte' }
+const PADROES = { modalidade: 'aluguel', periodicidade: 'mensal', indice_reajuste: 'IPCA', status: 'ativo', credito_abatimento: 'mes_seguinte', taxa_adm_base: 'bruto' }
 
 // Colunas do modo repasse (migração 2026-11-07b) e o valor "neutro" de cada uma: num banco sem a
 // migração, gravar um valor diferente do neutro é recusado (409) em vez de sumir em silêncio.
 export const COLS_REPASSE = {
   modo_repasse: false, contraparte_nome: null, contraparte_documento: null, bem_id: null, dia_repasse: null,
   repasse_meses_depois: 1, valor_primeiro_mes: null, saldo_inicial_adm: null, saldo_inicial_competencia: null,
+  taxa_adm_pct: null, taxa_adm_base: 'bruto', categoria_taxa_adm_id: null,
 }
 export const MSG_SEM_REPASSE = 'O banco deste ambiente ainda não tem a atualização de contrato a receber por administradora. Nada foi gravado — avise o suporte para atualizar o banco.'
 // Campos do repasse com valor de verdade que o banco não tem → lista (vazia = pode gravar).
@@ -109,7 +114,7 @@ export const repasseSemColuna = (dados, existem) =>
   Object.keys(COLS_REPASSE).filter(k => k in dados && !existem.has(k) && (dados[k] ?? null) !== COLS_REPASSE[k])
 
 // Colunas JSONB: o pg mandaria a lista como array do Postgres; vai como texto JSON.
-const JSONB = new Set(['meses_sem_cobranca', 'itens'])
+const JSONB = new Set(['meses_sem_cobranca', 'itens', 'valores_parcelas'])
 export const valorColuna = (k, v) => (JSONB.has(k) && v != null ? JSON.stringify(v) : v)
 
 // Colunas que o banco do ambiente já tem (as da migração 2026-11-03 só existem depois de aplicada):
@@ -160,6 +165,13 @@ export function normalizarItem(it) {
     descricao, grupo: grupo.v, responsavel: resp.v, valor_previsto: valor.v,
     categoria_id: texto(80)(it.categoria_id).v, ativo: it.ativo !== false,
   }
+  // Taxa da administradora cobrada no repasse (migração 2026-11-07c): tarifa fixa ou taxa única.
+  if (it.tipo_repasse) {
+    const r = normalizarTaxaRepasse(it, descricao, valor.v)
+    if (r.erro) return r
+    Object.assign(item, r.campos, { responsavel: 'proprietario' })
+    return { item }
+  }
   // Encargo/desconto que ENTRA na parcela (migração 2026-11-05): sinal, valor > 0, quantas parcelas
   // dura e em qual parcela do contrato está na 1ª dele (0 ou negativa: começou antes do contrato).
   if (it.na_parcela) {
@@ -174,6 +186,70 @@ export function normalizarItem(it) {
   }
   return { item }
 }
+
+// Tarifa fixa (valor por competência, de/até) ou taxa única (total em parcelas de valor livre).
+function normalizarTaxaRepasse(it, descricao, valor) {
+  const tipo = umDe(['tarifa_fixa', 'taxa_unica'], { obrigatorio: true })(it.tipo_repasse)
+  if (tipo.erro) return { erro: `item "${descricao}": tipo ${tipo.erro}` }
+  if (!(valor > 0)) return { erro: `item "${descricao}": valor maior que zero` }
+  const ini = competencia(it.vigencia_inicio)
+  const fim = competencia(it.vigencia_fim)
+  if (ini.erro || !ini.v) return { erro: `item "${descricao}": informe a competência inicial (AAAA-MM)` }
+  if (fim.erro) return { erro: `item "${descricao}": competência final ${fim.erro}` }
+  if (fim.v && fim.v < ini.v) return { erro: `item "${descricao}": competência final antes da inicial` }
+  let valores = null
+  if (tipo.v === 'taxa_unica') {
+    const lista = Array.isArray(it.valores_parcelas) ? it.valores_parcelas : []
+    if (!lista.length || lista.length > 120) return { erro: `item "${descricao}": informe de 1 a 120 parcelas` }
+    valores = lista.map(v => Math.round(Number(v) * 100) / 100)
+    if (valores.some(v => !Number.isFinite(v) || v <= 0)) return { erro: `item "${descricao}": parcela com valor inválido` }
+  }
+  const ded = it.dedutivel_ir == null ? null : it.dedutivel_ir === true || it.dedutivel_ir === 'true'
+  return {
+    campos: {
+      tipo_repasse: tipo.v, valores_parcelas: valores, vigencia_inicio: ini.v,
+      vigencia_fim: tipo.v === 'tarifa_fixa' ? fim.v : null, dedutivel_ir: ded,
+    },
+  }
+}
+
+// Colunas das taxas do repasse (só depois da migração 2026-11-07c).
+export const COLS_ITEM_REPASSE = ['tipo_repasse', 'valores_parcelas', 'vigencia_inicio', 'vigencia_fim', 'dedutivel_ir']
+
+// Composição de uma competência (contrato_competencias): itens tipados, valor com sinal.
+const TIPOS_ITEM_COMP = ['aluguel', 'taxa_adm', 'tarifa', 'taxa_unica', 'despesa', 'benfeitoria', 'ajuste']
+const NATUREZAS = ['iptu', 'condominio', 'consumo', 'manutencao', 'outra']
+export function normalizarCompetencia(b) {
+  const comp = competencia(b?.competencia)
+  if (comp.erro || !comp.v) return { erro: 'competencia: obrigatória (AAAA-MM)' }
+  const status = umDe(['aberta', 'fechada'], { obrigatorio: true })(b.status || 'aberta')
+  if (status.erro) return { erro: `status: ${status.erro}` }
+  const lista = Array.isArray(b.itens) ? b.itens : null
+  if (!lista) return { erro: 'itens: lista obrigatória' }
+  if (lista.length > 100) return { erro: 'itens: no máximo 100' }
+  const itens = []
+  for (const i of lista) {
+    const tipo = umDe(TIPOS_ITEM_COMP, { obrigatorio: true })(i?.tipo)
+    if (tipo.erro) return { erro: `item: tipo ${tipo.erro}` }
+    const v = Math.round(Number(i.valor) * 100) / 100
+    if (!Number.isFinite(v) || Math.abs(v) > 1e12) return { erro: `item "${i.descricao || i.tipo}": valor inválido` }
+    const calc = i.valor_calculado == null ? null : Math.round(Number(i.valor_calculado) * 100) / 100
+    if (calc != null && !Number.isFinite(calc)) return { erro: `item "${i.descricao || i.tipo}": valor calculado inválido` }
+    const origem = i.origem === 'auto' ? 'auto' : 'manual'
+    if (origem === 'manual' && !TIPOS_ITEM_COMP.slice(4).includes(tipo.v)) return { erro: `item "${i.descricao || i.tipo}": tipo automático marcado como manual` }
+    const item = {
+      chave: String(i.chave || '').slice(0, 80) || `m:${itens.length}`, tipo: tipo.v, descricao: String(i.descricao || '').trim().slice(0, 200),
+      valor: v, categoria_id: texto(80)(i.categoria_id).v, dedutivel_ir: i.dedutivel_ir === true, origem,
+    }
+    if (origem === 'auto') Object.assign(item, { informado: i.informado === true, valor_calculado: calc })
+    if (tipo.v === 'despesa') item.natureza = NATUREZAS.includes(i.natureza) ? i.natureza : 'outra'
+    if (tipo.v === 'benfeitoria') item.somar_ao_bem = i.somar_ao_bem === true
+    itens.push(item)
+  }
+  const obs = texto(2000)(b.observacao)
+  return { dados: { competencia: comp.v, status: status.v, itens, observacao: obs.v } }
+}
+export const MSG_SEM_COMPOSICAO = 'O banco deste ambiente ainda não tem a atualização da composição do repasse. Nada foi gravado — avise o suporte para atualizar o banco.'
 
 // Colunas dos encargos na parcela (só depois da migração 2026-11-05).
 export const COLS_ENCARGO = ['na_parcela', 'sinal', 'parcelas_total', 'parcela_inicio']
@@ -232,15 +308,18 @@ export async function inserirEvento(q, contratoId, ev) {
 
 export async function substituirItens(q, contratoId, itens) {
   // Encargo na parcela num banco sem a migração: erro claro ANTES de apagar a lista (nada muda).
-  const temEncargo = (await colunasDe(q, 'contrato_itens')).has('na_parcela')
+  const existem = await colunasDe(q, 'contrato_itens')
+  const temEncargo = existem.has('na_parcela')
+  const temRepasse = existem.has('tipo_repasse')
   if (!temEncargo && itens.some(it => it.na_parcela)) throw Object.assign(new Error(MSG_SEM_ENCARGOS), { status: 409, codigo: 'banco_desatualizado' })
+  if (!temRepasse && itens.some(it => it.tipo_repasse)) throw Object.assign(new Error(MSG_SEM_COMPOSICAO), { status: 409, codigo: 'banco_desatualizado' })
   await q('DELETE FROM contrato_itens WHERE contrato_id = $1', [contratoId])
   const out = []
   for (const it of itens) {
-    const cols = ['descricao', 'grupo', 'responsavel', 'valor_previsto', 'categoria_id', 'ativo', ...(temEncargo ? COLS_ENCARGO : [])]
+    const cols = ['descricao', 'grupo', 'responsavel', 'valor_previsto', 'categoria_id', 'ativo', ...(temEncargo ? COLS_ENCARGO : []), ...(temRepasse ? COLS_ITEM_REPASSE : [])]
     const [row] = await q(
       `INSERT INTO contrato_itens (contrato_id, ${cols.join(', ')}) VALUES ($1, ${cols.map((_, i) => `$${i + 2}`).join(', ')}) RETURNING *`,
-      [contratoId, ...cols.map(k => (k === 'na_parcela' ? !!it.na_parcela : it[k] ?? null))],
+      [contratoId, ...cols.map(k => (k === 'na_parcela' ? !!it.na_parcela : valorColuna(k, it[k] ?? null)))],
     )
     out.push(row)
   }
@@ -251,7 +330,7 @@ export async function substituirItens(q, contratoId, itens) {
 export const hojeIso = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
 
 // NUMERIC chega do pg como texto: as linhas saem com número de verdade.
-const NUMERICOS = ['valor_primeiro_mes', 'saldo_inicial_adm', 'valor_base', 'percentual_fixo', 'bonificacao_valor', 'valor_condominio_previsto', 'valor_previsto', 'percentual', 'valor_anterior', 'valor_novo', 'valor', 'creditos_abertos']
+const NUMERICOS = ['taxa_adm_pct', 'valor_primeiro_mes', 'saldo_inicial_adm', 'valor_base', 'percentual_fixo', 'bonificacao_valor', 'valor_condominio_previsto', 'valor_previsto', 'percentual', 'valor_anterior', 'valor_novo', 'valor', 'creditos_abertos']
 export function comNumeros(row) {
   if (!row) return row
   const out = { ...row }

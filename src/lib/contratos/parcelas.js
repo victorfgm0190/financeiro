@@ -5,6 +5,8 @@
 // Parcela paga (registered) nunca muda; reajuste/aditivo/renovação só mexem nas pendentes.
 import { ymDe, addMeses, diaNoMes, diaDe, hojeStr, fmtYm } from './datas.js'
 import { ehModoRepasse, competenciasRepasse, primeiroMes } from './repasse.js'
+import { comporCompetencia, resumoComposicao } from './composicaoRepasse.js'
+import { calcularSaldos, repassesRegistrados } from './saldoRepasse.js'
 import { itensEncargos } from './encargos.js'
 import { computeOccurrences } from '../occurrences.js'
 import { occEfetiva } from '../fluxoCaixa.js'
@@ -190,7 +192,23 @@ const somaItens = (itens) => r2(itens.reduce((a, i) => a + (Number(i.valor) || 0
 // Plano das parcelas do contrato (aluguel e condomínio), em ordem de vencimento por papel.
 //   apartirDe: competência mínima gerada ('AAAA-MM'); valoresMantidos: { papel: { ym: valor } }
 //   (vínculo com "manter valor atual"); valorCondominio: último valor pago (senão o previsto).
-export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, apartirDe = null, valoresMantidos = {}, valorCondominio = null } = {}) {
+//   repassesReais (modo repasse): { 'AAAA-MM': valor } dos repasses já registrados (saldoRepasse.js).
+export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, apartirDe = null, valoresMantidos = {}, valorCondominio = null, repassesReais = {} } = {}) {
+  // Modo repasse: só competência com saldo positivo vira recebimento, com o valor do saldo.
+  if (ehModoRepasse(contrato)) {
+    return competenciasDoRepasse(contrato, { hoje, indices, confirmados, repassesReais })
+      .filter(l => l.repasse > 0 && (!apartirDe || l.competencia >= apartirDe))
+      .map(l => ({
+        id: idParcela(contrato.id, 'aluguel', l.competencia), papel: 'aluguel', numero: l.numero, total: l.total,
+        competencia: l.competencia, vencimento: l.vencimento, valor: l.repasse, valorStatus: l.valorStatus,
+        // Cópia SÓ para exibir: a composição de verdade fica na contrato_competencias.
+        composicao: {
+          tipo: 'repasse', competencia: l.competencia, numero: l.numero, total_parcelas: l.total, itens: l.itens,
+          bruto: l.bruto, deducoes: l.deducoes, resultado: l.resultado, saldo_anterior: l.saldo_anterior, saldo: l.saldo,
+          repasse: l.repasse, total: l.repasse, ...(l.projecao ? { projecao: l.projecao } : {}),
+        },
+      }))
+  }
   const out = []
   const aluguel = vencimentos(contrato, 'aluguel', { hoje })
   const totalAluguel = contrato.data_fim ? aluguel.length : null
@@ -200,8 +218,6 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
   const bonifMeses = Number(contrato.bonificacao_meses) || 0
   const projecao = refProjecao(contrato, indices)
   const rot = rotulosContrato(contrato)
-  const repasse = ehModoRepasse(contrato)
-  const inicioYm = ymDe(contrato.data_inicio)
 
   const mantida = (papel, ym, comp) => {
     const v = valoresMantidos?.[papel]?.[ym]
@@ -211,25 +227,10 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
 
   for (const v of aluguel) {
     if (apartirDe && v.competencia < apartirDe) continue
-    const ciclo = cicloDaCompetencia(contrato, v.competencia)
-    const { base, status } = bases[ciclo]
-    const itens = [{ tipo: 'base', desc: rot.itemBase, valor: base }]
-    // Modo repasse: 1º mês proporcional (valor / 30 × dias) ou o valor informado no contrato.
-    const pm = repasse && v.competencia === inicioYm ? primeiroMes(contrato, base) : null
-    if (pm) {
-      itens[0] = {
-        tipo: 'base', valor: pm.valor, proporcional: true,
-        desc: pm.informado ? `${rot.itemBase} — 1º mês (informado)` : `${rot.itemBase} — proporcional ${pm.dias} dias`,
-      }
-    }
-    // Desconto nas `bonifMeses` primeiras parcelas COBRADAS (o número não conta mês sem cobrança).
-    if (bonifValor > 0 && v.numero <= bonifMeses) itens.push({ tipo: 'bonificacao', desc: rot.desconto, valor: -bonifValor })
-    // Encargos e descontos do contrato ativos nesta parcela ("Seguro 3/36 +49,06"); sem reajuste.
-    itens.push(...itensEncargos(contrato, v.numero))
+    const { ciclo, base, status, itens } = itensDoAluguel(contrato, v, { bases, bonifValor, bonifMeses, rot })
     const composicao = mantida('aluguel', v.competencia, {
       ciclo, base, itens, total: somaItens(itens), numero: v.numero, total_parcelas: totalAluguel,
       ...(status === 'projetado' ? { projecao } : {}),
-      ...(repasse ? { competencia: v.competencia, bruto: true } : {}),
     })
     out.push({
       id: idParcela(contrato.id, 'aluguel', v.competencia), papel: 'aluguel', numero: v.numero, total: totalAluguel,
@@ -238,8 +239,7 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
     })
   }
 
-  // No modo repasse o condomínio não é boleto do proprietário (entra como dedução da composição).
-  if (contrato.tem_condominio && !repasse) {
+  if (contrato.tem_condominio) {
     const cond = vencimentos(contrato, 'condominio', { hoje })
     const totalCond = contrato.data_fim ? cond.length : null
     const valor = r2(valorCondominio ?? contrato.valor_condominio_previsto)
@@ -257,6 +257,63 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
   }
   return out
 }
+
+// Itens do aluguel de uma competência (v de vencimentos): base do ciclo (reajuste), 1º mês proporcional
+// no modo repasse, bonificação nas primeiras e encargos/descontos do contrato.
+function itensDoAluguel(contrato, v, { bases, bonifValor, bonifMeses, rot }) {
+  const ciclo = cicloDaCompetencia(contrato, v.competencia)
+  const { base, status } = bases[ciclo]
+  const itens = [{ tipo: 'base', desc: rot.itemBase, valor: base }]
+  // Modo repasse: 1º mês proporcional (valor / 30 × dias) ou o valor informado no contrato.
+  const pm = ehModoRepasse(contrato) && v.competencia === ymDe(contrato.data_inicio) ? primeiroMes(contrato, base) : null
+  if (pm) {
+    itens[0] = {
+      tipo: 'base', valor: pm.valor, proporcional: true,
+      desc: pm.informado ? `${rot.itemBase} — 1º mês (informado)` : `${rot.itemBase} — proporcional ${pm.dias} dias`,
+    }
+  }
+  // Desconto nas `bonifMeses` primeiras parcelas COBRADAS (o número não conta mês sem cobrança).
+  if (bonifValor > 0 && v.numero <= bonifMeses) itens.push({ tipo: 'bonificacao', desc: rot.desconto, valor: -bonifValor })
+  // Encargos e descontos do contrato ativos nesta parcela ("Seguro 3/36 +49,06"); sem reajuste.
+  itens.push(...itensEncargos(contrato, v.numero))
+  return { ciclo, base, status, itens }
+}
+
+// MODO REPASSE: todas as competências do contrato (da 1ª à última do horizonte) com a composição e o
+// saldo com a administradora. Cada linha: { competencia, numero, total, vencimento (repasse),
+// vencimentoInquilino, semCobranca, itens, bruto, deducoes, resultado, foraDoSaldo, saldo_anterior,
+// saldo, repasse, transportado, repasseReal, valorStatus, projecao, linha (contrato_competencias) }.
+// A composição vem de contrato.competencias (linhas da tabela, fonte da verdade) + regras do contrato.
+export function competenciasDoRepasse(contrato, { hoje, indices, confirmados = {}, repassesReais = {} } = {}) {
+  const lista = vencimentos(contrato, 'aluguel', { hoje, comPulados: true })
+  const cobradas = lista.filter(v => !v.semCobranca)
+  const total = contrato.data_fim ? cobradas.length : null
+  const ultimoCiclo = lista.length ? cicloDaCompetencia(contrato, lista.at(-1).competencia) : 0
+  const bases = basesPorCiclo(contrato, ultimoCiclo, { indices, confirmados })
+  const ctx = { bases, bonifValor: r2(contrato.bonificacao_valor), bonifMeses: Number(contrato.bonificacao_meses) || 0, rot: rotulosContrato(contrato) }
+  const projecao = refProjecao(contrato, indices)
+  const linhas = new Map((contrato.competencias || []).map(c => [c.competencia, c]))
+  const base = lista.map(v => {
+    const linha = linhas.get(v.competencia) || null
+    let aluguel = null
+    let status = 'confirmado'
+    if (!v.semCobranca) {
+      const a = itensDoAluguel(contrato, v, ctx)
+      status = a.status
+      aluguel = { valor: somaItens(a.itens), desc: a.itens.length === 1 ? a.itens[0].desc : `Aluguel (${a.itens.map(i => i.desc).join(', ')})` }
+    }
+    const itens = comporCompetencia(contrato, v.competencia, aluguel, linha)
+    return {
+      competencia: v.competencia, numero: v.numero, total, vencimento: v.vencimento, vencimentoInquilino: v.vencimentoInquilino,
+      semCobranca: !!v.semCobranca, itens, ...resumoComposicao(itens), linha,
+      repasseReal: repassesReais?.[v.competencia] ?? null,
+      valorStatus: status, ...(status === 'projetado' ? { projecao } : {}),
+    }
+  })
+  return calcularSaldos(contrato, base)
+}
+
+export { repassesRegistrados }
 
 // Parcela do plano → agendamento do app (camelCase, como em src/lib/db.js rowToSchedule).
 export function agendamentoDaParcela(contrato, p) {
@@ -556,11 +613,14 @@ export function planoConfirmacaoReajuste(contrato, schedules, parcelaId, novoBas
 // Manutenção ao abrir o app (contrato ativo): descrição das pendentes conforme o contrato e, com
 // o índice conhecido, reprojeção das parcelas ainda PROJETADAS (inclusive as calculadas sem
 // índice). Nunca toca paga, confirmada ou de valor manual. → [{ id, antes, changes }]
-export function planoManutencao(contrato, schedules, { hoje, indices } = {}) {
+export function planoManutencao(contrato, schedules, { hoje, indices, transactions = [] } = {}) {
   const inicio = inicioDasParcelas(contrato, schedules)
   if (!inicio) return []
   const conhecido = refProjecao(contrato, indices)?.taxa_pct != null
-  const plano = gerarPlanoParcelas(contrato, { hoje, indices, confirmados: confirmadosDe(contrato, schedules), apartirDe: inicio })
+  const plano = gerarPlanoParcelas(contrato, {
+    hoje, indices, confirmados: confirmadosDe(contrato, schedules), apartirDe: inicio,
+    repassesReais: ehModoRepasse(contrato) ? repassesRegistrados(contrato, schedules, transactions) : {},
+  })
   const { atualizar } = planejarSincronizacao(contrato, schedules, plano, {
     excluidas: contrato.excluidas || [], cobertas: cobertasDoContrato(contrato, schedules), apartirDe: inicio,
   })

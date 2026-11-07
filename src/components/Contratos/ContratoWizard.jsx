@@ -13,6 +13,9 @@ import { gerarPlanoParcelas, proximoReajuste, r2, rotuloContrato, textoProjecao,
 import { primeiroMes, dataRepasse } from '../../lib/contratos/repasse'
 import { ehBemParametrizado } from '../../lib/patrimonio'
 import { faltaRecurso } from '../../lib/recursosBanco'
+import TaxasRepasse from './TaxasRepasse'
+import { taxaParaForm, formParaTaxa, erroTaxa, taxaParaItem, chaveTaxas } from '../../lib/contratos/taxasRepasseForm'
+import { taxaDoItem, BASES_TAXA_ADM } from '../../lib/contratos/composicaoRepasse'
 import { validarEtapa, sugerirCategoria } from '../../lib/contratos/validacao'
 import { candidatosVinculo } from '../../lib/contratos/vinculo'
 import { MODALIDADES, ehAluguel, rotuloPapel, rotulosContrato } from '../../lib/contratos/rotulos'
@@ -44,9 +47,9 @@ const MAX_LINHAS_PREVIA = 36
 const FINANCEIROS = ['valor_base', 'periodicidade', 'dia_vencimento', 'bonificacao_valor', 'bonificacao_meses', 'indice_reajuste',
   'percentual_fixo', 'mes_base_reajuste', 'data_inicio', 'data_fim', 'tem_condominio', 'valor_condominio_previsto', 'dia_vencimento_condominio',
   'meses_sem_cobranca', 'credito_abatimento', 'modalidade', 'encargos', 'modo_repasse', 'dia_repasse', 'repasse_meses_depois',
-  'valor_primeiro_mes', 'favorecido']
+  'valor_primeiro_mes', 'favorecido', 'taxa_adm_pct', 'taxa_adm_base', 'itens_repasse']
 // Valor "de antes" dos campos novos em contrato gravado antes da migração (a coluna ainda não veio).
-const ANTES_PADRAO = { meses_sem_cobranca: [], credito_abatimento: 'proximo_pendente', encargos: [], modo_repasse: false, repasse_meses_depois: 1 }
+const ANTES_PADRAO = { meses_sem_cobranca: [], credito_abatimento: 'proximo_pendente', encargos: [], modo_repasse: false, repasse_meses_depois: 1, taxa_adm_base: 'bruto', itens_repasse: [] }
 // Encargos comparáveis (o aditivo só os vê como mudança se algo deles mudou de verdade).
 const chaveEncargos = (l) => JSON.stringify((l || []).map(encargoDoItem).map(e => [e.descricao, e.sinal, e.valor, e.parcelas_total, e.parcela_inicio, e.ativo])
   .sort((a, b) => `${a[0]}|${a[4]}`.localeCompare(`${b[0]}|${b[4]}`)))
@@ -71,6 +74,9 @@ function formDoContrato(c, padrao) {
     saldo_inicial_valor: c.saldo_inicial_adm ? valorBRFormatado(Math.abs(c.saldo_inicial_adm)) : '',
     saldo_inicial_sinal: Number(c.saldo_inicial_adm) < 0 ? 'devedor' : 'credor',
     saldo_inicial_competencia: c.saldo_inicial_competencia || '',
+    taxa_adm_pct: c.taxa_adm_pct == null ? '' : String(c.taxa_adm_pct).replace('.', ','),
+    taxa_adm_base: c.taxa_adm_base || 'bruto',
+    categoria_taxa_adm_id: c.categoria_taxa_adm_id || '',
   }
 }
 
@@ -108,6 +114,9 @@ function paraContrato(f) {
     valor_primeiro_mes: repasse && txt(f.valor_primeiro_mes).trim() ? num(f.valor_primeiro_mes) : null,
     saldo_inicial_adm: saldo > 0 ? r2(f.saldo_inicial_sinal === 'devedor' ? -saldo : saldo) : null,
     saldo_inicial_competencia: saldo > 0 ? f.saldo_inicial_competencia || null : null,
+    taxa_adm_pct: repasse && num(f.taxa_adm_pct) > 0 ? num(f.taxa_adm_pct) : null,
+    taxa_adm_base: repasse ? f.taxa_adm_base || 'bruto' : 'bruto',
+    categoria_taxa_adm_id: repasse ? f.categoria_taxa_adm_id || null : null,
   }
 }
 
@@ -172,6 +181,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
     observacao: '', status: 'ativo', meses_sem_cobranca: [], credito_abatimento: 'mes_seguinte',
     modo_repasse: false, contraparte_nome: '', contraparte_documento: '', bem_id: '', dia_repasse: '', repasse_meses_depois: '1',
     valor_primeiro_mes: '', saldo_inicial_valor: '', saldo_inicial_sinal: 'credor', saldo_inicial_competencia: '',
+    taxa_adm_pct: '', taxa_adm_base: 'bruto', categoria_taxa_adm_id: '',
   }))
   const aluguel = f.modalidade === 'aluguel'
   const repasse = repasseDoForm(f)
@@ -202,6 +212,8 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   const [itens, setItens] = useState([])
   // Encargos e descontos na parcela (contrato_itens com na_parcela).
   const [encargosForm, setEncargosForm] = useState(() => (contrato?.encargos || []).map(encargoParaForm))
+  // Tarifas e taxa única da administradora (contrato_itens com tipo_repasse).
+  const [taxasForm, setTaxasForm] = useState(() => (contrato?.itens_repasse || []).map(taxaParaForm))
   const [etapa, setEtapa] = useState(0)
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -222,8 +234,9 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
     if (!edicao) return
     buscarContratoApi(contrato.id).then(r => {
       const todos = r.itens || []
-      setItens(todos.filter(i => !i.na_parcela).map(i => ({ ...i, valor_previsto: valorBRFormatado(i.valor_previsto ?? '') })))
+      setItens(todos.filter(i => !i.na_parcela && !i.tipo_repasse).map(i => ({ ...i, valor_previsto: valorBRFormatado(i.valor_previsto ?? '') })))
       if (todos.some(i => i.na_parcela)) setEncargosForm(todos.filter(i => i.na_parcela).map(encargoDoItem).map(encargoParaForm))
+      if (todos.some(i => i.tipo_repasse)) setTaxasForm(todos.filter(i => i.tipo_repasse).map(taxaDoItem).map(taxaParaForm))
     }).catch(() => {})
   }, [edicao, contrato?.id])
 
@@ -242,7 +255,11 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
     return nums.length ? Math.min(...nums) : 1
   }, [edicao, schedules, contrato])
   const encargosDados = useMemo(() => encargosForm.map(l => formParaEncargo(l, numeroProxima)).filter(Boolean), [encargosForm, numeroProxima])
-  const dados = useMemo(() => ({ ...paraContrato(f), encargos: encargosDados }), [f, encargosDados])
+  const taxasDados = useMemo(() => (repasse ? taxasForm.map(formParaTaxa).filter(Boolean) : []), [repasse, taxasForm])
+  // competencias: a composição gravada de cada mês entra na Prévia (o valor do repasse depende dela).
+  const dados = useMemo(() => ({
+    ...paraContrato(f), encargos: encargosDados, itens_repasse: taxasDados, competencias: contrato?.competencias || [],
+  }), [f, encargosDados, taxasDados, contrato?.competencias])
   const indice = indicesContratos[f.indice_reajuste]
   const tipoCat = f.tipo === 'receber' ? 'income' : 'expense'
 
@@ -276,6 +293,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       valor_previsto: num(i.valor_previsto), categoria_id: i.categoria_id || null, ativo: i.ativo !== false,
     })),
     ...encargosDados.map(encargoParaItem),
+    ...taxasDados.map(taxaParaItem),
   ]
 
   const confirmar = async () => {
@@ -287,6 +305,8 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       setEtapa(1)
       return setErro('Encargos e descontos na parcela: preencha descrição, valor, número de parcelas e o início (ou remova a linha).')
     }
+    const erroTaxas = repasse ? taxasForm.filter(l => formParaTaxa(l)).map(erroTaxa).find(Boolean) : ''
+    if (erroTaxas) { setEtapa(1); return setErro(erroTaxas) }
     setSalvando(true)
     setErro('')
     try {
@@ -301,7 +321,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       const mudou = {}
       for (const [k, v] of Object.entries(dados)) {
         const antes = contrato[k] ?? ANTES_PADRAO[k] ?? null
-        if (k === 'encargos' ? chaveEncargos(antes) !== chaveEncargos(v) : JSON.stringify(antes) !== JSON.stringify(v)) mudou[k] = { de: antes, para: v }
+        if (k === 'competencias') continue
+        const diferente = k === 'encargos' ? chaveEncargos(antes) !== chaveEncargos(v)
+          : k === 'itens_repasse' ? chaveTaxas(antes) !== chaveTaxas(v) : JSON.stringify(antes) !== JSON.stringify(v)
+        if (diferente) mudou[k] = { de: antes, para: v }
       }
       const financeiro = Object.keys(mudou).some(k => FINANCEIROS.includes(k))
       const evento = financeiro ? {
@@ -312,7 +335,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       const salvo0 = await atualizarContrato(contrato.id, campos, evento)
       const rows = await salvarItensContrato(contrato.id, itensPayload())
       // O plano usa os encargos gravados agora (a lista substitui a anterior).
-      const salvo = { ...salvo0, encargos: (rows || []).filter(i => i.na_parcela).map(encargoDoItem) }
+      const salvo = {
+        ...salvo0, encargos: (rows || []).filter(i => i.na_parcela).map(encargoDoItem),
+        itens_repasse: (rows || []).filter(i => i.tipo_repasse).map(taxaDoItem),
+      }
       const plano = await planejarParcelasContrato(salvo)
       await aplicarParcelasContrato(plano, { motivo: `Contrato ${rotuloContrato(salvo)}: ${financeiro ? 'aditivo' : 'edição'}` })
       onSalvo?.(salvo)
@@ -475,7 +501,8 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </select>
           </Campo>
           <div />
-          {repasse && <CamposRepasse f={f} set={set} />}
+          {repasse && <CamposRepasse f={f} set={set} categories={categories} />}
+          {repasse && <TaxasRepasse linhas={taxasForm} onChange={(v) => { setErro(''); setTaxasForm(v) }} categories={categories} perfilId={f.perfil_id} inicio={ymDe(f.data_inicio)} />}
           <Campo label={`${rot.desconto} por mês (desconto)`} help="contrato.desconto">
             <CampoValor value={f.bonificacao_valor} onChange={v => set('bonificacao_valor', v)} placeholder="Desconto em cada parcela (opcional)" />
           </Campo>
@@ -635,7 +662,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           {(f.meses_sem_cobranca || []).length > 0 && (
             <p className="text-xs text-texto-2">Sem cobrança: {f.meses_sem_cobranca.map(fmtYm).join(', ')}.</p>
           )}
-          {repasse && planoNovo.some(p => p.composicao?.bruto) && (
+          {repasse && planoNovo.some(p => p.composicao?.bruto === true) && (
             <p className="text-xs text-aviso">Valor bruto — as deduções da administradora entram na composição de cada mês.</p>
           )}
           <PreviaTabela linhas={planoNovo} contrato={dados} />
@@ -682,7 +709,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
 // Campos do modo repasse na etapa Valores: dia e regra do repasse, 1º mês proporcional e saldo inicial
 // com a administradora.
-function CamposRepasse({ f, set }) {
+function CamposRepasse({ f, set, categories }) {
   const valor = num(f.valor_base) || 0
   const pm = f.data_inicio ? primeiroMes({ data_inicio: f.data_inicio, valor_base: valor }) : null
   const comp = ymDe(f.data_inicio)
@@ -699,6 +726,19 @@ function CamposRepasse({ f, set }) {
           {Object.entries(REPASSE_MESES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         {exemplo && <p className="text-[11px] text-texto-3 mt-1">Ex.: aluguel de {fmtYm(comp)} → repasse em {fmtDate(exemplo)}.</p>}
+      </Campo>
+      <Campo label="Taxa de administração (%)">
+        <input autoComplete="off" className="input" inputMode="decimal" data-guia="contrato-form.taxa-adm" value={f.taxa_adm_pct}
+          onChange={e => set('taxa_adm_pct', e.target.value)} placeholder="Ex.: 10" />
+      </Campo>
+      <Campo label="Taxa calculada sobre">
+        <select className="input" value={f.taxa_adm_base} onChange={e => set('taxa_adm_base', e.target.value)}>
+          {Object.entries(BASES_TAXA_ADM).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <p className="text-[11px] text-texto-3 mt-1">O valor de cada mês pode ser corrigido na composição (fica o calculado e o informado).</p>
+      </Campo>
+      <Campo label="Categoria da taxa de administração" className="sm:col-span-2">
+        <CategorySelect categories={categories} value={f.categoria_taxa_adm_id} onChange={e => set('categoria_taxa_adm_id', e.target.value)} type="expense" perfilId={f.perfil_id || null} searchable />
       </Campo>
       <Campo label="Aluguel do 1º mês" className="sm:col-span-2">
         <CampoValor value={f.valor_primeiro_mes} onChange={v => set('valor_primeiro_mes', v)} placeholder={pm ? valorBRFormatado(pm.calculado) : 'Mês cheio'} />
@@ -726,7 +766,7 @@ function CamposRepasse({ f, set }) {
 }
 
 function Composicao({ c }) {
-  return [...(c?.itens || []).map(i => `${i.desc} ${fmt(i.valor)}`), c?.projecao ? textoProjecao(c.projecao) : ''].filter(Boolean).join(' · ')
+  return [...(c?.itens || []).map(i => `${i.desc ?? i.descricao} ${fmt(i.valor)}`), c?.projecao ? textoProjecao(c.projecao) : ''].filter(Boolean).join(' · ')
 }
 
 function PreviaTabela({ linhas, contrato }) {
@@ -750,7 +790,7 @@ function PreviaTabela({ linhas, contrato }) {
               <td className="px-2 py-1.5 text-texto-3"><Composicao c={p.composicao} /></td>
               <td className="px-2 py-1.5 text-right whitespace-nowrap">
                 <span className="text-texto-1 font-medium">{fmt(p.valor)}</span>
-                {p.composicao?.bruto && <span className="ml-1.5 text-[10px] text-aviso outline-dashed outline-1 outline-borda-forte rounded px-1">Valor bruto</span>}
+                {p.composicao?.bruto === true && <span className="ml-1.5 text-[10px] text-aviso outline-dashed outline-1 outline-borda-forte rounded px-1">Valor bruto</span>}
                 {p.valorStatus === 'projetado' && <span className="ml-1.5 text-[10px] text-aviso outline-dashed outline-1 outline-borda-forte rounded px-1">Projetado</span>}
               </td>
             </tr>

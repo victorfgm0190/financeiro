@@ -34,6 +34,7 @@ const { default: itens } = await import('./contrato-itens.js')
 const { default: eventos } = await import('./contrato-eventos.js')
 const { default: regras } = await import('./contrato-regras.js')
 const { default: creditos } = await import('./contrato-creditos.js')
+const { default: competencias } = await import('./contrato-competencias.js')
 
 const MIGRACAO = readFileSync(new URL('../supabase/migrations/2026-10-20b_contratos.sql', import.meta.url), 'utf-8')
 const MIGRACAO_E2 = readFileSync(new URL('../supabase/migrations/2026-10-21_contratos_creditos.sql', import.meta.url), 'utf-8')
@@ -347,5 +348,80 @@ describe('migração 2026-11-07b: contrato a receber por administradora (modo re
     expect(normalizarContrato({ ...REPASSE, dia_repasse: null }).erro).toMatch(/dia_repasse/)
     expect(normalizarContrato({ ...REPASSE, saldo_inicial_competencia: null }).erro).toMatch(/saldo_inicial_competencia/)
     expect(normalizarContrato({ ...CONTRATO }).dados).toMatchObject({ modo_repasse: false, repasse_meses_depois: 1, bem_id: null })
+  })
+})
+
+describe('migração 2026-11-07c: composição do repasse e taxas da administradora', () => {
+  const MIG_B = readFileSync(new URL('../supabase/migrations/2026-11-07b_contratos_repasse.sql', import.meta.url), 'utf-8')
+  const MIG_C = readFileSync(new URL('../supabase/migrations/2026-11-07c_contratos_composicao_repasse.sql', import.meta.url), 'utf-8')
+  // Dados fictícios.
+  const REPASSE = {
+    ...CONTRATO, tipo: 'receber', favorecido: 'Administradora Exemplo', bonificacao_valor: 0, bonificacao_meses: 0,
+    modo_repasse: true, dia_repasse: 10, taxa_adm_pct: 10, taxa_adm_base: 'bruto', categoria_taxa_adm_id: 'cat-adm',
+  }
+  const TAXA_UNICA = { descricao: 'Intermediação', tipo_repasse: 'taxa_unica', valor_previsto: 2200, valores_parcelas: [470, 865, 865], vigencia_inicio: '2026-02' }
+  const TARIFA = { descricao: 'Tarifa bancária', tipo_repasse: 'tarifa_fixa', valor_previsto: 3, vigencia_inicio: '2026-06' }
+  const COMP = {
+    competencia: '2026-02', status: 'aberta', itens: [
+      { chave: 'adm', tipo: 'taxa_adm', origem: 'auto', informado: true, valor: -11.67, valor_calculado: -58.67, dedutivel_ir: true },
+      { chave: 'm:1', tipo: 'despesa', natureza: 'consumo', descricao: 'Água', valor: -96.73, origem: 'manual' },
+      { chave: 'm:2', tipo: 'benfeitoria', descricao: 'Reparo', valor: -4799.49, origem: 'manual', somar_ao_bem: true },
+    ],
+  }
+
+  it('sem a 07c: taxa da administradora e composição → 409; lista sem os campos novos', async () => {
+    await estado.db.exec(MIG_B)
+    const { body } = await chamar(contratos, 'POST', { body: { contrato: { ...REPASSE, taxa_adm_pct: null, categoria_taxa_adm_id: null } } })
+    const id = body.contrato.id
+    expect((await chamar(contratos, 'PUT', { body: { id, contrato: { taxa_adm_pct: 10 } } })).statusCode).toBe(409)
+    expect((await chamar(itens, 'PUT', { url: '/api/contrato-itens', body: { contrato_id: id, itens: [TARIFA] } })).statusCode).toBe(409)
+    expect((await chamar(competencias, 'PUT', { url: '/api/contrato-competencias', body: { contrato_id: id, ...COMP } })).statusCode).toBe(409)
+    expect((await chamar(competencias, 'GET', { url: `/api/contrato-competencias?contrato_id=${id}` })).body.competencias).toEqual([])
+    const lista = (await chamar(contratos, 'GET')).body.contratos[0]
+    expect(lista.itens_repasse).toBeUndefined()
+    expect(lista.competencias).toBeUndefined()
+  })
+
+  it('com a 07c (idempotente): taxas e competências gravam e vêm junto com o contrato', async () => {
+    await estado.db.exec(MIG_B)
+    await estado.db.exec(MIG_C)
+    await estado.db.exec(MIG_C)
+    const r = await chamar(contratos, 'POST', { body: { contrato: REPASSE, itens: [TAXA_UNICA, TARIFA] } })
+    expect(r.statusCode).toBe(200)
+    expect(r.body.contrato).toMatchObject({ taxa_adm_pct: 10, taxa_adm_base: 'bruto', categoria_taxa_adm_id: 'cat-adm' })
+    const id = r.body.contrato.id
+    const ok = await chamar(competencias, 'PUT', { url: '/api/contrato-competencias', body: { contrato_id: id, ...COMP } })
+    expect(ok.statusCode).toBe(200)
+    expect(ok.body.competencia.itens[2]).toMatchObject({ tipo: 'benfeitoria', somar_ao_bem: true, valor: -4799.49 })
+    // Gravar de novo a mesma competência substitui (uma linha por competência).
+    await chamar(competencias, 'PUT', { url: '/api/contrato-competencias', body: { contrato_id: id, ...COMP, status: 'fechada' } })
+    const c = (await chamar(contratos, 'GET')).body.contratos.find(x => x.id === id)
+    expect(c.competencias).toHaveLength(1)
+    expect(c.competencias[0]).toMatchObject({ competencia: '2026-02', status: 'fechada' })
+    expect(c.itens_repasse.map(t => [t.tipo_repasse, t.valor, t.valores_parcelas, t.vigencia_inicio])).toEqual([
+      ['taxa_unica', 2200, [470, 865, 865], '2026-02'], ['tarifa_fixa', 3, null, '2026-06'],
+    ])
+    // Voltar ao padrão do contrato.
+    await chamar(competencias, 'DELETE', { url: `/api/contrato-competencias?contrato_id=${id}&competencia=2026-02` })
+    expect((await chamar(contratos, 'GET')).body.contratos.find(x => x.id === id).competencias).toEqual([])
+  })
+
+  it('validação: competência, tipos, taxa sem início ou sem parcelas; composição só no modo repasse', async () => {
+    await estado.db.exec(MIG_B)
+    await estado.db.exec(MIG_C)
+    const id = (await chamar(contratos, 'POST', { body: { contrato: REPASSE } })).body.contrato.id
+    const put = (b) => chamar(competencias, 'PUT', { url: '/api/contrato-competencias', body: { contrato_id: id, ...b } })
+    expect((await put({ ...COMP, competencia: '2026-13' })).statusCode).toBe(400)
+    expect((await put({ ...COMP, itens: [{ tipo: 'qualquer', valor: 1 }] })).statusCode).toBe(400)
+    expect((await put({ ...COMP, itens: [{ tipo: 'aluguel', valor: 1, origem: 'manual' }] })).statusCode).toBe(400)
+    const salvarItens = (its) => chamar(itens, 'PUT', { url: '/api/contrato-itens', body: { contrato_id: id, itens: its } })
+    expect((await salvarItens([{ ...TARIFA, vigencia_inicio: null }])).statusCode).toBe(400)
+    expect((await salvarItens([{ ...TAXA_UNICA, valores_parcelas: [] }])).statusCode).toBe(400)
+    expect((await salvarItens([{ ...TARIFA, vigencia_fim: '2026-01' }])).statusCode).toBe(400)
+    // Soma das parcelas ≠ total: grava (o aviso é na tela).
+    expect((await salvarItens([{ ...TAXA_UNICA, valores_parcelas: [470, 865] }])).statusCode).toBe(200)
+    const pagar = (await chamar(contratos, 'POST', { body: { contrato: CONTRATO } })).body.contrato.id
+    expect((await chamar(competencias, 'PUT', { url: '/api/contrato-competencias', body: { contrato_id: pagar, ...COMP } })).statusCode).toBe(400)
+    expect(regraDaRota('/api/contrato-competencias', 'PUT')).toEqual({ modulo: 'contratos', acao: 'editar' })
   })
 })

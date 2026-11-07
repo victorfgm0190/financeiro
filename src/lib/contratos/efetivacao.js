@@ -22,6 +22,11 @@ export function planejarPosEfetivacao({ contrato, parcela, tx, auto = false }) {
   if (papel !== 'aluguel') return { ...nada, lancamento: { contratoId: contrato.id } }
 
   const c = parcela.composicao || { itens: [], total: r2(parcela.amount) }
+  // Repasse de administradora: o lançamento é UMA linha (o líquido que caiu no banco) com a cópia da
+  // composição para exibir; a composição de verdade fica na contrato_competencias.
+  if (c.tipo === 'repasse') {
+    return { ...nada, lancamento: { contratoId: contrato.id, composicao: { ...c, total: pago, repasse_real: pago } } }
+  }
   const itens = [...(c.itens || [])]
   const previsto = r2(c.total ?? parcela.amount)
   if (Math.abs(pago - previsto) > 0.005) itens.push({ tipo: 'ajuste', desc: 'Diferença no pagamento', valor: r2(pago - previsto) })

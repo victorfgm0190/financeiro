@@ -5,6 +5,9 @@ import { fmt, fmtDate } from '../shared/utils'
 import { ehParcelaGerada } from '../../lib/contratos/parcelas'
 import { temComposicaoInformada } from '../../lib/contratos/composicaoAberta'
 import ComposicaoBoletoModal from './ComposicaoBoletoModal'
+import ComposicaoRepasseModal from './ComposicaoRepasseModal'
+import { ehModoRepasse } from '../../lib/contratos/repasse'
+import { competenciaDaParcela } from '../../lib/contratos/parcelas'
 
 // "Composição do boleto" de UMA parcela de condomínio, pedida de qualquer lugar (ficha do contrato,
 // Agendamentos no desktop e no celular, Assistente) por abrirComposicaoParcela(parcelaId, { txId,
@@ -30,6 +33,11 @@ export default function ComposicaoParcelaHost() {
         <p className="text-sm text-texto-2">Parcela ou pagamento não encontrado (talvez ainda carregando).</p>
       </Modal>
     )
+  }
+
+  // Contrato a receber por administradora: a composição é a do repasse da competência (a mesma da ficha).
+  if (ehModoRepasse(contrato)) {
+    return <ComposicaoRepasseModal key={pedido.parcelaId} contrato={contrato} competencia={competenciaDaParcela(parcela)} onClose={fechar} />
   }
 
   // Resposta { ok: false, conflito } → a tela pergunta; a decisão refaz a mesma gravação.

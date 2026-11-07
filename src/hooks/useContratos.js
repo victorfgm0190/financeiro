@@ -5,11 +5,14 @@ import {
   registrarEventoContratoApi, buscarIndiceApi, buscarContratoApi,
   listarRegrasApi, criarRegraApi, atualizarRegraApi, excluirRegraApi,
   listarCreditosApi, criarCreditoApi, atualizarCreditoApi, excluirCreditoApi,
+  salvarCompetenciaApi, excluirCompetenciaApi,
 } from '../lib/contratosApi'
+import { taxaDoItem } from '../lib/contratos/composicaoRepasse'
+import { ehModoRepasse } from '../lib/contratos/repasse'
 import {
   gerarPlanoParcelas, planejarSincronizacao, confirmadosDe, cobertasDoContrato, inicioDasParcelas,
   ehParcelaGerada, parcelaPaga, planoConfirmacaoReajuste, proximoReajuste, r2, rotuloContrato,
-  planoManutencao, idParcela, parcelaDeVinculo, ehParcelaDeVinculo,
+  planoManutencao, idParcela, parcelaDeVinculo, ehParcelaDeVinculo, repassesRegistrados,
 } from '../lib/contratos/parcelas'
 import { planoVinculo, planoDesvinculo } from '../lib/contratos/vinculo'
 import { mapaVinculos } from '../lib/vinculo'
@@ -22,7 +25,7 @@ import {
 } from '../lib/contratos/composicaoAberta'
 import { planejarPosEfetivacao, planejarReversao, planejarJustificativa } from '../lib/contratos/efetivacao'
 import { ultimoCondominioPago, planoPrevisaoCondominio, valorPrevistoCondominio } from '../lib/contratos/condominio'
-import { hojeStr, ymDe } from '../lib/contratos/datas'
+import { hojeStr, ymDe, fmtYm } from '../lib/contratos/datas'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { ESCOPO } from '../lib/camposSerie'
 import { gravarVinculoNaLinha, vinculoRepetido } from '../lib/contratos/gravarVinculo'
@@ -188,6 +191,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     const plano = gerarPlanoParcelas(contrato, {
       hoje, indices: idx, confirmados: confirmadosDe(contrato, lista), apartirDe: inicio, valoresMantidos,
       valorCondominio: valorCondominioPago(contrato, lista, dataRef.current.transactions),
+      repassesReais: repassesRegistrados(contrato, lista, dataRef.current.transactions),
     })
     const sinc = planejarSincronizacao(contrato, lista, plano, {
       excluidas: contrato.excluidas || [], cobertas: cobertasDoContrato(contrato, lista), apartirDe: inicio,
@@ -234,8 +238,11 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     if (itens.some(i => i.na_parcela) && faltaRecurso(recursosRef.current, 'encargosContrato')) throw new Error(MSG_ENCARGOS)
     if (dadosContrato.modo_repasse && faltaRecurso(recursosRef.current, 'contratoRepasse')) throw new Error(MSG_REPASSE)
     const r = await criarContratoApi({ ...dadosContrato, proximo_reajuste: proximoReajuste(dadosContrato, hojeStr()) }, itens)
-    // Encargos/descontos na parcela vão junto no contrato (o plano das parcelas usa).
-    const c = { ...r.contrato, encargos: (r.itens || []).filter(i => i.na_parcela).map(encargoDoItem) }
+    // Encargos/descontos na parcela e taxas do repasse vão junto no contrato (o plano das parcelas usa).
+    const c = {
+      ...r.contrato, encargos: (r.itens || []).filter(i => i.na_parcela).map(encargoDoItem),
+      itens_repasse: (r.itens || []).filter(i => i.tipo_repasse).map(taxaDoItem), competencias: [],
+    }
     trocarNaLista(c)
     contratosRef.current = [c, ...contratosRef.current.filter(x => x.id !== c.id)]
     return c
@@ -259,10 +266,34 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     if (itens.some(i => i.na_parcela) && faltaRecurso(recursosRef.current, 'encargosContrato')) throw new Error(MSG_ENCARGOS)
     const rows = await salvarItensContratoApi(id, itens)
     const encargos = rows.filter(i => i.na_parcela).map(encargoDoItem)
-    trocarNaLista({ id, encargos })
-    contratosRef.current = contratosRef.current.map(c => (c.id === id ? { ...c, encargos } : c))
+    const itensRepasse = rows.filter(i => i.tipo_repasse).map(taxaDoItem)
+    trocarNaLista({ id, encargos, itens_repasse: itensRepasse })
+    contratosRef.current = contratosRef.current.map(c => (c.id === id ? { ...c, encargos, itens_repasse: itensRepasse } : c))
     return rows
   }, [])
+
+  // MODO REPASSE: grava a composição de UMA competência (contrato_competencias, fonte da verdade) e
+  // refaz os repasses pendentes — o saldo com a administradora muda desta competência em diante.
+  // A geração vai pelo menos até a competência editada (quem mexe num mês espera ver o repasse dele).
+  //   comp: { competencia, itens, status, observacao }; remover = volta ao padrão do contrato.
+  const salvarCompetenciaRepasse = useCallback(async (contratoId, comp, { remover = false } = {}) => {
+    if (faltaRecurso(recursosRef.current, 'contratoRepasse')) throw new Error(MSG_REPASSE)
+    const atual = contratosRef.current.find(c => c.id === contratoId)
+    if (!atual || !ehModoRepasse(atual)) throw new Error('Contrato a receber por administradora não encontrado.')
+    let row = null
+    if (remover) await excluirCompetenciaApi(contratoId, comp.competencia)
+    else row = await salvarCompetenciaApi(contratoId, comp)
+    const competencias = [...(atual.competencias || []).filter(x => x.competencia !== comp.competencia), ...(row ? [row] : [])]
+      .sort((a, b) => a.competencia.localeCompare(b.competencia))
+    const novo = { ...atual, competencias }
+    trocarNaLista({ id: contratoId, competencias })
+    contratosRef.current = contratosRef.current.map(c => (c.id === contratoId ? novo : c))
+    const inicio = inicioDasParcelas(novo, dataRef.current.schedules)
+    const apartirDe = !inicio || comp.competencia < inicio ? comp.competencia : inicio
+    const plano = await planejarParcelas(novo, { apartirDe })
+    await aplicarParcelas(plano, { motivo: `Contrato ${rotuloContrato(novo)}: composição do repasse ${fmtYm(comp.competencia)}` })
+    return row
+  }, [dataRef, planejarParcelas, aplicarParcelas])
 
   // Vínculo (D2) de séries existentes + geração das parcelas, num só update().
   //   selecoes: [{ schedule, papel }]; valoresMantidos: { papel: { 'AAAA-MM': valor } }.
@@ -997,11 +1028,12 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
         const lista = dataRef.current.schedules
         if (!inicioDasParcelas(c, lista)) continue
         const idx = await indicesPara(c)
-        atualizar.push(...planoManutencao(c, lista, { hoje: hojeStr(), indices: idx }))
+        const txs = dataRef.current.transactions
+        atualizar.push(...planoManutencao(c, lista, { hoje: hojeStr(), indices: idx, transactions: txs }))
         if (c.data_fim) continue
         const plano = gerarPlanoParcelas(c, {
           hoje: hojeStr(), indices: idx, confirmados: confirmadosDe(c, lista), apartirDe: inicioDasParcelas(c, lista),
-          valorCondominio: valorCondominioPago(c, lista, dataRef.current.transactions),
+          valorCondominio: valorCondominioPago(c, lista, txs), repassesReais: repassesRegistrados(c, lista, txs),
         })
         criar.push(...planejarSincronizacao(c, lista, plano, { excluidas: c.excluidas || [], cobertas: cobertasDoContrato(c, lista), soExtender: true }).criar)
       }
@@ -1048,6 +1080,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     contratosHabilitado: habilitado,
     contratos, contratosCarregados: carregados, indicesContratos: indices, contratoPorId,
     recarregarContratos, carregarIndice, criarContrato, atualizarContrato, excluirContrato, salvarItensContrato: salvarItens,
+    salvarCompetenciaRepasse,
     registrarEventoContrato: registrarEvento, planejarParcelasContrato: planejarParcelas, aplicarParcelasContrato: aplicarParcelas,
     vincularEGerarContrato: vincularEGerar, desvincularDoContrato: desvincular, confirmarReajusteContrato: confirmarReajuste,
     excluirParcelaContrato: excluirParcela, rescindirContrato: rescindir, estornarLancamentoContrato,

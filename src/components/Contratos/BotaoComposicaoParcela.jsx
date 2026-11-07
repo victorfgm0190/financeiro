@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import { ehParcelaGerada, parcelaPaga } from '../../lib/contratos/parcelas'
 import { temComposicaoInformada } from '../../lib/contratos/composicaoAberta'
+import { ehModoRepasse } from '../../lib/contratos/repasse'
 
 // "Informar composição" do boleto do condomínio direto em Agendamentos (desktop e celular): na
 // ocorrência PENDENTE de uma parcela de condomínio do contrato, ou na PAGA (txId do pagamento). Abre
@@ -14,6 +15,19 @@ export default function BotaoComposicaoParcela({ schedule, txId = null }) {
   const papel = schedule.contratoPapel || 'aluguel'
   const contrato = contratoPorId(schedule.contratoId)
   if (!contrato || (papel === 'condominio' && !contrato.tem_condominio)) return null
+  // Repasse de administradora: a composição da competência (pendente ou paga), sempre disponível.
+  if (ehModoRepasse(contrato) && papel === 'aluguel' && ehParcelaGerada(schedule, contrato.id)) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); abrirComposicaoParcela(schedule.id, txId ? { txId } : {}) }}
+        title="Ver ou editar a composição deste repasse (aluguel, taxas e deduções)"
+        className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded whitespace-nowrap font-medium transition-colors shrink-0 bg-primary/15 text-primary-fg hover:bg-primary/25"
+      >
+        <Receipt size={10} /> Composição
+      </button>
+    )
+  }
   // Aluguel: composição pelo recibo (pendente: valor = total do recibo; paga: lançamento intocado).
   const aluguel = papel === 'aluguel'
   const paga = !!txId

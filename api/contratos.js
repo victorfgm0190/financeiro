@@ -27,10 +27,22 @@ const SQL_CREDITOS = `COALESCE((SELECT sum(cr.valor) FROM contrato_creditos cr
 const SQL_ENCARGOS = `COALESCE((SELECT json_agg(json_build_object('id', i.id, 'descricao', i.descricao, 'sinal', i.sinal,
                'valor', i.valor_previsto, 'parcelas_total', i.parcelas_total, 'parcela_inicio', i.parcela_inicio, 'ativo', i.ativo)
                ORDER BY i.descricao) FROM contrato_itens i WHERE i.contrato_id = c.id AND i.na_parcela), '[]'::json) AS encargos`
+// Modo repasse (migração 2026-11-07c): taxas da administradora (tarifa fixa, taxa única) e a composição
+// de cada competência (contrato_competencias, fonte da verdade) vão junto com o contrato — o app calcula
+// o saldo com a administradora e o valor de cada repasse (lib/contratos/parcelas.js competenciasDoRepasse).
+const SQL_ITENS_REPASSE = `COALESCE((SELECT json_agg(json_build_object('id', i.id, 'tipo_repasse', i.tipo_repasse, 'descricao', i.descricao,
+               'valor', i.valor_previsto, 'valores_parcelas', i.valores_parcelas, 'vigencia_inicio', i.vigencia_inicio,
+               'vigencia_fim', i.vigencia_fim, 'categoria_id', i.categoria_id, 'dedutivel_ir', i.dedutivel_ir, 'ativo', i.ativo)
+               ORDER BY i.vigencia_inicio, i.descricao) FROM contrato_itens i WHERE i.contrato_id = c.id AND i.tipo_repasse IS NOT NULL), '[]'::json) AS itens_repasse`
+const SQL_COMPETENCIAS = `COALESCE((SELECT json_agg(json_build_object('id', k.id, 'competencia', k.competencia, 'itens', k.itens,
+               'status', k.status, 'observacao', k.observacao, 'repasse_lancamento_id', k.repasse_lancamento_id)
+               ORDER BY k.competencia) FROM contrato_competencias k WHERE k.contrato_id = c.id), '[]'::json) AS competencias`
 async function sqlLista() {
-  const [{ t, e } = {}] = await query(`SELECT to_regclass('contrato_creditos') IS NOT NULL AS t,
-    EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_itens' AND column_name = 'na_parcela') AS e`)
-  return `SELECT c.*, ${SQL_EXCLUIDAS}${t ? `, ${SQL_CREDITOS}` : ''}${e ? `, ${SQL_ENCARGOS}` : ''} FROM contratos c`
+  const [{ t, e, r, k } = {}] = await query(`SELECT to_regclass('contrato_creditos') IS NOT NULL AS t,
+    EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_itens' AND column_name = 'na_parcela') AS e,
+    EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_itens' AND column_name = 'tipo_repasse') AS r,
+    to_regclass('contrato_competencias') IS NOT NULL AS k`)
+  return `SELECT c.*, ${SQL_EXCLUIDAS}${t ? `, ${SQL_CREDITOS}` : ''}${e ? `, ${SQL_ENCARGOS}` : ''}${r ? `, ${SQL_ITENS_REPASSE}` : ''}${k ? `, ${SQL_COMPETENCIAS}` : ''} FROM contratos c`
 }
 
 // Conta do contrato: tem de ser conta (cartão fica de fora na 1ª versão) e, com perfis restritos,

@@ -23,7 +23,7 @@ export default function SeloContrato({ schedule = null, contratoId = null, comPr
   const abrir = (e) => { e.stopPropagation(); abrirFichaContrato(id) }
   const projetado = comProjetado && schedule?.valorStatus === 'projetado' && !parcelaPaga(schedule)
   // Repasse sem deduções calculadas: o valor ainda é o aluguel bruto.
-  const bruto = comProjetado && !!schedule?.composicao?.bruto && !parcelaPaga(schedule)
+  const bruto = comProjetado && schedule?.composicao?.bruto === true && !parcelaPaga(schedule)
   return (
     <>
       <button
