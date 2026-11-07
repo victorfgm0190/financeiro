@@ -40,10 +40,11 @@ export function resumoTaxa(l) {
   const ini = mesAno(l.vigencia_inicio)
   const partes = [nome]
   if (l.tipo_repasse === 'taxa_unica') {
-    const v = parcelasDoTexto(l.parcelas)
+    const v = semParcelas(l) ? null : parcelasDoTexto(l.parcelas)
     let t = valor > 0 ? reais(valor) : 'total não informado'
-    if (v?.length) t += ` em ${v.length} ${v.length === 1 ? 'parcela' : 'parcelas'} (${v.map(valorBRFormatado).join(' + ')})`
-    if (ini) t += ` a partir de ${ini}`
+    // Vazio (ou uma parcela só): "R$ 2.200,00 em 1 parcela em 02/2026".
+    if (!v || v.length === 1) t += ` em 1 parcela${ini ? ` em ${ini}` : ''}`
+    else t += ` em ${v.length} parcelas (${v.map(valorBRFormatado).join(' + ')})${ini ? ` a partir de ${ini}` : ''}`
     partes.push(t)
   } else {
     const fim = mesAno(l.vigencia_fim)
@@ -64,9 +65,19 @@ export const novaTaxaForm = (tipo = 'tarifa_fixa', vigencia_inicio = '') => ({
 export const taxaParaForm = (t) => ({
   id: t.id || null, tipo_repasse: t.tipo_repasse, descricao: t.descricao || '', valor: valorBRFormatado(t.valor),
   vigencia_inicio: t.vigencia_inicio || '', vigencia_fim: t.vigencia_fim || '',
-  parcelas: (t.valores_parcelas || []).map(valorBRFormatado).join('; '),
+  parcelas: parcelasParaTexto(t),
   categoria_id: t.categoria_id || '', dedutivel_ir: t.dedutivel_ir ?? dedutivelPadrao(t.tipo_repasse === 'taxa_unica' ? 'taxa_unica' : 'tarifa'),
 })
+
+// Parcelas da taxa única no formulário: uma só, igual ao total, volta vazia (o campo é opcional:
+// vazio = tudo de uma vez na competência da 1ª parcela).
+function parcelasParaTexto(t) {
+  const v = Array.isArray(t.valores_parcelas) ? t.valores_parcelas : []
+  if (v.length === 1 && Math.abs(r2(v[0]) - r2(t.valor)) < 0.005) return ''
+  return v.map(valorBRFormatado).join('; ')
+}
+
+const semParcelas = (l) => !String(l.parcelas || '').trim()
 
 // "470,00; 865,00; 865,00" → [470, 865, 865] (null se algum valor for inválido).
 export function parcelasDoTexto(txt) {
@@ -81,7 +92,7 @@ export function formParaTaxa(l, i = 0) {
   const unica = l.tipo_repasse === 'taxa_unica'
   return {
     id: l.id || `nova-${i}`, tipo_repasse: l.tipo_repasse, descricao: String(l.descricao || '').trim(), valor: r2(num(l.valor)),
-    valores_parcelas: unica ? parcelasDoTexto(l.parcelas) || [] : null,
+    valores_parcelas: unica ? (semParcelas(l) ? (num(l.valor) > 0 ? [r2(num(l.valor))] : []) : parcelasDoTexto(l.parcelas) || []) : null,
     vigencia_inicio: l.vigencia_inicio || null, vigencia_fim: unica ? null : l.vigencia_fim || null,
     categoria_id: l.categoria_id || null, dedutivel_ir: !!l.dedutivel_ir, ativo: true,
   }
@@ -94,9 +105,9 @@ export function erroTaxa(l) {
   if (!(num(l.valor) > 0)) return `Taxa "${nome}": informe o valor${l.tipo_repasse === 'taxa_unica' ? ' total' : ''}.`
   if (!YM.test(String(l.vigencia_inicio || ''))) return `Taxa "${nome}": informe a competência ${l.tipo_repasse === 'taxa_unica' ? 'da 1ª parcela' : 'inicial'}.`
   if (l.tipo_repasse === 'tarifa_fixa' && l.vigencia_fim && (!YM.test(l.vigencia_fim) || l.vigencia_fim < l.vigencia_inicio)) return `Taxa "${nome}": competência final inválida.`
-  if (l.tipo_repasse === 'taxa_unica') {
+  if (l.tipo_repasse === 'taxa_unica' && !semParcelas(l)) {
     const v = parcelasDoTexto(l.parcelas)
-    if (!v || !v.length) return `Taxa "${nome}": informe o valor de cada parcela (ex.: 470,00; 865,00; 865,00).`
+    if (!v || !v.length) return `Taxa "${nome}": valor de parcela inválido (ex.: 470,00; 865,00; 865,00) — ou deixe vazio para descontar tudo de uma vez.`
     if (v.length > 120) return `Taxa "${nome}": no máximo 120 parcelas.`
   }
   return ''

@@ -548,7 +548,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           {repasse && <CamposRepasse f={f} set={set} categories={categories} />}
           {repasse && (
             <div className="sm:col-span-2">
-              <TaxasRepasse linhas={taxasForm} onChange={(v) => { setErro(''); setTaxasForm(v) }} categories={categories} perfilId={f.perfil_id} inicio={ymDe(f.data_inicio)} />
+              <TaxasRepasse linhas={taxasForm} onChange={(v) => { setErro(''); setTaxasForm(v) }} categories={categories} perfilId={f.perfil_id} inicio={ymDe(f.data_inicio)} aluguel={num(f.valor_base) || 0} />
             </div>
           )}
           <Campo campo="bonificacao_valor" label={`${rot.desconto} por mês (desconto)`} help="contrato.desconto">

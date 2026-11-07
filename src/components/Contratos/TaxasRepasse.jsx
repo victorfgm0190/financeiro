@@ -11,7 +11,8 @@ import { CampoErroContext, CLASSE_ERRO } from './campoErro'
 // competência) e taxa única em parcelas de valor livre (ex.: intermediação = 1º aluguel).
 // Cada uma é um cartão com o resumo em uma linha; "Editar" abre os campos e "OK" fecha de volta.
 // `_editando` (só da tela; formParaTaxa ignora) diz qual cartão está aberto.
-export default function TaxasRepasse({ linhas, onChange, categories, perfilId, inicio }) {
+// `aluguel`: valor do aluguel do contrato (botão "= 1º aluguel" no total da taxa única).
+export default function TaxasRepasse({ linhas, onChange, categories, perfilId, inicio, aluguel = 0 }) {
   const falha = useContext(CampoErroContext)
   // Erro do "OK" (cartão que não fecha enquanto falta algo), por índice.
   const [erroOk, setErroOk] = useState({})
@@ -77,8 +78,17 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <input autoComplete="off" className="input py-1.5 text-sm col-span-2" placeholder={unica ? 'Ex.: Taxa de intermediação' : 'Ex.: Tarifa bancária'}
                     aria-label="Descrição da taxa" value={l.descricao} onChange={e => setL(i, { descricao: e.target.value })} maxLength={200} />
-                  <CampoValor className="input py-1.5 text-sm" placeholder={unica ? 'Total' : 'Valor por mês'} aria-label={unica ? 'Valor total da taxa' : 'Valor da tarifa'}
-                    value={l.valor} onChange={v => setL(i, { valor: v })} />
+                  <div className={`min-w-0 ${unica ? 'flex items-center gap-1' : ''}`}>
+                    <CampoValor className="input py-1.5 text-sm min-w-0" placeholder={unica ? 'Total' : 'Valor por mês'} aria-label={unica ? 'Valor total da taxa' : 'Valor da tarifa'}
+                      value={l.valor} onChange={v => setL(i, { valor: v })} />
+                    {unica && (
+                      <button type="button" className="btn-secondary text-[11px] py-1 px-2 whitespace-nowrap" disabled={!(aluguel > 0)}
+                        title={aluguel > 0 ? `Total = aluguel do contrato (${valorBRFormatado(aluguel)})` : 'Informe o valor do aluguel primeiro'}
+                        onClick={() => setL(i, { valor: valorBRFormatado(aluguel) })}>
+                        = 1º aluguel
+                      </button>
+                    )}
+                  </div>
                   <label className="flex items-center gap-1 text-[11px] text-texto-2">
                     <input type="checkbox" className="accent-primary" checked={!!l.dedutivel_ir} onChange={e => setL(i, { dedutivel_ir: e.target.checked })} />
                     Dedutível IR
@@ -89,17 +99,18 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
                       onChange={e => setL(i, { vigencia_inicio: e.target.value })} />
                   </label>
                   {unica ? (
-                    <label className="text-[11px] text-texto-3 col-span-1 sm:col-span-2">
-                      Valor de cada parcela — separe com ";"
-                      <input autoComplete="off" className="input py-1 text-sm" placeholder="Ex.: 470,00; 865,00; 865,00" aria-label="Valores das parcelas"
-                        value={l.parcelas} onChange={e => setL(i, { parcelas: e.target.value })}
-                        onBlur={() => { const v = parcelasDoTexto(l.parcelas); if (v) setL(i, { parcelas: v.map(valorBRFormatado).join('; ') }) }} />
+                    <div className="text-[11px] text-texto-3 col-span-1 sm:col-span-2">
+                      <label htmlFor={`taxa-parcelas-${i}`}>Valor de cada parcela (opcional) — separe com ";"</label>
+                      <input id={`taxa-parcelas-${i}`} autoComplete="off" className="input py-1 text-sm" placeholder="Vazio = tudo de uma vez" aria-label="Valores das parcelas"
+                        value={l.parcelas ?? ''} onChange={e => setL(i, { parcelas: e.target.value })}
+                        onBlur={e => { const v = parcelasDoTexto(e.target.value); if (v?.length) setL(i, { parcelas: v.map(valorBRFormatado).join('; ') }) }} />
                       {soma && (
                         <span data-testid="soma-parcelas" className={`block mt-1 ${soma.ok ? 'text-receita' : 'text-aviso'}`}>
                           {soma.texto}{!soma.ok && ' (dá para gravar assim mesmo)'}
                         </span>
                       )}
-                    </label>
+                      <span className="block mt-1">Deixe vazio para descontar tudo de uma vez. O saldo com a administradora vai abatendo nos meses seguintes até zerar.</span>
+                    </div>
                   ) : (
                     <label className="text-[11px] text-texto-3 col-span-1">
                       Até a competência (opcional)

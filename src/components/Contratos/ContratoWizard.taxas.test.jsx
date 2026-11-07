@@ -83,6 +83,42 @@ describe('ContratoWizard — tarifas e taxas da administradora', () => {
     expect(within(cartoes()[0]).getByTestId('resumo-taxa')).toBeTruthy()
   })
 
+  it('parcelas vazias = 1 parcela com o total; "= 1º aluguel" preenche o total; grava [total]', async () => {
+    abrirValores()
+    fireEvent.click(screen.getByRole('button', { name: /Taxa única/ }))
+    const w = within(cartoes()[0])
+    expect(w.getByText('Deixe vazio para descontar tudo de uma vez. O saldo com a administradora vai abatendo nos meses seguintes até zerar.')).toBeTruthy()
+    expect(w.getByText(/Valor de cada parcela \(opcional\)/)).toBeTruthy()
+    mudar(w.getByLabelText('Descrição da taxa'), 'Intermediação')
+    mudar(w.getByLabelText('Competência da 1ª parcela'), '2026-02')
+    fireEvent.click(w.getByRole('button', { name: '= 1º aluguel' }))
+    expect(w.getByLabelText('Valor total da taxa').value).toBe('2.200,00')
+    fireEvent.click(w.getByRole('button', { name: /OK/ }))
+    expect(within(cartoes()[0]).getByTestId('resumo-taxa').textContent).toBe('Intermediação · R$ 2.200,00 em 1 parcela em 02/2026 · dedutível IR')
+
+    avancar(); avancar(); avancar()
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar/ }))
+    await vi.waitFor(() => expect(criarContrato).toHaveBeenCalled())
+    const [, itens] = criarContrato.mock.calls[0]
+    expect(itens.find(i => i.tipo_repasse === 'taxa_unica')).toMatchObject({ valor_previsto: 2200, valores_parcelas: [2200], vigencia_inicio: '2026-02' })
+  })
+
+  it('digitando caractere por caractere, o campo das parcelas guarda o texto', () => {
+    abrirValores()
+    fireEvent.click(screen.getByRole('button', { name: /Taxa única/ }))
+    const inp = () => within(cartoes()[0]).getByLabelText('Valores das parcelas')
+    inp().focus()
+    for (const ch of '470;865;865') {
+      fireEvent.keyDown(inp(), { key: ch })
+      mudar(inp(), inp().value + ch)
+      fireEvent.keyUp(inp(), { key: ch })
+      expect(document.activeElement).toBe(inp())
+    }
+    expect(inp().value).toBe('470;865;865')
+    fireEvent.blur(inp())
+    expect(inp().value).toBe('470,00; 865,00; 865,00')
+  })
+
   it('tarifa fixa: resumo "R$ 3,00/mês de 06/2026 em diante"; Excluir remove o cartão', () => {
     abrirValores()
     fireEvent.click(screen.getByRole('button', { name: /Tarifa fixa/ }))
@@ -111,13 +147,13 @@ describe('ContratoWizard — tarifas e taxas da administradora', () => {
   it('Avançar com taxa incompleta: erro no cartão (borda + texto), rola até ele e foca o 1º campo', () => {
     abrirValores()
     fireEvent.click(screen.getByRole('button', { name: /Taxa única/ }))
-    preencherTaxaUnica(cartoes()[0], '')
+    preencherTaxaUnica(cartoes()[0], '470,00; abc')
     avancar()
     const c = cartoes()[0]
     expect(screen.getByText('Valor do aluguel (contratual)', { selector: 'label' })).toBeTruthy() // não avançou
     expect(c.hasAttribute('data-erro')).toBe(true)
     expect(c.className).toMatch(/ring-perigo/)
-    expect(within(c).getByRole('alert').textContent).toMatch(/informe o valor de cada parcela/)
+    expect(within(c).getByRole('alert').textContent).toMatch(/valor de parcela inválido/)
     expect(levados).toContain(c)
     expect(document.activeElement).toBe(within(c).getByLabelText('Descrição da taxa'))
   })
