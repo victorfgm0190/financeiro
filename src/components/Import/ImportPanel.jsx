@@ -25,6 +25,7 @@ import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhas
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
+import { valorDeReferencia } from '../../lib/parcelasOcorrencia'
 import { competenciasImplausiveis, mensagemCompetenciaImplausivel, divergenciaMesArquivo } from '../../lib/competenciaFatura'
 import { favorecidoDaImportacao, favorecidoPorAlias } from '../../lib/favorecidos'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
@@ -3251,7 +3252,7 @@ Importar mesmo assim no mês selecionado?`)) return
       .map(r => {
         const tx = { type: 'expense', accountType: 'credit', accountId: selectedAccount, amount: r.amount, payee: r.payee, description: r.description, date: computeSaveDate(r), faturaMonthYear: r.faturaMonthYear || faturaMonthYear }
         const schedule = findMatchingSchedule(tx)
-        return schedule && Math.abs(Number(schedule.amount) - Number(r.amount)) > BAIXA_TOLERANCIA_VALOR ? { row: r, schedule, tx } : null
+        return schedule && Math.abs(Number(valorDeReferencia(schedule)) - Number(r.amount)) > BAIXA_TOLERANCIA_VALOR ? { row: r, schedule, tx } : null
       })
       .filter(Boolean)
   }, [showImportPreview, resolvedRows, baixasPorLinha, findMatchingSchedule, selectedAccount, faturaMonthYear]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -3275,7 +3276,7 @@ Importar mesmo assim no mês selecionado?`)) return
       if (dec) {
         out.push({ id: `rec-${it.row._id}`, status: 'ok', titulo: `Cobrança recorrente "${nome}": ${dec.acao === 'register' ? `será baixada por ${fmt(it.row.amount)} (valor do cartão)` : 'agendamento mantido'}` })
       } else {
-        out.push({ id: `rec-${it.row._id}`, status: 'acao', titulo: `Cobrança recorrente "${nome}" com valor diferente`, detalhe: `Cartão ${fmt(it.row.amount)} × agendado ${fmt(it.schedule.amount)}.`, onResolver: () => setResolvendoRecorrente(it) })
+        out.push({ id: `rec-${it.row._id}`, status: 'acao', titulo: `Cobrança recorrente "${nome}" com valor diferente`, detalhe: `Cartão ${fmt(it.row.amount)} × agendado ${fmt(valorDeReferencia(it.schedule))}.`, onResolver: () => setResolvendoRecorrente(it) })
       }
     }
     return out

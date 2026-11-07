@@ -43,6 +43,13 @@ import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { baixaNoPeriodo, mensagemConflitoPulo } from '../../lib/conflitoPeriodo'
 import { perguntaFluxoPrincipal, considerarFluxoParaGravar } from '../../lib/fluxoPrincipal'
 import InputMoeda from '../shared/InputMoeda'
+import {
+  ehParcelado, ehUnicaParcelada, frequenciaExibida, normalizarUnica, permiteParcelamento, maxParcelas, erroLimiteParcelas,
+  textoDivisao, parcelaDaData, valorBaseDaChave, agruparPorOcorrencia, planoParcelamento, erroEdicaoOcorrencia, temOcorrenciaDepois,
+  temConsumo, situacaoDaOcorrencia, aposMudarInicio, ESCOPO_OCORRENCIA, MSG_DATA_BLOQUEADA,
+} from '../../lib/parcelasOcorrencia'
+
+const datasFeitas = (s) => new Set([...(s.registered || []), ...(s.skipped || [])])
 
 const FREQUENCIES = [
   { value: 'once', label: 'Única' },
@@ -89,7 +96,7 @@ function Toggle({ value, onChange }) {
   )
 }
 
-function OccEditModal({ originalDate, override, isSkipped, defaultAmount, baixaNoMes = null, onSave, onClose }) {
+function OccEditModal({ originalDate, override, isSkipped, defaultAmount, baixaNoMes = null, titulo = null, onSave, onClose }) {
   const [date, setDate] = useState(override?.date || originalDate)
   const [amount, setAmount] = useState(String(override?.amount ?? defaultAmount))
   const [skip, setSkip] = useState(isSkipped || false)
@@ -108,7 +115,7 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, baixaN
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
       <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-64 p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-texto-1">Ocorrência de {fmtD(originalDate)}</p>
+          <p className="text-xs font-semibold text-texto-1">{titulo || `Ocorrência de ${fmtD(originalDate)}`}</p>
           <button type="button" onClick={onClose} className="text-texto-3 hover:text-texto-2 p-0.5 rounded transition-colors">
             <X size={14} />
           </button>
@@ -242,7 +249,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   const serieBase = serieLocal || atual
   // Âncora da série tal como está no banco (data ORIGINAL da ocorrência). Vazia num agendamento
   // novo; num já salvo sem âncora explícita, a primeira ocorrência futura.
-  const ancoraDe = (sch) => sch?.nextOccurrence
+  // Recorrência parcelada: a âncora é sempre a próxima parcela pendente.
+  const ancoraDe = (sch) => (ehParcelado(sch) ? (getNextOccurrences(sch, 1)[0] || '') : sch?.nextOccurrence)
     || (sch?.id ? (getNextOccurrences(sch, 24).find(d => d >= today()) || '') : '')
   const ancoraSalva = ancoraDe(serieBase)
   // O que o campo MOSTRA: a mesma âncora com a exceção da ocorrência aplicada. Com a ocorrência
@@ -262,7 +270,14 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   const ehMotor = !!initial?.id && agendamentoDoMotor(initial)
   const ehFinanciamento = !!initial?.id && !!chaveSerieFinanciamento(initial)
   const ehRecorrente = !!initial?.id && !ehMotor && !ehFinanciamento && (initial.frequency || 'once') !== 'once'
-  const occInicial = ehRecorrente && ancoraSalva ? occCampos(serieBase, ancoraSalva) : null
+  // Campos da ocorrência que o formulário mostra. Recorrência parcelada: o campo Valor é o TOTAL da
+  // ocorrência (ano) em que a próxima parcela cai, e não o valor da parcela.
+  const occDoForm = (base, anc) => {
+    const oc = occCampos(base, anc)
+    const p = parcelaDaData(base, anc)
+    return p ? { ...oc, amount: p.valorTotal } : oc
+  }
+  const occInicial = ehRecorrente && ancoraSalva ? occDoForm(serieBase, ancoraSalva) : null
   // Parcela de contrato (src/lib/contratos): frequência, ocorrência e data-base (competência) são do
   // contrato. O vencimento muda pela exceção da ocorrência (overrides[data-base].date), como na
   // parcela de financiamento — a baixa continua casando com a data-base.
@@ -280,9 +295,11 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   const formDe = (ini, base) => {
     const anc = ancoraDe(base)
     const exib = (anc && base) ? occEfetiva(base, anc).date : anc
-    const occ = ehRecorrente && anc ? occCampos(base, anc) : null
+    const occ = ehRecorrente && anc ? occDoForm(base, anc) : null
     return formDeValores(ini, occ, exib)
   }
+  // N mostrado: o da ocorrência da próxima parcela (pode ter exceção "só neste ano").
+  const nDaOcorrencia = (ini, anc) => parcelaDaData(ini, anc)?.total ?? (Number(ini?.parcelasPorOcorrencia) || 1)
   const formDeValores = (ini, occInicial, ancoraExibida) => ({
     description: (occInicial ? occInicial.description : ini?.description) || '',
     transactionType: ini?.transactionType || 'expense',
@@ -297,14 +314,16 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : ini?.categoriaCpfId) || '',
     payee: ini?.payee || '',
     costCenter: (occInicial ? occInicial.costCenter : ini?.costCenter) || '',
-    frequency: ini?.frequency || '',
+    // Única em N parcelas: gravada como Anual + 1 ocorrência; aqui é sempre "Única".
+    frequency: ini ? (ini.frequency ? frequenciaExibida(ini) : '') : '',
     startDate: ini?.startDate || today(),
     // Data de Vencimento Atual: re-ancora a série. O campo EXIBE a data efetiva (com a exceção
     // aplicada, quando existe) — ver `ancoraExibida`. A âncora realmente salva é `ancoraSalva`,
     // e só substitui a atual se este campo for editado à mão.
     nextOccurrence: ancoraExibida,
-    occurrenceType: ini?.occurrenceType || 'continuous',
-    installments: ini?.installments ?? 0,
+    occurrenceType: ehUnicaParcelada(ini) ? 'continuous' : (ini?.occurrenceType || 'continuous'),
+    installments: ehUnicaParcelada(ini) ? 0 : (ini?.installments ?? 0),
+    parcelasPorOcorrencia: nDaOcorrencia(ini, ancoraDe(ini)),
     remindDaysBefore: ini?.remindDaysBefore ?? 3,
     autoRegister: ini?.autoRegister ?? true,
     sincronizarAgenda: ini?.sincronizarAgenda !== false,
@@ -392,6 +411,19 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     : { categoriaCnpjId: null, categoriaCpfId: null }
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
+  // Parcelamento: só em Despesa e Receita, em frequência maior que mensal ou Única; nunca em parcela
+  // de contrato, de financiamento ou agendamento do motor da fatura.
+  const parcelamentoDisponivel = permiteParcelamento(form.frequency) && form.transactionType !== 'transfer'
+    && !ehMotor && !ehFinanciamento && !ehParcelaContrato
+  const nForm = parcelamentoDisponivel ? Math.max(1, Math.floor(Number(form.parcelasPorOcorrencia) || 1)) : 1
+  const parcelavaAntes = !!initial?.id && ehParcelado(serieBase)
+  const parcForm = nForm > 1 || parcelavaAntes
+  const erroLimite = parcelamentoDisponivel ? erroLimiteParcelas(form.frequency, nForm) : null
+  // Série comum com baixas não vira parcelada: as baixas estão presas às datas antigas.
+  const parcelamentoBloqueado = !!initial?.id && !parcelavaAntes && temConsumo(serieBase)
+  const serieComBaixa = parcelavaAntes && temConsumo(serieBase)
+  const [erroParcelamento, setErroParcelamento] = useState('')
+  const occAlvoParcela = parcelavaAntes && ancoraSalva ? (parcelaDaData(serieBase, ancoraSalva)?.ocorrencia || null) : null
   // Pergunta do fluxo principal (só despesa/receita em conta não FC, ou transferência FC ↔ não FC;
   // nunca cartão). Vale para a série: o realizado segue a regra da conta.
   const perguntaFluxo = perguntaFluxoPrincipal(form, accounts)
@@ -417,7 +449,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
   // Fatura a que a Data de Vencimento Atual pertence (só despesa em cartão de crédito).
   // Recalcula automaticamente quando muda a conta (closingDay) ou a data.
-  const faturaCalculada = form.transactionType === 'expense' && isCredit && form.nextOccurrence && selectedAccount?.closingDay
+  const faturaCalculada = form.transactionType === 'expense' && isCredit && form.nextOccurrence && !parcForm && selectedAccount?.closingDay
     ? computeFaturaRef(new Date(form.nextOccurrence + 'T12:00:00'), selectedAccount.closingDay)
     : null
 
@@ -462,7 +494,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     return [...new Set([...payees])].sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
   }, [transactions, payees])
 
-  const previewSchedule = {
+  const previewBase = {
     ...form,
     // A prévia é gerada a partir da âncora SALVA, não da exibida. As datas que ela produz são as
     // ORIGINAIS — chaves de overrides/skipped e do que o fluxo de caixa usa. Cada célula EXIBE a
@@ -470,14 +502,24 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     nextOccurrence: ancoraTocada ? form.nextOccurrence : ancoraSalva,
     // Valor da SÉRIE: num recorrente salvo, o campo Valor mostra a ocorrência da âncora (que pode
     // ter exceção própria), então a série vem do agendamento.
-    amount: ehRecorrente ? (Number(serieBase.amount) || 0) : (Number(form.amount) || 0),
+    amount: parcForm ? (parcelavaAntes ? (Number(serieBase.amount) || 0) : (Number(form.amount) || 0)) : ehRecorrente ? (Number(serieBase.amount) || 0) : (Number(form.amount) || 0),
+    parcelasPorOcorrencia: parcelavaAntes ? (Number(serieBase.parcelasPorOcorrencia) || 1) : nForm,
     // As registradas reais: num parcelado, o motor conta as já consumidas antes da âncora para
     // saber quantas faltam — com [] a prévia do TV PAPAI (4 de 8 pagas) listava 8 datas futuras.
     // As puladas seguem fora ([]), para continuarem aparecendo como chip "Pulado".
     registered: initial?.id ? (serieBase?.registered || []) : [],
     skipped: [],
   }
-  const preview = form.startDate && form.frequency ? getNextOccurrences(previewSchedule, 12) : []
+  // Recorrência parcelada: a prévia mostra o total/N digitados, ainda sem gravar nada.
+  const previewSchedule = (() => {
+    const normal = normalizarUnica(previewBase)
+    if (!parcelavaAntes || !occAlvoParcela) return normal
+    try {
+      return planoParcelamento(normal, { dataOcorrencia: occAlvoParcela, total: Number(form.amount) || 0, n: nForm, escopo: ESCOPO_OCORRENCIA.PROXIMAS })
+    } catch { return normal }
+  })()
+  const preview = form.startDate && form.frequency ? getNextOccurrences(previewSchedule, parcForm ? Math.max(36, nForm * 3) : 12) : []
+  const gruposPrevia = parcForm ? agruparPorOcorrencia(previewSchedule, preview) : []
   // "x/N" de cada card: com as puladas REAIS do formulário (pulada consome a posição).
   const scheduleParcela = { ...previewSchedule, installments: Number(form.installments) || 0, skipped: form.skipped }
 
@@ -511,7 +553,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     const pendentes = getNextOccurrences(fonte, 400)
     const { mudancas, perguntar, nProximas, conflitos } = edicaoDeOcorrencia(fonte, occDate, changes, pendentes)
     if (!mudancas.length) return
-    if (perguntar) {
+    // Recorrência parcelada: pela prévia, a edição vale só para esta parcela (o total muda no campo Valor).
+    if (perguntar && !ehParcelado(fonte)) {
       setChipPendente({ occDate, mudancas, nProximas, nPendentes: pendentes.length, conflitos })
       return
     }
@@ -538,7 +581,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         overrides: novo.overrides,
         skipped: novo.skipped || [],
         ...(!ancoraTocada && ancoraNova ? { nextOccurrence: occEfetiva(novo, ancoraNova).date } : {}),
-        ...(ancoraNova && normalizarCampo('amount', f.amount) === normalizarCampo('amount', camposAntes?.amount)
+        ...(ancoraNova && !ehParcelado(novo) && normalizarCampo('amount', f.amount) === normalizarCampo('amount', camposAntes?.amount)
           ? { amount: occCampos(novo, ancoraNova).amount } : {}),
       }))
       return
@@ -636,15 +679,45 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         accountId: serieBase.accountId, accountType: serieBase.accountType, costCenter: serieBase.costCenter,
         grupoGerencial: serieBase.grupoGerencial, payee: serieBase.payee, tipoDocumentoId: serieBase.tipoDocumentoId,
         numeroContrato: serieBase.numeroContrato || null,
+        parcelasPorOcorrencia: Number(serieBase.parcelasPorOcorrencia) || 1,
       }
-      const plano = planoAgendamento(base, {
-        occDate: ctx.occDate, mudancas, escopo: escopoParcela,
-        pendentes: getNextOccurrences(base, 400), proximasDoNovo: s => getNextOccurrences(s, 400),
-      })
-      const final = { ...plano.schedule, accountType: accounts.find(a => a.id === plano.schedule.accountId)?.type || plano.schedule.accountType }
+      // Série comum (sem baixas) que passa a ser parcelada: total e N entram direto, como numa criação.
+      if (!parcelavaAntes && nForm > 1) { base.amount = Number(form.amount); base.parcelasPorOcorrencia = nForm }
+      // Recorrência parcelada: total/N têm regra própria; os demais campos seguem a regra de sempre.
+      const numericos = mudancas.filter(m => m.campo === 'valorTotalOcorrencia' || m.campo === 'parcelasPorOcorrencia')
+      const demais = mudancas.filter(m => m !== numericos[0] && m !== numericos[1])
+      // Sem nenhuma baixa, mudar início ou frequência recomeça a série: nada ficou preso às datas antigas.
+      const recomeco = parcelavaAntes && !temConsumo(serieBase) && (data.startDate !== serieBase.startDate || data.frequency !== serieBase.frequency)
+      const escopoOcc = decisao?.escopo === ESCOPO.PARCELA && !recomeco ? ESCOPO_OCORRENCIA.SO_ESTA : ESCOPO_OCORRENCIA.PROXIMAS
+      let baseParc = base
+      if (recomeco) {
+        baseParc = aposMudarInicio({ ...base, amount: Number(form.amount), parcelasPorOcorrencia: nForm, nextOccurrence: data.startDate }, null)
+      } else if (parcelavaAntes && numericos.length) {
+        baseParc = planoParcelamento(base, { dataOcorrencia: occAlvoParcela, total: Number(form.amount), n: nForm, escopo: escopoOcc })
+      }
+      // "Só nesta ocorrência" com outros campos alterados: valem para as parcelas pendentes desta ocorrência.
+      let planoSchedule = baseParc
+      let afetadas
+      if (parcelavaAntes && !recomeco && numericos.length && escopoOcc === ESCOPO_OCORRENCIA.SO_ESTA) {
+        const pendentesOcc = situacaoDaOcorrencia(baseParc, occAlvoParcela).chaves.filter(d => !datasFeitas(baseParc).has(d))
+        for (const occDate of pendentesOcc) {
+          planoSchedule = planoAgendamento(planoSchedule, { occDate, mudancas: demais, escopo: ESCOPO.PARCELA }).schedule
+        }
+        afetadas = pendentesOcc
+      } else {
+        const plano = planoAgendamento(baseParc, {
+          occDate: parcelavaAntes ? (getNextOccurrences(baseParc, 1)[0] || ctx.occDate) : ctx.occDate,
+          mudancas: parcelavaAntes ? demais : mudancas, escopo: numericos.length ? ESCOPO.PROXIMAS : escopoParcela,
+          pendentes: getNextOccurrences(baseParc, 400), proximasDoNovo: s => getNextOccurrences(s, 400),
+        })
+        planoSchedule = plano.schedule
+        afetadas = plano.afetadas
+      }
+      const final = { ...planoSchedule, accountType: accounts.find(a => a.id === planoSchedule.accountId)?.type || planoSchedule.accountType }
+      if (ehParcelado(final)) final.nextOccurrence = getNextOccurrences(final, 1)[0] || null
       updateSchedule(initial.id, final)
       finais = [final]
-      nAfetadas = plano.afetadas.length || 1
+      nAfetadas = afetadas.length || 1
       if (ctx.nProximas === 0) escopoParcela = ESCOPO.PARCELA
       entradas = [{ id: initial.id, ocorrenciaData: escopoParcela === ESCOPO.PARCELA ? ctx.occDate : null, mudancas }]
     } else if (ctx.tipo === 'F') {
@@ -724,6 +797,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     if (form.transactionType === 'transfer' && !form.toAccountId) return
     if (form.transactionType === 'transfer' && schNeedsReservaCategorySelect && !form.reservaExpenseCategoryId) return
     if (tipoDocObrigatorio && !form.tipoDocumentoId) { setErroTipoDoc('Selecione o tipo de documento.'); return }
+    if (erroLimite) { setErroParcelamento(erroLimite); return }
+    setErroParcelamento('')
     // Rateio: só grava quando as linhas fecham o valor do agendamento.
     const comRateio = form.transactionType !== 'transfer' && rateioRows.length > 0
     if (comRateio) {
@@ -749,6 +824,21 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       installments: Number(form.installments),
       ...(gerencialLigado ? {} : { grupoGerencial: grupoComChaveDesligada(initial) }),
       remindDaysBefore: Number(form.remindDaysBefore) || 0,
+      parcelasPorOcorrencia: nForm,
+    }
+    // Série parcelada com baixa não muda de frequência (as baixas estão presas às datas atuais), e a
+    // Única continua sendo Anual + 1 ocorrência no banco.
+    if (serieComBaixa) {
+      data.frequency = serieBase.frequency
+      if (ehUnicaParcelada(serieBase)) { data.occurrenceType = serieBase.occurrenceType; data.installments = serieBase.installments }
+    } else {
+      Object.assign(data, normalizarUnica(data))
+    }
+    // Série comum sem baixas que passa a ser parcelada: nasce na próxima data e sem as exceções antigas.
+    if (initial?.id && !parcelavaAntes && nForm > 1) {
+      const inicio = form.startDate === serieBase.startDate && ancoraSalva ? ancoraSalva : form.startDate
+      Object.assign(data, aposMudarInicio({ ...data, startDate: inicio, overrides: {} }, null))
+      data.nextOccurrence = inicio
     }
     // Criar vs editar se decide pelo `id`, NÃO pela presença de `initial`: o DuplicateButton
     // ("Duplicar → Criar Agendamento") passa um `initial` só com os campos pré-preenchidos do
@@ -764,11 +854,36 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     let ctxRateio = null
     if (schedId) {
       // Regra única de séries: campo da PARCELA mudou e há pendentes depois → pergunta o escopo.
-      const mudancas = diffCampos(camposAntes, camposDoForm(form))
+      let mudancas = diffCampos(camposAntes, camposDoForm(form))
       const ctx = contextoSerie()
+      // Recorrência parcelada: "Valor" aqui é o total da ocorrência; total e N têm pergunta própria.
+      if (parcelavaAntes) {
+        const mTotal = mudancas.find(m => m.campo === 'amount')
+        const nAntes = parcelaDaData(serieBase, ancoraSalva)?.total ?? (Number(serieBase.parcelasPorOcorrencia) || 1)
+        const numericos = [
+          ...(mTotal ? [{ ...mTotal, campo: 'valorTotalOcorrencia' }] : []),
+          ...(nAntes !== nForm ? [{ campo: 'parcelasPorOcorrencia', de: nAntes, para: nForm }] : []),
+        ]
+        mudancas = [...numericos, ...mudancas.filter(m => m.campo !== 'amount')]
+        if (numericos.length) {
+          if (!occAlvoParcela) { setErroParcelamento('Esta série não tem parcela pendente para recalcular.'); return }
+          const motivoErro = erroEdicaoOcorrencia(serieBase, occAlvoParcela, { total: Number(form.amount), n: nForm })
+          if (motivoErro) { setErroParcelamento(motivoErro); return }
+          if (!decisao && temOcorrenciaDepois(serieBase, occAlvoParcela)) {
+            setEscopoPendente({ parcelamento: true, mudancas, nProximas: ctx.nProximas, nPendentes: ctx.nPendentes, conflitos: [] })
+            return
+          }
+        }
+      }
       ctxRateio = ctx
       const mudancaRateio = rateioMudou ? [{ campo: 'rateio', de: resumoRateio(rateioInicial), para: resumoRateio(rateioRows) }] : []
-      if (!decisao && (precisaEscolherEscopo(mudancas, ctx.nProximas) || (rateioMudou && ctx.nProximas > 0))) {
+      // Série comum virando parcelada: o valor passa a ser o total; não há o que perguntar.
+      if (!parcelavaAntes && nForm > 1) mudancas = [
+        { campo: 'parcelasPorOcorrencia', de: 1, para: nForm },
+        ...mudancas.map(m => (m.campo === 'amount' ? { ...m, campo: 'valorTotalOcorrencia' } : m)),
+      ]
+      const numericoTratado = mudancas.some(m => m.campo === 'valorTotalOcorrencia' || m.campo === 'parcelasPorOcorrencia')
+      if (!decisao && !numericoTratado && (precisaEscolherEscopo(mudancas, ctx.nProximas) || (rateioMudou && ctx.nProximas > 0))) {
         setEscopoPendente({
           mudancas: [...mudancas, ...mudancaRateio], nProximas: ctx.nProximas, nPendentes: ctx.nPendentes, ocorrencia: ctx.tipo === 'A',
           conflitos: ctx.tipo === 'A' ? conflitosProximas(serieBase, { occDate: ctx.occDate, mudancas, pendentes: ctx.pendentes }) : [],
@@ -854,7 +969,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   if (escopoPendente) {
     return (
       <EscopoSerieDialog
-        variante={escopoPendente.ocorrencia ? 'ocorrencia' : undefined}
+        variante={escopoPendente.parcelamento ? 'parcelamento' : escopoPendente.ocorrencia ? 'ocorrencia' : undefined}
+        anoOcorrencia={occAlvoParcela ? occAlvoParcela.slice(0, 4) : null}
         continua={form.occurrenceType === 'continuous'}
         conflitos={escopoPendente.conflitos}
         mudancas={escopoPendente.mudancas}
@@ -986,7 +1102,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Valor */}
         <div data-guia="agendamento-form.valor" className="max-sm:-order-1">
-          <LabelTip tip={TIPS.amount} required confira={!!destaques?.includes('amount')}>Valor (R$)</LabelTip>
+          <LabelTip tip={TIPS.amount} required confira={!!destaques?.includes('amount')}>{nForm > 1 ? 'Valor total da ocorrência (R$)' : 'Valor (R$)'}</LabelTip>
           <InputMoeda
             className="input valor-destaque"
             min="0.01"
@@ -996,6 +1112,9 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             readOnly={ehFinanciamento}
             disabled={!!trava}
           />
+          {nForm > 1 && Number(form.amount) > 0 && !erroLimite && (
+            <p className="text-xs text-texto-2 mt-1" role="status">{textoDivisao(Number(form.amount), nForm, fmt)}</p>
+          )}
           {ehFinanciamento && <p className="text-[11px] text-texto-3 mt-1">O pagamento usa principal + juros da parcela; o valor não é editável aqui.</p>}
           {hasNextDiff && !occInicial && (
             <p className="text-xs text-texto-2 mt-1">Próximo vencimento: {fmt(nextOccAmount)}</p>
@@ -1226,7 +1345,9 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             onChange={id => setForm(f => ({ ...f, frequency: id, ...(id === 'once' || !id ? { occurrenceType: 'continuous' } : {}) }))}
             placeholder="Selecione a frequência..."
             required
+            disabled={serieComBaixa}
           />
+          {serieComBaixa && <p className="text-[11px] text-texto-3 mt-1">{MSG_DATA_BLOQUEADA}</p>}
         </div>
         )}
 
@@ -1267,13 +1388,14 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             onChange={e => set('startDate', e.target.value)}
             required
             hoje
-            disabled={!!trava}
+            disabled={!!trava || serieComBaixa}
           />
+          {serieComBaixa && <p className="text-[11px] text-texto-3 mt-1">{MSG_DATA_BLOQUEADA}</p>}
         </div>
         )}
 
         {/* Data de Vencimento Atual — re-ancora a série (só p/ frequências recorrentes) */}
-        {form.frequency && form.frequency !== 'once' && (
+        {form.frequency && form.frequency !== 'once' && !parcForm && (
           <div>
             <LabelTip tip={TIPS.nextOccurrence}>Data de Vencimento Atual</LabelTip>
             <DateInput
@@ -1302,10 +1424,34 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
               recorrencia={form.frequency}
               occurrenceType={form.occurrenceType}
               installments={form.installments}
-              rotuloVezes="Nº de parcelas"
+              rotuloVezes="Nº de ocorrências"
+              rotuloModoVezes="Número de ocorrências"
               onChange={({ occurrenceType, installments }) => setForm(f => ({ ...f, occurrenceType, installments: installments || f.installments }))}
             />
             {!form.frequency && <p className="sm:hidden text-[11px] text-texto-3 mt-1">Escolha a frequência primeiro</p>}
+          </div>
+        )}
+
+        {/* Parcelamento: cada ocorrência dividida em N parcelas mensais (seguro anual em 12x). */}
+        {parcelamentoDisponivel && (
+          <div data-guia="agendamento-form.parcelas-por-ocorrencia" className="sm:col-span-2">
+            <LabelTip tip={TIPS.parcelasPorOcorrencia}>Parcelamento</LabelTip>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-texto-2">
+              <span>{form.frequency === 'once' ? 'Dividir em' : 'Dividir cada ocorrência em'}</span>
+              <input
+                className="input text-center w-20"
+                type="number"
+                min="1"
+                max={maxParcelas(form.frequency)}
+                aria-label="Número de parcelas por ocorrência"
+                value={form.parcelasPorOcorrencia}
+                onChange={e => { setErroParcelamento(''); set('parcelasPorOcorrencia', e.target.value) }}
+                disabled={!!trava || parcelamentoBloqueado}
+              />
+              <span>parcelas mensais</span>
+            </div>
+            {parcelamentoBloqueado && <p className="text-[11px] text-texto-3 mt-1">Este agendamento já tem ocorrências baixadas e não pode virar parcelado. Crie um novo agendamento parcelado a partir da próxima ocorrência.</p>}
+            {(erroLimite || erroParcelamento) && <p className="text-xs text-perigo mt-1" role="alert">{erroLimite || erroParcelamento}</p>}
           </div>
         )}
 
@@ -1423,6 +1569,39 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
               Prévia das próximas ocorrências
               <span className="ml-1.5 text-texto-3 text-[10px] normal-case font-normal">— clique para editar</span>
             </label>
+            {parcForm ? (
+              <div className="space-y-1.5">
+                {gruposPrevia.map((g, gi) => (
+                  <details key={g.ocorrencia} open={gi === 0} className="rounded-lg border border-borda-forte/60">
+                    <summary className="cursor-pointer select-none px-3 py-2 text-xs text-texto-1 flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">{frequenciaExibida(previewSchedule) === 'once' ? 'Parcelas' : `Ocorrência ${g.ano}`}</span>
+                      <span className="text-texto-2">{fmt(g.total)} · {g.n}x{g.parcelas.length < g.n ? ` · ${g.parcelas.length} pendente${g.parcelas.length !== 1 ? 's' : ''}` : ''}</span>
+                    </summary>
+                    <ul className="divide-y divide-borda/40 border-t border-borda/40">
+                      {g.parcelas.map(p => {
+                        const pulada = form.skipped.includes(p.data)
+                        const ef = occEfetiva(previewSchedule, p.data)
+                        const editada = !pulada && (!!form.overrides[p.data]?.date || Math.abs(Number(ef.amount) - p.valor) > 0.005)
+                        const dataBR = (d) => d.split('-').reverse().join('/')
+                        const fatura = isCredit && form.transactionType === 'expense' && selectedAccount?.closingDay
+                          ? computeFaturaRef(new Date(ef.date + 'T12:00:00'), selectedAccount.closingDay) : null
+                        return (
+                          <li key={p.data}>
+                            <button type="button" onClick={() => setEditingOcc(p.data)} title="Clique para editar esta parcela"
+                              className="w-full flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5 text-xs text-left hover:bg-surface-hover/40 transition-colors">
+                              <span className="w-10 text-texto-3 tabular-nums">{p.numero}/{p.total}</span>
+                              <span className={`text-texto-2 tabular-nums ${pulada ? 'line-through opacity-50' : ''}`}>{dataBR(pulada ? p.data : ef.date)}</span>
+                              <span className="flex-1 text-texto-3">{fatura ? `fatura ${fatura}` : ''}{pulada ? ' · Pulada' : editada ? ' · Editada' : ''}</span>
+                              <span className="text-texto-1 font-medium tabular-nums">{fmt(Number(ef.amount) || 0)}</span>
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </details>
+                ))}
+              </div>
+            ) : (
             <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
               {preview.map((date, i) => {
                 const override = form.overrides[date]
@@ -1471,6 +1650,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
                 )
               })}
             </div>
+            )}
           </div>
         )}
 
@@ -1492,7 +1672,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           originalDate={editingOcc}
           override={form.overrides[editingOcc]}
           isSkipped={form.skipped.includes(editingOcc)}
-          defaultAmount={previewSchedule.amount}
+          defaultAmount={valorBaseDaChave(previewSchedule, editingOcc)}
+          titulo={parcelaDaData(previewSchedule, editingOcc) ? `Parcela ${parcelaDaData(previewSchedule, editingOcc).numero}/${parcelaDaData(previewSchedule, editingOcc).total} de ${editingOcc.split('-').reverse().join('/')}` : null}
           baixaNoMes={baixaNoPeriodo(previewSchedule, editingOcc)}
           onSave={handleSaveOccurrence}
           onClose={() => setEditingOcc(null)}

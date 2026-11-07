@@ -471,6 +471,7 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
           {doPedido.citados.length > 0 && (
             <p className="mt-0.5 text-texto-2">Do seu pedido: {doPedido.citados.map(c => ROTULO_CITADO[c] || c).join(', ')}.</p>
           )}
+          {sugestao.aviso_parcelas_ocorrencia && <p className="mt-0.5 text-aviso" role="alert">{sugestao.aviso_parcelas_ocorrencia}</p>}
           {sugestao.aviso_parcelas && <p className="mt-0.5 text-aviso">Parcelado: {sugestao.aviso_parcelas} (valor total).</p>}
           {sugestao.linha_digitavel && (
             <p className="mt-0.5 text-aviso break-all">

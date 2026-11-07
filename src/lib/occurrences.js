@@ -3,6 +3,7 @@
 // direto: o contexto arrasta o grafo inteiro de db/api e não é importável isolado.
 // `next_occurrence` re-ancora a série (dia de vencimento atual); null → desde start_date.
 import { addDays, addWeeks, addMonths, addYears, format } from 'date-fns'
+import { ehParcelado, parcelasDaSerie } from './parcelasOcorrencia.js'
 
 // Constrói uma Date ao MEIO-DIA local a partir de uma string de data (usa só os 10 primeiros
 // chars 'YYYY-MM-DD'). Evita o off-by-one de fuso: parseISO/new Date de uma string com hora 'Z'
@@ -69,6 +70,10 @@ export function datasConsumidas(schedule) {
 // Retorna todas as ocorrências pendentes de um agendamento até upToDateStr (inclusive)
 export function computePendingUpTo(schedule, upToDateStr) {
   const allDone = new Set(datasConsumidas(schedule))
+  // Parcelamento por ocorrência: cada parcela é uma data; a série sai sempre da Data de Início.
+  if (ehParcelado(schedule)) {
+    return parcelasDaSerie(schedule, { ate: upToDateStr, aceitar: d => !allDone.has(d) }).map(p => p.data)
+  }
   const pending = []
   // next_occurrence re-ancora a série (dia de vencimento atual); null → desde start_date.
   let current = parseScheduleDate(schedule.nextOccurrence || schedule.startDate)
@@ -115,6 +120,11 @@ export function advanceByFrequency(dateStr, frequency) {
 // Puro — reusado por getNextOccurrences (contexto) e pelo avanço no registro. next_occurrence
 // re-ancora a série (dia de vencimento atual); null → desde start_date.
 export function computeOccurrences(schedule, count = 12) {
+  // Parcelamento por ocorrência: `count` conta parcelas pendentes (cada uma é uma data).
+  if (ehParcelado(schedule)) {
+    const feitas = new Set(datasConsumidas(schedule))
+    return parcelasDaSerie(schedule, { limite: count, aceitar: d => !feitas.has(d) }).map(p => p.data)
+  }
   const occurrences = []
   let current = parseScheduleDate(schedule.nextOccurrence || schedule.startDate)
   const maxInstallments = schedule.occurrenceType === 'installment' ? schedule.installments : Infinity

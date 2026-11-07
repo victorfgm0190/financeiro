@@ -15,6 +15,7 @@ import { normalizarTermo } from './texto.js'
 import { computeOccurrences } from '../occurrences.js'
 import { occEfetiva } from '../fluxoCaixa.js'
 import { getNumeroParcela } from '../numeroParcela.js'
+import { ehParcelado, parcelasDaSerie, frequenciaExibida } from '../parcelasOcorrencia.js'
 import { resumoRegistradas, historicoOcorrencias, STATUS_OCORRENCIA } from '../ocorrenciasRegistradas.js'
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
@@ -146,10 +147,11 @@ export function procurarAgendamentos(schedules, { descricao = null, favorecido =
 // somadas uma a uma). `recorrentesAMostrar`: quantas próximas de um sem fim aparecem.
 export function resumoAgendamento(schedule, { hoje, transactions = [], recorrentesAMostrar = 3 } = {}) {
   const s = schedule
-  const freq = s.frequency || 'once'
-  const tipo = freq === 'once' ? 'unico' : s.occurrenceType === 'installment' ? 'parcelado' : 'recorrente'
+  const parcelada = ehParcelado(s)
+  const freq = frequenciaExibida(s)
+  const tipo = !parcelada && freq === 'once' ? 'unico' : s.occurrenceType === 'installment' ? 'parcelado' : 'recorrente'
   const reg = resumoRegistradas(s, transactions)
-  const total = tipo === 'parcelado' ? (Number(s.installments) || 0) : tipo === 'unico' ? 1 : null
+  const total = tipo === 'parcelado' ? (parcelada ? parcelasDaSerie(s).length : (Number(s.installments) || 0)) : tipo === 'unico' ? 1 : null
   const quantas = tipo === 'recorrente' ? recorrentesAMostrar : Math.max(total, 1)
   const proximas = computeOccurrences(s, quantas).map(base => {
     const ef = occEfetiva(s, base)

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, MousePointer2, AlertTriangle } from 'lucide-
 import { fmt, fmtDate } from '../shared/utils'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import { occCampos } from '../../lib/camposSerie'
+import { rotuloDaParcela } from '../../lib/parcelasOcorrencia'
 import { ehSintetico } from '../../lib/tiposDocumento'
 import { agruparPorSemana, particionarAgenda, totalAPagarNoMes } from '../../lib/agendaMobile'
 import { ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
@@ -86,7 +87,7 @@ export default function AgendaMobile({ onAbrirAvulso, rows, schedules, getNextOc
     return (
       <Item
         key={s.id} id={s.id} aberto={aberto === s.id} onToggle={toggle}
-        descricao={oc.description || s.description || '(agendamento)'}
+        descricao={`${oc.description || s.description || '(agendamento)'}${rotuloDaParcela(s, r.nextDate) ? ` · ${rotuloDaParcela(s, r.nextDate)}` : ''}`}
         data={r.displayDate} valor={Number(occEfetiva(s, r.nextDate).amount) || 0}
         schedule={s} pills={comCartao(s, pills)} detalhe={aberto === s.id ? renderDetalhe(r) : null}
       />

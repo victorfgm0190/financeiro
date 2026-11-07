@@ -8,6 +8,7 @@ import Modal from './Modal'
 import DateInput from './DateInput'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from './utils'
+import { valorDeReferencia } from '../../lib/parcelasOcorrencia'
 import { searchEntries } from '../../lib/db'
 import SeloCambio from './SeloCambio'
 import { occEfetiva } from '../../lib/fluxoCaixa'
@@ -92,7 +93,7 @@ export default function GlobalSearch({ open, onClose }) {
       (!from || (t.date && t.date >= from)) && (!to || (t.date && t.date <= to))
     )
     const scItems = schedules.filter(s =>
-      matchValue(s.amount) && matchText(s.description, s.payee) &&
+      (matchValue(s.amount) || matchValue(valorDeReferencia(s))) && matchText(s.description, s.payee) &&
       (!to || (s.startDate && s.startDate <= to))
     )
     return { txItems, scItems }

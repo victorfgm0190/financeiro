@@ -5,11 +5,17 @@
 // Data de Início) + posição na série a partir da âncora. Puladas consomem a posição.
 // Agendamento sem nº de parcelas (contínuo) ou 'Uma vez' → null (sem contador).
 import { datasDaSerie, diaVencimentoDe, datasConsumidas } from './occurrences.js'
+import { ehParcelado, parcelaDaData, rotuloDaParcela } from './parcelasOcorrencia.js'
 
 const dia = (d) => String(d || '').slice(0, 10)
 
 export function getNumeroParcela(schedule, dataOcorrencia) {
   const s = schedule
+  // Recorrência parcelada: a parcela dentro da ocorrência, não a posição na série.
+  if (ehParcelado(s)) {
+    const p = parcelaDaData(s, dia(dataOcorrencia))
+    return p ? { numero: p.numero, total: p.total } : null
+  }
   const total = Number(s?.installments) || 0
   if (!s || s.occurrenceType !== 'installment' || (s.frequency || 'once') === 'once' || total < 1) return null
   const data = dia(dataOcorrencia)
@@ -29,6 +35,7 @@ export function getNumeroParcela(schedule, dataOcorrencia) {
 
 // "2/4" ou null.
 export function rotuloParcela(schedule, dataOcorrencia) {
+  if (ehParcelado(schedule)) return rotuloDaParcela(schedule, dia(dataOcorrencia))
   const p = getNumeroParcela(schedule, dataOcorrencia)
   return p ? `${p.numero}/${p.total}` : null
 }

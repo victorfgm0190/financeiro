@@ -104,6 +104,7 @@ const agendamentoDaLinha = (r) => ({
   accountId: r.account_id || null, toAccountId: r.to_account_id || null, amount: Number(r.amount) || 0,
   frequency: r.frequency, startDate: r._inicio, nextOccurrence: r._proxima || null,
   occurrenceType: r.occurrence_type || 'continuous', installments: r.installments,
+  parcelasPorOcorrencia: Number(r.parcelas_por_ocorrencia) || 1,
   registered: r.registered || [], skipped: r.skipped || [], overrides: r.overrides || {},
   efetivacoes: Array.isArray(r.efetivacoes) ? r.efetivacoes : [],
   reservaFuncaoId: r.reserva_funcao_id || null, isProvisao: !!r.is_provisao, provisaoEfetivada: !!r.provisao_efetivada,

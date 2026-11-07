@@ -30,6 +30,7 @@ import ComposicaoParcelaResumo from '../Contratos/ComposicaoParcelaResumo'
 import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
 import { rotuloParcela } from '../../lib/numeroParcela'
+import { ehParcelado, frequenciaExibida, valorDeReferencia } from '../../lib/parcelasOcorrencia'
 import FilterBar from './FilterBar'
 import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { ehPagamentoDeCartao, contaEhCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
@@ -883,7 +884,7 @@ function EstornarModal({ schedule, nextDate, accounts, onClose, onConfirm }) {
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-texto-3">Valor</span>
-              <span className="text-texto-1 font-bold">{fmt(schedule.amount)}</span>
+              <span className="text-texto-1 font-bold">{fmt(ehParcelado(schedule) && nextDate ? occEfetiva(schedule, nextDate).amount : schedule.amount)}</span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-texto-3">Data</span>
@@ -935,7 +936,7 @@ function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-texto-3">Frequência</span>
-              <span className="text-texto-1">{FREQ_LABELS[schedule.frequency] || schedule.frequency}</span>
+              <span className="text-texto-1">{FREQ_LABELS[frequenciaExibida(schedule)] || schedule.frequency}</span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-texto-3">Próxima data</span>
@@ -1013,12 +1014,13 @@ function ScheduleRow({
     const t = todasTxs?.find(x => x.id === txId)
     return `${fmtDate(d)} ↔ ${t ? `${fmtDate(t.date)} ${t.description || '(sem descrição)'} ${fmt(t.amount)}` : txId}`
   }).join('\n') : ''
-  const isInstallment = schedule.occurrenceType === 'installment'
+  const parcelada = ehParcelado(schedule)
+  const isInstallment = schedule.occurrenceType === 'installment' || parcelada
   // Selo "x/N": número da ocorrência mostrada (a próxima pendente, ou a seguinte no calendário).
   // Encerrado (sem próxima) → quantas foram consumidas.
   const dataParcela = futura ? (futura.original || futura.data) : nextDate
   const seloParcela = isInstallment
-    ? (dataParcela ? rotuloParcela(schedule, dataParcela) : (schedule.frequency || 'once') !== 'once' ? `${totalDone}/${schedule.installments}` : null)
+    ? (dataParcela ? rotuloParcela(schedule, dataParcela) : (schedule.frequency || 'once') !== 'once' && !parcelada ? `${totalDone}/${schedule.installments}` : null)
     : null
   // Auto-registro que não criou a ocorrência por achar um lançamento parecido (src/lib/autoRegistro.js).
   const duplicados = possiveisDuplicados?.get(schedule.id)
@@ -1094,7 +1096,7 @@ function ScheduleRow({
   const deContrato = !!schedule.contratoId && contratosHabilitado
   const rotuloFreq = deContrato && (schedule.frequency || 'once') === 'once'
     ? rotuloFrequencia(contratoPorId(schedule.contratoId), schedule.contratoPapel)
-    : FREQ_LABELS[schedule.frequency] || schedule.frequency
+    : FREQ_LABELS[frequenciaExibida(schedule)] || schedule.frequency
   // Valor EFETIVO da próxima ocorrência (respeita override individual); sem ocorrência → valor-pai.
   const effAmount = futura ? futura.amount : nextDate ? occEfetiva(schedule, nextDate).amount : schedule.amount
   const pularAgora = () => {
@@ -1683,7 +1685,7 @@ export function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }
             <p className="text-sm text-texto-1 font-medium">{schedule.description}</p>
             {!isOnce && occDate && (
               <p className="text-xs text-texto-2 mt-1">
-                Ocorrência de {fmtDate(vencimento || occDate)} · {FREQ_LABELS[schedule.frequency] || schedule.frequency}
+                Ocorrência de {fmtDate(vencimento || occDate)} · {FREQ_LABELS[frequenciaExibida(schedule)] || schedule.frequency}
               </p>
             )}
           </div>
@@ -3144,7 +3146,7 @@ export default function SchedulePanel() {
   // Valores reais (distintos) dos itens visíveis (já filtrados por data/etc.), maior → menor.
   const valorOptions = useMemo(() => {
     const set = new Set()
-    for (const s of (abaPagos ? pagosBuscados : searchedSchedules)) set.add(Math.round((Number(s.amount) || 0) * 100) / 100)
+    for (const s of (abaPagos ? pagosBuscados : searchedSchedules)) set.add(Math.round((Number(valorDeReferencia(s)) || 0) * 100) / 100)
     return [...set].sort((a, b) => b - a)
   }, [abaPagos, pagosBuscados, searchedSchedules])
   // Lista final após o filtro de valor (multiselect).
@@ -3153,7 +3155,7 @@ export default function SchedulePanel() {
   const finalSchedules = useMemo(() => {
     const porValor = selValores.size === 0
       ? searchedSchedules
-      : searchedSchedules.filter(s => selValores.has(Math.round((Number(s.amount) || 0) * 100) / 100))
+      : searchedSchedules.filter(s => selValores.has(Math.round((Number(valorDeReferencia(s)) || 0) * 100) / 100))
     return filtrarPorTipoDocumento(porValor, selTipos, tiposDocumento)
   }, [searchedSchedules, selValores, selTipos, tiposDocumento])
   // Chips de "Contas envolvidas": contados sobre a lista já filtrada pelos demais filtros. Conta
@@ -3241,7 +3243,7 @@ export default function SchedulePanel() {
     }, getNextOccurrences, hojeStr)
     const porValor = selValores.size === 0
       ? buscados
-      : buscados.filter(s => selValores.has(Math.round((Number(s.amount) || 0) * 100) / 100))
+      : buscados.filter(s => selValores.has(Math.round((Number(valorDeReferencia(s)) || 0) * 100) / 100))
     const porTipo = filtrarPorTipoDocumento(porValor, selTipos, tiposDocumento)
     return filtroContasAtivo ? filtrarPorContas(porTipo, selContas) : porTipo
   }, [emCalendario, statusCal, displaySchedules, getNextOccurrences, hojeStr, fltDesc, fltPayee, fltCat, fltMin, fltMax, fltAgenda, selValores, selTipos, tiposDocumento, filtroContasAtivo, selContas])

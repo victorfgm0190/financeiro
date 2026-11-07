@@ -41,7 +41,8 @@ const ddmmyyyy = (iso) => (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(
 export function formatarValorHistorico(campo, v, ctx = {}) {
   if (v === null || v === undefined || v === '') return '—'
   switch (campo) {
-    case 'amount': return brl(v)
+    case 'amount':
+    case 'valorTotalOcorrencia': return brl(v)
     case 'date': return ddmmyyyy(v)
     case 'categoryId':
     case 'categoriaCnpjId':

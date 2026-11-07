@@ -39,6 +39,7 @@ import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleD
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
 import { computeOccurrences, registerAndAdvance } from '../lib/occurrences'
+import { ehParcelado } from '../lib/parcelasOcorrencia'
 import { aplicarRenomeacao, nomeFavorecido } from '../lib/favorecidos'
 import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada, lancamentosVinculados, ocorrenciaDaCobranca, baixarPeloValor, reabrirBaixasDoLancamento } from '../lib/scheduleBaixa'
 import { extractLearnKeyword } from '../lib/descMatch'
@@ -5390,7 +5391,9 @@ export function AppProvider({ children }) {
   // "Cobrança recorrente detectada" → "Sim, baixar agendamento": baixa a ocorrência da mesma
   // fatura pelo valor do lançamento (o do cartão), ligada a ele — sem segundo lançamento —, grava
   // previsto × realizado em historico_alteracoes e recalcula gerencial/resgates do cartão.
-  const baixarCobrancaRecorrente = useCallback(({ schedule, tx, meta, atualizarFuturas = false }) => {
+  const baixarCobrancaRecorrente = useCallback(({ schedule, tx, meta, atualizarFuturas: pediuFuturas = false }) => {
+    // Recorrência parcelada: amount é o total da ocorrência; o valor de uma parcela não vira a base.
+    const atualizarFuturas = pediuFuturas && !ehParcelado(schedule)
     const atual = dataRef.current.schedules.find(s => s.id === schedule.id) || schedule
     const conta = dataRef.current.accounts.find(a => a.id === (tx.accountId || atual.accountId))
     const ehCartao = conta?.type === 'credit' || tx.accountType === 'credit'

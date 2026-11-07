@@ -712,6 +712,8 @@ export const scheduleToRow = (s) => ({
   start_date: s.startDate,
   occurrence_type: s.occurrenceType || 'continuous',
   installments: s.installments || null,
+  // Recorrência parcelada: em quantas parcelas mensais cada ocorrência se divide. 1 = sem parcelamento.
+  parcelas_por_ocorrencia: Number(s.parcelasPorOcorrencia) > 1 ? Number(s.parcelasPorOcorrencia) : 1,
   registered: s.registered || [],
   // { "<data>": { tipo, lancamento_id, import_id } } — como cada ocorrência foi baixada.
   registered_meta: s.registeredMeta || {},
@@ -775,6 +777,7 @@ export const rowToSchedule = (r) => ({
   startDate: r.start_date,
   occurrenceType: r.occurrence_type || 'continuous',
   installments: r.installments,
+  parcelasPorOcorrencia: Number(r.parcelas_por_ocorrencia) || 1,
   registered: r.registered || [],
   registeredMeta: r.registered_meta || {},
   skipped: r.skipped || [],

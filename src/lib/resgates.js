@@ -1,7 +1,8 @@
 // Detecção de "resgate/devolução já executado". Puras e compartilhadas — vivem aqui (e não no
 // AppContext) para serem testáveis sem carregar o contexto inteiro.
 
-import { fontePrevistoId } from './gerencialPrevistos.js'
+import { fontePrevistoId, fonteDaOcorrencia } from './gerencialPrevistos.js'
+import { ehParcelado } from './parcelasOcorrencia.js'
 
 // Pago = agendamento registrado/pulado/confirmado OU lançamento executado (transfer com
 // source_schedule_id apontando p/ o slot, caso o agendamento tenha sido removido).
@@ -35,6 +36,9 @@ export const isResgatePagoParaGasto = (txId, schedules, transactions) => {
   // criaria um resgate delta para ele. A mesma despesa sairia DUAS VEZES da conta-reserva, e
   // resgate é transferência real, não número de tela.
   const tx = (transactions || []).find(t => t.id === txId)
+  // Recorrência parcelada: a chave do previsto sai da parcela (data_ocorrencia), não da data do lançamento.
+  const agendada = tx?.scheduleId && tx.dataOcorrencia ? (schedules || []).find(s => s.id === tx.scheduleId) : null
+  if (agendada && ehParcelado(agendada)) return cobertoPor(fonteDaOcorrencia(agendada, tx.dataOcorrencia, tx.date))
   if (tx?.scheduleId && tx.date) return cobertoPor(fontePrevistoId(tx.scheduleId, tx.date))
   return false
 }

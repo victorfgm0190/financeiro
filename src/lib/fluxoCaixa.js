@@ -10,6 +10,7 @@
 
 import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from './origins.js'
 import { occCampos } from './camposSerie.js'
+import { valorBaseDaChave, rotuloDaParcela } from './parcelasOcorrencia.js'
 import { dueDateInMonth } from './fatura.js'
 import { agendamentoNoFluxoPrincipal, valorNoFluxoPrincipal } from './fluxoPrincipal.js'
 import { parteDoEnvelope } from './rateio.js'
@@ -49,10 +50,12 @@ export function envelopeCyclesOverlapping(dueDay, start, end) {
 // (Chaves não-data, como _gerencialKey, nunca casam com 'YYYY-MM-DD' e são ignoradas.)
 export function occEfetiva(schedule, dataOriginal) {
   const ov = schedule.overrides?.[dataOriginal]
-  if (!ov || typeof ov !== 'object') return { date: dataOriginal, amount: schedule.amount }
+  // valorBaseDaChave: o `amount` do agendamento ou, na recorrência parcelada, o valor da parcela.
+  const base = valorBaseDaChave(schedule, dataOriginal)
+  if (!ov || typeof ov !== 'object') return { date: dataOriginal, amount: base }
   return {
     date: ov.date || dataOriginal,
-    amount: ov.amount != null ? Number(ov.amount) : schedule.amount,
+    amount: ov.amount != null ? Number(ov.amount) : base,
   }
 }
 
@@ -246,7 +249,8 @@ export function computeFluxoCaixa({
         if (!m) return
         if (date < start) { agendamentosAntes = round2(agendamentosAntes + m.entrada - m.saida); return }
         out.push({
-          date, description: oc.description || '(agendamento)', type: s.transactionType,
+          // Recorrência parcelada: cada linha diz qual parcela é ("3/12 · ocorr. 2027").
+          date, description: (oc.description || '(agendamento)') + (rotuloDaParcela(s, origDate) ? ` (${rotuloDaParcela(s, origDate)})` : ''), type: s.transactionType,
           fromAccountId: oc.accountId, toAccountId: s.toAccountId,
           categoryId: oc.categoryId || s.reservaExpenseCategoryId || null,
           reservaFuncaoId: s.reservaFuncaoId || null,

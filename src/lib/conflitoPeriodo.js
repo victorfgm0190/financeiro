@@ -7,7 +7,7 @@
 // torno do vencimento). Uma data registrada R ≠ V cujo vencimento mais próximo é V é a baixa
 // "deste mês" gravada com outra data.
 import { computeOccurrences } from './occurrences.js'
-import { JANELA_DIAS } from './ocorrenciasRegistradas.js'
+import { janelaDaSerie } from './ocorrenciasRegistradas.js'
 
 const dia = (d) => String(d || '').slice(0, 10)
 const ms = (d) => new Date(`${dia(d)}T12:00:00`).getTime()
@@ -16,7 +16,7 @@ const ehRecorrente = (s) => !!s && (s.frequency || 'once') !== 'once' && !!s.sta
 
 // Vencimentos-BASE da série (sem baixas/pulos) até passar de `ate` por um período.
 function serieAte(s, ate) {
-  const janela = JANELA_DIAS[s.frequency] ?? 31
+  const janela = janelaDaSerie(s)
   const passos = Math.ceil(Math.max(0, (ms(ate) - ms(s.startDate)) / 86400000) / Math.max(1, janela * 0.9)) + 3
   return computeOccurrences({ ...s, nextOccurrence: null, registered: [], skipped: [] }, Math.min(passos, 5000))
 }
@@ -24,7 +24,7 @@ function serieAte(s, ate) {
 // Vencimento da série cujo período contém `data` (o mais próximo, até meio passo), ou null.
 export function vencimentoDoPeriodo(s, data) {
   if (!ehRecorrente(s) || !data) return null
-  const meio = (JANELA_DIAS[s.frequency] ?? 31) / 2
+  const meio = janelaDaSerie(s) / 2
   let melhor = null
   for (const v of serieAte(s, data)) {
     const d = distDias(v, data)

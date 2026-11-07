@@ -10,7 +10,7 @@ import { ESCOPO, ROTULO_CAMPO } from '../../lib/camposSerie'
 // "Aplicar esta alteração às próximas ocorrências?" com dois botões. `conflitos` = ocorrências
 // seguintes cuja exceção (do campo alterado) será descartada no "Sim" — avisadas antes.
 // `continua` (série sem fim): não mostra a contagem de pendentes, que é só o teto da projeção.
-export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie = 0, onConfirm, onCancel, variante, conflitos = [], continua = false }) {
+export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie = 0, onConfirm, onCancel, variante, conflitos = [], continua = false, anoOcorrencia = null }) {
   const [escopo, setEscopo] = useState(ESCOPO.PARCELA)
   const [motivo, setMotivo] = useState('')
   const parcela = mudancas.filter(m => !['payee', 'tipoDocumentoId'].includes(m.campo)).map(m => ROTULO_CAMPO[m.campo] || m.campo)
@@ -25,6 +25,31 @@ export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie
     </label>
   )
   const dataBR = (d) => String(d).split('-').reverse().join('/')
+  // Recorrência parcelada: mudou o valor total ou o nº de parcelas. "Ocorrência" aqui é o ano inteiro.
+  if (variante === 'parcelamento') {
+    const confirmar = (esc) => onConfirm({ escopo: esc, motivo: motivo.trim() || null })
+    return (
+      <div className="space-y-4">
+        <div className="flex items-start gap-2">
+          <Layers size={16} className="text-primary-fg mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-texto-1">Aplicar só nesta ocorrência ({anoOcorrencia}) ou nesta e nas próximas?</p>
+            <p className="text-xs text-texto-2 mt-0.5">Você alterou: <span className="text-texto-1">{parcela.join(', ')}</span>.</p>
+          </div>
+        </div>
+        <p className="text-[11px] text-texto-3">Só as parcelas pendentes são recalculadas: novo total menos o que já foi pago, dividido entre elas. Parcelas já pagas nunca mudam.</p>
+        <div>
+          <label className="label">Motivo da alteração (opcional)</label>
+          <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Digite o motivo (opcional)" />
+        </div>
+        <div className="flex gap-2 justify-end flex-wrap">
+          <button type="button" className="btn-secondary" onClick={onCancel}>Voltar</button>
+          <button type="button" className="btn-secondary" onClick={() => confirmar(ESCOPO.PARCELA)}>Só nesta ocorrência</button>
+          <button type="button" className="btn-primary" onClick={() => confirmar(ESCOPO.PROXIMAS)}>Nesta e nas próximas</button>
+        </div>
+      </div>
+    )
+  }
   if (variante === 'ocorrencia') {
     const confirmar = (esc) => onConfirm({ escopo: esc, motivo: motivo.trim() || null })
     return (

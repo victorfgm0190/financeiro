@@ -5,6 +5,8 @@
 
 // Campo do agendamento → campo do lançamento / da linha da importação (função de reserva fica em
 // `_reservaFuncaoId` na linha). Ordem = ordem de exibição.
+import { valorDeReferencia } from './parcelasOcorrencia.js'
+
 export const CAMPOS_DO_AGENDAMENTO = [
   { campo: 'grupoGerencial', linha: 'grupoGerencial', rotulo: 'Grupo gerencial' },
   { campo: 'reservaFuncaoId', linha: '_reservaFuncaoId', rotulo: 'Função de reserva' },
@@ -22,7 +24,7 @@ const igual = (a, b) => (vazio(a) && vazio(b)) || a === b
 export function casaAgendamento(tx, schedule) {
   if (!tx || !schedule) return false
   if (schedule.transactionType !== (tx.type || 'expense')) return false
-  if (Math.abs(Number(schedule.amount) - Number(tx.amount)) > 0.50) return false
+  if (Math.abs(Number(valorDeReferencia(schedule)) - Number(tx.amount)) > 0.50) return false
   const txPayee = (tx.payee || '').toLowerCase().trim()
   const sPayee = (schedule.payee || '').toLowerCase().trim()
   const txDesc = (tx.description || '').toLowerCase()

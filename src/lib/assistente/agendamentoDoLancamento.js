@@ -17,6 +17,7 @@
 // valor, descricao, favorecido, conta_id, tipo, atrasado }, o mais parecido primeiro.
 import { normalizarTermo } from './texto.js'
 import { occEfetiva } from '../fluxoCaixa.js'
+import { ehParcelado } from '../parcelasOcorrencia.js'
 import { mesmoNumeroContrato } from '../contratos/numero.js'
 import { algumParecido, prefixoParecido, semIntermediador } from './nomeParecido.js'
 
@@ -50,7 +51,7 @@ export function nomesParecidos(lanc, schedule) {
 
 // Valor variável: projetado, ou algum pagamento ligado com valor diferente do agendado.
 export function valorVariavel(schedule, transactions = []) {
-  if ((schedule.occurrenceType || 'continuous') === 'installment') return false
+  if ((schedule.occurrenceType || 'continuous') === 'installment' || ehParcelado(schedule)) return false
   if (schedule.valorStatus === 'projetado') return true
   return transactions.some(t => t.scheduleId === schedule.id && Math.abs((Number(t.amount) || 0) - schedule.amount) > TOLERANCIA_VALOR)
 }

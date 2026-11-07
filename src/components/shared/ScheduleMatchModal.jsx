@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { RefreshCw, BellOff } from 'lucide-react'
 import { fmt, fmtDate } from './utils'
+import { ehParcelado, frequenciaExibida, valorDeReferencia } from '../../lib/parcelasOcorrencia'
 
 const FREQ_LABELS = {
   once: 'Única', daily: 'Diária', weekly: 'Semanal', biweekly: 'Quinzenal',
@@ -16,7 +17,8 @@ const FREQ_LABELS = {
 // pergunta se o agendamento também muda.
 export default function ScheduleMatchModal({ schedule, tx, categories, remaining = 0, diferencas = [], onRegister, onKeep, onNeverAsk }) {
   const cat = categories.find(c => c.id === schedule.categoryId)
-  const diff = Math.abs(schedule.amount - Number(tx.amount))
+  const valorPrevisto = Number(valorDeReferencia(schedule)) || 0
+  const diff = Math.abs(valorPrevisto - Number(tx.amount))
   const [atualizarFuturas, setAtualizarFuturas] = useState(false)
   const [usarDoAgendamento, setUsarDoAgendamento] = useState(true)
   const [atualizarAgendamento, setAtualizarAgendamento] = useState(false)
@@ -83,11 +85,11 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
                     </span>
                   )}
                   <span className="text-[10px] text-texto-3">
-                    {FREQ_LABELS[schedule.frequency] || schedule.frequency}
+                    {FREQ_LABELS[frequenciaExibida(schedule)] || schedule.frequency}
                   </span>
                 </div>
               </div>
-              <p className="text-base font-bold text-despesa shrink-0">{fmt(schedule.amount)}</p>
+              <p className="text-base font-bold text-despesa shrink-0">{fmt(valorPrevisto)}</p>
             </div>
           </div>
 
@@ -130,7 +132,7 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
               )}
             </div>
           )}
-          {diff > 0.01 && (
+          {diff > 0.01 && !ehParcelado(schedule) && (
             // Só a caixinha é clicável: o texto não é <label>, para um clique perto do botão não
             // marcar sem querer (a opção muda o valor base do agendamento).
             <div className="flex items-start gap-2 text-xs text-texto-2">

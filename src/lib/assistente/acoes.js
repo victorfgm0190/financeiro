@@ -23,6 +23,7 @@ import { contaParaGravar, escolherConta, contaCitada } from './contas.js'
 import { moedaDoTexto } from '../cambio.js'
 import { parcelaAtualDoTexto, numeroContratoDoTexto } from './prontidao.js'
 import { rateioDoTexto } from './rateioTexto.js'
+import { permiteParcelamento, erroLimiteParcelas } from '../parcelasOcorrencia.js'
 import {
   normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra, parcelamentoDoTexto, descricaoGenericaDeCompra, estabelecimentoDoTexto,
 } from './texto.js'
@@ -454,7 +455,8 @@ export const ACOES = [
           ...CAMPOS_LANCAMENTO,
           vencimento: { type: ['string', 'null'], description: 'Primeiro vencimento, YYYY-MM-DD' },
           recorrencia: { type: 'string', enum: RECORRENCIAS, description: 'once = única' },
-          parcelas: { type: ['integer', 'null'], description: 'Número de parcelas, se for parcelado; null = contínuo' },
+          parcelas: { type: ['integer', 'null'], description: 'Série mensal parcelada: número de meses; null = contínuo. Não use para "todo ano em 12x" (isso é parcelas_por_ocorrencia)' },
+          parcelas_por_ocorrencia: { type: ['integer', 'null'], description: 'Cada ocorrência dividida em N parcelas mensais: "seguro de 2800 todo ano em 12x" → recorrencia annual, valor 2800 (TOTAL de cada ano), parcelas_por_ocorrencia 12, parcelas null. Também "IPVA de 3000 em 3x" sem repetir → recorrencia once, parcelas_por_ocorrencia 3. null = sem parcelamento' },
           linha_digitavel: { type: ['string', 'null'], description: 'Boleto: a linha digitável (só os dígitos), se legível' },
         },
         required: ['tipo', 'valor', 'vencimento', 'recorrencia', 'conta_id', 'categoria_id', 'descricao', 'confianca'],
@@ -466,6 +468,16 @@ export const ACOES = [
       out.vencimento = DATA_ISO.test(String(p.vencimento || '')) ? p.vencimento : out.data
       out.recorrencia = doEnum(RECORRENCIAS, p.recorrencia, 'once')
       out.parcelas = Number.isInteger(p.parcelas) && p.parcelas > 1 && p.parcelas <= 360 ? p.parcelas : null
+      // Parcelamento por ocorrência: só em Despesa/Receita, frequência maior que mensal ou Única, e dentro
+      // do limite do período (Anual ≤ 12…). Modelo que mandou "anual + parcelas 12" quis dizer isto:
+      // 12 ANOS é o que o agendamento faria com "parcelas".
+      const nOcc = Number.isInteger(p.parcelas_por_ocorrencia) && p.parcelas_por_ocorrencia > 1 ? p.parcelas_por_ocorrencia
+        : (out.parcelas && out.recorrencia !== 'monthly' && permiteParcelamento(out.recorrencia) && parcelamentoDoTexto(ctx.trechoItem ?? ctx.textoPedido)?.n === out.parcelas ? out.parcelas : null)
+      if (nOcc && permiteParcelamento(out.recorrencia) && out.tipo !== 'transferencia') {
+        const erroN = erroLimiteParcelas(out.recorrencia, nOcc)
+        if (erroN) out.aviso_parcelas_ocorrencia = erroN
+        else { out.parcelas_por_ocorrencia = nOcc; out.parcelas = null }
+      }
       // Boleto: linha digitável (47/48 dígitos; 44 = código de barras) — a prévia SEMPRE pede conferência.
       const linha = String(p.linha_digitavel || '').replace(/\D/g, '')
       if ([44, 47, 48].includes(linha.length)) out.linha_digitavel = linha

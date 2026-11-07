@@ -13,11 +13,21 @@
 
 import { occEfetiva } from './fluxoCaixa.js'
 import { contaPrincipalDe, nomeSubcontaGer } from './provisaoGerencial.js'
+import { ehParcelado, parcelaDaData, dataDaParcela } from './parcelasOcorrencia.js'
 
 export const PREVISTO_PREFIX = 'sch:'
 
 export const fontePrevistoId = (scheduleId, date) =>
   `${PREVISTO_PREFIX}${scheduleId}@${String(date).slice(0, 10)}`
+
+// Recorrência parcelada: 'sch:<agendamento>@<data da ocorrência>#<parcela>'. Identifica a parcela
+// mesmo com a data dela movida. Sem parcelamento, o id de sempre (data efetiva).
+export function fonteDaOcorrencia(schedule, chave, diaEfetivo) {
+  const p = parcelaDaData(schedule, chave)
+  return p
+    ? `${PREVISTO_PREFIX}${schedule.id}@${p.ocorrencia}#${p.numero}`
+    : fontePrevistoId(schedule.id, diaEfetivo)
+}
 
 export function parseFontePrevisto(id) {
   if (typeof id !== 'string' || !id.startsWith(PREVISTO_PREFIX)) return null
@@ -25,7 +35,8 @@ export function parseFontePrevisto(id) {
   // lastIndexOf: o id do agendamento pode conter '@'; a data nunca contém.
   const at = resto.lastIndexOf('@')
   if (at < 1 || at === resto.length - 1) return null
-  return { scheduleId: resto.slice(0, at), date: resto.slice(at + 1) }
+  const [date, parcela] = resto.slice(at + 1).split('#')
+  return { scheduleId: resto.slice(0, at), date, ...(parcela ? { parcela: Number(parcela) } : {}) }
 }
 
 export const ehFontePrevista = (id) => typeof id === 'string' && id.startsWith(PREVISTO_PREFIX)
@@ -65,7 +76,7 @@ export function previstosDaFatura({
       if (faturaDe(dia) !== faturaMesAno) continue
       const valor = Math.round((Number(amount) || 0) * 100) / 100
       if (!(valor > 0)) continue
-      const id = fontePrevistoId(s.id, dia)
+      const id = fonteDaOcorrencia(s, String(original).slice(0, 10), dia)
       if (vistos.has(id)) continue // duas ocorrências reescritas para o mesmo dia
       vistos.add(id)
       out.push({
@@ -116,6 +127,18 @@ export function resolverFontePrevista(id, schedules = [], getOccurrences, limite
   if (!parsed) return null
   const schedule = (schedules || []).find(s => s.id === parsed.scheduleId) || null
   let valor = Number(schedule?.amount) || 0
+  // Parcela: o id aponta direto para ela (registrada ou não), sem procurar entre as pendentes.
+  if (schedule && parsed.parcela) {
+    const chave = dataDaParcela(schedule, parsed.date, parsed.parcela)
+    if (chave) {
+      const ef = occEfetiva(schedule, chave)
+      return {
+        id, scheduleId: parsed.scheduleId, date: String(ef.date).slice(0, 10),
+        valor: Math.round((Number(ef.amount) || 0) * 100) / 100,
+        description: schedule.description || null, categoryId: schedule.categoryId || null, schedule,
+      }
+    }
+  }
   if (schedule && typeof getOccurrences === 'function') {
     for (const original of getOccurrences(schedule, limite)) {
       const ef = occEfetiva(schedule, String(original).slice(0, 10))
@@ -177,7 +200,7 @@ export function projecoesEtapaA({
       const valor = Math.round((Number(amount) || 0) * 100) / 100
       if (!(valor > 0)) continue
       if (efetivadas.has(`${s.id}|${dia}`) || efetivadas.has(`${s.id}|${origDate}`)) continue
-      const id = etapaAPrevistaId(s.id, dia)
+      const id = etapaAPrevistaId(s.id, ehParcelado(s) ? origDate : dia)
       if (vistos.has(id)) continue
       vistos.add(id)
       out.push({

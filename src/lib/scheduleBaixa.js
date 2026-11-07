@@ -15,6 +15,7 @@
 import { computeOccurrences, registerAndAdvance } from './occurrences.js'
 import { occEfetiva } from './fluxoCaixa.js'
 import { descSimilarity, stripParcelaSuffix, normText } from './conciliacaoMatch.js'
+import { ehParcelado } from './parcelasOcorrencia.js'
 
 export const BAIXA_TOLERANCIA_VALOR = 0.05
 
@@ -202,7 +203,8 @@ export const metaBaixaComValor = (meta, previsto, realizado) =>
 // sem valor próprio; as já pagas guardam o delas no meta.
 export function baixarPeloValor(s, { occurrenceDate, meta, previsto, realizado, atualizarFuturas = false }) {
   const baixado = aplicarBaixa(s, occurrenceDate, metaBaixaComValor(meta, previsto, realizado))
-  return atualizarFuturas ? { ...baixado, amount: r2(realizado) } : baixado
+  // Recorrência parcelada: amount é o TOTAL da ocorrência; o valor de uma parcela não pode virar a base.
+  return atualizarFuturas && !ehParcelado(s) ? { ...baixado, amount: r2(realizado) } : baixado
 }
 
 // Baixa UMA ocorrência: mesma transição do markScheduleRegistered (registered + avanço de
@@ -310,7 +312,7 @@ export function txCobrindoOcorrencia(schedule, dataOcorrencia, txsCartao, { clos
   const fatura = faturaDaData(dataOcc, closingDay)
   const palavras = palavrasSignificativas(schedule.description, schedule.payee)
   if (palavras.size === 0) return null
-  const parcelado = schedule.occurrenceType === 'installment'
+  const parcelado = schedule.occurrenceType === 'installment' || ehParcelado(schedule)
   let best = null, bestDist = Infinity
   for (const t of txsCartao || []) {
     if ((t.type || 'expense') !== 'expense' || t.scheduleId) continue

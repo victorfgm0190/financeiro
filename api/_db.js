@@ -242,7 +242,7 @@ export const COLUNAS_OPCIONAIS = {
     'moeda', 'valor_original', 'cotacao', 'data_cotacao', 'spread', 'estimado', 'compra_iof_id', 'bem_id'],
   contas: ['spread_cambio', 'iof_linha_separada'],
   configuracoes: ['iof_compra_internacional', 'reserva_perguntar_virada', 'reserva_dias_caixa'],
-  agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato', 'efetivacoes'],
+  agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato', 'efetivacoes', 'parcelas_por_ocorrencia'],
   envelopes: ['tipo_orcamento', 'valor_dia', 'dias_semana', 'descontar_feriados'],
 }
 // Coluna opcional ausente só sai do upsert quando o valor dela é NEUTRO (o mesmo que o banco sem a
@@ -256,6 +256,7 @@ const NEUTRO_OPCIONAL = {
   'envelopes.valor_dia': [0],
   'agendamentos.valor_status': ['confirmado'],
   'agendamentos.sincronizar_agenda': [true],
+  'agendamentos.parcelas_por_ocorrencia': [1],
 }
 export function valorNeutro(table, col, v) {
   if (v == null || v === false || v === '') return true

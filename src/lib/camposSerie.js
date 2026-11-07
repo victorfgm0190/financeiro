@@ -20,6 +20,7 @@
 import { somarDias, diasEntre } from './fluxoConsultas.js'
 import { FREQ_MENSAIS, datasDaSerie } from './occurrences.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
+import { valorBaseDaChave } from './parcelasOcorrencia.js'
 
 export const CAMPOS_SERIE = ['payee', 'tipoDocumentoId', 'numeroContrato']
 export const CAMPOS_PARCELA = ['amount', 'date', 'categoryId', 'categoriaCnpjId', 'categoriaCpfId', 'description', 'accountId', 'costCenter', 'grupoGerencial']
@@ -29,6 +30,7 @@ export const ROTULO_CAMPO = {
   amount: 'Valor', date: 'Data', categoryId: 'Categoria', categoriaCnpjId: 'Categoria no CNPJ',
   categoriaCpfId: 'Categoria no CPF', description: 'Descrição', accountId: 'Conta',
   costCenter: 'Centro de custo', grupoGerencial: 'Grupo gerencial', payee: 'Favorecido',
+  valorTotalOcorrencia: 'Valor total da ocorrência', parcelasPorOcorrencia: 'Parcelas por ocorrência',
   tipoDocumentoId: 'Tipo de documento',
   numeroContrato: 'Nº do contrato',
 }
@@ -80,7 +82,7 @@ export function occCampos(schedule, dataOriginal) {
   const pick = (k) => (o[k] !== undefined ? o[k] : s[k])
   return {
     date: o.date || dataOriginal,
-    amount: o.amount != null ? Number(o.amount) : s.amount,
+    amount: o.amount != null ? Number(o.amount) : valorBaseDaChave(s, dataOriginal),
     categoryId: pick('categoryId'),
     categoriaCnpjId: pick('categoriaCnpjId'),
     categoriaCpfId: pick('categoriaCpfId'),
@@ -129,7 +131,7 @@ export function planoAgendamento(schedule, { occDate, mudancas, escopo, pendente
       if (m.campo === 'date') {
         if (m.para && m.para !== occDate) ov.date = m.para
         else ov = semCampo(ov, 'date')
-      } else if (normalizarCampo(m.campo, s[m.campo]) === m.para) {
+      } else if (normalizarCampo(m.campo, m.campo === 'amount' ? valorBaseDaChave(s, occDate) : s[m.campo]) === m.para) {
         ov = semCampo(ov, m.campo) // voltou ao valor da série: o override some
       } else {
         ov[m.campo] = m.para

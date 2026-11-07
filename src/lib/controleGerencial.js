@@ -5,6 +5,7 @@
 // Gerenciais), nunca no motor. O histórico não é apagado: o grupo gravado fica; só some da tela.
 // PURO (sem React). Imports com .js.
 import { computeOccurrences } from './occurrences.js'
+import { valorBaseDaChave } from './parcelasOcorrencia.js'
 
 // null/undefined (banco ainda sem a coluna) = comportamento de sempre: ligado.
 export const controleGerencialAtivo = (settings) => settings?.controleGerencial !== false
@@ -53,7 +54,7 @@ export function impedimentosDesligar({ accounts = [], schedules = [], gerencialG
     const prox = (ocorrencias(s, 1) || [])[0] // data da próxima ocorrência PENDENTE
     if (!prox) continue
     const ov = s.overrides?.[prox]
-    agendamentos.push({ agendamento: s, vencimento: ov?.date || prox, valor: Number(ov?.amount ?? s.amount) || 0 })
+    agendamentos.push({ agendamento: s, vencimento: ov?.date || prox, valor: Number(ov?.amount ?? valorBaseDaChave(s, prox)) || 0 })
   }
   return { contas, agendamentos }
 }

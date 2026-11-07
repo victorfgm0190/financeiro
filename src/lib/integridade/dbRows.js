@@ -68,6 +68,7 @@ export const agendamentoDeLinha = (r) => ({
   startDate: dataStr(r.start_date),
   occurrenceType: r.occurrence_type || 'continuous',
   installments: r.installments,
+  parcelasPorOcorrencia: Number(r.parcelas_por_ocorrencia) || 1,
   registered: r.registered || [],
   skipped: r.skipped || [],
   overrides: r.overrides || {},

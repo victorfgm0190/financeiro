@@ -171,5 +171,9 @@ export const MIGRACOES = [
  {
   "nome": "2026-11-06j_venda_de_cota.sql",
   "sql": "-- Venda real por cota do consórcio (evento 'vender_cota' em /api/consorcio-eventos). A cota guarda o custo que\n-- saiu do bem e o evento que a vendeu; sem evento, é marcação manual de cota vendida antes desta função.\n-- Idempotente. Não altera nenhum dado existente: só cria colunas e aceita o novo tipo de evento.\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS vendida_custo NUMERIC(14,2);\nALTER TABLE consorcio_cotas ADD COLUMN IF NOT EXISTS vendida_evento_id TEXT;\nALTER TABLE consorcio_eventos DROP CONSTRAINT IF EXISTS consorcio_eventos_tipo_check;\nALTER TABLE consorcio_eventos ADD CONSTRAINT consorcio_eventos_tipo_check\n  CHECK (tipo IN ('contemplar', 'reajuste', 'vender', 'usar_carta', 'vender_cota'));\n"
+ },
+ {
+  "nome": "2026-11-07_parcelas_por_ocorrencia.sql",
+  "sql": "-- Recorrência com parcelamento em cada ocorrência: em quantas parcelas mensais cada ocorrência se divide.\n-- Com valor maior que 1, agendamentos.amount passa a ser o TOTAL da ocorrência.\n-- 1 = sem parcelamento (todos os agendamentos atuais). Idempotente. Não altera nenhum dado existente.\nALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS parcelas_por_ocorrencia INTEGER NOT NULL DEFAULT 1;\n"
  }
 ]

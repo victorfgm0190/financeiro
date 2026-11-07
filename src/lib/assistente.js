@@ -32,6 +32,8 @@ export function initialDaSugestao(ferramenta, p = {}) {
       frequency: p.recorrencia || 'once',
       occurrenceType: parcelado ? 'installment' : 'continuous',
       installments: parcelado ? Number(p.parcelas) : 0,
+      // Valor = TOTAL de cada ocorrência; o formulário mostra a divisão e o limite.
+      ...(Number(p.parcelas_por_ocorrencia) > 1 ? { parcelasPorOcorrencia: Number(p.parcelas_por_ocorrencia) } : {}),
     }
   }
   // Compra parcelada: valor = TOTAL; o formulário (Parcelado + N) divide pelas parcelas.

@@ -7,7 +7,7 @@ import { fmtDate } from './utils'
 // a partir de `inicio` (inclusive) e mostra a última. O que fica gravado é o de sempre:
 // occurrenceType ('continuous' | 'installment') + installments.
 //   onChange({ occurrenceType, installments })
-export default function FimRepeticao({ inicio, recorrencia, occurrenceType, installments, onChange, rotuloVezes = 'Nº de vezes' }) {
+export default function FimRepeticao({ inicio, recorrencia, occurrenceType, installments, onChange, rotuloVezes = 'Nº de vezes', rotuloModoVezes = 'Número de vezes' }) {
   const [modo, setModo] = useState(occurrenceType === 'installment' ? 'vezes' : 'sem')
   const [ate, setAte] = useState('')
   const calc = modo === 'data' && ate ? ocorrenciasAte({ inicio, ate, recorrencia }) : null
@@ -27,7 +27,7 @@ export default function FimRepeticao({ inicio, recorrencia, occurrenceType, inst
   return (
     <div className="space-y-2">
       <div role="radiogroup" aria-label="Até quando" className="flex rounded-lg overflow-hidden border border-borda-forte">
-        {[['sem', 'Sem fim'], ['vezes', 'Número de vezes'], ['data', 'Até a data']].map(([v, l]) => (
+        {[['sem', 'Sem fim'], ['vezes', rotuloModoVezes], ['data', 'Até a data']].map(([v, l]) => (
           <button key={v} type="button" role="radio" aria-checked={modo === v} onClick={() => escolher(v)}
             className={`flex-1 py-2 text-xs sm:text-sm font-medium transition-colors ${modo === v ? 'bg-primary/15 text-primary-fg' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'}`}>
             {l}

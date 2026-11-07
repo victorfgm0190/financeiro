@@ -1,6 +1,8 @@
 // Datas PROVISÓRIAS no relatório Fluxo de Caixa: simulação de tela (nada é gravado) e o
 // "Aplicar no agendamento", que grava a data num agendamento real.
 
+import { ehParcelado, temConsumo, MSG_DATA_BLOQUEADA } from './parcelasOcorrencia.js'
+
 const round2 = n => Math.round(n * 100) / 100
 
 // Linhas da tela a partir das linhas de computeFluxoCaixa, aplicando as datas provisórias
@@ -93,6 +95,8 @@ export function opcoesAplicarData(s, orig, nova, primeiraPendente) {
   } else if (ultimaFeita && nova <= ultimaFeita) {
     serie = { ok: false, motivo: `A nova data não pode ser igual ou anterior a uma ocorrência já registrada/pulada (${ultimaFeita}).` }
   }
+  // Recorrência parcelada: a série sai da Data de Início e as baixas ficam presas às datas atuais.
+  if (serie.ok && ehParcelado(s) && temConsumo(s)) serie = { ok: false, motivo: MSG_DATA_BLOQUEADA }
   const avisos = []
   if (serie.ok) {
     const excecoes = Object.keys(s.overrides || {}).filter(k => ehChaveData(k) && k > orig)

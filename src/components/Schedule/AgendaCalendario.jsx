@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, ChevronDown, AlertTriangle, CheckCircle } from 'lucide-react'
 import { fmt, fmtDate } from '../shared/utils'
 import { occCampos } from '../../lib/camposSerie'
+import { rotuloDaParcela } from '../../lib/parcelasOcorrencia'
 import { montarCalendario, somarMeses, NOMES_MES, DIAS_SEMANA, ladoDoGrupo } from '../../lib/agendaCalendario'
 
 // Visão Calendário de Agendamentos. Só exibição: os itens vêm de lib/agendaCalendario (as mesmas
@@ -169,7 +170,7 @@ export default function AgendaCalendario({
                 <button type="button" onClick={() => setAbertoMobile(aberto ? null : i.key)} aria-expanded={aberto}
                   className="w-full min-h-[52px] flex items-center gap-3 px-3 py-2 text-left active:bg-surface-hover/40">
                   <span className="flex-1 min-w-0">
-                    <span className="block text-sm text-texto-1 truncate">{oc.description || i.schedule.description || '(agendamento)'}</span>
+                    <span className="block text-sm text-texto-1 truncate">{oc.description || i.schedule.description || '(agendamento)'}{rotuloDaParcela(i.schedule, i.ocorrencia) ? ` · ${rotuloDaParcela(i.schedule, i.ocorrencia)}` : ''}</span>
                     <span className="flex flex-wrap gap-1 mt-0.5">
                       {i.atrasado && <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-perigo-bg text-perigo">⚠ Atrasado</span>}
                       {!i.proxima && <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-2 text-texto-3">Antes, efetive a de {fmtDate(i.antesDe).slice(0, 5)}</span>}

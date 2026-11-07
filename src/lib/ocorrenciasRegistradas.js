@@ -21,6 +21,7 @@ import { computeOccurrences } from './occurrences.js'
 import { occEfetiva } from './fluxoCaixa.js'
 import { lancamentosVinculados } from './scheduleBaixa.js'
 import { casaCategoria } from './filtroCategoria.js'
+import { ehParcelado, parcelasDaSerie } from './parcelasOcorrencia.js'
 
 export const STATUS_OCORRENCIA = { PAGA: 'paga', PULADA: 'pulada', BAIXADA: 'baixada', AVULSO: 'avulso' }
 
@@ -28,6 +29,16 @@ export const STATUS_OCORRENCIA = { PAGA: 'paga', PULADA: 'pulada', BAIXADA: 'bai
 export const JANELA_DIAS = {
   daily: 1, weekly: 7, biweekly: 14, monthly: 31, bimonthly: 62, quarterly: 92,
   quadrimestral: 123, semiannual: 184, annual: 366, once: 31,
+}
+
+// Recorrência parcelada: as parcelas são mensais, seja qual for a frequência das ocorrências.
+export const janelaDaSerie = (s) => (ehParcelado(s) ? JANELA_DIAS.monthly : (JANELA_DIAS[s?.frequency] ?? 31))
+
+// Total de "x de N" do histórico: parcelas somadas (recorrência parcelada com fim) ou ocorrências.
+const totalDaSerie = (s, continua) => {
+  if (continua) return null
+  if (ehParcelado(s)) return parcelasDaSerie(s).length || null
+  return Number(s?.installments) || null
 }
 
 const MOTIVO_BAIXA = {
@@ -49,7 +60,7 @@ export function resumoRegistradas(schedule, transactions = []) {
   const continua = (schedule?.occurrenceType || 'continuous') !== 'installment'
   return {
     registradas, puladas, continua,
-    total: continua ? null : (Number(schedule?.installments) || null),
+    total: totalDaSerie(schedule, continua),
     temAlgo: registradas + puladas > 0 || vinculados,
   }
 }
@@ -58,7 +69,7 @@ export function historicoOcorrencias(schedule, transactions = []) {
   if (!schedule) return { linhas: [], totalPago: 0, totalPrevisto: 0, diferenca: 0, nPagas: 0 }
   const s = schedule
   const continua = (s.occurrenceType || 'continuous') !== 'installment'
-  const total = continua ? null : (Number(s.installments) || null)
+  const total = totalDaSerie(s, continua)
   const registradas = [...new Set((s.registered || []).map(dia))]
   const puladas = new Set((s.skipped || []).map(dia))
   const eventos = [...new Set([...registradas, ...puladas])].sort()
@@ -80,7 +91,7 @@ export function historicoOcorrencias(schedule, transactions = []) {
     if (tx && !usados.has(tx.id)) { casado.set(d, tx); usados.add(tx.id) }
   }
   // b) mais próximo da data registrada, ainda não usado, dentro da janela. Ordem cronológica.
-  const janela = JANELA_DIAS[s.frequency] ?? 31
+  const janela = janelaDaSerie(s)
   for (const d of [...registradas].sort()) {
     if (casado.has(d)) continue
     let melhor = null

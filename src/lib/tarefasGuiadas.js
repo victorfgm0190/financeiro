@@ -331,7 +331,7 @@ export const TODAS_AS_TAREFAS = [
       { alvo: 'agendamento-form.valor', espera: 'preencher', texto: 'Digite o valor de UMA parcela. Exemplo: 300,00.' },
       { alvo: 'agendamento-form.frequencia', espera: 'nenhuma', texto: 'Escolha "Mensal" (uma parcela por mês).' },
       { alvo: 'agendamento-form.data', espera: 'nenhuma', texto: 'Coloque a data da primeira parcela.' },
-      { alvo: 'agendamento-form.ate-quando', espera: 'clique', texto: 'Clique em "Número de vezes" e digite quantas parcelas são. Exemplo: 10.' },
+      { alvo: 'agendamento-form.ate-quando', espera: 'clique', texto: 'Clique em "Número de ocorrências" e digite quantas vezes a conta se repete. Exemplo: 10.' },
       { alvo: 'agendamento-form.salvar', espera: 'salvar', texto: 'Confira as parcelas na prévia e clique em "Criar Agendamento".' },
     ],
     novoItem: { colecao: 'schedules', filtro: (s) => s.occurrenceType === 'installment' && !s.isProvisao },

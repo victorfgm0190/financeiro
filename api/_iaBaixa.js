@@ -45,6 +45,7 @@ export const agendamentoDaLinha = (r) => ({
   id: r.id, description: r.description || '', transactionType: r.transaction_type, accountId: r.account_id,
   amount: Number(r.amount) || 0, payee: r.payee || '', frequency: r.frequency, startDate: dataStr(r.start_date),
   occurrenceType: r.occurrence_type || 'continuous', installments: r.installments,
+  parcelasPorOcorrencia: Number(r.parcelas_por_ocorrencia) || 1,
   registered: Array.isArray(r.registered) ? r.registered : [], skipped: Array.isArray(r.skipped) ? r.skipped : [],
   overrides: r.overrides || {}, nextOccurrence: dataStr(r.next_occurrence),
 })
@@ -90,7 +91,7 @@ export function filtrarCandidatos(agendamentos, criterio, hoje) {
 export async function buscarCandidatosBaixa(user, criterio, hoje = hojeSaoPaulo(), q = query) {
   const rows = await q(
     `SELECT id, description, transaction_type, account_id, to_account_id, amount, payee, frequency, start_date,
-            occurrence_type, installments, registered, skipped, overrides, next_occurrence, reserva_funcao_id
+            occurrence_type, installments, parcelas_por_ocorrencia, registered, skipped, overrides, next_occurrence, reserva_funcao_id
        FROM agendamentos
       WHERE transaction_type IN ('expense', 'income') AND COALESCE(is_provisao, false) = false`)
   const visiveis = recortarLeitura('agendamentos', rows, await contextoPerfis(q, user))
