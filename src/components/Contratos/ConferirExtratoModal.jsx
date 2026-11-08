@@ -12,6 +12,7 @@ import { saldoTaxasUnicas } from '../../lib/contratos/taxaUnica'
 import {
   TIPOS_EXTRATO, ROTULOS_TIPO_EXTRATO, linhasDaLeitura, linhasDoProjetado, compararComProjetado, conferirSaldoAnterior,
   linhaAjusteSaldo, avisosTaxasUnicas, montarConferencia, taxasUnicasDo, conferirRepasse, linhaAjusteRepasse,
+  periodoDeOutroMes,
 } from '../../lib/contratos/conferenciaExtrato'
 import { extrairExtratoDeImagem } from '../../lib/contratos/imagemBoleto'
 
@@ -118,7 +119,9 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
   const itensTela = linhas.map(l => ({ ...l, valor: valorDe(l) }))
   const saldoExtrato = numOuNull(cab.saldoTexto) == null ? null : r2(cab.saldoSinal * numOuNull(cab.saldoTexto))
   const totalExtrato = numOuNull(cab.total) == null ? null : r2(cab.totalSinal * numOuNull(cab.total))
-  const difSaldo = linha.foraDoSaldo ? null : conferirSaldoAnterior(saldoExtrato, projetada.saldo_anterior)
+  // Extrato de outra competência: bloqueia e esconde os avisos de saldo/total (comparariam meses diferentes).
+  const outroMes = periodoDeOutroMes(cab.periodo, competencia)
+  const difSaldo = linha.foraDoSaldo || outroMes ? null : conferirSaldoAnterior(saldoExtrato, projetada.saldo_anterior)
   const temAjusteSaldo = linhas.some(l => l.ajusteSaldo)
   const comparacao = compararComProjetado(itensTela, projetada.itens, contrato)
   const avisos = avisosTaxasUnicas(itensTela, saldosTaxa, contrato)
@@ -130,11 +133,12 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
   const incluir = () => setLinhas(prev => [...prev, paraTela({ id: `n${Date.now().toString(36)}`, descricao: '', valor: -0, tipo: 'despesa', natureza: 'outra', taxa_id: null })])
   const criarAjuste = () => setLinhas(prev => [...prev, { ...paraTela(linhaAjusteSaldo(difSaldo.diferenca)), ajusteSaldo: true }])
   // "Passar adiante" vale para a diferença escolhida; se os números mudarem, pergunta de novo.
-  const difRepasse = linha.foraDoSaldo ? null : conferirRepasse(numOuNull(cab.repasse), montado.resumo.saldo, totalExtrato)
+  const difRepasse = linha.foraDoSaldo || outroMes ? null : conferirRepasse(numOuNull(cab.repasse), montado.resumo.saldo, totalExtrato)
   const decidido = !difRepasse || (passarDif != null && Math.abs(passarDif - difRepasse.diferenca) < 0.005)
   const ajustarRepasse = () => { setPassarDif(null); setLinhas(prev => [...prev, paraTela(linhaAjusteRepasse(difRepasse.diferenca))]) }
 
   const confirmar = async () => {
+    if (outroMes) return setErro(`Este extrato é de ${outroMes.extrato}; a competência é ${outroMes.conferindo}.`)
     if (!decidido) return setErro('Escolha o que fazer com a diferença entre o extrato e os itens conferidos.')
     const sem = itensTela.find(l => !String(l.descricao || '').trim())
     if (sem) return setErro('Informe a descrição de todos os itens.')
@@ -156,6 +160,20 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
   return (
     <Modal open onClose={onClose} title={titulo} size="xl">
       <div className="space-y-3 text-sm">
+        {outroMes && (
+          <div role="alert" data-testid="aviso-periodo" className="p-3 rounded-lg border-2 border-perigo/60 bg-perigo/10 text-sm text-texto-1 space-y-2">
+            <p className="flex items-start gap-2 font-medium">
+              <AlertTriangle size={16} className="text-perigo shrink-0 mt-0.5" />
+              Este extrato é de {outroMes.extrato} e você está conferindo {outroMes.conferindo}. Anexe o extrato certo ou troque a competência.
+            </p>
+            <p className="text-xs text-texto-2">Se a leitura errou o período, corrija o campo &quot;Período do extrato&quot; abaixo.</p>
+            {podeEditar && (
+              <button type="button" className="btn-secondary text-xs py-1 flex items-center gap-1" onClick={() => { setLinhas(null); setErro(''); setPassarDif(null) }}>
+                <Upload size={12} /> Anexar outro extrato
+              </button>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-texto-3">
           <label>Período do extrato
             <input className="input py-1 text-sm" value={cab.periodo} onChange={e => setCab(c => ({ ...c, periodo: e.target.value }))} aria-label="Período do extrato" placeholder={fmtYm(competencia)} />
@@ -278,7 +296,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
         {erro && <p role="alert" className="text-xs text-perigo">{erro}</p>}
         <div className="flex justify-end gap-2 pt-2 border-t border-borda">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-          {podeEditar && <button type="button" className="btn-primary" disabled={salvando || !decidido} title={decidido ? undefined : 'Escolha o que fazer com a diferença do repasse'} onClick={confirmar}>Confirmar conferência</button>}
+          {podeEditar && <button type="button" className="btn-primary" disabled={salvando || !decidido || !!outroMes} title={outroMes ? 'O extrato é de outra competência' : decidido ? undefined : 'Escolha o que fazer com a diferença do repasse'} onClick={confirmar}>Confirmar conferência</button>}
         </div>
       </div>
     </Modal>

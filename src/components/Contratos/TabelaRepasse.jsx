@@ -6,6 +6,7 @@ import { competenciasDoRepasse, confirmadosDe, repassesRegistrados, ehParcelaGer
 import ComposicaoRepasseModal from './ComposicaoRepasseModal'
 import ConferirExtratoModal from './ConferirExtratoModal'
 import { extratoPendente } from '../../lib/contratos/conferenciaExtrato'
+import { avisoCategoriaContrato } from '../../lib/contratos/composicaoRepasse'
 
 // Status de uma competência do repasse na ficha.
 export function statusDaCompetencia(l, hoje) {
@@ -41,9 +42,15 @@ export default function TabelaRepasse({ contrato }) {
 
   const th = 'px-2 py-1.5 text-right font-medium'
   const pendente = extratoPendente(contrato, linhas, hoje)
+  const semCategoria = avisoCategoriaContrato(contrato)
   return (
     <div>
       <p className="label">Repasses por competência</p>
+      {semCategoria && (
+        <p role="alert" data-testid="aviso-categoria-contrato" className="mb-2 text-xs text-aviso">
+          ⚠ {semCategoria} (Editar → Taxa de administração). Os itens do repasse ficam sem categoria até lá.
+        </p>
+      )}
       {pendente && (
         <p role="alert" className="mb-2 text-xs text-aviso flex flex-wrap items-center gap-2">
           ⚠ {pendente.texto}.

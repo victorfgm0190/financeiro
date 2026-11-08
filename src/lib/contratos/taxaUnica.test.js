@@ -186,3 +186,18 @@ describe('conferirRepasse — valor do extrato × saldo do Finup', () => {
     expect(conferirRepasse(0, 120, null)).toMatchObject({ diferenca: -120, fonte: 'repasse' })
   })
 })
+
+describe('competenciaDoPeriodo — período escrito no extrato', () => {
+  it('reconhece os formatos e recusa período ambíguo', async () => {
+    const { competenciaDoPeriodo, periodoDeOutroMes } = await import('./conferenciaExtrato.js')
+    expect(competenciaDoPeriodo('03/2026')).toBe('2026-03')
+    expect(competenciaDoPeriodo('01/03 a 31/03/2026')).toBe('2026-03')
+    expect(competenciaDoPeriodo('Março/2026')).toBe('2026-03')
+    expect(competenciaDoPeriodo('mar de 2026')).toBe('2026-03')
+    expect(competenciaDoPeriodo('2026-03')).toBe('2026-03')
+    expect(competenciaDoPeriodo('21/02/2026 a 20/03/2026')).toBeNull()
+    expect(competenciaDoPeriodo('')).toBeNull()
+    expect(periodoDeOutroMes('03/2026', '2026-04')).toEqual({ extrato: '03/2026', conferindo: '04/2026' })
+    expect(periodoDeOutroMes('04/2026', '2026-04')).toBeNull()
+  })
+})

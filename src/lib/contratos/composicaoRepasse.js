@@ -75,6 +75,31 @@ export function conferirTaxaUnica(item) {
 const vigente = (it, competencia) => (!it.vigencia_inicio || it.vigencia_inicio <= competencia)
   && (!it.vigencia_fim || competencia <= it.vigencia_fim)
 
+// CATEGORIA PADRÃO de um item da composição, tirada do contrato (o item nasce com ela; editável):
+//   aluguel → categoria do contrato; taxa_adm → categoria da taxa de adm.; tarifa/taxa única → a do
+//   item no contrato ou, vazia ("a da taxa de adm."), a da taxa de adm. Demais tipos: null.
+export function categoriaPadraoDoItem(contrato, item) {
+  const adm = contrato?.categoria_taxa_adm_id || null
+  if (item?.tipo === 'aluguel') return contrato?.categoria_id || null
+  if (item?.tipo === 'taxa_adm') return adm
+  if (item?.tipo === 'tarifa' || item?.tipo === 'taxa_unica') {
+    const id = item.taxa_id || String(item.chave || '').split(':')[1] || null
+    return (contrato?.itens_repasse || []).find(t => t.id === id)?.categoria_id || adm
+  }
+  return null
+}
+// Lê a composição gravada completando a categoria vazia com a padrão (competências gravadas antes de o
+// contrato ter a categoria). Só na leitura: o banco não é alterado.
+const comCategoria = (contrato, i) => (i.categoria_id ? i : { ...i, categoria_id: categoriaPadraoDoItem(contrato, i) })
+
+// Contrato sem a categoria que os itens automáticos usariam → o aviso (uma vez, na ficha), ou null.
+export function avisoCategoriaContrato(contrato) {
+  if (!contrato?.modo_repasse || contrato.categoria_taxa_adm_id) return null
+  const usa = Number(contrato.taxa_adm_pct) > 0
+    || (contrato.itens_repasse || []).some(t => t.ativo !== false && (t.tipo_repasse === 'tarifa_fixa' || t.tipo_repasse === 'taxa_unica') && !t.categoria_id)
+  return usa ? 'Defina a categoria da taxa de administração no contrato' : null
+}
+
 // Itens automáticos da competência (sem a taxa de administração, que depende deles):
 //   aluguel: { valor, desc } do plano da competência, ou null (mês sem cobrança).
 //   taxasUnicas: projeção da competência ({ [taxaId]: { valor, k, n } }, de projetarTaxasUnicas);
@@ -120,7 +145,7 @@ function juntar(auto, salvo) {
     ...auto,
     origem: 'auto',
     descricao: salvo.descricao || auto.descricao,
-    categoria_id: salvo.categoria_id !== undefined ? salvo.categoria_id : auto.categoria_id,
+    categoria_id: salvo.categoria_id || auto.categoria_id,
     dedutivel_ir: salvo.dedutivel_ir ?? auto.dedutivel_ir,
     valor_calculado: auto.valor,
     valor: informado ? r2(salvo.valor) : auto.valor,
@@ -145,7 +170,7 @@ export function taxaAdmCalculada(contrato, itens) {
 // Conferida pelo extrato ou fechada: a composição gravada vale como está.
 //   opts.taxasUnicas: projeção das taxas únicas nesta competência (saldo a descontar).
 export function comporCompetencia(contrato, competencia, aluguel, linha = null, { taxasUnicas = null } = {}) {
-  if (linhaCongelada(linha)) return (linha.itens || []).map(i => ({ ...i, valor: r2(i.valor) }))
+  if (linhaCongelada(linha)) return (linha.itens || []).map(i => comCategoria(contrato, { ...i, valor: r2(i.valor) }))
   const gravados = linha?.itens || []
   const salvo = new Map(gravados.filter(i => i.origem === 'auto').map(i => [i.chave, i]))
   const auto = automaticosSemAdm(contrato, competencia, aluguel, taxasUnicas).map(a => juntar(a, salvo.get(a.chave)))

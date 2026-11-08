@@ -194,6 +194,25 @@ export function conferirRepasse(repasseExtrato, saldoCalculado, totalExtrato = n
   return comparar(repasseExtrato, 'repasse')
 }
 
+// Competência ("AAAA-MM") do "Período do extrato" escrito: "03/2026", "01/03 a 31/03/2026",
+// "março/2026", "mar de 2026", "2026-03". Mais de um mês (período que cruza meses) ou nada → null.
+const MESES_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+export function competenciaDoPeriodo(texto) {
+  const t = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const achados = new Set()
+  const add = (a, m) => { if (m >= 1 && m <= 12 && a >= 2000 && a <= 2100) achados.add(`${a}-${String(m).padStart(2, '0')}`) }
+  for (const x of t.matchAll(/(\d{4})-(\d{1,2})(?!\d)/g)) add(Number(x[1]), Number(x[2]))
+  for (const x of t.matchAll(/(?<![\d-])(\d{1,2})[/.-](\d{4})(?!\d)/g)) add(Number(x[2]), Number(x[1]))
+  for (const x of t.matchAll(/\b(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?\s*(?:\/|de)?\s*(\d{4})/g)) add(Number(x[2]), MESES_PT.indexOf(x[1]) + 1)
+  return achados.size === 1 ? [...achados][0] : null
+}
+
+// Extrato de outra competência → { extrato, conferindo } ("MM/AAAA"), ou null (mesma, ou período ilegível).
+export function periodoDeOutroMes(periodo, competencia) {
+  const c = competenciaDoPeriodo(periodo)
+  return c && c !== competencia ? { extrato: fmtYm(c), conferindo: fmtYm(competencia) } : null
+}
+
 export const linhaAjusteRepasse = (diferenca) => ({
   id: `ar${Date.now().toString(36)}`, descricao: 'Ajuste do repasse (líquido do extrato)', valor: r2(diferenca), tipo: 'ajuste', natureza: null, taxa_id: null,
 })
