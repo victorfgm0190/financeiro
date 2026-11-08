@@ -41,6 +41,7 @@ export function validarEtapaCampo(i, f) {
       if (!(dr >= 1 && dr <= 31)) return E('dia_repasse', 'Dia do repasse entre 1 e 31.')
       const pct = txt(f.taxa_adm_pct).trim() ? num(f.taxa_adm_pct) : 0
       if (pct == null || pct < 0 || pct > 100) return E('taxa_adm_pct', 'Taxa de administração entre 0% e 100%.')
+      if (pct > 0 && !txt(f.categoria_taxa_adm_id).trim()) return E('categoria_taxa_adm_id', 'Escolha a categoria da taxa de administração.')
       if (txt(f.valor_primeiro_mes).trim() && !(num(f.valor_primeiro_mes) > 0)) return E('valor_primeiro_mes', 'Valor do 1º mês inválido (deixe em branco para usar o proporcional).')
       const saldo = txt(f.saldo_inicial_valor).trim() ? num(f.saldo_inicial_valor) : 0
       if (saldo == null || saldo < 0) return E('saldo_inicial_valor', 'Saldo inicial com a administradora inválido.')

@@ -171,3 +171,32 @@ describe('ContratoWizard — tarifas e taxas da administradora', () => {
     expect(levados).toContain(c)
   })
 })
+
+describe('ContratoWizard — categoria da taxa de administração', () => {
+  it('taxa de adm. > 0 sem categoria: Avançar barra com erro junto do campo; escolhida, avança e grava', async () => {
+    abrirValores()
+    mudar(campo('Taxa de administração (%)').querySelector('input'), '10')
+    avancar()
+    const c = campo('Categoria da taxa de administração')
+    expect(c.hasAttribute('data-erro')).toBe(true)
+    expect(within(c).getByRole('alert').textContent).toBe('Escolha a categoria da taxa de administração.')
+    expect(levados).toContain(c)
+
+    fireEvent.click(within(c).getByRole('button', { expanded: false }))
+    const opcao = screen.getAllByRole('button').find(b => b.hasAttribute('data-item') && b.textContent === 'Taxas')
+    fireEvent.mouseDown(opcao)
+    fireEvent.click(opcao)
+    expect(campo('Categoria da taxa de administração').hasAttribute('data-erro')).toBe(false)
+    avancar(); avancar(); avancar()
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar/ }))
+    await vi.waitFor(() => expect(criarContrato).toHaveBeenCalled())
+    expect(criarContrato.mock.calls[0][0]).toMatchObject({ taxa_adm_pct: 10, categoria_taxa_adm_id: 'cat-adm' })
+  })
+
+  it('sem taxa de adm. (vazia ou 0): a categoria não é exigida', () => {
+    abrirValores()
+    mudar(campo('Taxa de administração (%)').querySelector('input'), '0')
+    avancar()
+    expect(screen.queryByText('Escolha a categoria da taxa de administração.')).toBeNull()
+  })
+})

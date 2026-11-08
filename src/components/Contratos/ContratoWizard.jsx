@@ -792,7 +792,7 @@ function CamposRepasse({ f, set, categories }) {
         </select>
         <p className="text-[11px] text-texto-3 mt-1">O valor de cada mês pode ser corrigido na composição (fica o calculado e o informado).</p>
       </Campo>
-      <Campo label="Categoria da taxa de administração" className="sm:col-span-2">
+      <Campo campo="categoria_taxa_adm_id" label="Categoria da taxa de administração" className="sm:col-span-2">
         <CategorySelect categories={categories} value={f.categoria_taxa_adm_id} onChange={e => set('categoria_taxa_adm_id', e.target.value)} type="expense" perfilId={f.perfil_id || null} searchable />
       </Campo>
       <Campo campo="valor_primeiro_mes" label="Aluguel do 1º mês" className="sm:col-span-2">
