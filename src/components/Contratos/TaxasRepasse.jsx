@@ -1,7 +1,6 @@
 import { useContext, useState } from 'react'
 import { Plus, Trash2, Pencil, Check } from 'lucide-react'
 import CategorySelect from '../shared/CategorySelect'
-import HelpCampo from '../shared/HelpCampo'
 import CampoValor from './CampoValor'
 import { TIPOS_TAXA, BOTOES_TAXA, AJUDA_FORMA_DESCONTO, novaTaxaForm, parcelasDoTexto, resumoTaxa, somaParcelasTexto, erroTaxa, formaDoForm, valoresDoForm } from '../../lib/contratos/taxasRepasseForm'
 import { FORMAS_TAXA_UNICA } from '../../lib/contratos/taxaUnica'
@@ -36,12 +35,12 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {Object.entries(BOTOES_TAXA).map(([k, b]) => (
           <div key={k} className="min-w-0">
+            {/* Sem ⓘ: a explicação já está escrita embaixo do botão. */}
             <div className="flex items-center gap-1">
               <button type="button" className="btn-secondary text-xs py-1 flex items-center gap-1"
                 onClick={() => onChange([...linhas, { ...novaTaxaForm(k, inicio), _editando: true }])}>
                 <Plus size={12} /> {b.rotulo}
               </button>
-              <HelpCampo texto={b.explicacao} />
             </div>
             <p className="text-[11px] text-texto-3 mt-1">{b.explicacao}</p>
           </div>

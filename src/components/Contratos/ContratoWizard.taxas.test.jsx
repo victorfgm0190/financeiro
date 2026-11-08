@@ -61,6 +61,8 @@ describe('ContratoWizard — tarifas e taxas da administradora', () => {
     expect(screen.getByText(/Valor igual descontado todo mês no repasse, enquanto valer \(ex\.: tarifa bancária\)\. Informe o valor e o mês de início; o fim é opcional\./)).toBeTruthy()
     expect(screen.getByText(/Cobrança feita uma vez só no contrato, com total fechado, descontada em uma ou mais parcelas de valores livres/)).toBeTruthy()
     expect(screen.getByText('As tarifas e taxas são gravadas ao concluir o cadastro (Confirmar / Salvar aditivo).')).toBeTruthy()
+    // Explicação já escrita embaixo do botão: sem ⓘ repetindo o mesmo texto.
+    expect(screen.queryAllByRole('button', { name: /^Ajuda: (Valor igual descontado|Cobrança feita uma vez)/ })).toHaveLength(0)
   })
 
   it('taxa única: soma das parcelas ao digitar, sem "(0)" no rótulo; OK fecha no resumo; Editar reabre', () => {

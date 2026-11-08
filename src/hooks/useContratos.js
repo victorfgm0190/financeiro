@@ -13,7 +13,7 @@ import { blocoDoRepasse, composicaoDoRecebimento } from '../lib/contratos/saldoR
 import {
   gerarPlanoParcelas, planejarSincronizacao, confirmadosDe, cobertasDoContrato, inicioDasParcelas,
   ehParcelaGerada, parcelaPaga, planoConfirmacaoReajuste, proximoReajuste, r2, rotuloContrato,
-  planoManutencao, idParcela, parcelaDeVinculo, ehParcelaDeVinculo, repassesRegistrados,
+  planoManutencao, idParcela, parcelaDeVinculo, ehParcelaDeVinculo, repassesRegistrados, parcelaDoRepasse,
   competenciasDoRepasse, competenciaDaParcela,
 } from '../lib/contratos/parcelas'
 import { planoVinculo, planoDesvinculo } from '../lib/contratos/vinculo'
@@ -924,7 +924,10 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
         await gravarVinculoNaLinha({
           aplicar: () => update(d => ({
             ...d,
-            schedules: d.schedules.some(s => s.id === nova.id) ? d.schedules : [...d.schedules, nova],
+            // Pendente da mesma competência criada no meio do caminho (replanejamento): vira a paga.
+            schedules: d.schedules.some(s => s.id === nova.id)
+              ? d.schedules.map(s => (s.id === nova.id && !parcelaPaga(s) ? nova : s))
+              : [...d.schedules, nova],
             transactions: d.transactions.map(t => (t.id === tx.id ? { ...t, ...noLancamento } : t)),
           })),
           persistir: () => persistir({ pronto: est => baixadaCom(est, tx.id), chaves }),
@@ -958,6 +961,27 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
       travas.forEach(k => vinculosEmAndamento.current.delete(k))
     }
   }, [dataRef, update, registrarEvento])
+
+  // ETAPA 6 — repasse JÁ LANÇADO na conta (antes do contrato) ligado à competência: o lançamento não
+  // muda (valor, data, categoria e conta ficam); ganha contrato e a cópia da composição; o agendamento
+  // pendente da competência é baixado por ele (sem criar outro) ou, sem agendamento, a parcela nasce já
+  // paga (parcelaDeVinculo). Depois, a pós-efetivação fecha as competências quitadas e, com valor
+  // diferente do calculado, pergunta do ajuste (efetivarRepasse — a regra de sempre).
+  //   fns: { vincular, desvincular } = vincularLancamento/desvincularLancamento do AppContext.
+  const vincularRepasseLancado = useCallback(async (contrato, competencia, txId, fns) => {
+    const atual = contratosRef.current.find(c => c.id === contrato.id) || contrato
+    const tx = dataRef.current.transactions.find(t => t.id === txId)
+    if (!tx) throw new Error('Lançamento não encontrado.')
+    const l = (await linhasRepasse(atual)).find(x => x.competencia === competencia)
+    if (!l || !(l.repasse > 0)) throw new Error(`A competência ${fmtYm(competencia)} não tem repasse a receber.`)
+    const item = parcelaDoRepasse(atual, l)
+    const s = dataRef.current.schedules.find(x => x.id === item.id) || null
+    if (s && parcelaPaga(s)) throw new Error(`O repasse de ${fmtYm(competencia)} já está baixado.`)
+    const linha = s
+      ? { ...item, key: `aluguel:${competencia}`, schedule: s, ocorrencia: s.startDate, paga: false, semParcela: false, valor: r2(s.amount) }
+      : { ...item, key: `aluguel:${competencia}`, semParcela: true, valor: r2(item.valor) }
+    await vincularLancamentoNaLinha(atual, linha, tx, fns)
+  }, [dataRef, linhasRepasse, vincularLancamentoNaLinha])
 
   // "Desfazer vínculo": a parcela volta a como estava (pendente, ou some se foi criada só para o
   // vínculo), o lançamento fica — sem contrato e sem composição; créditos compensados nele reabrem.
@@ -1223,7 +1247,7 @@ export function useContratos({ habilitado, update, dataRef, dados, dbConectado, 
     regrasContratos: regras, criarRegraContrato: criarRegra, atualizarRegraContrato: atualizarRegra, excluirRegraContrato: excluirRegra,
     creditosContratos: creditos, adiarCreditoNaParcela, editarComposicaoLancamento,
     trocarDestinoCredito, criarCreditoManual, aplicarCreditosEmValorManual, justificarDiferenca, informarComposicao,
-    vincularLancamentoNaLinha, desfazerVinculoLancamento,
+    vincularLancamentoNaLinha, vincularRepasseLancado, desfazerVinculoLancamento,
     pendenciasContrato: pendencias, resolverPendenciaContrato: resolverPendencia,
     confirmarComposicaoContrato: confirmarComposicao, estimarComposicaoContrato: estimarComposicao,
     notificarEfetivacao, reverterEfetivacaoContrato: reverterEfetivacao,

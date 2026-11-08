@@ -190,6 +190,20 @@ export const valorManual = (s) => !!s?.composicao && (!!s.composicao.manual || !
 
 const somaItens = (itens) => r2(itens.reduce((a, i) => a + (Number(i.valor) || 0), 0))
 
+// Item do plano de UMA competência do repasse (linha de competenciasDoRepasse): o recebimento com o
+// valor do repasse e a cópia da composição para exibir (a de verdade fica na contrato_competencias).
+export function parcelaDoRepasse(contrato, l) {
+  return {
+    id: idParcela(contrato.id, 'aluguel', l.competencia), papel: 'aluguel', numero: l.numero, total: l.total,
+    competencia: l.competencia, vencimento: l.vencimento, valor: l.repasse, valorStatus: l.valorStatus,
+    composicao: {
+      tipo: 'repasse', competencia: l.competencia, numero: l.numero, total_parcelas: l.total, itens: l.itens,
+      bruto: l.bruto, deducoes: l.deducoes, resultado: l.resultado, saldo_anterior: l.saldo_anterior, saldo: l.saldo,
+      repasse: l.repasse, total: l.repasse, conferida: !!l.conferida, ...(l.projecao ? { projecao: l.projecao } : {}),
+    },
+  }
+}
+
 // Plano das parcelas do contrato (aluguel e condomínio), em ordem de vencimento por papel.
 //   apartirDe: competência mínima gerada ('AAAA-MM'); valoresMantidos: { papel: { ym: valor } }
 //   (vínculo com "manter valor atual"); valorCondominio: último valor pago (senão o previsto).
@@ -199,16 +213,7 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
   if (ehModoRepasse(contrato)) {
     return competenciasDoRepasse(contrato, { hoje, indices, confirmados, repassesReais })
       .filter(l => l.repasse > 0 && (!apartirDe || l.competencia >= apartirDe))
-      .map(l => ({
-        id: idParcela(contrato.id, 'aluguel', l.competencia), papel: 'aluguel', numero: l.numero, total: l.total,
-        competencia: l.competencia, vencimento: l.vencimento, valor: l.repasse, valorStatus: l.valorStatus,
-        // Cópia SÓ para exibir: a composição de verdade fica na contrato_competencias.
-        composicao: {
-          tipo: 'repasse', competencia: l.competencia, numero: l.numero, total_parcelas: l.total, itens: l.itens,
-          bruto: l.bruto, deducoes: l.deducoes, resultado: l.resultado, saldo_anterior: l.saldo_anterior, saldo: l.saldo,
-          repasse: l.repasse, total: l.repasse, conferida: !!l.conferida, ...(l.projecao ? { projecao: l.projecao } : {}),
-        },
-      }))
+      .map(l => parcelaDoRepasse(contrato, l))
   }
   const out = []
   const aluguel = vencimentos(contrato, 'aluguel', { hoje })

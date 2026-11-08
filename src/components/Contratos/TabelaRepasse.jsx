@@ -1,28 +1,37 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { fmtYm, hojeStr } from '../../lib/contratos/datas'
 import { competenciasDoRepasse, confirmadosDe, repassesRegistrados, ehParcelaGerada, parcelaPaga, competenciaDaParcela } from '../../lib/contratos/parcelas'
 import ComposicaoRepasseModal from './ComposicaoRepasseModal'
 import ConferirExtratoModal from './ConferirExtratoModal'
+import BuscarRepassesModal from './BuscarRepassesModal'
+import { buscarRepassesLancados, TEXTO_NAO_ENCONTRADO, TEXTO_FALTA_VINCULAR } from '../../lib/contratos/buscaRepasses'
 import { extratoPendente } from '../../lib/contratos/conferenciaExtrato'
 import { avisoCategoriaContrato } from '../../lib/contratos/composicaoRepasse'
 
-// Status de uma competência do repasse na ficha.
-export function statusDaCompetencia(l, hoje) {
+// Status de uma competência do repasse na ficha. `busca`: a da competência (buscarRepassesLancados),
+// para o repasse passado sem baixa: lançamento achado na conta (falta vincular) ou não encontrado.
+export function statusDaCompetencia(l, hoje, busca = null) {
   if (l.foraDoSaldo) return { texto: 'Antes do saldo inicial', tom: 'text-texto-3' }
-  if (l.paga) return { texto: 'Recebido', tom: 'text-receita' }
+  if (l.paga || l.repasseReal != null) return { texto: 'Recebido', tom: 'text-receita' }
   if (!(l.repasse > 0)) return { texto: 'Sem repasse — saldo transportado', tom: 'text-texto-3' }
+  if (l.vencimento < hoje) {
+    return busca?.candidatos?.length ? { texto: TEXTO_FALTA_VINCULAR, tom: 'text-aviso' } : { texto: TEXTO_NAO_ENCONTRADO, tom: 'text-aviso' }
+  }
   if (!l.schedule) return { texto: 'Sem agendamento', tom: 'text-texto-3' }
   return l.vencimento < hoje ? { texto: 'Em atraso', tom: 'text-aviso' } : { texto: 'Previsto', tom: 'text-texto-2' }
 }
 
 // Tabela por competência do contrato a receber por administradora: Bruto | Deduções | Resultado |
 // Saldo | Repasse | Data | Status. Clique abre a composição da competência (a mesma das outras telas).
-export default function TabelaRepasse({ contrato }) {
+//   abrirBusca: abre "Buscar repasses já lançados" de cara (aditivo que trouxe o início para o passado).
+export default function TabelaRepasse({ contrato, abrirBusca = false, onBuscaFechada }) {
   const { schedules, transactions, indicesContratos, pode } = useApp()
   const [aberta, setAberta] = useState(null)
   const [conferir, setConferir] = useState(null)
+  const [buscando, setBuscando] = useState(abrirBusca)
+  useEffect(() => { if (abrirBusca) setBuscando(true) }, [abrirBusca])
   const hoje = hojeStr()
   const doContrato = useMemo(() => schedules.filter(s => s.contratoId === contrato.id), [schedules, contrato.id])
   const linhas = useMemo(() => {
@@ -42,10 +51,26 @@ export default function TabelaRepasse({ contrato }) {
 
   const th = 'px-2 py-1.5 text-right font-medium'
   const pendente = extratoPendente(contrato, linhas, hoje)
+  // Repasses passados já lançados na conta (sem contrato): oferecidos para vincular, nunca sozinho.
+  const busca = useMemo(() => buscarRepassesLancados(contrato, linhas, schedules, transactions, { hoje }), [contrato, linhas, schedules, transactions, hoje])
+  const buscaPor = new Map(busca.map(b => [b.competencia, b]))
+  const achados = busca.filter(b => b.sugestao).length
+  const fecharBusca = () => { setBuscando(false); onBuscaFechada?.() }
   const semCategoria = avisoCategoriaContrato(contrato)
   return (
     <div>
-      <p className="label">Repasses por competência</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="label mb-0">Repasses por competência</p>
+        {pode('contratos', 'editar') && (
+          <button type="button" className="btn-secondary text-xs py-0.5" onClick={() => setBuscando(true)}>Buscar repasses já lançados</button>
+        )}
+      </div>
+      {achados > 0 && pode('contratos', 'editar') && (
+        <p role="alert" data-testid="aviso-repasses-lancados" className="my-2 text-xs text-aviso flex flex-wrap items-center gap-2">
+          ⚠ {achados === 1 ? '1 repasse já lançado na conta parece ser' : `${achados} repasses já lançados na conta parecem ser`} deste contrato.
+          <button type="button" className="btn-secondary text-xs py-0.5" onClick={() => setBuscando(true)}>Revisar e vincular</button>
+        </p>
+      )}
       {semCategoria && (
         <p role="alert" data-testid="aviso-categoria-contrato" className="mb-2 text-xs text-aviso">
           ⚠ {semCategoria} (Editar → Taxa de administração). Os itens do repasse ficam sem categoria até lá.
@@ -70,7 +95,7 @@ export default function TabelaRepasse({ contrato }) {
           </thead>
           <tbody>
             {linhas.map(l => {
-              const st = statusDaCompetencia(l, hoje)
+              const st = statusDaCompetencia(l, hoje, buscaPor.get(l.competencia))
               const real = l.paga && l.repasseReal != null && Math.abs(l.repasseReal - l.repasse) > 0.005 ? l.repasseReal : null
               return (
                 <tr key={l.competencia} className="border-b border-borda/50 hover:bg-surface-hover cursor-pointer" onClick={() => setAberta(l.competencia)}
@@ -109,6 +134,7 @@ export default function TabelaRepasse({ contrato }) {
       </div>
       {aberta && <ComposicaoRepasseModal contrato={contrato} competencia={aberta} onClose={() => setAberta(null)} />}
       {conferir && <ConferirExtratoModal contrato={contrato} competencia={conferir} onClose={() => setConferir(null)} />}
+      {buscando && <BuscarRepassesModal contrato={contrato} linhas={linhas} onClose={fecharBusca} />}
     </div>
   )
 }

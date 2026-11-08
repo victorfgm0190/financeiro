@@ -40,7 +40,8 @@ describe('composição do repasse', () => {
     // 02: 586,67 − 11,67 − 470 − 200 = −95,00 → 03: −95 + 2.200 − 220 − 865 = 1.020,00 (1º repasse)
     expect(within(linha('02/2026')).getAllByText('-R$ 95,00').length).toBe(2)
     expect(within(linha('03/2026')).getAllByText('R$ 1.020,00').length).toBe(2)
-    expect(within(linha('03/2026')).getByText('Sem agendamento')).toBeTruthy()
+    // Repasse de 10/04/2026 já passou e não há lançamento na conta: não cria recebimento sozinho.
+    expect(within(linha('03/2026')).getByText('Pendente — não encontrado na conta')).toBeTruthy()
   })
 
   it('modal: taxa informada mostra o calculado; despesa incluída entra no resultado e é gravada', async () => {

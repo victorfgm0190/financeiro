@@ -86,6 +86,8 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
   const [aba, setAba] = useState('pendentes')
   const [revisar, setRevisar] = useState(null)
   const [modal, setModal] = useState(acaoInicial === 'rescindir' ? 'rescindir' : null)
+  // Aditivo que trouxe o início para o passado (Etapa 6): abre a busca dos repasses já lançados.
+  const [buscarRepasses, setBuscarRepasses] = useState(false)
   const [reajusteDe, setReajusteDe] = useState(null)
   const [reajusteRepasse, setReajusteRepasse] = useState(null)
   const [vinculo, setVinculo] = useState(null)
@@ -348,7 +350,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
         </p>
       )}
 
-      {repasse ? <TabelaRepasse contrato={contrato} /> : (
+      {repasse ? <TabelaRepasse contrato={contrato} abrirBusca={buscarRepasses} onBuscaFechada={() => setBuscarRepasses(false)} /> : (
       <div>
         <div className="flex flex-wrap gap-1 mb-2">
           {ABAS.map(([k, r]) => (
@@ -494,7 +496,8 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
 
       {modal === 'aditivo' && (
         <Modal open onClose={() => setModal(null)} title="Aditivo / editar contrato" size="xl">
-          <ContratoWizard contrato={contrato} onClose={() => setModal(null)} onSalvo={() => { setModal(null); recarregar() }} />
+          <ContratoWizard contrato={contrato} onClose={() => setModal(null)}
+            onSalvo={(_, opcoes) => { setModal(null); recarregar(); if (opcoes?.buscarRepasses) setBuscarRepasses(true) }} />
         </Modal>
       )}
       {modal === 'renovar' && <RenovarModal contrato={contrato} onClose={() => setModal(null)} onRenovar={(d) => { setModal(null); renovar(d) }} />}

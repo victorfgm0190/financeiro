@@ -155,7 +155,9 @@ function MesesSemCobranca({ valor = [], onChange, inicio, fim }) {
 }
 
 // Erros que apontam para um campo exibido junto de outro (competência do saldo inicial fica no mesmo bloco).
-const AVISO_INICIO_PASSADO = 'Mudar o início para o passado não gera os meses anteriores. Para lançar meses passados, cadastre um contrato novo com o início correto.'
+// Aditivo que traz o início para o passado (modo repasse): as competências passadas entram na conta do
+// repasse e, depois de salvar, a busca dos repasses já lançados na conta é oferecida (Etapa 6).
+const textoInicioPassado = (de, ate) => `As competências de ${fmtYm(de)} a ${fmtYm(ate)} passam a fazer parte do contrato (o saldo com a administradora conta desde o novo início).`
 const CAMPO_DO_ERRO = { saldo_inicial_competencia: 'saldo_inicial_valor' }
 
 // `help`: chave do ⓘ do campo (src/lib/helpCampos.js). `campo`: chave do formulário (rolagem/destaque do erro).
@@ -258,6 +260,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   }, [apartirManual, repasse, hoje, f.repasse_meses_depois, f.data_inicio, edicao, contrato?.data_inicio])
   const [planoEdicao, setPlanoEdicao] = useState(null)
   const [vinculo, setVinculo] = useState(null)
+  const [buscarAoSalvar, setBuscarAoSalvar] = useState(true)
   const set = (k, v) => { setErro(''); setF(p => ({ ...p, [k]: v })) }
 
   useEffect(() => {
@@ -380,7 +383,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       }
       const plano = await planejarParcelasContrato(salvo)
       await aplicarParcelasContrato(plano, { motivo: `Contrato ${rotuloContrato(salvo)}: ${financeiro ? 'aditivo' : 'edição'}` })
-      onSalvo?.(salvo)
+      onSalvo?.(salvo, { buscarRepasses: inicioNoPassado && buscarAoSalvar })
     } catch (err) {
       setErro(err?.message || 'Falha ao salvar.')
     } finally {
@@ -481,7 +484,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           )}
           <Campo campo="data_inicio" label="Início da vigência">
             <input data-guia="contrato-form.inicio" autoComplete="off" type="date" className="input" value={f.data_inicio} onChange={e => set('data_inicio', e.target.value)} />
-            {inicioNoPassado && <p className="text-[11px] text-aviso mt-1" data-testid="aviso-inicio-passado">⚠ {AVISO_INICIO_PASSADO}</p>}
+            {inicioNoPassado && <p className="text-[11px] text-aviso mt-1" data-testid="aviso-inicio-passado">⚠ {textoInicioPassado(ymDe(f.data_inicio), addMeses(ymDe(contrato.data_inicio), -1))}</p>}
           </Campo>
           <Campo campo="data_fim" label="Fim da vigência">
             <input autoComplete="off" type="date" className="input" value={f.sem_fim ? '' : f.data_fim} disabled={f.sem_fim} onChange={e => set('data_fim', e.target.value)} />
@@ -720,7 +723,13 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       )}
 
       {etapa === ULTIMA && inicioNoPassado && (
-        <p className="text-xs text-aviso p-2 rounded-lg bg-aviso/10">⚠ {AVISO_INICIO_PASSADO}</p>
+        <div className="text-xs p-2 rounded-lg bg-aviso/10 space-y-1" data-testid="inicio-passado-ultima">
+          <p className="text-aviso">⚠ {textoInicioPassado(ymDe(f.data_inicio), addMeses(ymDe(contrato.data_inicio), -1))}</p>
+          <label className="flex items-center gap-2 text-texto-1">
+            <input type="checkbox" className="accent-primary" checked={buscarAoSalvar} onChange={e => setBuscarAoSalvar(e.target.checked)} />
+            Gerar as competências passadas e, depois de salvar, buscar na conta os repasses já lançados para vincular
+          </label>
+        </div>
       )}
       {etapa === ULTIMA && edicao && (
         <div className="space-y-2">
