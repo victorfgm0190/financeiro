@@ -18,9 +18,22 @@ const ROTULOS = {
   Delete: 'Del', Insert: 'Ins', PageUp: 'PgUp', PageDown: 'PgDn',
 }
 
-// Bloqueadas: o navegador/sistema age antes da página (ou o usuário perde a aba).
-export const RESERVADAS = ['Ctrl+N', 'Ctrl+T', 'Ctrl+W', 'Ctrl+Shift+N', 'Ctrl+Tab', 'Alt+F4', 'Alt+F', 'Alt+D',
-  'Alt+E', 'F5', 'Ctrl+R', 'Ctrl+L']
+// RESERVED_KEYS — o navegador/sistema age antes da página (ou o usuário perde a aba/janela). No Mac,
+// Cmd faz o papel do Ctrl nessas teclas: o motor ignora Cmd e o atalho nunca usa Cmd.
+//   F1 é a AJUDA do Finup (fixa; src/help/teclaF1.js): nenhum atalho pode usar F1.
+export const TECLA_AJUDA = 'F1'
+export const RESERVED_KEYS = [
+  'F3', 'F5', 'F6', 'F7', 'F11', 'F12', 'Ctrl+F5', 'Shift+F5', 'Ctrl+Shift+F5',
+  'Ctrl+R', 'Ctrl+W', 'Ctrl+T', 'Ctrl+N', 'Ctrl+L', 'Ctrl+P', 'Ctrl+F', 'Ctrl+H', 'Ctrl+J', 'Ctrl+D', 'Ctrl+Tab', 'Ctrl+Shift+Tab',
+  'Ctrl+Shift+R', 'Ctrl+Shift+T', 'Ctrl+Shift+N',
+  'Alt+F4', 'Alt+ArrowLeft', 'Alt+ArrowRight', 'Alt+ArrowUp', 'Alt+ArrowDown',
+  // Menus do navegador (Alt+letra abre o menu no Chrome/Edge/Firefox).
+  'Alt+F', 'Alt+D', 'Alt+E',
+]
+// Nome antigo (mesma lista).
+export const RESERVADAS = RESERVED_KEYS
+// Teclas de função que podem ser atalho SOZINHAS (sem Ctrl/Alt).
+export const F_SOZINHAS = ['F2', 'F4', 'F8', 'F9', 'F10']
 export const FIXA_GRAVAR_MODAL = 'Ctrl+Enter'
 
 // code do evento → tecla canônica; null para modificador sozinho ou tecla não suportada.
@@ -75,14 +88,18 @@ export function normalizarCombinacao(txt) {
 }
 
 export const temModificador = (combinacao) => /(^|\+)(Ctrl|Alt)\+/.test(combinacao || '')
+const teclaFinal = (c) => String(c || '').split('+').pop()
+// Pode disparar sem Ctrl/Alt (F2, F4, F8, F9, F10, com ou sem Shift).
+export const podeSemModificador = (combinacao) => F_SOZINHAS.includes(teclaFinal(combinacao))
 
 // Mensagem de erro, ou null se a combinação pode ser usada num atalho configurável.
 export function validarCombinacao(combinacao) {
   const c = normalizarCombinacao(combinacao)
   if (!c) return 'Combinação inválida.'
-  if (RESERVADAS.includes(c)) return `${c} é reservada pelo navegador/sistema.`
+  if (teclaFinal(c) === TECLA_AJUDA) return 'F1 é fixa: abre a ajuda do campo ou da tela.'
+  if (RESERVED_KEYS.includes(c)) return `${textoCombinacao(c)} é reservada pelo navegador/sistema.`
   if (c === FIXA_GRAVAR_MODAL) return `${c} é fixa (gravar o modal aberto).`
-  if (!temModificador(c)) return 'Use pelo menos um modificador (Alt ou Ctrl).'
+  if (!temModificador(c) && !podeSemModificador(c)) return 'Use um modificador (Ctrl ou Alt). Sozinhas, só F2, F4, F8, F9 e F10.'
   return null
 }
 

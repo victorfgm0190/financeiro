@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Keyboard, RotateCcw, Ban, Circle } from 'lucide-react'
+import { Keyboard, RotateCcw, Ban, Circle, Lock } from 'lucide-react'
 import { useAtalhos } from '../../context/atalhosHooks'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import Teclas from '../shared/Teclas'
 import { ACOES, CONTEXTOS, ATALHOS_FIXOS, acaoPorId, acoesEmConflito, rotuloContexto } from '../../lib/atalhos/registry'
-import { combinacaoDoEvento, temModificador, textoCombinacao, validarCombinacao } from '../../lib/atalhos/combinacao'
+import { combinacaoDoEvento, textoCombinacao, validarCombinacao } from '../../lib/atalhos/combinacao'
 
 // Cadastros › Atalhos: a combinação de cada ação do registry (as ações são fixas no código).
 // Grava no Neon (/api/atalhos) só o que difere do padrão; "Restaurar" apaga a linha.
@@ -39,7 +39,6 @@ export default function AtalhosPanel() {
       if (e.key === 'Escape') { setCapturando(null); return }
       const combinacao = combinacaoDoEvento(e)
       if (!combinacao) return
-      if (!temModificador(combinacao)) { setErroCaptura('Use pelo menos um modificador (Alt ou Ctrl).'); return }
       const erro = validarCombinacao(combinacao)
       if (erro) { setErroCaptura(erro); return }
       if (mapa[capturando] === combinacao) { setCapturando(null); return }
@@ -182,8 +181,11 @@ export default function AtalhosPanel() {
         <h3 className="text-xs font-semibold uppercase tracking-wide text-texto-3 mb-2">Fixos (não configuráveis)</h3>
         <ul className="space-y-1.5">
           {ATALHOS_FIXOS.map(f => (
-            <li key={f.combinacao} className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-texto-2">{f.label}</span>
+            <li key={f.combinacao} className="flex items-center justify-between gap-3 text-sm" data-testid={f.trava ? `atalho-fixo-travado-${f.combinacao}` : undefined}>
+              <span className="text-texto-2 flex items-center gap-1.5">
+                {f.trava && <Lock size={12} className="text-texto-3" aria-label="Fixo: não pode ser usado em outro atalho" />}
+                {f.label}
+              </span>
               <Teclas combinacao={f.combinacao} />
             </li>
           ))}

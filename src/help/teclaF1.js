@@ -17,6 +17,8 @@ export const ehF1 = (e) => e?.key === 'F1' || e?.code === 'F1' || e?.keyCode ===
 export function tratarTeclaF1(e, { abrirCampo = abrirHelpCampo, abrirForm = abrirHelpFormulario, abrirTela = ajudaDaTela, alvo = null } = {}) {
   if (!ehF1(e)) return null
   e.preventDefault()
+  // Gravando um atalho (Configurações › Atalhos): a F1 segue para a tela de captura, que a recusa.
+  if (typeof document !== 'undefined' && document.body?.dataset?.capturandoAtalho) return 'captura'
   e.stopPropagation()
   e.stopImmediatePropagation?.()
   if (e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return 'ignorado'

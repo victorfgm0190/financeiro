@@ -49,6 +49,7 @@ import ContratosPanel from './components/Contratos/ContratosPanel'
 import ContratoFichaHost from './components/Contratos/ContratoFichaHost'
 import ContratoEfetivacaoHost from './components/Contratos/ContratoEfetivacaoHost'
 import HelpCampoPainel from './components/Ajuda/HelpCampoPainel'
+import AvisoAtalhosMigrados from './components/shared/AvisoAtalhosMigrados'
 import ComposicaoParcelaHost from './components/Contratos/ComposicaoParcelaHost'
 import MonthStartModal from './components/shared/MonthStartModal'
 import GlobalSearch from './components/shared/GlobalSearch'
@@ -265,6 +266,7 @@ function AppContent() {
         {showAssistente && <Assistente onClose={() => setShowAssistente(false)} onToast={setGenericToast} />}
       </Modal>
       <AtalhosAjudaModal />
+      <AvisoAtalhosMigrados />
       <ModoAltAtalhos />
       <BoasVindasTour />
       <JornadaBoasVindas />

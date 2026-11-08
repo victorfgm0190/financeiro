@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AtalhosContext } from './atalhosHooks'
 import { useIsMobile } from '../hooks/useIsMobile'
-import { acaoPorId, mapaEfetivo, nivelContexto } from '../lib/atalhos/registry'
-import { combinacaoDoEvento, FIXA_GRAVAR_MODAL, temModificador } from '../lib/atalhos/combinacao'
+import { acaoPorId, mapaEfetivo, nivelContexto, sanearAtalhos } from '../lib/atalhos/registry'
+import { combinacaoDoEvento, FIXA_GRAVAR_MODAL, temModificador, validarCombinacao, textoCombinacao } from '../lib/atalhos/combinacao'
 import { listarAtalhos, gravarAtalhos, restaurarAtalho, restaurarTodosAtalhos } from '../lib/atalhos/api'
 
 // MOTOR DE ATALHOS: um único keydown no window. Telas e modais registram os handlers das suas ações
@@ -29,6 +29,8 @@ export function AtalhosProvider({ children }) {
   const [gravados, setGravados] = useState({})
   const [carregado, setCarregado] = useState(false)
   const [ajuda, setAjuda] = useState(null)
+  // Aviso ÚNICO da migração das regras de atalho (corrigidos no banco: não volta a aparecer).
+  const [avisoMigracao, setAvisoMigracao] = useState(null)
   const mapa = useMemo(() => mapaEfetivo(gravados), [gravados])
   const mapaRef = useRef(mapa)
   useEffect(() => { mapaRef.current = mapa }, [mapa])
@@ -42,7 +44,26 @@ export function AtalhosProvider({ children }) {
   useEffect(() => {
     let vivo = true
     listarAtalhos()
-      .then(rows => { if (vivo) setGravados(Object.fromEntries(rows.map(r => [r.acaoId, r.combinacao ?? null]))) })
+      .then(async rows => {
+        if (!vivo) return
+        const lidos = Object.fromEntries(rows.map(r => [r.acaoId, r.combinacao ?? null]))
+        // Migração: atalho gravado que viola as regras volta ao padrão ou é desativado (uma vez).
+        const { mudancas } = sanearAtalhos(lidos, validarCombinacao)
+        const corrigidos = { ...lidos }
+        for (const m of mudancas) { if (m.para === 'padrao') delete corrigidos[m.acaoId]; else corrigidos[m.acaoId] = null }
+        setGravados(corrigidos)
+        if (!mudancas.length) return
+        try {
+          for (const m of mudancas.filter(x => x.para === 'padrao')) await restaurarAtalho(m.acaoId)
+          const desativar = mudancas.filter(x => x.para !== 'padrao')
+          if (desativar.length) await gravarAtalhos(desativar.map(m => ({ acaoId: m.acaoId, combinacao: null })))
+          if (vivo) {
+            setAvisoMigracao(mudancas.map(m => `${acaoPorId(m.acaoId)?.label || m.acaoId}: ${textoCombinacao(m.de)} ${m.para === 'padrao' ? 'voltou ao padrão' : 'foi desativado'} (${m.motivo})`))
+          }
+        } catch (err) {
+          console.warn('[atalhos] migração não gravada:', err.message)
+        }
+      })
       .catch(err => console.warn('[atalhos] falha ao carregar:', err.message))
       .finally(() => { if (vivo) setCarregado(true) })
     return () => { vivo = false }
@@ -59,7 +80,14 @@ export function AtalhosProvider({ children }) {
     return () => camadas.current.delete(id)
   }, [])
 
-  const setCapturando = useCallback((v) => { capturando.current = !!v }, [])
+  // Em captura (Configurações › Atalhos), a F1 também chega à tela de captura para ser recusada.
+  const setCapturando = useCallback((v) => {
+    capturando.current = !!v
+    if (typeof document !== 'undefined') {
+      if (v) document.body.dataset.capturandoAtalho = '1'
+      else delete document.body.dataset.capturandoAtalho
+    }
+  }, [])
 
   const camadaTopo = useCallback(() => {
     let topo = null
@@ -96,7 +124,8 @@ export function AtalhosProvider({ children }) {
   useEffect(() => {
     if (!ativo) return
     const onKeyDown = (e) => {
-      if (capturando.current || e.defaultPrevented || e.isComposing) return
+      // IME (composição de texto, ex.: acentos no Mac/Android): nunca dispara.
+      if (capturando.current || e.defaultPrevented || e.isComposing || e.keyCode === 229) return
       if (e.metaKey || e.getModifierState?.('AltGraph')) return
       const consumir = () => { e.preventDefault(); e.stopPropagation() }
       const emCampo = ehCampoDeTexto(e.target)
@@ -110,7 +139,8 @@ export function AtalhosProvider({ children }) {
 
       const combinacao = combinacaoDoEvento(e)
       if (!combinacao) return
-      // Em campo de texto só passam combinações com Alt/Ctrl — nunca uma tecla "solta".
+      // Em campo de texto só passam combinações com Alt/Ctrl (como sempre: Alt+G grava) — nunca uma
+      // tecla "solta", nem as F2/F4/F8/F9/F10 sozinhas. Fora de campo, tecla solta só se o atalho a usa.
       if (emCampo && !temModificador(combinacao)) return
 
       if (combinacao === FIXA_GRAVAR_MODAL) {
@@ -167,7 +197,8 @@ export function AtalhosProvider({ children }) {
   const value = useMemo(() => ({
     ativo, carregado, mapa, gravados, registrar, registrarCamada, setCapturando,
     gravar, restaurar, restaurarTodos, ajuda, fecharAjuda: () => setAjuda(null),
-  }), [ativo, carregado, mapa, gravados, registrar, registrarCamada, setCapturando, gravar, restaurar, restaurarTodos, ajuda])
+    avisoMigracao, fecharAvisoMigracao: () => setAvisoMigracao(null),
+  }), [ativo, carregado, mapa, gravados, registrar, registrarCamada, setCapturando, gravar, restaurar, restaurarTodos, ajuda, avisoMigracao])
 
   return <AtalhosContext.Provider value={value}>{children}</AtalhosContext.Provider>
 }

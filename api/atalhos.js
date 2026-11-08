@@ -1,8 +1,8 @@
 import { query, parseBody, withTransaction } from './_db.js'
 import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
-import { acaoPorId } from '../src/lib/atalhos/registry.js'
-import { normalizarCombinacao, validarCombinacao } from '../src/lib/atalhos/combinacao.js'
+import { acaoPorId, acoesEmConflito, mapaEfetivo } from '../src/lib/atalhos/registry.js'
+import { normalizarCombinacao, validarCombinacao, textoCombinacao } from '../src/lib/atalhos/combinacao.js'
 import { comAmbiente } from './_ambiente.js'
 
 // ATALHOS DE TECLADO do usuário logado (as ações são fixas em src/lib/atalhos/registry.js).
@@ -47,6 +47,19 @@ export function normalizarItem(it) {
   return { item: { acaoId, combinacao: normalizarCombinacao(it.combinacao) } }
 }
 
+// Sem duplicados: com os itens aplicados sobre o que o usuário já tem, nenhuma combinação pode ficar
+// em duas ações do mesmo contexto (ou com uma global). → mensagem de erro ou null.
+export function conflitoDepoisDeGravar(gravados, itens) {
+  const g = { ...gravados, ...Object.fromEntries(itens.map(i => [i.acaoId, i.combinacao])) }
+  const efetivo = mapaEfetivo(g)
+  for (const it of itens) {
+    if (!it.combinacao) continue
+    const outros = acoesEmConflito(it.acaoId, it.combinacao, efetivo)
+    if (outros.length) return `${textoCombinacao(it.combinacao)} já é usada por "${outros[0].label}".`
+  }
+  return null
+}
+
 export async function gravarAtalhos(q, userId, itens) {
   for (const it of itens) {
     await q(
@@ -80,6 +93,9 @@ async function handler(req, res) {
         if (erro) return res.status(400).json({ error: erro })
         itens.push(item)
       }
+      const atuais = await query('SELECT acao_id, combinacao FROM atalhos_usuario WHERE user_id = $1', [userId])
+      const conflito = conflitoDepoisDeGravar(Object.fromEntries(atuais.map(r => [r.acao_id, r.combinacao])), itens)
+      if (conflito) return res.status(409).json({ error: conflito })
       await withTransaction(q => gravarAtalhos(q, userId, itens))
       return res.json({ ok: true, atalhos: itens })
     }

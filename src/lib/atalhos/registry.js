@@ -30,8 +30,9 @@ export const CONTEXTOS = [
   { id: 'modal:lancamento', label: 'Modal Lançamento' },
 ]
 
-// Fixos e não configuráveis (só exibidos).
+// Fixos e não configuráveis (só exibidos). `trava`: linha com cadeado (nunca pode virar atalho).
 export const ATALHOS_FIXOS = [
+  { combinacao: 'F1', label: 'Ajuda do campo (ou da tela, fora de um campo)', trava: true },
   { combinacao: 'Ctrl+Enter', label: 'Gravar o modal aberto' },
   { combinacao: 'Escape', label: 'Fechar o modal' },
   { combinacao: 'Shift+?', label: 'Abrir a lista de atalhos' },
@@ -49,6 +50,37 @@ export function mapaEfetivo(gravados = {}) {
   const m = {}
   for (const a of ACOES) m[a.id] = Object.prototype.hasOwnProperty.call(gravados, a.id) ? gravados[a.id] : a.padrao
   return m
+}
+
+// MIGRAÇÃO das regras novas (F1 fixa, RESERVED_KEYS, modificador obrigatório, sem duplicados):
+// atalho gravado que as viola volta ao padrão (se o padrão vale e não conflita) ou é desativado.
+//   gravados: { acaoId: combinacao | null }; validar: validarCombinacao.
+// → { mudancas: [{ acaoId, de, para: 'padrao' | null, motivo }] } (vazio = nada a corrigir).
+export function sanearAtalhos(gravados, validar) {
+  const mudancas = []
+  const efetivo = mapaEfetivo(gravados)
+  for (const a of ACOES) {
+    if (!Object.prototype.hasOwnProperty.call(gravados || {}, a.id)) continue
+    const c = gravados[a.id]
+    if (c == null) continue
+    const motivo = validar(c)
+    if (!motivo) continue
+    const semEle = { ...efetivo, [a.id]: a.padrao }
+    const padraoVale = !validar(a.padrao) && !acoesEmConflito(a.id, a.padrao, semEle).length
+    mudancas.push({ acaoId: a.id, de: c, para: padraoVale ? 'padrao' : null, motivo })
+    efetivo[a.id] = padraoVale ? a.padrao : null
+  }
+  // Duplicados que sobraram (mesma combinação no mesmo contexto ou com uma global): fica a ação que vem
+  // antes na lista; a gravada depois é desativada.
+  for (const a of ACOES) {
+    const c = efetivo[a.id]
+    if (!c || !Object.prototype.hasOwnProperty.call(gravados || {}, a.id)) continue
+    if (acoesEmConflito(a.id, c, efetivo).some(b => ACOES.indexOf(b) < ACOES.indexOf(a))) {
+      mudancas.push({ acaoId: a.id, de: c, para: null, motivo: 'Combinação repetida em outra ação.' })
+      efetivo[a.id] = null
+    }
+  }
+  return { mudancas }
 }
 
 // Ações que já usam `combinacao` e conflitam com `acaoId`: mesmo contexto, ou uma das duas global.
