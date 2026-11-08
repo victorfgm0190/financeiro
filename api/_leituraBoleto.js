@@ -132,7 +132,7 @@ export const DEFINICAO_EXTRATO = {
     properties: {
       periodo: { type: ['string', 'null'], description: 'Período/competência do extrato como está escrito (ex.: "02/2026", "01/02 a 28/02/2026"); null se não houver.' },
       saldo_anterior: { type: ['number', 'null'], description: 'Saldo anterior do proprietário com a administradora, em reais, ponto decimal. POSITIVO se a administradora devia ao proprietário; NEGATIVO se o proprietário devia (saldo devedor). null se não houver.' },
-      total_extrato: { type: ['number', 'null'], description: 'O "Total do Extrato" LÍQUIDO: o valor da última linha (saldo anterior + créditos − débitos), em reais, COM SINAL — NEGATIVO quando o proprietário fica devendo (ex.: -606.35; é o saldo do extrato quando não há repasse). null se não houver.' },
+      total_extrato: { type: ['number', 'null'], description: 'O "Total do Extrato" LÍQUIDO (saldo anterior + créditos − débitos), em reais, COM SINAL — NEGATIVO quando o proprietário fica devendo (ex.: -606.35; é o saldo do extrato quando não há repasse). No layout com colunas Débito/Crédito na linha "Total do Extrato", é o número da linha DE BAIXO (o líquido), NUNCA a soma dos débitos nem a dos créditos. null se não houver.' },
       valor_repasse: { type: ['number', 'null'], description: 'Valor da seção/linha "Repasse", em reais, COM O SINAL que está no extrato: positivo = depositado ao proprietário; NEGATIVO quando o extrato mostra o repasse negativo (saldo devedor — não houve repasse; ex.: -606.35); 0 se diz que não houve repasse; null se não estiver escrito.' },
       itens: {
         type: 'array',
@@ -159,7 +159,8 @@ Chame a ferramenta ${FERRAMENTA_EXTRATO} UMA vez com o que está ESCRITO no docu
 - Cada lançamento com a descrição como está, o valor POSITIVO e a natureza: crédito (a favor do proprietário) ou débito (descontado dele). O tipo é só uma sugestão.
 - Saldo anterior, total e valor repassado NÃO são lançamentos: vão nos campos próprios. Saldo anterior devedor (o proprietário devia) é NEGATIVO.
 - valor_repasse com o sinal do extrato: repasse NEGATIVO (ex.: "Repasse -606,35", saldo devedor) vem NEGATIVO — não tire o sinal.
-- total_extrato = o "Total do Extrato" líquido, o valor da última linha, com sinal: negativo quando o proprietário fica devendo (ex.: -606.35). Quando o extrato não tem repasse, esse é o saldo do extrato — não confunda com o total de créditos ou de débitos.
+- total_extrato = o "Total do Extrato" LÍQUIDO, com sinal: negativo quando o proprietário fica devendo (ex.: -606.35). Quando o extrato não tem repasse, esse é o saldo do extrato.
+- Layout com colunas Débito/Crédito: a linha "Total do Extrato" mostra a soma dos débitos (ex.: -2.806,35) e a dos créditos (ex.: 2.200,00) e, NA LINHA DE BAIXO, o líquido (ex.: -606,35). total_extrato é o líquido de baixo — NUNCA a soma dos débitos nem a dos créditos.
 - Não invente: campo ilegível = null; lançamento ilegível fica de fora.`
 
 // Saída da ferramenta → { periodo, saldo_anterior, total_extrato, valor_repasse, itens: [{ descricao, valor, natureza, tipo, natureza_despesa }] }

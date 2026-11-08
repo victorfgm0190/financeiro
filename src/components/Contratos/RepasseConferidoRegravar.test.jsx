@@ -11,7 +11,10 @@ const CONTRATO = {
   data_inicio: '2026-02-21', data_fim: '2026-12-31', valor_base: 2200, periodicidade: 'mensal', dia_vencimento: 5, dia_repasse: 10,
   repasse_meses_depois: 1, indice_reajuste: 'NENHUM', bonificacao_valor: 0, bonificacao_meses: 0, categoria_id: 'cat-alug',
   taxa_adm_pct: 10, taxa_adm_base: 'bruto', categoria_taxa_adm_id: 'cat-adm', perfil_id: 'pf', conta_id: 'cc',
-  itens_repasse: [{ id: 'tu-nova', tipo_repasse: 'taxa_unica', descricao: 'Intermediação', valor: 2200, valores_parcelas: [2200], vigencia_inicio: '2026-02', ativo: true }],
+  itens_repasse: [
+    { id: 'tu-nova', tipo_repasse: 'taxa_unica', descricao: 'Intermediação', valor: 2200, valores_parcelas: [2200], vigencia_inicio: '2026-02', ativo: true },
+    { id: 'tf', tipo_repasse: 'tarifa_fixa', descricao: 'Tarifa bancária', valor: 3, vigencia_inicio: '2026-06', ativo: true },
+  ],
   competencias: [
     { competencia: '2026-02', status: 'fechada', conferencia: CONF('02/2026'), itens: [
       { chave: 'aluguel', tipo: 'aluguel', descricao: 'Aluguel dias', valor: 586.67, origem: 'auto', informado: false, valor_calculado: null, categoria_id: 'cat-alug' },
@@ -152,5 +155,62 @@ describe('extrato de maio com "Repasse −606,35" (não houve repasse)', () => {
     await vi.waitFor(() => expect(screen.getAllByTestId('item-extrato')).toHaveLength(2))
     expect(screen.queryByTestId('aviso-repasse')).toBeNull()
     expect(screen.getByRole('button', { name: 'Confirmar conferência' }).disabled).toBe(false)
+  })
+})
+
+describe('total do extrato: layout novo (Débito/Crédito + líquido embaixo) × antigo', () => {
+  const C = (descricao, valor, tipo) => ({ descricao, valor, natureza: 'credito', tipo })
+  const D = (descricao, valor, tipo, extra = {}) => ({ descricao, valor, natureza: 'debito', tipo, ...extra })
+  // Extratos do caso de referência: saldo anterior, itens, líquido e a soma dos débitos (com o saldo
+  // anterior devedor) que a IA leu no layout novo.
+  const EXTRATOS = [
+    { comp: '2026-02', sa: 0, liquido: -16.86, debitos: -603.53, repasse: null, itens: [
+      C('Aluguel proporcional', 586.67, 'aluguel'), D('Sanepar', 96.73, 'despesa', { natureza_despesa: 'consumo' }),
+      D('Regularização de luz', 25.13, 'despesa', { natureza_despesa: 'consumo' }), D('Intermediação parte', 470, 'taxa_unica'), D('Taxa de administração', 11.67, 'taxa_adm')] },
+    { comp: '2026-03', sa: -16.86, liquido: -3701.35, debitos: -5901.35, repasse: null, itens: [
+      C('Aluguel 03/2026', 2200, 'aluguel'), D('Intermediação parte', 865, 'taxa_unica'), D('Benfeitorias', 4799.49, 'benfeitoria'), D('Taxa de administração', 220, 'taxa_adm')] },
+    { comp: '2026-04', sa: -3701.35, liquido: -2586.35, debitos: -4786.35, repasse: null, itens: [
+      C('Aluguel 04/2026', 2200, 'aluguel'), D('Intermediação saldo', 865, 'taxa_unica'), D('Taxa de administração', 220, 'taxa_adm')] },
+    { comp: '2026-05', sa: -2586.35, liquido: -606.35, debitos: -2806.35, repasse: -606.35, itens: [
+      C('Aluguel 05/2026', 2200, 'aluguel'), D('Taxa de administração', 220, 'taxa_adm')] },
+    { comp: '2026-06', sa: -606.35, liquido: 1370.65, debitos: -829.35, repasse: 1370.65, itens: [
+      C('Aluguel 06/2026', 2200, 'aluguel'), D('Taxa de administração', 220, 'taxa_adm'), D('Tarifa bancária', 3, 'tarifa')] },
+  ]
+  const ler = async (e, total) => {
+    render(<ConferirExtratoModal contrato={CONTRATO} competencia={e.comp} onClose={() => {}}
+      ler={vi.fn(async () => ({ periodo: e.comp.split('-').reverse().join('/'), saldo_anterior: e.sa, total_extrato: total, valor_repasse: e.repasse, itens: e.itens }))} />)
+    fireEvent.change(screen.getByLabelText('Arquivo do extrato'), { target: { files: [new File(['x'], 'extrato.pdf', { type: 'application/pdf' })] } })
+    await vi.waitFor(() => expect(screen.getAllByTestId('item-extrato')).toHaveLength(e.itens.length))
+  }
+  const totalNaTela = () => (screen.getByLabelText('Sinal do total do extrato').value === '-1' ? '-' : '') + screen.getByLabelText('Total do extrato').value
+  const fmtBR = (v) => (v < 0 ? '-' : '') + Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+
+  it('maio, layout novo: IA devolve −2.806,35 (débitos) → a tela usa −606,35 com a nota e não pergunta nada', async () => {
+    await ler(EXTRATOS[3], -2806.35)
+    expect(totalNaTela()).toBe('-606,35')
+    expect(screen.getByTestId('nota-total-recalculado').textContent).toBe('Total recalculado a partir dos itens do extrato')
+    expect(screen.queryByTestId('aviso-repasse')).toBeNull()
+    expect(screen.queryByTestId('aviso-saldo-anterior')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Confirmar conferência' }).disabled).toBe(false)
+  })
+
+  for (const e of EXTRATOS) {
+    for (const [layout, total, nota] of [['antigo (só o líquido)', e.liquido, false], ['novo (IA leu os débitos)', e.debitos, true], ['novo (IA leu os créditos)', e.itens.filter(i => i.natureza === 'credito').reduce((a, i) => a + i.valor, 0), true]]) {
+      it(`${e.comp.split('-').reverse().join('/')} · layout ${layout}: total = ${fmtBR(e.liquido)}, nenhum aviso`, async () => {
+        await ler(e, total)
+        expect(totalNaTela()).toBe(fmtBR(e.liquido))
+        expect(!!screen.queryByTestId('nota-total-recalculado')).toBe(nota)
+        expect(screen.queryByTestId('aviso-repasse')).toBeNull()
+        expect(screen.queryByTestId('aviso-saldo-anterior')).toBeNull()
+        expect(screen.getByRole('button', { name: 'Confirmar conferência' }).disabled).toBe(false)
+      })
+    }
+  }
+
+  it('total diferente por outro motivo: mantém o lido e o aviso segue valendo', async () => {
+    await ler(EXTRATOS[3], -650)
+    expect(totalNaTela()).toBe('-650,00')
+    expect(screen.queryByTestId('nota-total-recalculado')).toBeNull()
+    expect(screen.getByTestId('aviso-repasse')).toBeTruthy()
   })
 })

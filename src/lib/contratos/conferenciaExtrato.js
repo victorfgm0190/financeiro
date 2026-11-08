@@ -48,6 +48,28 @@ export function linhasDaLeitura(leitura, contrato) {
   })
 }
 
+// CONFERÊNCIA AUTOMÁTICA DO TOTAL LIDO. Total esperado = saldo anterior + créditos − débitos dos itens
+// lidos. Se o total da IA for outro E bater com a soma dos débitos ou dos créditos (com ou sem o saldo
+// anterior, com ou sem sinal) — leu a coluna Débito/Crédito da linha "Total do Extrato" em vez do
+// líquido —, vale o calculado (recalculado: true). Diferente por outro motivo: fica o lido (o aviso
+// da conferência mostra a diferença). → { total, recalculado }
+export const NOTA_TOTAL_RECALCULADO = 'Total recalculado a partir dos itens do extrato'
+export function totalDaLeitura(leitura) {
+  const lido = leitura?.total_extrato
+  if (lido == null || lido === '' || !Number.isFinite(Number(lido))) return { total: null, recalculado: false }
+  const itens = Array.isArray(leitura?.itens) ? leitura.itens : []
+  const soma = (nat) => r2(itens.filter(i => (i.natureza === 'credito') === (nat === 'credito')).reduce((a, i) => a + Math.abs(Number(i.valor) || 0), 0))
+  const creditos = soma('credito')
+  const debitos = soma('debito')
+  const sa = Number.isFinite(Number(leitura?.saldo_anterior)) ? r2(leitura.saldo_anterior) : 0
+  const esperado = r2(sa + creditos - debitos)
+  const total = r2(lido)
+  if (Math.abs(total - esperado) <= ZERO) return { total, recalculado: false }
+  const colunas = [-debitos, creditos, r2(-debitos + sa), r2(creditos + sa), r2(-debitos + Math.min(sa, 0)), r2(creditos + Math.max(sa, 0))]
+  const bateColuna = colunas.some(c => Math.abs(c) > ZERO && Math.abs(Math.abs(total) - Math.abs(c)) <= ZERO)
+  return bateColuna ? { total: esperado, recalculado: true } : { total, recalculado: false }
+}
+
 export const taxasUnicasDo = (contrato) => (contrato?.itens_repasse || []).filter(t => t.tipo_repasse === 'taxa_unica' && t.ativo !== false)
 
 // Itens projetados da competência → linhas da tela (digitar o extrato a partir do projetado).

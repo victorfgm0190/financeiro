@@ -201,3 +201,18 @@ describe('competenciaDoPeriodo — período escrito no extrato', () => {
     expect(periodoDeOutroMes('04/2026', '2026-04')).toBeNull()
   })
 })
+
+describe('totalDaLeitura — total lido × calculado dos itens', () => {
+  it('coluna Débito/Crédito no lugar do líquido → recalcula; outro motivo → mantém', async () => {
+    const { totalDaLeitura } = await import('./conferenciaExtrato.js')
+    const maio = (total) => ({ saldo_anterior: -2586.35, total_extrato: total, itens: [
+      { valor: 2200, natureza: 'credito' }, { valor: 220, natureza: 'debito' }] })
+    expect(totalDaLeitura(maio(-606.35))).toEqual({ total: -606.35, recalculado: false })
+    expect(totalDaLeitura(maio(-2806.35))).toEqual({ total: -606.35, recalculado: true })
+    expect(totalDaLeitura(maio(2806.35))).toEqual({ total: -606.35, recalculado: true }) // sem sinal
+    expect(totalDaLeitura(maio(2200))).toEqual({ total: -606.35, recalculado: true })
+    expect(totalDaLeitura(maio(-220))).toEqual({ total: -606.35, recalculado: true }) // débitos sem o saldo anterior
+    expect(totalDaLeitura(maio(-650))).toEqual({ total: -650, recalculado: false })
+    expect(totalDaLeitura(maio(null))).toEqual({ total: null, recalculado: false })
+  })
+})

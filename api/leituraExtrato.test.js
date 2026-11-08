@@ -26,7 +26,7 @@ describe('leitura extrato_administradora', () => {
   it('sem repasse: o "Total do Extrato" líquido vem com sinal (última linha, ex.: −606,35)', () => {
     const r = normalizarSaidaExtrato({ periodo: '05/2026', saldo_anterior: -2586.35, total_extrato: -606.35, valor_repasse: null, itens: [] })
     expect(r).toMatchObject({ total_extrato: -606.35, valor_repasse: null })
-    expect(DEFINICAO_EXTRATO.input_schema.properties.total_extrato.description).toMatch(/última linha.*NEGATIVO/s)
+    expect(DEFINICAO_EXTRATO.input_schema.properties.total_extrato.description).toMatch(/LÍQUIDO.*NEGATIVO.*linha DE BAIXO.*NUNCA a soma dos débitos nem a dos créditos/s)
   })
   it('repasse negativo (saldo devedor) vem com sinal', () => {
     expect(normalizarSaidaExtrato({ valor_repasse: -606.35, itens: [] }).valor_repasse).toBe(-606.35)

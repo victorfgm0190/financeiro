@@ -12,7 +12,7 @@ import { saldoTaxasUnicas } from '../../lib/contratos/taxaUnica'
 import {
   TIPOS_EXTRATO, ROTULOS_TIPO_EXTRATO, linhasDaLeitura, linhasDoProjetado, compararComProjetado, conferirSaldoAnterior,
   linhaAjusteSaldo, avisosTaxasUnicas, montarConferencia, taxasUnicasDo, conferirRepasse, linhaAjusteRepasse,
-  periodoDeOutroMes,
+  periodoDeOutroMes, totalDaLeitura, NOTA_TOTAL_RECALCULADO,
 } from '../../lib/contratos/conferenciaExtrato'
 import { extrairExtratoDeImagem } from '../../lib/contratos/imagemBoleto'
 
@@ -48,6 +48,8 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
   const [linhas, setLinhas] = useState(null)
   const [origem, setOrigem] = useState('manual')
   const [cab, setCab] = useState({ periodo: '', saldoSinal: 1, saldoTexto: '', totalSinal: 1, total: '', repasse: '' })
+  // O total lido pela IA era a coluna Débito/Crédito: foi trocado pelo calculado dos itens.
+  const [totalRecalculado, setTotalRecalculado] = useState(false)
   const [lendo, setLendo] = useState(false)
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -76,7 +78,9 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
       // Repasse negativo ou zero = NÃO houve repasse (o valor é o saldo devedor): repasse 0 e, sem
       // "Total do Extrato" lido, esse valor com sinal vira o total (é com ele que se compara).
       const semRepasse = l.valor_repasse != null && l.valor_repasse <= 0
-      const total = l.total_extrato ?? (semRepasse && l.valor_repasse < 0 ? l.valor_repasse : null)
+      const conferido = totalDaLeitura(l)
+      setTotalRecalculado(conferido.recalculado)
+      const total = conferido.total ?? (semRepasse && l.valor_repasse < 0 ? l.valor_repasse : null)
       setCab({
         periodo: l.periodo || '', saldoSinal: (l.saldo_anterior ?? 0) < 0 ? -1 : 1,
         saldoTexto: l.saldo_anterior == null ? '' : valorBRFormatado(Math.abs(l.saldo_anterior)),
@@ -197,8 +201,9 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
               <select className="input py-1 text-xs w-14 px-1" value={cab.totalSinal} onChange={e => setCab(c => ({ ...c, totalSinal: Number(e.target.value) }))} aria-label="Sinal do total do extrato" title="+ a administradora me deve · − eu devo (passa para o mês seguinte)">
                 <option value={1}>+</option><option value={-1}>−</option>
               </select>
-              <CampoValor className="input py-1 text-sm min-w-0" value={cab.total} onChange={v => setCab(c => ({ ...c, total: v }))} aria-label="Total do extrato" placeholder="Opcional" />
+              <CampoValor className="input py-1 text-sm min-w-0" value={cab.total} onChange={v => { setTotalRecalculado(false); setCab(c => ({ ...c, total: v })) }} aria-label="Total do extrato" placeholder="Opcional" />
             </div>
+            {totalRecalculado && <p data-testid="nota-total-recalculado" className="text-[10px] text-texto-3 mt-0.5">{NOTA_TOTAL_RECALCULADO}</p>}
           </div>
           <label>Valor do repasse (líquido)
             <CampoValor className="input py-1 text-sm" value={cab.repasse} onChange={v => setCab(c => ({ ...c, repasse: v }))} aria-label="Valor do repasse do extrato" placeholder={`Calculado: ${valorBRFormatado(montado.resumo.saldo > 0 ? montado.resumo.saldo : 0)}`} />
