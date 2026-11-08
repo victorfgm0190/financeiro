@@ -163,7 +163,7 @@ describe('useHoje + próximos 7 dias', () => {
     }
     expect(comparados).toBeGreaterThan(30000)
     expect(diferentes).toBeGreaterThan(0) // os casos 29/30/31 em mês curto (a correção)
-  })
+  }, 15000) // ~34 mil comparações (3 anos × 31 dias): sob a suíte carregada passava dos 5 s padrão
 
   it('dataDoDia: mesmo dia/mês/ano da data, ao meio-dia local', () => {
     const d = dataDoDia('2026-12-31')
