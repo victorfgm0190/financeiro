@@ -73,12 +73,16 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
       const l = await ler(arquivo)
       setOrigem('ia')
       setLinhas(linhasDaLeitura(l, contrato).map(paraTela))
+      // Repasse negativo ou zero = NÃO houve repasse (o valor é o saldo devedor): repasse 0 e, sem
+      // "Total do Extrato" lido, esse valor com sinal vira o total (é com ele que se compara).
+      const semRepasse = l.valor_repasse != null && l.valor_repasse <= 0
+      const total = l.total_extrato ?? (semRepasse && l.valor_repasse < 0 ? l.valor_repasse : null)
       setCab({
         periodo: l.periodo || '', saldoSinal: (l.saldo_anterior ?? 0) < 0 ? -1 : 1,
         saldoTexto: l.saldo_anterior == null ? '' : valorBRFormatado(Math.abs(l.saldo_anterior)),
-        totalSinal: (l.total_extrato ?? 0) < 0 ? -1 : 1,
-        total: l.total_extrato == null ? '' : valorBRFormatado(Math.abs(l.total_extrato)),
-        repasse: l.valor_repasse == null ? '' : valorBRFormatado(Math.abs(l.valor_repasse)),
+        totalSinal: (total ?? 0) < 0 ? -1 : 1,
+        total: total == null ? '' : valorBRFormatado(Math.abs(total)),
+        repasse: l.valor_repasse == null ? '' : semRepasse ? valorBRFormatado(0) : valorBRFormatado(l.valor_repasse),
       })
     } catch (e) {
       setErro(e?.message || 'Não consegui ler o extrato.')

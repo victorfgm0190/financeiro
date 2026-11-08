@@ -28,6 +28,10 @@ describe('leitura extrato_administradora', () => {
     expect(r).toMatchObject({ total_extrato: -606.35, valor_repasse: null })
     expect(DEFINICAO_EXTRATO.input_schema.properties.total_extrato.description).toMatch(/última linha.*NEGATIVO/s)
   })
+  it('repasse negativo (saldo devedor) vem com sinal', () => {
+    expect(normalizarSaidaExtrato({ valor_repasse: -606.35, itens: [] }).valor_repasse).toBe(-606.35)
+    expect(DEFINICAO_EXTRATO.input_schema.properties.valor_repasse.description).toMatch(/NEGATIVO/)
+  })
   it('a ferramenta pede os tipos do Finup', () => {
     expect(DEFINICAO_EXTRATO.input_schema.properties.itens.items.properties.tipo.enum).toEqual(TIPOS_ITEM_EXTRATO)
   })

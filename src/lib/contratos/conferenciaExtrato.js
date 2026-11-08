@@ -140,7 +140,8 @@ export function montarConferencia(contrato, linhaProjetada, linhas, cab = {}, { 
   const finup = linhaProjetada?.saldo_anterior ?? null
   const saldo = r2((Number(finup) || 0) + somaItens(itens))
   const repasseInformado = cab.repasse != null && cab.repasse !== '' && Number.isFinite(Number(cab.repasse))
-  const repasse = repasseInformado ? r2(cab.repasse) : (saldo > ZERO ? saldo : 0)
+  // Repasse negativo ou zero no extrato = não houve repasse.
+  const repasse = repasseInformado ? Math.max(0, r2(cab.repasse)) : (saldo > ZERO ? saldo : 0)
   return {
     itens,
     resumo: { saldo_anterior: finup, resultado: somaItens(itens), saldo, repasse },
@@ -188,10 +189,11 @@ export function conferirRepasse(repasseExtrato, saldoCalculado, totalExtrato = n
     const diferenca = r2(extrato - calculado)
     return Math.abs(diferenca) > ZERO ? { extrato, calculado, diferenca, fonte } : null
   }
+  // Repasse negativo ou zero = não houve repasse: compara pelo total com sinal.
   if (informado(repasseExtrato) && r2(repasseExtrato) > ZERO) return comparar(repasseExtrato, 'repasse')
   if (informado(totalExtrato)) return comparar(totalExtrato, 'total')
   if (!informado(repasseExtrato) || calculado <= ZERO) return null
-  return comparar(repasseExtrato, 'repasse')
+  return comparar(0, 'repasse')
 }
 
 // Competência ("AAAA-MM") do "Período do extrato" escrito: "03/2026", "01/03 a 31/03/2026",

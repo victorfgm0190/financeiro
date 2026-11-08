@@ -424,6 +424,23 @@ describe('migração 2026-11-07c: composição do repasse e taxas da administrad
     expect((await chamar(competencias, 'PUT', { url: '/api/contrato-competencias', body: { contrato_id: pagar, ...COMP } })).statusCode).toBe(400)
     expect(regraDaRota('/api/contrato-competencias', 'PUT')).toEqual({ modulo: 'contratos', acao: 'editar' })
   })
+
+  it('regravar as taxas mantém o id (o taxa_id das competências continua valendo); id de outro contrato não é reaproveitado', async () => {
+    await estado.db.exec(MIG_B)
+    await estado.db.exec(MIG_C)
+    const r = await chamar(contratos, 'POST', { body: { contrato: REPASSE, itens: [TAXA_UNICA, TARIFA] } })
+    const id = r.body.contrato.id
+    const [tu, tf] = r.body.itens
+    const salvarItens = (cid, its) => chamar(itens, 'PUT', { url: '/api/contrato-itens', body: { contrato_id: cid, itens: its } })
+    const de1 = await salvarItens(id, [{ ...TAXA_UNICA, id: tu.id, valores_parcelas: [2200] }, { ...TARIFA, id: tf.id }, { ...TARIFA, descricao: 'Nova' }])
+    expect(de1.statusCode).toBe(200)
+    expect(de1.body.itens.map(i => i.id).slice(0, 2)).toEqual([tu.id, tf.id])
+    expect(de1.body.itens[0].valores_parcelas).toEqual([2200])
+    expect(de1.body.itens[2].id).not.toBe(tu.id)
+    const outro = (await chamar(contratos, 'POST', { body: { contrato: REPASSE } })).body.contrato.id
+    const de2 = await salvarItens(outro, [{ ...TAXA_UNICA, id: tu.id }])
+    expect(de2.body.itens[0].id).not.toBe(tu.id)
+  })
 })
 
 describe('migração 2026-11-07d: benfeitoria no custo do bem e reajuste do repasse', () => {

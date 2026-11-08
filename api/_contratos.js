@@ -198,6 +198,9 @@ export function normalizarItem(it) {
     descricao, grupo: grupo.v, responsavel: resp.v, valor_previsto: valor.v,
     categoria_id: texto(80)(it.categoria_id).v, ativo: it.ativo !== false,
   }
+  // id do item já gravado: substituirItens o mantém (as competências guardam o taxa_id da taxa única).
+  const id = texto(80)(it.id).v
+  if (id) item.id = id
   // Taxa da administradora cobrada no repasse (migração 2026-11-07c): tarifa fixa ou taxa única.
   if (it.tipo_repasse) {
     const r = normalizarTaxaRepasse(it, descricao, valor.v)
@@ -382,13 +385,19 @@ export async function substituirItens(q, contratoId, itens) {
   const temRepasse = existem.has('tipo_repasse')
   if (!temEncargo && itens.some(it => it.na_parcela)) throw Object.assign(new Error(MSG_SEM_ENCARGOS), { status: 409, codigo: 'banco_desatualizado' })
   if (!temRepasse && itens.some(it => it.tipo_repasse)) throw Object.assign(new Error(MSG_SEM_COMPOSICAO), { status: 409, codigo: 'banco_desatualizado' })
+  // Ids já existentes DESTE contrato são mantidos (taxa_id gravado nas competências continua valendo);
+  // os demais (novos) recebem id gerado pelo banco.
+  const antigos = new Set((await q('SELECT id FROM contrato_itens WHERE contrato_id = $1', [contratoId])).map(r => r.id))
   await q('DELETE FROM contrato_itens WHERE contrato_id = $1', [contratoId])
   const out = []
+  const usados = new Set()
   for (const it of itens) {
-    const cols = ['descricao', 'grupo', 'responsavel', 'valor_previsto', 'categoria_id', 'ativo', ...(temEncargo ? COLS_ENCARGO : []), ...(temRepasse ? COLS_ITEM_REPASSE : [])]
+    const manter = it.id && antigos.has(it.id) && !usados.has(it.id)
+    if (manter) usados.add(it.id)
+    const cols = [...(manter ? ['id'] : []), 'descricao', 'grupo', 'responsavel', 'valor_previsto', 'categoria_id', 'ativo', ...(temEncargo ? COLS_ENCARGO : []), ...(temRepasse ? COLS_ITEM_REPASSE : [])]
     const [row] = await q(
       `INSERT INTO contrato_itens (contrato_id, ${cols.join(', ')}) VALUES ($1, ${cols.map((_, i) => `$${i + 2}`).join(', ')}) RETURNING *`,
-      [contratoId, ...cols.map(k => (k === 'na_parcela' ? !!it.na_parcela : valorColuna(k, it[k] ?? null)))],
+      [contratoId, ...cols.map(k => (k === 'id' ? it.id : k === 'na_parcela' ? !!it.na_parcela : valorColuna(k, it[k] ?? null)))],
     )
     out.push(row)
   }

@@ -14,6 +14,7 @@ import {
   TIPOS_ITEM_REPASSE, TIPOS_MANUAIS, NATUREZAS_DESPESA, resumoComposicao, taxaAdmCalculada, itensParaGravar, novoItemManual,
   dedutivelPadrao,
 } from '../../lib/contratos/composicaoRepasse'
+import { linhaCongelada } from '../../lib/contratos/taxaUnica'
 
 const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100
 const POSITIVO = 0.005
@@ -51,6 +52,12 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [conferindo, setConferindo] = useState(false)
+  // Conferida com o extrato (ou fechada): nada é recalculado; categoria, dedutível e observação mudam à
+  // vontade, mas VALOR só depois de confirmar.
+  const congelada = linhaCongelada(linha?.linha)
+  const [valoresLiberados, setValoresLiberados] = useState(false)
+  const [perguntaValor, setPerguntaValor] = useState(false)
+  const travado = congelada && !valoresLiberados
   const bem = contrato.bem_id ? accounts.find(a => a.id === contrato.bem_id) : null
   // Recebimento desta competência (agendamento gerado pelo contrato).
   const parcela = doContrato.find(s => ehParcelaGerada(s, contrato.id) && (s.contratoPapel || 'aluguel') === 'aluguel' && competenciaDaParcela(s) === competencia) || null
@@ -74,13 +81,18 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
   const saldo = linha.foraDoSaldo ? null : r2(saldoAnterior + resultado)
   const repasse = saldo != null && saldo > POSITIVO ? saldo : 0
 
-  const mudar = (i, campos) => { setErro(''); setLinhas(prev => comAdmRecalculada(contrato, prev.map((l, j) => (j === i ? { ...l, ...campos } : l)))) }
-  const mudarValor = (i, texto) => mudar(i, { texto, ...(linhas[i].origem === 'auto' ? { informado: true } : {}) })
-  const voltarCalculado = (i) => mudar(i, { informado: false, texto: valorBRFormatado(Math.abs(Number(linhas[i].valor_calculado) || 0)) })
-  const incluir = (tipo) => setLinhas(prev => [...prev, paraEdicao({
+  const recalcular = (ls) => (congelada ? ls : comAdmRecalculada(contrato, ls))
+  const mudar = (i, campos) => { setErro(''); setLinhas(prev => recalcular(prev.map((l, j) => (j === i ? { ...l, ...campos } : l)))) }
+  // Mexer em valor (digitar, sinal, incluir/remover item, voltar ao calculado) numa competência
+  // conferida/fechada: primeiro a pergunta; nada muda até o "Sim".
+  const seLiberado = (fn) => (...a) => { if (travado) { setPerguntaValor(true); return } fn(...a) }
+  const mudarValor = seLiberado((i, texto) => mudar(i, { texto, ...(linhas[i].origem === 'auto' ? { informado: true } : {}) }))
+  const voltarCalculado = seLiberado((i) => mudar(i, { informado: false, texto: valorBRFormatado(Math.abs(Number(linhas[i].valor_calculado) || 0)) }))
+  const incluir = seLiberado((tipo) => setLinhas(prev => [...prev, paraEdicao({
     ...novoItemManual(tipo, { categoria_id: contrato.categoria_taxa_adm_id || null }), valor: tipo === 'ajuste' ? 0 : -0,
-  })])
-  const remover = (i) => setLinhas(prev => comAdmRecalculada(contrato, prev.filter((_, j) => j !== i)))
+  })]))
+  const remover = seLiberado((i) => setLinhas(prev => recalcular(prev.filter((_, j) => j !== i))))
+  const mudarSinal = seLiberado((i, sinal) => mudar(i, { sinal }))
 
   const gravar = async (paraPadrao = false) => {
     const faltaDescricao = itens.find(i => i.origem !== 'auto' && !String(i.descricao || '').trim())
@@ -127,6 +139,13 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
             </button>
           )}
         </div>
+        {perguntaValor && travado && (
+          <div role="alertdialog" data-testid="pergunta-valor-conferida" className="p-2 rounded-lg border border-aviso/50 bg-aviso/10 text-xs text-texto-1 flex flex-wrap items-center gap-2">
+            <span>{linha.linha?.conferencia ? 'Esta competência foi conferida com o extrato. Alterar o valor?' : 'Esta competência está fechada. Alterar o valor?'}</span>
+            <button type="button" className="btn-secondary text-xs py-0.5" onClick={() => { setValoresLiberados(true); setPerguntaValor(false) }}>Sim, alterar</button>
+            <button type="button" className="btn-secondary text-xs py-0.5" onClick={() => setPerguntaValor(false)}>Não</button>
+          </div>
+        )}
         <p className="text-xs text-texto-3">
           Aluguel do inquilino com vencimento em {fmtDate(linha.vencimentoInquilino)} · repasse da administradora em {fmtDate(linha.vencimento)}.
           {' '}Itens automáticos seguem o contrato; ao digitar outro valor, ele fica informado à mão (o calculado aparece ao lado).
@@ -154,11 +173,11 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
                 <div>
                   <div className="flex items-center gap-1">
                     {l.tipo === 'ajuste' ? (
-                      <select className="input py-1 text-xs w-12 px-1" value={l.sinal} disabled={!podeEditar} aria-label="Sinal do ajuste" onChange={e => mudar(i, { sinal: Number(e.target.value) })}>
+                      <select className="input py-1 text-xs w-12 px-1" value={l.sinal} disabled={!podeEditar} aria-label="Sinal do ajuste" onChange={e => mudarSinal(i, Number(e.target.value))}>
                         <option value={1}>+</option><option value={-1}>−</option>
                       </select>
                     ) : <span className={`text-xs ${l.sinal > 0 ? 'text-receita' : 'text-despesa'}`}>{l.sinal > 0 ? '+' : '−'}</span>}
-                    <CampoValor className="input py-1 text-sm" value={l.texto} disabled={!podeEditar} onChange={v => mudarValor(i, v)} aria-label={`Valor de ${l.descricao || TIPOS_ITEM_REPASSE[l.tipo]}`} />
+                    <CampoValor className="input py-1 text-sm" value={l.texto} disabled={!podeEditar} readOnly={travado} onFocus={travado ? () => setPerguntaValor(true) : undefined} onChange={v => mudarValor(i, v)} aria-label={`Valor de ${l.descricao || TIPOS_ITEM_REPASSE[l.tipo]}`} />
                   </div>
                   {auto && l.informado && l.valor_calculado != null && (
                     <button type="button" className="text-[11px] text-texto-3 hover:text-texto-1 inline-flex items-center gap-0.5 mt-0.5" onClick={() => voltarCalculado(i)} disabled={!podeEditar}>

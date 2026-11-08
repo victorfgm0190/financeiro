@@ -149,6 +149,7 @@ export function avisoTaxa(l) {
 
 // Taxa → item da API (contrato_itens com tipo_repasse).
 export const taxaParaItem = (t) => ({
+  ...(t.id && !String(t.id).startsWith('nova-') ? { id: t.id } : {}),
   descricao: t.descricao, grupo: 'outro', responsavel: 'proprietario', valor_previsto: t.valor, categoria_id: t.categoria_id || null,
   ativo: t.ativo !== false, tipo_repasse: t.tipo_repasse, valores_parcelas: t.valores_parcelas, vigencia_inicio: t.vigencia_inicio,
   vigencia_fim: t.vigencia_fim, dedutivel_ir: !!t.dedutivel_ir,

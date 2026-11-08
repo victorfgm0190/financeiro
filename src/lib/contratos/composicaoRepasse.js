@@ -12,7 +12,7 @@
 // competência ABERTA os automáticos seguem o contrato (salvo os informados à mão, que guardam
 // valor_calculado e valor informado); FECHADA, a composição gravada vale como está.
 import { mesesEntre } from './datas.js'
-import { descricaoTaxaUnica, linhaCongelada } from './taxaUnica.js'
+import { descricaoTaxaUnica, linhaCongelada, taxaUnicaDoItem } from './taxaUnica.js'
 
 const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100
 
@@ -83,14 +83,19 @@ export function categoriaPadraoDoItem(contrato, item) {
   if (item?.tipo === 'aluguel') return contrato?.categoria_id || null
   if (item?.tipo === 'taxa_adm') return adm
   if (item?.tipo === 'tarifa' || item?.tipo === 'taxa_unica') {
-    const id = item.taxa_id || String(item.chave || '').split(':')[1] || null
+    const id = item.tipo === 'taxa_unica' ? taxaUnicaDoItem(contrato, item) : item.taxa_id || String(item.chave || '').split(':')[1] || null
     return (contrato?.itens_repasse || []).find(t => t.id === id)?.categoria_id || adm
   }
   return null
 }
 // Lê a composição gravada completando a categoria vazia com a padrão (competências gravadas antes de o
 // contrato ter a categoria). Só na leitura: o banco não é alterado.
-const comCategoria = (contrato, i) => (i.categoria_id ? i : { ...i, categoria_id: categoriaPadraoDoItem(contrato, i) })
+// A taxa única ligada a um id antigo (contrato regravado) volta a apontar para a taxa atual.
+function comCategoria(contrato, item) {
+  const taxaId = item.tipo === 'taxa_unica' ? taxaUnicaDoItem(contrato, item) : null
+  const i = taxaId && taxaId !== item.taxa_id ? { ...item, taxa_id: taxaId } : item
+  return i.categoria_id ? i : { ...i, categoria_id: categoriaPadraoDoItem(contrato, i) }
+}
 
 // Contrato sem a categoria que os itens automáticos usariam → o aviso (uma vez, na ficha), ou null.
 export function avisoCategoriaContrato(contrato) {

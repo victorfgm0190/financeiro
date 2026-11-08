@@ -55,11 +55,27 @@ function planoDaTaxa(item) {
 }
 const acumulado = (plano, k) => r2(plano.slice(0, Math.min(k + 1, plano.length)).reduce((a, x) => a + x, 0))
 
+// Taxa única do contrato a que um item taxa_unica gravado pertence: o taxa_id (ou a chave
+// taxa_unica:<id>) quando ainda existe no contrato; senão (id antigo de antes de o contrato ser
+// regravado, ou "extrato" sem ligação) a única taxa única do contrato, ou a de mesma descrição. → id ou null.
+const semAcento = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+export function taxaUnicaDoItem(contrato, item) {
+  if (item?.tipo !== 'taxa_unica') return null
+  const unicas = (contrato?.itens_repasse || []).filter(t => t.tipo_repasse === 'taxa_unica')
+  const ref = item.taxa_id || String(item.chave || '').split(':')[1] || null
+  if (ref && unicas.some(t => t.id === ref)) return ref
+  if (unicas.length === 1) return unicas[0].id
+  const d = semAcento(item.descricao)
+  return unicas.find(t => semAcento(t.descricao) && d.startsWith(semAcento(t.descricao)))?.id || null
+}
+
 // Valor (positivo) que a competência gravada já descontou da taxa: itens taxa_unica ligados a ela
-// (taxa_id, ou a chave automática taxa_unica:<id>).
-export function descontadoNaLinha(linha, id) {
+// (taxaUnicaDoItem; sem o contrato, só o taxa_id/chave exatos).
+export function descontadoNaLinha(linha, id, contrato = null) {
+  const daTaxa = (i) => (contrato ? taxaUnicaDoItem(contrato, i) === id
+    : i.taxa_id === id || i.chave === `taxa_unica:${id}` || String(i.chave || '').startsWith(`taxa_unica:${id}:`))
   return r2(-(linha?.itens || [])
-    .filter(i => i.tipo === 'taxa_unica' && (i.taxa_id === id || i.chave === `taxa_unica:${id}` || String(i.chave || '').startsWith(`taxa_unica:${id}:`)))
+    .filter(i => i.tipo === 'taxa_unica' && daTaxa(i))
     .reduce((a, i) => a + (Number(i.valor) || 0), 0))
 }
 
@@ -83,7 +99,7 @@ export function projetarTaxasUnicas(contrato, competencias) {
       if (k < 0) continue
       const falta = r2(total - descontado)
       if (linhaCongelada(c.linha)) {
-        const real = descontadoNaLinha(c.linha, it.id)
+        const real = descontadoNaLinha(c.linha, it.id, contrato)
         if (real > ZERO) porComp[c.competencia] = { valor: real, k, n: plano.length, real: true, falta }
         descontado = r2(descontado + real)
         continue
