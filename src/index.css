@@ -301,3 +301,9 @@
     font-weight: 600;
   }
 }
+
+/* Ícone ⓘ do help de campo (HelpCampo): no toque, área de 44px sem mudar o layout. */
+@media (pointer: coarse) {
+  .help-campo-alvo { position: relative; }
+  .help-campo-alvo::after { content: ''; position: absolute; inset: -14px; }
+}

@@ -48,6 +48,7 @@ import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
 import ContratosPanel from './components/Contratos/ContratosPanel'
 import ContratoFichaHost from './components/Contratos/ContratoFichaHost'
 import ContratoEfetivacaoHost from './components/Contratos/ContratoEfetivacaoHost'
+import HelpCampoPainel from './components/Ajuda/HelpCampoPainel'
 import ComposicaoParcelaHost from './components/Contratos/ComposicaoParcelaHost'
 import MonthStartModal from './components/shared/MonthStartModal'
 import GlobalSearch from './components/shared/GlobalSearch'
@@ -269,6 +270,7 @@ function AppContent() {
       <JornadaBoasVindas />
       <JornadaBarra />
       <GuiaInterativo />
+      <HelpCampoPainel />
     </>
   )
 

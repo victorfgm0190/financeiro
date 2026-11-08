@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within, act } from '@testing-library/react'
 
 // Tarifas e taxas da administradora no wizard do contrato de repasse: explicação dos botões, cartão com
 // resumo + Editar/Excluir/OK, conferência da soma das parcelas e erro de validação junto do cartão.
@@ -17,6 +17,8 @@ const app = {
 vi.mock('../../context/AppContext', () => ({ useApp: () => app }))
 
 const { default: ContratoWizard } = await import('./ContratoWizard.jsx')
+const { default: HelpCampoPainel } = await import('../Ajuda/HelpCampoPainel.jsx')
+const { fecharHelpCampo } = await import('../../help/helpCampoEstado.js')
 
 const levados = []
 beforeEach(() => {
@@ -200,5 +202,19 @@ describe('ContratoWizard — categoria da taxa de administração', () => {
     mudar(campo('Taxa de administração (%)').querySelector('input'), '0')
     avancar()
     expect(screen.queryByText('Escolha a categoria da taxa de administração.')).toBeNull()
+  })
+})
+
+describe('ContratoWizard — F1 (help de campo) no modo administradora', () => {
+  afterEach(() => act(() => fecharHelpCampo()))
+  it('F1 em "Dia do repasse" e em "Taxa de administração" abre o help de cada campo; layout sem ⓘ novo', () => {
+    render(<HelpCampoPainel />)
+    abrirValores()
+    const ev = (el) => { act(() => el.focus()); const e = new KeyboardEvent('keydown', { key: 'F1', bubbles: true, cancelable: true }); act(() => { el.dispatchEvent(e) }); return e }
+    expect(ev(campo('Dia do repasse').querySelector('input')).defaultPrevented).toBe(true)
+    expect(screen.getByTestId('help-campo-painel').textContent).toContain('Dia do mês em que a administradora deposita o líquido.')
+    ev(campo('Taxa de administração (%)').querySelector('input'))
+    expect(screen.getByTestId('help-campo-painel').textContent).toContain('Percentual que a administradora desconta de cada aluguel.')
+    expect(within(campo('Dia do repasse')).queryByTestId('help-campo')).toBeNull()
   })
 })

@@ -69,7 +69,9 @@ export default function CategorySelect({
   perfilId,
   quebrarRotulo = false,
   filtro = false,
+  helpId = null, // help de campo (F1): 'tela.campo' no contêiner (display: contents — não muda o layout)
 }) {
+  const comHelp = (n) => (helpId ? <span className="contents" data-help-id={helpId}>{n}</span> : n)
   const { activeProfileId, categoryGroupOrder } = useApp()
   const perfil = perfilId === undefined ? activeProfileId : perfilId
   const categories = useMemo(
@@ -83,7 +85,7 @@ export default function CategorySelect({
   )
 
   if (searchable) {
-    return (
+    return comHelp(
       <>
         <SearchableDropdown
           categories={categories}
@@ -102,7 +104,7 @@ export default function CategorySelect({
   const { grouped, ungrouped, sortedGroups } = buildGroups(categories, type)
   const hasGroups = sortedGroups.length > 0
 
-  return (
+  return comHelp(
     <>
     <select className={className} value={value} onChange={onChange} required={required}>
       <option value="">{filtro ? 'Todas' : placeholder}</option>

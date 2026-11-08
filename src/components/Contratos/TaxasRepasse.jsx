@@ -30,7 +30,7 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
     onChange(linhas.filter((_, j) => j !== i))
   }
   return (
-    <div className="space-y-2" data-guia="contrato-form.taxas-repasse">
+    <div className="space-y-2" data-guia="contrato-form.taxas-repasse" data-help-form="contratoTaxa">
       <p className="label mb-0">Tarifas e taxas da administradora</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {Object.entries(BOTOES_TAXA).map(([k, b]) => (
@@ -77,9 +77,9 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <input autoComplete="off" className="input py-1.5 text-sm col-span-2" placeholder={unica ? 'Ex.: Taxa de intermediação' : 'Ex.: Tarifa bancária'}
-                    aria-label="Descrição da taxa" value={l.descricao} onChange={e => setL(i, { descricao: e.target.value })} maxLength={200} />
+                    aria-label="Descrição da taxa" data-help-id="contratoTaxa.descricao" value={l.descricao} onChange={e => setL(i, { descricao: e.target.value })} maxLength={200} />
                   <div className={`min-w-0 ${unica ? 'flex items-center gap-1' : ''}`}>
-                    <CampoValor className="input py-1.5 text-sm min-w-0" placeholder={unica ? 'Total' : 'Valor por mês'} aria-label={unica ? 'Valor total da taxa' : 'Valor da tarifa'}
+                    <CampoValor className="input py-1.5 text-sm min-w-0" placeholder={unica ? 'Total' : 'Valor por mês'} aria-label={unica ? 'Valor total da taxa' : 'Valor da tarifa'} helpId="contratoTaxa.valor"
                       value={l.valor} onChange={v => setL(i, { valor: v })} />
                     {unica && (
                       <button type="button" className="btn-secondary text-[11px] py-1 px-2 whitespace-nowrap" disabled={!(aluguel > 0)}
@@ -90,12 +90,12 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
                     )}
                   </div>
                   <label className="flex items-center gap-1 text-[11px] text-texto-2">
-                    <input type="checkbox" className="accent-primary" checked={!!l.dedutivel_ir} onChange={e => setL(i, { dedutivel_ir: e.target.checked })} />
+                    <input type="checkbox" className="accent-primary" data-help-id="contratoTaxa.dedutivelIr" checked={!!l.dedutivel_ir} onChange={e => setL(i, { dedutivel_ir: e.target.checked })} />
                     Dedutível IR
                   </label>
                   <label className="text-[11px] text-texto-3 col-span-1">
                     {unica ? 'Competência da 1ª parcela' : 'A partir da competência'}
-                    <input type="month" className="input py-1 text-sm" aria-label={unica ? 'Competência da 1ª parcela' : 'Competência inicial'} value={l.vigencia_inicio}
+                    <input type="month" className="input py-1 text-sm" aria-label={unica ? 'Competência da 1ª parcela' : 'Competência inicial'} data-help-id="contratoTaxa.vigenciaInicio" value={l.vigencia_inicio}
                       onChange={e => setL(i, { vigencia_inicio: e.target.value })} />
                   </label>
                   {unica ? (
@@ -103,21 +103,21 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
                       <div className="flex flex-wrap items-end gap-2">
                         <label className="min-w-0">
                           Forma de desconto
-                          <select className="input py-1 text-sm" aria-label="Forma de desconto" value={formaDoForm(l)} onChange={e => setL(i, { forma: e.target.value })}>
+                          <select className="input py-1 text-sm" aria-label="Forma de desconto" data-help-id="contratoTaxa.formaDesconto" value={formaDoForm(l)} onChange={e => setL(i, { forma: e.target.value })}>
                             {Object.entries(FORMAS_TAXA_UNICA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                           </select>
                         </label>
                         {formaDoForm(l) === 'iguais' && (
                           <label className="w-28">
                             Nº de parcelas
-                            <input type="number" min="1" max="120" className="input py-1 text-sm" aria-label="Número de parcelas iguais"
+                            <input type="number" min="1" max="120" className="input py-1 text-sm" aria-label="Número de parcelas iguais" data-help-id="contratoTaxa.nParcelas"
                               value={l.n_parcelas ?? ''} onChange={e => setL(i, { n_parcelas: e.target.value })} />
                           </label>
                         )}
                         {formaDoForm(l) === 'valores' && (
                           <div className="flex-1 min-w-[12rem]">
                             <label htmlFor={`taxa-parcelas-${i}`}>Valor de cada parcela — separe com ";"</label>
-                            <input id={`taxa-parcelas-${i}`} autoComplete="off" className="input py-1 text-sm" placeholder="Ex.: 470,00; 865,00; 865,00" aria-label="Valores das parcelas"
+                            <input id={`taxa-parcelas-${i}`} autoComplete="off" className="input py-1 text-sm" placeholder="Ex.: 470,00; 865,00; 865,00" aria-label="Valores das parcelas" data-help-id="contratoTaxa.valoresParcelas"
                               value={l.parcelas ?? ''} onChange={e => setL(i, { parcelas: e.target.value })}
                               onBlur={e => { const v = parcelasDoTexto(e.target.value); if (v?.length) setL(i, { parcelas: v.map(valorBRFormatado).join('; ') }) }} />
                           </div>
@@ -138,13 +138,13 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
                   ) : (
                     <label className="text-[11px] text-texto-3 col-span-1">
                       Até a competência (opcional)
-                      <input type="month" className="input py-1 text-sm" aria-label="Competência final" value={l.vigencia_fim}
+                      <input type="month" className="input py-1 text-sm" aria-label="Competência final" data-help-id="contratoTaxa.vigenciaFim" value={l.vigencia_fim}
                         onChange={e => setL(i, { vigencia_fim: e.target.value })} />
                     </label>
                   )}
                   <div className="col-span-2 sm:col-span-1 min-w-0">
                     <p className="text-[11px] text-texto-3">Categoria</p>
-                    <CategorySelect categories={categories} value={l.categoria_id} onChange={e => setL(i, { categoria_id: e.target.value })} type="expense" perfilId={perfilId || null} searchable placeholder="A da taxa de adm." />
+                    <CategorySelect helpId="contratoTaxa.categoria" categories={categories} value={l.categoria_id} onChange={e => setL(i, { categoria_id: e.target.value })} type="expense" perfilId={perfilId || null} searchable placeholder="A da taxa de adm." />
                   </div>
                 </div>
                 {erro && <p role="alert" className="text-xs text-perigo">{erro}</p>}

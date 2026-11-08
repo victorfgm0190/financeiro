@@ -6,7 +6,6 @@ import PreviaParcelada from './PreviaParcelada'
 import CampoParcelamento from './CampoParcelamento'
 import HelpCampo from '../shared/HelpCampo'
 import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
-import { HELP_CAMPOS } from '../../lib/helpCampos'
 import { publicarAgendaJa } from '../../lib/agendaFeedApi'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
@@ -70,17 +69,16 @@ const FREQUENCIES = [
 const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
 
 // Textos do ⓘ de cada campo: src/lib/helpCampos.js (help de campo, centralizado).
-const TIPS = HELP_CAMPOS.agendamento
 
 // Ícone ⓘ do campo: componente único do app (src/components/shared/HelpCampo.jsx).
-const Tooltip = ({ text }) => <HelpCampo texto={text} />
+const Tooltip = ({ text, campo }) => <HelpCampo texto={text} campo={campo} />
 
 // `confira`: campo sugerido pelo Assistente IA com confiança baixa (ou vazio) — destaque na prévia.
-function LabelTip({ children, tip, required, confira = false }) {
+function LabelTip({ children, tip, help, required, confira = false }) {
   return (
     <label className="label">
       <span className="inline-flex items-center">
-        {children}{required && ' *'}<Tooltip text={tip} />
+        {children}{required && ' *'}<Tooltip text={tip} campo={help} />
         {confira && <span className="ml-1.5 text-[11px] font-medium text-aviso" title="Sugestão do assistente: confira">● confira</span>}
       </span>
     </label>
@@ -890,7 +888,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           ordem do código — assim o Valor vem logo após a Descrição e antes da Conta. No desktop
           a ordem e as 2 colunas são as de sempre. */}
       {!initial?.id && <AvisoPrerequisitos funcao="agendamento" onIr={onClose} />}
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-help-form="agendamento">
         {initial?.id && (
           <div className="max-sm:-order-1 sm:col-span-2 flex items-center justify-end -mb-2">
             <button type="button" onClick={() => setVerHistorico(true)} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5" title="Histórico de alterações">
@@ -941,8 +939,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         )}
 
         {/* Movimentação */}
-        <div data-guia="agendamento-form.tipo" className="max-sm:-order-1 sm:col-span-2">
-          <LabelTip tip={TIPS.transactionType}>Movimentação</LabelTip>
+        <div data-help-id="agendamento.transactionType" data-guia="agendamento-form.tipo" className="max-sm:-order-1 sm:col-span-2">
+          <LabelTip help="agendamento.transactionType">Movimentação</LabelTip>
           <div className="flex rounded-lg overflow-hidden border border-borda-forte">
             {['expense', 'income', 'transfer'].map(t => (
               <button
@@ -972,8 +970,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         )}
 
         {/* Descrição */}
-        <div data-guia="agendamento-form.descricao" className="max-sm:-order-1 sm:col-span-2">
-          <LabelTip tip={TIPS.description} required confira={!!destaques?.includes('description')}>Descrição</LabelTip>
+        <div data-help-id="agendamento.description" data-guia="agendamento-form.descricao" className="max-sm:-order-1 sm:col-span-2">
+          <LabelTip help="agendamento.description" required confira={!!destaques?.includes('description')}>Descrição</LabelTip>
           <input
             className="input"
             value={form.description}
@@ -986,8 +984,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         </div>
 
         {/* Conta */}
-        <div data-guia="agendamento-form.conta">
-          <LabelTip tip={TIPS.account} required confira={!!destaques?.includes('accountId')}>{form.transactionType === 'transfer' ? 'Conta Origem' : 'Conta'}</LabelTip>
+        <div data-help-id="agendamento.account" data-guia="agendamento-form.conta">
+          <LabelTip help="agendamento.account" required confira={!!destaques?.includes('accountId')}>{form.transactionType === 'transfer' ? 'Conta Origem' : 'Conta'}</LabelTip>
           {trava
             ? <div className="input opacity-60 cursor-not-allowed" title={trava}>{selectedAccount?.apelido || selectedAccount?.name || '—'}</div>
             : <SearchableSelect
@@ -1003,8 +1001,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         </div>
 
         {/* Valor */}
-        <div data-guia="agendamento-form.valor" className="max-sm:-order-1">
-          <LabelTip tip={TIPS.amount} required confira={!!destaques?.includes('amount')}>{nForm > 1 ? 'Valor total da ocorrência (R$)' : 'Valor (R$)'}</LabelTip>
+        <div data-help-id="agendamento.amount" data-guia="agendamento-form.valor" className="max-sm:-order-1">
+          <LabelTip help="agendamento.amount" required confira={!!destaques?.includes('amount')}>{nForm > 1 ? 'Valor total da ocorrência (R$)' : 'Valor (R$)'}</LabelTip>
           <InputMoeda
             className="input valor-destaque"
             min="0.01"
@@ -1059,8 +1057,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Conta Destino (apenas para transferências) */}
         {form.transactionType === 'transfer' && (
-          <div data-guia="agendamento-form.conta-destino" className="sm:col-span-2">
-            <LabelTip tip={TIPS.toAccount} required confira={!!destaques?.includes('toAccountId')}>Conta Destino</LabelTip>
+          <div data-help-id="agendamento.toAccount" data-guia="agendamento-form.conta-destino" className="sm:col-span-2">
+            <LabelTip help="agendamento.toAccount" required confira={!!destaques?.includes('toAccountId')}>Conta Destino</LabelTip>
             <SearchableSelect
               options={destAccountOpts}
               value={form.toAccountId}
@@ -1168,8 +1166,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Categoria */}
         {form.transactionType !== 'transfer' && (
-          <div data-guia="agendamento-form.categoria">
-            <LabelTip tip={TIPS.category} confira={!!destaques?.includes('categoryId')}>Categoria</LabelTip>
+          <div data-help-id="agendamento.category" data-guia="agendamento-form.categoria">
+            <LabelTip help="agendamento.category" confira={!!destaques?.includes('categoryId')}>Categoria</LabelTip>
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
                 <ResumoRateio linhas={rateioRows} categories={categories} total={Number(form.amount) || 0} extra={rateioSoDestaOcorrencia ? ' · só desta ocorrência' : ''} />
@@ -1197,8 +1195,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Favorecido — também na parcela de financiamento (transferência), onde é campo da série */}
         {(form.transactionType !== 'transfer' || ehFinanciamento) && (
-          <div data-guia="agendamento-form.favorecido">
-            <LabelTip tip={TIPS.payee} confira={!!destaques?.includes('payee')}>Favorecido</LabelTip>
+          <div data-help-id="agendamento.payee" data-guia="agendamento-form.favorecido">
+            <LabelTip help="agendamento.payee" confira={!!destaques?.includes('payee')}>Favorecido</LabelTip>
             <FavorecidoAutocomplete
               value={form.payee}
               onChange={v => set('payee', v)}
@@ -1232,15 +1230,15 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Frequência — parcela de contrato: do contrato, só leitura */}
         {ehParcelaContrato ? (
-          <div data-guia="agendamento-form.frequencia">
-            <LabelTip tip={TIPS.frequency}>Frequência</LabelTip>
+          <div data-help-id="agendamento.frequency" data-guia="agendamento-form.frequencia">
+            <LabelTip help="agendamento.frequency">Frequência</LabelTip>
             <div className="input bg-surface-2/60 text-texto-2 cursor-not-allowed" title="Definida pelo contrato">
               {rotuloFrequencia(contratoPorId?.(initial.contratoId), initial.contratoPapel)}
             </div>
           </div>
         ) : (
-        <div data-guia="agendamento-form.frequencia">
-          <LabelTip tip={TIPS.frequency}>Frequência</LabelTip>
+        <div data-help-id="agendamento.frequency" data-guia="agendamento-form.frequencia">
+          <LabelTip help="agendamento.frequency">Frequência</LabelTip>
           <SearchableSelect
             options={FREQ_OPTIONS}
             value={form.frequency}
@@ -1256,12 +1254,12 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         {/* Data de Início — parcela de contrato: data-base travada + vencimento editável */}
         {ehParcelaContrato ? (
           <>
-            <div>
-              <LabelTip tip={TIPS.dataBase}>Data-base (competência)</LabelTip>
+            <div data-help-id="agendamento.dataBase">
+              <LabelTip help="agendamento.dataBase">Data-base (competência)</LabelTip>
               <DateInput className="input opacity-60 cursor-not-allowed" value={form.startDate} onChange={() => {}} disabled />
             </div>
-            <div>
-              <LabelTip tip={TIPS.dataVencimento}>Data de vencimento</LabelTip>
+            <div data-help-id="agendamento.dataVencimento">
+              <LabelTip help="agendamento.dataVencimento">Data de vencimento</LabelTip>
               <DateInput
                 className="input"
                 value={form.overrides?.[form.startDate]?.date || form.startDate}
@@ -1282,8 +1280,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             </div>
           </>
         ) : (
-        <div data-guia="agendamento-form.data">
-          <LabelTip tip={TIPS.startDate} required confira={!!destaques?.includes('startDate')}>Data de Início</LabelTip>
+        <div data-help-id="agendamento.startDate" data-guia="agendamento-form.data">
+          <LabelTip help="agendamento.startDate" required confira={!!destaques?.includes('startDate')}>Data de Início</LabelTip>
           <DateInput
             className="input"
             value={form.startDate}
@@ -1298,8 +1296,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Data de Vencimento Atual — re-ancora a série (só p/ frequências recorrentes) */}
         {form.frequency && form.frequency !== 'once' && !parcForm && (
-          <div>
-            <LabelTip tip={TIPS.nextOccurrence}>Data de Vencimento Atual</LabelTip>
+          <div data-help-id="agendamento.nextOccurrence">
+            <LabelTip help="agendamento.nextOccurrence">Data de Vencimento Atual</LabelTip>
             <DateInput
               className="input"
               value={form.nextOccurrence || ''}
@@ -1319,8 +1317,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Até quando — Sem fim | Número de vezes | Até a data (só com frequência recorrente escolhida) */}
         {form.frequency !== 'once' && (
-          <div data-guia="agendamento-form.ate-quando" className={`sm:col-span-2 ${!form.frequency ? 'opacity-40 pointer-events-none' : ''}`}>
-            <LabelTip tip={TIPS.occurrence}>Até quando</LabelTip>
+          <div data-help-id="agendamento.occurrence" data-guia="agendamento-form.ate-quando" className={`sm:col-span-2 ${!form.frequency ? 'opacity-40 pointer-events-none' : ''}`}>
+            <LabelTip help="agendamento.occurrence">Até quando</LabelTip>
             <FimRepeticao
               inicio={form.startDate}
               recorrencia={form.frequency}
@@ -1352,9 +1350,9 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
           {/* Texto à esquerda (quebra se precisar) e toggle sempre à direita. No celular o
               "N dias antes" desce para uma linha própria (order-last + basis-full). */}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+          <div data-help-id="agendamento.remindDaysBefore" className="flex flex-wrap items-center gap-x-2 gap-y-2">
             <span className="flex-1 min-w-0 text-sm text-texto-2 inline-flex items-center">
-              Lembrar com Antecedência<Tooltip text={TIPS.remindDaysBefore} />
+              Lembrar com Antecedência<Tooltip campo="agendamento.remindDaysBefore" />
             </span>
             {form.remindDaysBefore > 0 && (
               <div className="flex items-center gap-2 max-sm:order-last max-sm:basis-full">
@@ -1375,16 +1373,16 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             />
           </div>
 
-          <div className="flex items-center justify-between gap-3">
+          <div data-help-id="agendamento.autoRegister" className="flex items-center justify-between gap-3">
             <span className="min-w-0 text-sm text-texto-2 inline-flex items-center">
-              Registrar Automático<Tooltip text={TIPS.autoRegister} />
+              Registrar Automático<Tooltip campo="agendamento.autoRegister" />
             </span>
             <Toggle value={form.autoRegister} onChange={v => set('autoRegister', v)} />
           </div>
 
-          <div className="flex items-center justify-between gap-3">
+          <div data-help-id="agendamento.sincronizarAgenda" className="flex items-center justify-between gap-3">
             <span className="min-w-0 text-sm text-texto-2 inline-flex items-center">
-              Sincronizar com a agenda do celular<Tooltip text={TIPS.sincronizarAgenda} />
+              Sincronizar com a agenda do celular<Tooltip campo="agendamento.sincronizarAgenda" />
             </span>
             <Toggle value={form.sincronizarAgenda} onChange={v => set('sincronizarAgenda', v)} />
           </div>
@@ -1392,9 +1390,9 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Classificação Gerencial (some com o controle gerencial desligado) */}
         {form.transactionType === 'expense' && gerencialLigado && (
-          <div className="sm:col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-2">
+          <div data-help-id="agendamento.gerencial" className="sm:col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-2">
             <p className="text-[11px] font-medium text-texto-3 uppercase tracking-wider flex items-center">
-              Classificação Gerencial <Tooltip text={TIPS.gerencial} />
+              Classificação Gerencial <Tooltip campo="agendamento.gerencial" />
               {destaques?.includes('grupoGerencial') && <span className="ml-1.5 normal-case tracking-normal text-[11px] font-medium text-aviso" title="Sugestão do assistente: confira">● confira</span>}
             </p>
             <select

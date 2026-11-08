@@ -24,6 +24,7 @@ import { useGuiaTela, useEstadoBoasVindas } from './useGuiaTela'
 import { tarefasDaTela } from '../../lib/tarefasGuiadas'
 import { iniciarTarefa } from './tourEstado'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { EVENTO_AJUDA_TELA } from '../../help/helpCampoEstado'
 import { elementoDoItem, areaVisivel, faixasFixas, itemAcionavel } from './guiaElementos'
 import { posicionarSelos, quandoAparece } from './tourPassos'
 
@@ -109,6 +110,14 @@ export default function AjudaTela({ pagina, className = '' }) {
     return () => { document.removeEventListener('mousedown', fora); window.removeEventListener('keydown', esc) }
   }, [menu])
   const isMobile = useIsMobile()
+  // F1 fora de campo e de formulário (src/help/teclaF1.js): abre este menu. Atende um só "?".
+  const atende = !!guia && ligados
+  useEffect(() => {
+    if (!atende) return
+    const pedir = (e) => { if (e.detail?.atendido) return; e.detail.atendido = true; setMenu(true) }
+    window.addEventListener(EVENTO_AJUDA_TELA, pedir)
+    return () => window.removeEventListener(EVENTO_AJUDA_TELA, pedir)
+  }, [atende])
   const tarefas = tarefasDaTela(tela, ctx, { celular: isMobile })
   const itens = guia?.itens || []
   const painel = useRef(null)

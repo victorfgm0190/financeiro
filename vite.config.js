@@ -84,7 +84,7 @@ export default defineConfig({
         //
         // A saída de verdade é code splitting (o próprio build avisa). Enquanto isso não é
         // feito, este teto evita que o build quebre a cada poucos KB de código novo.
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 08/11: 4 MiB estourou com o help de campo (bundle ~4,2 MB)
       },
     }),
   ],

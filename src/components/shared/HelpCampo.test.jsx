@@ -11,8 +11,9 @@ vi.mock('../../lib/boasVindasApi', () => ({
 }))
 const { default: HelpCampo } = await import('./HelpCampo.jsx')
 const { HELP_CAMPOS, textoHelpCampo } = await import('../../lib/helpCampos.js')
+const { lerHelpCampo, fecharHelpCampo } = await import('../../help/helpCampoEstado.js')
 
-afterEach(() => { cleanup(); boas.estado = null })
+afterEach(() => { cleanup(); boas.estado = null; fecharHelpCampo() })
 const balao = () => screen.queryByRole('tooltip')
 
 describe('HelpCampo', () => {
@@ -26,19 +27,27 @@ describe('HelpCampo', () => {
     expect(balao()).toBeNull()
   })
 
-  it('toque abre e fica aberto; tocar fora ou Esc fecha; o clique não aciona o campo do rótulo', () => {
+  it('clique/toque abre o painel do help de campo (não o balão); o clique não aciona o campo do rótulo', () => {
     const marcar = vi.fn()
     render(<div><label><input type="checkbox" onChange={marcar} /> Registrar <HelpCampo campo="agendamento.autoRegister" /></label><p>fora</p></div>)
+    fireEvent.click(screen.getByTestId('help-campo'))
+    expect(lerHelpCampo()).toMatchObject({ aberto: true, id: 'agendamento.autoRegister', origem: 'icone' })
+    expect(balao()).toBeNull()
+    expect(marcar).not.toHaveBeenCalled()
+  })
+
+  it('texto direto (sem chave da base): toque abre o balão e fica; tocar fora ou Esc fecha', () => {
+    render(<div><label>Algo <HelpCampo texto="Explicação curta do campo." /></label><p>fora</p></div>)
     const icone = screen.getByTestId('help-campo')
     fireEvent.click(icone)
     fireEvent.mouseLeave(icone)
-    expect(balao()).not.toBeNull()
-    expect(marcar).not.toHaveBeenCalled()
+    expect(balao().textContent).toBe('Explicação curta do campo.')
     fireEvent.touchStart(screen.getByText('fora'))
     expect(balao()).toBeNull()
     fireEvent.click(icone)
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(balao()).toBeNull()
+    expect(lerHelpCampo().aberto).toBe(false)
   })
 
   it('preferência desligada: o ícone não aparece; religada: volta', () => {
@@ -74,6 +83,6 @@ describe('acessibilidade dentro de rótulos', () => {
     render(<div><label htmlFor="c1">Vínculo <HelpCampo campo="conta.vinculo" /></label><select id="c1"><option>x</option></select></div>)
     expect(screen.getByLabelText(/Vínculo/).tagName).toBe('SELECT')
     fireEvent.keyDown(screen.getByTestId('help-campo'), { key: 'Enter' })
-    expect(balao()).not.toBeNull()
+    expect(lerHelpCampo()).toMatchObject({ aberto: true, id: 'conta.vinculo' })
   })
 })

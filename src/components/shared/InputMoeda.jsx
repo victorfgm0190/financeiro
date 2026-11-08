@@ -39,7 +39,7 @@ const comValor = (e, value) => {
 // onBlur/onKeyDown do consumidor recebem o mesmo e.target.value canônico; o blur NÃO chama onChange.
 export default function InputMoeda({
   value, onChange, onBlur, onFocus, onKeyDown, negativo = false, min, max, name,
-  className = 'input', placeholder = '0,00',
+  className = 'input', placeholder = '0,00', helpId = null,
   type: _type, step: _step, ...rest // eslint-disable-line no-unused-vars
 }) {
   const ref = useRef(null)
@@ -70,6 +70,7 @@ export default function InputMoeda({
   return (
     <input
       {...rest}
+      {...(helpId ? { 'data-help-id': helpId } : {})}
       ref={ref}
       name={name}
       type="text"

@@ -128,7 +128,7 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
   }
   return (
     <Modal open onClose={onClose} title={`Composição do repasse — ${fmtYm(competencia)}`} size="lg">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="repasseComposicao">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className={`text-xs font-medium ${linha.linha?.conferencia ? 'text-receita' : 'text-aviso'}`}>
             {linha.linha?.conferencia ? `Conferida com o extrato em ${linha.linha.conferencia.conferido_em.split('-').reverse().join('/')}` : 'Projetada pelo Finup — extrato ainda não conferido'}
@@ -160,7 +160,7 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
                   {auto ? <p className="text-texto-1 truncate">{l.descricao}</p> : (
                     <div className="flex gap-1.5">
                       {l.tipo === 'despesa' && (
-                        <select className="input py-1 text-xs w-auto" value={l.natureza || 'outra'} disabled={!podeEditar} aria-label="Natureza da despesa"
+                        <select className="input py-1 text-xs w-auto" value={l.natureza || 'outra'} disabled={!podeEditar} aria-label="Natureza da despesa" data-help-id="repasseComposicao.naturezaDespesa"
                           onChange={e => mudar(i, { natureza: e.target.value, dedutivel_ir: dedutivelPadrao('despesa', e.target.value) })}>
                           {Object.entries(NATUREZAS_DESPESA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                         </select>
@@ -177,7 +177,7 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
                         <option value={1}>+</option><option value={-1}>−</option>
                       </select>
                     ) : <span className={`text-xs ${l.sinal > 0 ? 'text-receita' : 'text-despesa'}`}>{l.sinal > 0 ? '+' : '−'}</span>}
-                    <CampoValor className="input py-1 text-sm" value={l.texto} disabled={!podeEditar} readOnly={travado} onFocus={travado ? () => setPerguntaValor(true) : undefined} onChange={v => mudarValor(i, v)} aria-label={`Valor de ${l.descricao || TIPOS_ITEM_REPASSE[l.tipo]}`} />
+                    <CampoValor helpId="repasseComposicao.valorItem" className="input py-1 text-sm" value={l.texto} disabled={!podeEditar} readOnly={travado} onFocus={travado ? () => setPerguntaValor(true) : undefined} onChange={v => mudarValor(i, v)} aria-label={`Valor de ${l.descricao || TIPOS_ITEM_REPASSE[l.tipo]}`} />
                   </div>
                   {auto && l.informado && l.valor_calculado != null && (
                     <button type="button" className="text-[11px] text-texto-3 hover:text-texto-1 inline-flex items-center gap-0.5 mt-0.5" onClick={() => voltarCalculado(i)} disabled={!podeEditar}>
@@ -186,19 +186,19 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
                   )}
                 </div>
                 <div className="min-w-0">
-                  <CategorySelect categories={categories} value={l.categoria_id || ''} onChange={e => mudar(i, { categoria_id: e.target.value || null })}
+                  <CategorySelect helpId="repasseComposicao.categoria" categories={categories} value={l.categoria_id || ''} onChange={e => mudar(i, { categoria_id: e.target.value || null })}
                     type={tipoCategoria(l)} perfilId={contrato.perfil_id || null} searchable />
                 </div>
                 <div className="flex flex-col gap-0.5 text-[11px] text-texto-2">
                   {l.tipo !== 'aluguel' && (
                     <label className="flex items-center gap-1 whitespace-nowrap">
-                      <input type="checkbox" className="accent-primary" checked={!!l.dedutivel_ir} disabled={!podeEditar} onChange={e => mudar(i, { dedutivel_ir: e.target.checked })} />
+                      <input type="checkbox" className="accent-primary" data-help-id="repasseComposicao.dedutivelIr" checked={!!l.dedutivel_ir} disabled={!podeEditar} onChange={e => mudar(i, { dedutivel_ir: e.target.checked })} />
                       Dedutível IR
                     </label>
                   )}
                   {l.tipo === 'benfeitoria' && (
                     <label className="flex items-center gap-1 whitespace-nowrap" title={bem ? `Soma no custo de ${bem.apelido || bem.name} (sem lançamento de caixa)` : 'Ligue um bem ao contrato para somar ao custo'}>
-                      <input type="checkbox" className="accent-primary" checked={!!l.somar_ao_bem} disabled={!podeEditar} onChange={e => mudar(i, { somar_ao_bem: e.target.checked })} />
+                      <input type="checkbox" className="accent-primary" data-help-id="repasseComposicao.somarAoBem" checked={!!l.somar_ao_bem} disabled={!podeEditar} onChange={e => mudar(i, { somar_ao_bem: e.target.checked })} />
                       Somar ao custo do bem
                     </label>
                   )}
@@ -251,10 +251,10 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
             <p className="text-xs font-semibold text-texto-2">Registrar recebimento do repasse</p>
             <div className="flex flex-wrap items-end gap-2">
               <label className="text-[11px] text-texto-3">Data
-                <input type="date" className="input py-1 text-sm" value={recebimento.data} onChange={e => setRecebimento(r => ({ ...r, data: e.target.value }))} aria-label="Data do recebimento" />
+                <input type="date" className="input py-1 text-sm" data-help-id="repasseComposicao.dataRecebimento" value={recebimento.data} onChange={e => setRecebimento(r => ({ ...r, data: e.target.value }))} aria-label="Data do recebimento" />
               </label>
               <label className="text-[11px] text-texto-3">Valor que caiu na conta
-                <CampoValor className="input py-1 text-sm" value={recebimento.texto} onChange={v => setRecebimento(r => ({ ...r, texto: v }))} aria-label="Valor recebido" />
+                <CampoValor helpId="repasseComposicao.valorRecebido" className="input py-1 text-sm" value={recebimento.texto} onChange={v => setRecebimento(r => ({ ...r, texto: v }))} aria-label="Valor recebido" />
               </label>
               <button type="button" className="btn-primary text-xs" disabled={alterado || salvando} onClick={registrar}
                 title={alterado ? 'Grave a composição antes de registrar' : 'Mesmo efeito de registrar pelo Agendamento'}>
@@ -266,17 +266,17 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
         )}
 
         <label className="flex items-center gap-2 text-xs text-texto-2">
-          <input type="checkbox" className="accent-primary" checked={fechada} disabled={!podeEditar} onChange={e => setFechada(e.target.checked)} />
+          <input type="checkbox" className="accent-primary" data-help-id="repasseComposicao.fechada" checked={fechada} disabled={!podeEditar} onChange={e => setFechada(e.target.checked)} />
           Competência fechada: a composição fica como está, mesmo se o contrato mudar
         </label>
         <div className="flex flex-wrap items-center gap-2 text-xs text-texto-2">
           <label htmlFor="pago-inquilino">Inquilino pagou à administradora em</label>
           <DateInput id="pago-inquilino" className="input py-1 text-xs w-36" value={pagoInquilino} disabled={!podeEditar}
-            onChange={e => setPagoInquilino(e.target.value)} aria-label="Data do pagamento do inquilino" />
+            onChange={e => setPagoInquilino(e.target.value)} aria-label="Data do pagamento do inquilino" data-help-id="repasseComposicao.dataPagamentoInquilino" />
           {!pagoInquilino && linha.vencimentoInquilino && <span className="text-texto-3">vazio = vencimento ({fmtDate(linha.vencimentoInquilino)})</span>}
         </div>
         <textarea className="input min-h-[44px] text-xs" placeholder="Observação (opcional)" value={observacao} disabled={!podeEditar}
-          onChange={e => setObservacao(e.target.value)} maxLength={2000} aria-label="Observação da competência" />
+          onChange={e => setObservacao(e.target.value)} maxLength={2000} aria-label="Observação da competência" data-help-id="repasseComposicao.observacao" />
 
         {erro && <p className="text-xs text-perigo">{erro}</p>}
         <div className="flex flex-wrap justify-between gap-2 pt-2 border-t border-borda">

@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Info } from 'lucide-react'
 import { textoHelpCampo } from '../../lib/helpCampos'
+import { helpDoCampo } from '../../help/index.js'
+import { abrirHelpCampo } from '../../help/helpCampoEstado'
 import { assinarBoasVindas, estadoBoasVindas } from '../../lib/boasVindasApi'
 
 // ── Help de campo: ícone ⓘ discreto ao lado do rótulo ───────────────────────────────────────────
@@ -38,6 +40,15 @@ export default function HelpCampo({ campo, texto }) {
   }
   const abrir = () => { posicionar(); setAberto(true) }
   const fechar = () => { fixoRef.current = false; setAberto(false) }
+  // Campo da base de help (src/help): clique/toque abre o painel completo (drawer no computador,
+  // bottom sheet no celular); passar o mouse continua mostrando o texto curto.
+  const completo = !!campo && !!helpDoCampo(campo)
+  const acionar = () => {
+    if (completo) { fechar(); abrirHelpCampo(campo, { origem: 'icone' }); return }
+    if (aberto && fixoRef.current) { fechar(); return }
+    fixoRef.current = true
+    abrir()
+  }
 
   useEffect(() => {
     if (!aberto) return
@@ -72,7 +83,7 @@ export default function HelpCampo({ campo, texto }) {
         aria-describedby={aberto ? id : undefined}
         aria-expanded={aberto}
         data-testid="help-campo"
-        className="ml-1 inline-flex items-center justify-center align-middle rounded-full text-texto-3 hover:text-texto-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-help p-1 -m-1"
+        className="help-campo-alvo ml-1 inline-flex items-center justify-center align-middle rounded-full text-texto-3 hover:text-texto-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-help p-1 -m-1"
         onMouseEnter={abrir}
         onMouseLeave={() => { if (!fixoRef.current) setAberto(false) }}
         onFocus={abrir}
@@ -80,17 +91,13 @@ export default function HelpCampo({ campo, texto }) {
         onClick={(ev) => {
           ev.preventDefault()
           ev.stopPropagation()
-          if (aberto && fixoRef.current) { fechar(); return }
-          fixoRef.current = true
-          abrir()
+          acionar()
         }}
         onKeyDown={(ev) => {
           if (ev.key !== 'Enter' && ev.key !== ' ') return
           ev.preventDefault()
           ev.stopPropagation()
-          if (aberto && fixoRef.current) { fechar(); return }
-          fixoRef.current = true
-          abrir()
+          acionar()
         }}
       >
         <Info size={12} aria-hidden="true" />

@@ -99,7 +99,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
   if (!linhas) {
     return (
       <Modal open onClose={onClose} title={titulo} size="md">
-        <div className="space-y-3 text-sm">
+        <div className="space-y-3 text-sm" data-help-form="conferenciaExtrato">
           <p className="text-xs text-texto-2">
             O Finup já calculou esta competência sozinho (repasse previsto {fmt(projetada.repasse)}). Anexe o extrato da
             administradora para conferir item a item, ou digite partindo do que foi projetado.
@@ -110,7 +110,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
           <input ref={arquivoRef} type="file" accept="image/*,application/pdf" className="hidden" aria-label="Arquivo do extrato"
             onChange={e => lerArquivo(e.target.files?.[0])} />
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn-primary flex items-center gap-1" disabled={lendo || !podeEditar} onClick={() => arquivoRef.current?.click()}>
+            <button type="button" className="btn-primary flex items-center gap-1" disabled={lendo || !podeEditar} onClick={() => arquivoRef.current?.click()} data-help-id="conferenciaExtrato.arquivo">
               {lendo ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} {lendo ? 'Lendo o extrato…' : 'Anexar PDF ou foto do extrato'}
             </button>
             <button type="button" className="btn-secondary flex items-center gap-1" disabled={lendo || !podeEditar} onClick={comecarDigitando}>
@@ -167,7 +167,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
 
   return (
     <Modal open onClose={onClose} title={titulo} size="xl">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="conferenciaExtrato">
         {outroMes && (
           <div role="alert" data-testid="aviso-periodo" className="p-3 rounded-lg border-2 border-perigo/60 bg-perigo/10 text-sm text-texto-1 space-y-2">
             <p className="flex items-start gap-2 font-medium">
@@ -184,29 +184,29 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
         )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-texto-3">
           <label>Período do extrato
-            <input className="input py-1 text-sm" value={cab.periodo} onChange={e => setCab(c => ({ ...c, periodo: e.target.value }))} aria-label="Período do extrato" placeholder={fmtYm(competencia)} />
+            <input className="input py-1 text-sm" value={cab.periodo} onChange={e => setCab(c => ({ ...c, periodo: e.target.value }))} aria-label="Período do extrato" data-help-id="conferenciaExtrato.periodo" placeholder={fmtYm(competencia)} />
           </label>
           <div>
             <span>Saldo anterior no extrato</span>
             <div className="flex gap-1">
-              <select className="input py-1 text-xs w-14 px-1" value={cab.saldoSinal} onChange={e => setCab(c => ({ ...c, saldoSinal: Number(e.target.value) }))} aria-label="Sinal do saldo anterior" title="+ a administradora me devia · − eu devia">
+              <select className="input py-1 text-xs w-14 px-1" value={cab.saldoSinal} onChange={e => setCab(c => ({ ...c, saldoSinal: Number(e.target.value) }))} aria-label="Sinal do saldo anterior" data-help-id="conferenciaExtrato.saldoAnterior" title="+ a administradora me devia · − eu devia">
                 <option value={1}>+</option><option value={-1}>−</option>
               </select>
-              <CampoValor className="input py-1 text-sm min-w-0" value={cab.saldoTexto} onChange={v => setCab(c => ({ ...c, saldoTexto: v }))} aria-label="Saldo anterior do extrato" placeholder="Opcional" />
+              <CampoValor className="input py-1 text-sm min-w-0" value={cab.saldoTexto} onChange={v => setCab(c => ({ ...c, saldoTexto: v }))} aria-label="Saldo anterior do extrato" helpId="conferenciaExtrato.saldoAnterior" placeholder="Opcional" />
             </div>
           </div>
           <div>
             <span>Total do extrato</span>
             <div className="flex gap-1">
-              <select className="input py-1 text-xs w-14 px-1" value={cab.totalSinal} onChange={e => setCab(c => ({ ...c, totalSinal: Number(e.target.value) }))} aria-label="Sinal do total do extrato" title="+ a administradora me deve · − eu devo (passa para o mês seguinte)">
+              <select className="input py-1 text-xs w-14 px-1" value={cab.totalSinal} onChange={e => setCab(c => ({ ...c, totalSinal: Number(e.target.value) }))} aria-label="Sinal do total do extrato" data-help-id="conferenciaExtrato.total" title="+ a administradora me deve · − eu devo (passa para o mês seguinte)">
                 <option value={1}>+</option><option value={-1}>−</option>
               </select>
-              <CampoValor className="input py-1 text-sm min-w-0" value={cab.total} onChange={v => { setTotalRecalculado(false); setCab(c => ({ ...c, total: v })) }} aria-label="Total do extrato" placeholder="Opcional" />
+              <CampoValor className="input py-1 text-sm min-w-0" value={cab.total} onChange={v => { setTotalRecalculado(false); setCab(c => ({ ...c, total: v })) }} aria-label="Total do extrato" helpId="conferenciaExtrato.total" placeholder="Opcional" />
             </div>
             {totalRecalculado && <p data-testid="nota-total-recalculado" className="text-[10px] text-texto-3 mt-0.5">{NOTA_TOTAL_RECALCULADO}</p>}
           </div>
           <label>Valor do repasse (líquido)
-            <CampoValor className="input py-1 text-sm" value={cab.repasse} onChange={v => setCab(c => ({ ...c, repasse: v }))} aria-label="Valor do repasse do extrato" placeholder={`Calculado: ${valorBRFormatado(montado.resumo.saldo > 0 ? montado.resumo.saldo : 0)}`} />
+            <CampoValor className="input py-1 text-sm" value={cab.repasse} onChange={v => setCab(c => ({ ...c, repasse: v }))} aria-label="Valor do repasse do extrato" helpId="conferenciaExtrato.repasse" placeholder={`Calculado: ${valorBRFormatado(montado.resumo.saldo > 0 ? montado.resumo.saldo : 0)}`} />
           </label>
         </div>
 
@@ -224,28 +224,28 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
           {linhas.map((l, i) => (
             <div key={l.id} data-testid="item-extrato" className="grid grid-cols-2 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_130px_28px] gap-2 items-center p-2 rounded-lg bg-surface-2/60">
               <input className="input py-1 text-sm col-span-2 sm:col-span-1" value={l.descricao} onChange={e => mudar(i, { descricao: e.target.value })} aria-label="Descrição do item do extrato" maxLength={200} placeholder="Descrição" />
-              <select className="input py-1 text-xs" value={l.tipo} aria-label={`Tipo de ${l.descricao || 'item'}`}
+              <select className="input py-1 text-xs" value={l.tipo} aria-label={`Tipo de ${l.descricao || 'item'}`} data-help-id="conferenciaExtrato.itemTipo"
                 onChange={e => { const tipo = e.target.value; mudar(i, { tipo, sinal: tipo === 'aluguel' ? 1 : l.tipo === 'aluguel' ? -1 : l.sinal, taxa_id: tipo === 'taxa_unica' && unicas.length === 1 ? unicas[0].id : null, natureza: tipo === 'despesa' ? l.natureza || 'outra' : null }) }}>
                 {TIPOS_EXTRATO.map(t => <option key={t} value={t}>{ROTULOS_TIPO_EXTRATO[t]}</option>)}
               </select>
               <div className="min-w-0">
                 {l.tipo === 'taxa_unica' && (
-                  <select className="input py-1 text-xs" value={l.taxa_id || ''} aria-label={`Taxa do contrato de ${l.descricao || 'item'}`} onChange={e => mudar(i, { taxa_id: e.target.value || null })}>
+                  <select className="input py-1 text-xs" value={l.taxa_id || ''} aria-label={`Taxa do contrato de ${l.descricao || 'item'}`} data-help-id="conferenciaExtrato.itemTaxa" onChange={e => mudar(i, { taxa_id: e.target.value || null })}>
                     <option value="">Sem ligação</option>
                     {unicas.map(t => <option key={t.id} value={t.id}>{t.descricao}{saldosTaxa[t.id] ? ` — falta ${valorBRFormatado(saldosTaxa[t.id].falta)}` : ''}</option>)}
                   </select>
                 )}
                 {l.tipo === 'despesa' && (
-                  <select className="input py-1 text-xs" value={l.natureza || 'outra'} aria-label={`Natureza de ${l.descricao || 'item'}`} onChange={e => mudar(i, { natureza: e.target.value })}>
+                  <select className="input py-1 text-xs" value={l.natureza || 'outra'} aria-label={`Natureza de ${l.descricao || 'item'}`} data-help-id="repasseComposicao.naturezaDespesa" onChange={e => mudar(i, { natureza: e.target.value })}>
                     {Object.entries(NATUREZAS_DESPESA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 )}
               </div>
               <div className="flex items-center gap-1">
-                <select className="input py-1 text-xs w-11 px-1" value={l.sinal} aria-label={`Sinal de ${l.descricao || 'item'}`} onChange={e => mudar(i, { sinal: Number(e.target.value) })}>
+                <select className="input py-1 text-xs w-11 px-1" value={l.sinal} aria-label={`Sinal de ${l.descricao || 'item'}`} data-help-id="conferenciaExtrato.itemValor" onChange={e => mudar(i, { sinal: Number(e.target.value) })}>
                   <option value={1}>+</option><option value={-1}>−</option>
                 </select>
-                <CampoValor className="input py-1 text-sm min-w-0" value={l.texto} onChange={v => mudar(i, { texto: v })} aria-label={`Valor de ${l.descricao || 'item'}`} />
+                <CampoValor className="input py-1 text-sm min-w-0" value={l.texto} onChange={v => mudar(i, { texto: v })} aria-label={`Valor de ${l.descricao || 'item'}`} helpId="conferenciaExtrato.itemValor" />
               </div>
               <button type="button" className="p-1 text-texto-3 hover:text-perigo" title="Remover item" onClick={() => setLinhas(prev => prev.filter((_, j) => j !== i))}><Trash2 size={14} /></button>
             </div>
@@ -270,7 +270,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
         </table>
 
         {difRepasse && (
-          <div role="alert" data-testid="aviso-repasse" className="p-2 rounded-lg border border-aviso/50 bg-aviso/10 text-xs text-texto-1 space-y-2">
+          <div role="alert" data-testid="aviso-repasse" data-help-id="conferenciaExtrato.diferencaRepasse" className="p-2 rounded-lg border border-aviso/50 bg-aviso/10 text-xs text-texto-1 space-y-2">
             <p className="flex items-start gap-1">
               <AlertTriangle size={14} className="text-aviso shrink-0" />
               {difRepasse.fonte === 'total' ? 'O total do extrato' : 'O líquido do extrato'} ({fmt(difRepasse.extrato)}) não bate com os itens conferidos ({fmt(difRepasse.calculado)}) — diferença de {fmt(difRepasse.diferenca)}. Falta algum item?
