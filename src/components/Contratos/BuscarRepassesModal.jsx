@@ -72,7 +72,10 @@ export default function BuscarRepassesModal({ contrato, linhas, onClose }) {
                 {r?.ok ? (
                   <p className="text-xs text-receita">Vinculado.</p>
                 ) : b.candidatos.length === 0 ? (
-                  <p className="text-xs text-aviso">{TEXTO_NAO_ENCONTRADO}</p>
+                  // Dia do repasse ainda não chegou: só previsto (não é "não encontrado").
+                  b.vencimento > hoje
+                    ? <p className="text-xs text-texto-2">Previsto</p>
+                    : <p className="text-xs text-aviso">{TEXTO_NAO_ENCONTRADO}</p>
                 ) : (
                   <select className="input py-1 text-xs" value={escolha[b.competencia]} disabled={gravando || !podeEditar}
                     aria-label={`Lançamento para ${fmtYm(b.competencia)}`} onChange={e => setEscolha(x => ({ ...x, [b.competencia]: e.target.value }))}>

@@ -58,7 +58,9 @@ describe('ficha: repasses já lançados na conta', () => {
     const linhas = screen.getAllByTestId('busca-repasse')
     expect(linhas.map(l => l.textContent.slice(0, 7))).toEqual(['06/2026', '07/2026', '08/2026', '09/2026', '10/2026'])
     expect(['06/2026', '07/2026', '08/2026', '09/2026'].map(ym => screen.getByLabelText(`Lançamento para ${ym}`).value)).toEqual(['t06', 't07', 't08', 't09'])
-    expect(within(linhas[4]).getByText('Pendente — não encontrado na conta')).toBeTruthy()
+    // 10/2026: repasse em 10/11/2026, hoje 08/11 — ainda não chegou: "Previsto".
+    expect(within(linhas[4]).getByText('Previsto')).toBeTruthy()
+    expect(within(linhas[4]).queryByText('Pendente — não encontrado na conta')).toBeNull()
 
     // O usuário pula 08: vincula 06, 07 e 09, nessa ordem.
     fireEvent.change(screen.getByLabelText('Lançamento para 08/2026'), { target: { value: '' } })
@@ -75,7 +77,9 @@ describe('ficha: repasses já lançados na conta', () => {
     for (const ym of ['06/2026', '07/2026', '08/2026', '09/2026']) expect(statusDe(ym)).toBe('Pendente — não encontrado na conta')
     expect(screen.queryByTestId('aviso-repasses-lancados')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Buscar repasses já lançados' }))
-    expect(screen.getAllByText('Pendente — não encontrado na conta').length).toBeGreaterThan(4)
+    const modal = screen.getAllByTestId('busca-repasse')
+    expect(modal.slice(0, 4).every(l => l.textContent.includes('Pendente — não encontrado na conta'))).toBe(true)
+    expect(modal[4].textContent).toContain('Previsto')
     expect(screen.queryByRole('button', { name: /^Vincular/ })).toBeNull()
   })
 
