@@ -5,6 +5,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
 import CampoValor from './CampoValor'
+import HelpCampo from '../shared/HelpCampo'
 import { fmtYm, hojeStr } from '../../lib/contratos/datas'
 import { competenciasDoRepasse, confirmadosDe, repassesRegistrados } from '../../lib/contratos/parcelas'
 import { NATUREZAS_DESPESA } from '../../lib/contratos/composicaoRepasse'
@@ -183,11 +184,11 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
           </div>
         )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-texto-3">
-          <label>Período do extrato
+          <label>Período do extrato<HelpCampo campo="conferenciaExtrato.periodo" />
             <input className="input py-1 text-sm" value={cab.periodo} onChange={e => setCab(c => ({ ...c, periodo: e.target.value }))} aria-label="Período do extrato" data-help-id="conferenciaExtrato.periodo" placeholder={fmtYm(competencia)} />
           </label>
           <div>
-            <span>Saldo anterior no extrato</span>
+            <span>Saldo anterior no extrato<HelpCampo campo="conferenciaExtrato.saldoAnterior" /></span>
             <div className="flex gap-1">
               <select className="input py-1 text-xs w-14 px-1" value={cab.saldoSinal} onChange={e => setCab(c => ({ ...c, saldoSinal: Number(e.target.value) }))} aria-label="Sinal do saldo anterior" data-help-id="conferenciaExtrato.saldoAnterior" title="+ a administradora me devia · − eu devia">
                 <option value={1}>+</option><option value={-1}>−</option>
@@ -196,7 +197,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
             </div>
           </div>
           <div>
-            <span>Total do extrato</span>
+            <span>Total do extrato<HelpCampo campo="conferenciaExtrato.total" /></span>
             <div className="flex gap-1">
               <select className="input py-1 text-xs w-14 px-1" value={cab.totalSinal} onChange={e => setCab(c => ({ ...c, totalSinal: Number(e.target.value) }))} aria-label="Sinal do total do extrato" data-help-id="conferenciaExtrato.total" title="+ a administradora me deve · − eu devo (passa para o mês seguinte)">
                 <option value={1}>+</option><option value={-1}>−</option>
@@ -205,7 +206,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
             </div>
             {totalRecalculado && <p data-testid="nota-total-recalculado" className="text-[10px] text-texto-3 mt-0.5">{NOTA_TOTAL_RECALCULADO}</p>}
           </div>
-          <label>Valor do repasse (líquido)
+          <label>Valor do repasse (líquido)<HelpCampo campo="conferenciaExtrato.repasse" />
             <CampoValor className="input py-1 text-sm" value={cab.repasse} onChange={v => setCab(c => ({ ...c, repasse: v }))} aria-label="Valor do repasse do extrato" helpId="conferenciaExtrato.repasse" placeholder={`Calculado: ${valorBRFormatado(montado.resumo.saldo > 0 ? montado.resumo.saldo : 0)}`} />
           </label>
         </div>

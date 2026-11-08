@@ -68,7 +68,7 @@ export const campos = {
   },
   'contrato.fim': {
     titulo: 'Fim da vigência',
-    paraQueServe: 'Data em que o contrato termina. "Sem data de fim" gera 12 meses à frente e vai estendendo.',
+    paraQueServe: 'Data em que o contrato termina. Sem fim definido, o Finup gera 12 meses à frente e vai estendendo.',
     relacaoComTela: 'Limita até quando as parcelas são geradas.',
     obrigatorio: false,
   },

@@ -13,7 +13,8 @@ import { navegarPara } from '../../lib/abrirTela'
 //   Computador: drawer lateral que NÃO bloqueia o formulário — o foco fica no campo, o painel
 //   acompanha a troca de campo e o Esc fecha só ele (o modal de baixo continua aberto).
 //   Celular: bottom sheet (aberto pelo ⓘ; tocar no campo só abre o teclado).
-// Rodapé: "Ajuda da tela" (o "?" do cabeçalho) e "Preencher com guia" (formulário guiado).
+// Rodapé: "Ajuda da tela" (o "?" do cabeçalho) e "Preencher com guia" (formulário guiado — ligado na Etapa 4).
+const GUIA_DISPONIVEL = false
 export default function HelpCampoPainel() {
   const estado = useSyncExternalStore(assinarHelpCampo, lerHelpCampo, lerHelpCampo)
   const celular = useIsMobile()
@@ -86,11 +87,13 @@ export default function HelpCampoPainel() {
         onClick={() => { if (pedirAjudaDaTela()) fecharHelpCampo(); else { fecharHelpCampo(); navegarPara('ajuda') } }}>
         <BookOpen size={12} /> Ajuda da tela
       </button>
-      <button type="button" className="btn-secondary text-xs py-1 flex items-center gap-1" disabled={!estado.form}
-        title={estado.form ? 'Percorre os campos do formulário com explicação' : 'Disponível nos formulários de cadastro'}
-        onClick={() => { if (pedirPreencherComGuia(estado.id)) fecharHelpCampo() }}>
-        <Wand2 size={12} /> Preencher com guia
-      </button>
+      {/* Só quando um formulário guiado atende (Etapa 4); até lá, escondido. */}
+      {GUIA_DISPONIVEL && estado.form && (
+        <button type="button" className="btn-secondary text-xs py-1 flex items-center gap-1" title="Percorre os campos do formulário com explicação"
+          onClick={() => { if (pedirPreencherComGuia(estado.id)) fecharHelpCampo() }}>
+          <Wand2 size={12} /> Preencher com guia
+        </button>
+      )}
       {!celular && <span className="ml-auto text-[10px] text-texto-3">{dicaTecla}: ajuda do campo · Esc fecha</span>}
     </div>
   )

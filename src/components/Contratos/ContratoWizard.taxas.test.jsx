@@ -215,6 +215,9 @@ describe('ContratoWizard — F1 (help de campo) no modo administradora', () => {
     expect(screen.getByTestId('help-campo-painel').textContent).toContain('Dia do mês em que a administradora deposita o líquido.')
     ev(campo('Taxa de administração (%)').querySelector('input'))
     expect(screen.getByTestId('help-campo-painel').textContent).toContain('Percentual que a administradora desconta de cada aluguel.')
-    expect(within(campo('Dia do repasse')).queryByTestId('help-campo')).toBeNull()
+    // ⓘ ao lado do rótulo nos campos do repasse.
+    for (const r of ['Dia do repasse', 'Repasse acontece', 'Taxa de administração (%)', 'Taxa calculada sobre', 'Centro de custo', 'Categoria da taxa de administração']) {
+      expect(within(campo(r)).getByTestId('help-campo'), r).toBeTruthy()
+    }
   })
 })

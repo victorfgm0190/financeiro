@@ -59,7 +59,7 @@ export default function Header({ page, financialPeriod, onOpenSearch, onOpenAssi
   const activeProfile = profiles.find(p => p.id === activeProfileId) || null
 
   return (
-    <header className="border-b border-borda bg-page px-4 md:px-6 pb-2.5 header-safe-top flex items-center gap-3 sticky top-0 z-10">
+    <header className="border-b border-borda bg-page px-4 md:px-6 pb-2.5 header-safe-top flex items-center gap-3 sticky top-0 z-30">
       {/* Title + period */}
       <div className="min-w-0">
         <div className="flex items-center gap-1">

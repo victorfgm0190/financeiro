@@ -81,7 +81,8 @@ export default function HelpCampo({ campo, texto }) {
         tabIndex={0}
         aria-label={`Ajuda: ${conteudo}`}
         aria-describedby={aberto ? id : undefined}
-        aria-expanded={aberto}
+        aria-expanded={completo ? undefined : aberto}
+        aria-haspopup={completo ? 'dialog' : undefined}
         data-testid="help-campo"
         className="help-campo-alvo ml-1 inline-flex items-center justify-center align-middle rounded-full text-texto-3 hover:text-texto-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-help p-1 -m-1"
         onMouseEnter={abrir}

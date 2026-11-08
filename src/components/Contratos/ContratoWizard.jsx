@@ -160,15 +160,15 @@ function MesesSemCobranca({ valor = [], onChange, inicio, fim }) {
 const textoInicioPassado = (de, ate) => `As competências de ${fmtYm(de)} a ${fmtYm(ate)} passam a fazer parte do contrato (o saldo com a administradora conta desde o novo início).`
 const CAMPO_DO_ERRO = { saldo_inicial_competencia: 'saldo_inicial_valor' }
 
-// `help`: chave do ⓘ do campo (src/help). `ajuda`: chave do help do campo SEM ⓘ (só F1 — a explicação
-// já está escrita na tela ou o campo não tinha ⓘ). `campo`: chave do formulário (rolagem/destaque do erro).
+// `help` / `ajuda`: chave do help do campo (src/help) — ⓘ ao lado do rótulo + F1. `semIcone`: só F1,
+// quando a explicação já está escrita visível ao lado do campo. `campo`: chave do formulário (rolagem/erro).
 // Sem `label`: só o bloco (destaque/rolagem), para seções com título próprio (ex.: encargos).
-const Campo = ({ label, children, className = '', help, campo, ajuda }) => {
+const Campo = ({ label, children, className = '', help, campo, ajuda, semIcone = false }) => {
   const falha = useContext(CampoErroContext)
   const comErro = !!campo && falha?.campo === campo
   return (
     <div className={`${className}${comErro ? ` ${CLASSE_ERRO}` : ''}`} data-campo={campo} data-erro={comErro ? '' : undefined} data-help-id={help || ajuda || undefined}>
-      {label != null && <label className="label">{label}{help && <HelpCampo campo={help} />}</label>}{children}
+      {label != null && <label className="label">{label}{(help || ajuda) && !semIcone && <HelpCampo campo={help || ajuda} />}</label>}{children}
       {comErro && <p role="alert" className="text-xs text-perigo mt-1">{falha.erro}</p>}
     </div>
   )
@@ -704,7 +704,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       {etapa === ULTIMA && !edicao && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-end gap-3">
-            <Campo ajuda="contrato.gerarAPartirDe" label={repasse ? 'Gerar repasses a partir da competência' : 'Gerar parcelas a partir de'}>
+            <Campo ajuda="contrato.gerarAPartirDe" semIcone label={repasse ? 'Gerar repasses a partir da competência' : 'Gerar parcelas a partir de'}>
               <input autoComplete="off" type="month" className="input" value={apartirDe} min={ymDe(f.data_inicio)} onChange={e => setApartirDe(e.target.value || ymDe(hoje))} />
             </Campo>
             <p className="text-xs text-texto-3 pb-2">

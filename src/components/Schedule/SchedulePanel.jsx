@@ -27,6 +27,7 @@ import { linhasDosAgendamentos, linhasDosPagos, linhasDasFaturas, specAgendament
 import SeloContrato from '../Contratos/SeloContrato'
 import BotaoComposicaoParcela from '../Contratos/BotaoComposicaoParcela'
 import ComposicaoParcelaResumo from '../Contratos/ComposicaoParcelaResumo'
+import HelpCampo from '../shared/HelpCampo'
 import { totalDoRepasse } from '../../lib/contratos/saldoRepasse'
 import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
@@ -569,7 +570,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 </div>
               </div>
               <div data-guia="baixa-form.valor" data-help-id="registrarAgendamento.valor">
-                <label className="label">Quanto você vai pagar? (R$)</label>
+                <label className="label">Quanto você vai pagar? (R$)<HelpCampo campo="registrarAgendamento.valor" /></label>
                 <InputMoeda
                   min="0.01"
                   max={parcelaFin.total}
@@ -629,7 +630,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 menos que a parcela ela fica parcial e o saldo continua em aberto.
               </p>
               <div data-guia="baixa-form.conta" data-help-id="registrarAgendamento.conta">
-                <label className="label">Banco de</label>
+                <label className="label">Banco de<HelpCampo campo="registrarAgendamento.conta" /></label>
                 {/* Só conta corrente/poupança: os dois lançamentos são criados pelo backend, que
                     não sabe montar gasto de cartão (fatura, dívida do cartão). É o mesmo conjunto
                     que /api/financiamento/criar aceita como conta de origem. */}
@@ -642,7 +643,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 </select>
               </div>
               <div data-guia="baixa-form.data" data-help-id="registrarAgendamento.data">
-                <label className="label">Data</label>
+                <label className="label">Data<HelpCampo campo="registrarAgendamento.data" /></label>
                 <DataPagamentoField value={finDate} onChange={e => setFinDate(e.target.value)} vencimento={nextDate} />
               </div>
               {finErro && <p className="text-xs text-despesa">{finErro}</p>}
@@ -652,7 +653,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
           {!parcelaFin && tab === 'pagamento' && (
             <>
               <div data-guia="baixa-form.conta" data-help-id="registrarAgendamento.conta">
-                <label className="label">Banco de</label>
+                <label className="label">Banco de<HelpCampo campo="registrarAgendamento.conta" /></label>
                 <select className="input" value={payAccountId} onChange={e => setPayAccountId(e.target.value)}>
                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
@@ -662,17 +663,17 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 <FavorecidoAutocomplete value={payPayee} onChange={setPayPayee} suggestions={sortedPayees} placeholder="Digite o nome do favorecido" />
               </div>
               <div data-guia="baixa-form.valor" data-help-id="registrarAgendamento.valor">
-                <label className="label">Valor</label>
+                <label className="label">Valor<HelpCampo campo="registrarAgendamento.valor" /></label>
                 <InputMoeda className={`input ${valorOk ? '' : '!border-perigo'}`} placeholder="" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
                 {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
               </div>
               {blocoAjusteRateio}
               <div data-guia="baixa-form.data" data-help-id="registrarAgendamento.data">
-                <label className="label">Data</label>
+                <label className="label">Data<HelpCampo campo="registrarAgendamento.data" /></label>
                 <DataPagamentoField value={payDate} onChange={e => setPayDate(e.target.value)} vencimento={occVenc} />
               </div>
               <div data-guia="baixa-form.categoria" data-help-id="agendamento.category">
-                <label className="label">Categoria</label>
+                <label className="label">Categoria<HelpCampo campo="agendamento.category" /></label>
                 <CategorySelect categories={categories} perfilId={accounts.find(a => a.id === payAccountId)?.profileId || undefined} type="expense" value={payCategoryId} onChange={e => setPayCategoryId(e.target.value)} />
               </div>
               {gerencialLigado && (
@@ -694,7 +695,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
           {!parcelaFin && tab === 'recebimento' && (
             <>
               <div data-guia="baixa-form.conta" data-help-id="registrarAgendamento.conta">
-                <label className="label">Banco para</label>
+                <label className="label">Banco para<HelpCampo campo="registrarAgendamento.conta" /></label>
                 <select className="input" value={recAccountId} onChange={e => setRecAccountId(e.target.value)}>
                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
@@ -704,17 +705,17 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 <FavorecidoAutocomplete value={recPayee} onChange={setRecPayee} suggestions={sortedPayees} placeholder="Digite o nome do pagador" />
               </div>
               <div data-guia="baixa-form.valor" data-help-id="registrarAgendamento.valor">
-                <label className="label">Valor</label>
+                <label className="label">Valor<HelpCampo campo="registrarAgendamento.valor" /></label>
                 <InputMoeda className={`input ${valorOk ? '' : '!border-perigo'}`} placeholder="" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
                 {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
               </div>
               {blocoAjusteRateio}
               <div data-guia="baixa-form.data" data-help-id="registrarAgendamento.data">
-                <label className="label">Data</label>
+                <label className="label">Data<HelpCampo campo="registrarAgendamento.data" /></label>
                 <DataPagamentoField value={recDate} onChange={e => setRecDate(e.target.value)} vencimento={occVenc} />
               </div>
               <div data-guia="baixa-form.categoria" data-help-id="agendamento.category">
-                <label className="label">Categoria</label>
+                <label className="label">Categoria<HelpCampo campo="agendamento.category" /></label>
                 <CategorySelect categories={categories} perfilId={accounts.find(a => a.id === recAccountId)?.profileId || undefined} type="income" value={recCategoryId} onChange={e => setRecCategoryId(e.target.value)} />
               </div>
               <div>
@@ -745,7 +746,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 </div>
               )}
               <div data-guia="baixa-form.conta" data-help-id="registrarAgendamento.conta">
-                <label className="label">Banco de</label>
+                <label className="label">Banco de<HelpCampo campo="registrarAgendamento.conta" /></label>
                 <select className="input" value={trfFromId} onChange={e => setTrfContas(e.target.value, trfToId)} disabled={hasDetalhe}>
                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
@@ -757,7 +758,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 </select>
               </div>
               <div data-guia="baixa-form.valor" data-help-id="registrarAgendamento.valor">
-                <label className="label">Valor{hasDetalhe ? ' (soma das funções)' : ''}</label>
+                <label className="label">Valor{hasDetalhe ? ' (soma das funções)' : ''}<HelpCampo campo="registrarAgendamento.valor" /></label>
                 <InputMoeda
                   className={`input ${valorOk ? '' : '!border-perigo'}`}
                   placeholder=""
@@ -780,7 +781,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 />
               )}
               <div data-guia="baixa-form.data" data-help-id="registrarAgendamento.data">
-                <label className="label">Data</label>
+                <label className="label">Data<HelpCampo campo="registrarAgendamento.data" /></label>
                 <DataPagamentoField value={trfDate} onChange={e => setTrfDate(e.target.value)} vencimento={occVenc} />
               </div>
               <div>

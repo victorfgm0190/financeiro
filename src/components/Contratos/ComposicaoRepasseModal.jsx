@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Plus, Trash2, RotateCcw } from 'lucide-react'
 import Modal from '../shared/Modal'
 import CategorySelect from '../shared/CategorySelect'
+import HelpCampo from '../shared/HelpCampo'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
@@ -250,10 +251,10 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
           <div className="p-3 rounded-lg border border-borda space-y-2">
             <p className="text-xs font-semibold text-texto-2">Registrar recebimento do repasse</p>
             <div className="flex flex-wrap items-end gap-2">
-              <label className="text-[11px] text-texto-3">Data
+              <label className="text-[11px] text-texto-3">Data<HelpCampo campo="repasseComposicao.dataRecebimento" />
                 <input type="date" className="input py-1 text-sm" data-help-id="repasseComposicao.dataRecebimento" value={recebimento.data} onChange={e => setRecebimento(r => ({ ...r, data: e.target.value }))} aria-label="Data do recebimento" />
               </label>
-              <label className="text-[11px] text-texto-3">Valor que caiu na conta
+              <label className="text-[11px] text-texto-3">Valor que caiu na conta<HelpCampo campo="repasseComposicao.valorRecebido" />
                 <CampoValor helpId="repasseComposicao.valorRecebido" className="input py-1 text-sm" value={recebimento.texto} onChange={v => setRecebimento(r => ({ ...r, texto: v }))} aria-label="Valor recebido" />
               </label>
               <button type="button" className="btn-primary text-xs" disabled={alterado || salvando} onClick={registrar}
@@ -270,7 +271,7 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
           Competência fechada: a composição fica como está, mesmo se o contrato mudar
         </label>
         <div className="flex flex-wrap items-center gap-2 text-xs text-texto-2">
-          <label htmlFor="pago-inquilino">Inquilino pagou à administradora em</label>
+          <label htmlFor="pago-inquilino">Inquilino pagou à administradora em<HelpCampo campo="repasseComposicao.dataPagamentoInquilino" /></label>
           <DateInput id="pago-inquilino" className="input py-1 text-xs w-36" value={pagoInquilino} disabled={!podeEditar}
             onChange={e => setPagoInquilino(e.target.value)} aria-label="Data do pagamento do inquilino" data-help-id="repasseComposicao.dataPagamentoInquilino" />
           {!pagoInquilino && linha.vencimentoInquilino && <span className="text-texto-3">vazio = vencimento ({fmtDate(linha.vencimentoInquilino)})</span>}

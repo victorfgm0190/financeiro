@@ -1,4 +1,5 @@
 import { useContext, useState } from 'react'
+import HelpCampo from '../shared/HelpCampo'
 import { Plus, Trash2, Pencil, Check } from 'lucide-react'
 import CategorySelect from '../shared/CategorySelect'
 import CampoValor from './CampoValor'
@@ -91,10 +92,10 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
                   </div>
                   <label className="flex items-center gap-1 text-[11px] text-texto-2">
                     <input type="checkbox" className="accent-primary" data-help-id="contratoTaxa.dedutivelIr" checked={!!l.dedutivel_ir} onChange={e => setL(i, { dedutivel_ir: e.target.checked })} />
-                    Dedutível IR
+                    Dedutível IR<HelpCampo campo="contratoTaxa.dedutivelIr" />
                   </label>
                   <label className="text-[11px] text-texto-3 col-span-1">
-                    {unica ? 'Competência da 1ª parcela' : 'A partir da competência'}
+                    {unica ? 'Competência da 1ª parcela' : 'A partir da competência'}<HelpCampo campo="contratoTaxa.vigenciaInicio" />
                     <input type="month" className="input py-1 text-sm" aria-label={unica ? 'Competência da 1ª parcela' : 'Competência inicial'} data-help-id="contratoTaxa.vigenciaInicio" value={l.vigencia_inicio}
                       onChange={e => setL(i, { vigencia_inicio: e.target.value })} />
                   </label>
@@ -109,14 +110,14 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
                         </label>
                         {formaDoForm(l) === 'iguais' && (
                           <label className="w-28">
-                            Nº de parcelas
+                            Nº de parcelas<HelpCampo campo="contratoTaxa.nParcelas" />
                             <input type="number" min="1" max="120" className="input py-1 text-sm" aria-label="Número de parcelas iguais" data-help-id="contratoTaxa.nParcelas"
                               value={l.n_parcelas ?? ''} onChange={e => setL(i, { n_parcelas: e.target.value })} />
                           </label>
                         )}
                         {formaDoForm(l) === 'valores' && (
                           <div className="flex-1 min-w-[12rem]">
-                            <label htmlFor={`taxa-parcelas-${i}`}>Valor de cada parcela — separe com ";"</label>
+                            <label htmlFor={`taxa-parcelas-${i}`}>Valor de cada parcela — separe com ";"<HelpCampo campo="contratoTaxa.valoresParcelas" /></label>
                             <input id={`taxa-parcelas-${i}`} autoComplete="off" className="input py-1 text-sm" placeholder="Ex.: 470,00; 865,00; 865,00" aria-label="Valores das parcelas" data-help-id="contratoTaxa.valoresParcelas"
                               value={l.parcelas ?? ''} onChange={e => setL(i, { parcelas: e.target.value })}
                               onBlur={e => { const v = parcelasDoTexto(e.target.value); if (v?.length) setL(i, { parcelas: v.map(valorBRFormatado).join('; ') }) }} />
@@ -137,7 +138,7 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
                     </div>
                   ) : (
                     <label className="text-[11px] text-texto-3 col-span-1">
-                      Até a competência (opcional)
+                      Até a competência (opcional)<HelpCampo campo="contratoTaxa.vigenciaFim" />
                       <input type="month" className="input py-1 text-sm" aria-label="Competência final" data-help-id="contratoTaxa.vigenciaFim" value={l.vigencia_fim}
                         onChange={e => setL(i, { vigencia_fim: e.target.value })} />
                     </label>
