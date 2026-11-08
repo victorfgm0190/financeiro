@@ -23,6 +23,11 @@ describe('leitura extrato_administradora', () => {
       ['Esquisito', 5, 'debito', 'ajuste', null],
     ])
   })
+  it('sem repasse: o "Total do Extrato" líquido vem com sinal (última linha, ex.: −606,35)', () => {
+    const r = normalizarSaidaExtrato({ periodo: '05/2026', saldo_anterior: -2586.35, total_extrato: -606.35, valor_repasse: null, itens: [] })
+    expect(r).toMatchObject({ total_extrato: -606.35, valor_repasse: null })
+    expect(DEFINICAO_EXTRATO.input_schema.properties.total_extrato.description).toMatch(/última linha.*NEGATIVO/s)
+  })
   it('a ferramenta pede os tipos do Finup', () => {
     expect(DEFINICAO_EXTRATO.input_schema.properties.itens.items.properties.tipo.enum).toEqual(TIPOS_ITEM_EXTRATO)
   })

@@ -6,6 +6,7 @@ import {
   conferirSaldoAnterior, linhaAjusteSaldo, montarConferencia, linhasDoProjetado, compararComProjetado, avisosTaxasUnicas,
   extratoPendente, linhasDaLeitura,
 } from './conferenciaExtrato.js'
+import { conferirRepasse } from './conferenciaExtrato.js'
 import { saldoTaxasUnicas } from './taxaUnica.js'
 
 // Dados fictícios. Caso de referência: aluguel 2.200, adm. 10%, início 21/02/2026, 1º mês 586,67,
@@ -167,5 +168,21 @@ describe('lembrete do extrato', () => {
     expect(extratoPendente(c, linhas(c), '2026-04-20')?.competencia).toBe('2026-03')
     const conf = conferir(c, '2026-03', 865)
     expect(extratoPendente(conf, linhas(conf), '2026-04-20')).toBeNull()
+  })
+})
+
+describe('conferirRepasse — valor do extrato × saldo do Finup', () => {
+  it('maio: total −606,35 × saldo −653,35 → diferença 47,00 (os dois negativos também comparam)', () => {
+    expect(conferirRepasse(null, -653.35, -606.35)).toEqual({ extrato: -606.35, calculado: -653.35, diferenca: 47, fonte: 'total' })
+    expect(conferirRepasse(0, -653.35, -606.35)).toMatchObject({ diferenca: 47, fonte: 'total' })
+  })
+  it('não pergunta quando batem ou o extrato não traz o total', () => {
+    expect(conferirRepasse(null, -653.35, -653.35)).toBeNull()
+    expect(conferirRepasse(null, -653.35, null)).toBeNull()
+    expect(conferirRepasse(0, -653.35, null)).toBeNull()
+  })
+  it('com repasse, compara o líquido repassado', () => {
+    expect(conferirRepasse(1360, 1370.65, null)).toMatchObject({ diferenca: -10.65, fonte: 'repasse' })
+    expect(conferirRepasse(0, 120, null)).toMatchObject({ diferenca: -120, fonte: 'repasse' })
   })
 })

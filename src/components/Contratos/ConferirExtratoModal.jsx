@@ -46,7 +46,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
 
   const [linhas, setLinhas] = useState(null)
   const [origem, setOrigem] = useState('manual')
-  const [cab, setCab] = useState({ periodo: '', saldoSinal: 1, saldoTexto: '', total: '', repasse: '' })
+  const [cab, setCab] = useState({ periodo: '', saldoSinal: 1, saldoTexto: '', totalSinal: 1, total: '', repasse: '' })
   const [lendo, setLendo] = useState(false)
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -75,6 +75,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
       setCab({
         periodo: l.periodo || '', saldoSinal: (l.saldo_anterior ?? 0) < 0 ? -1 : 1,
         saldoTexto: l.saldo_anterior == null ? '' : valorBRFormatado(Math.abs(l.saldo_anterior)),
+        totalSinal: (l.total_extrato ?? 0) < 0 ? -1 : 1,
         total: l.total_extrato == null ? '' : valorBRFormatado(Math.abs(l.total_extrato)),
         repasse: l.valor_repasse == null ? '' : valorBRFormatado(Math.abs(l.valor_repasse)),
       })
@@ -116,24 +117,25 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
 
   const itensTela = linhas.map(l => ({ ...l, valor: valorDe(l) }))
   const saldoExtrato = numOuNull(cab.saldoTexto) == null ? null : r2(cab.saldoSinal * numOuNull(cab.saldoTexto))
+  const totalExtrato = numOuNull(cab.total) == null ? null : r2(cab.totalSinal * numOuNull(cab.total))
   const difSaldo = linha.foraDoSaldo ? null : conferirSaldoAnterior(saldoExtrato, projetada.saldo_anterior)
   const temAjusteSaldo = linhas.some(l => l.ajusteSaldo)
   const comparacao = compararComProjetado(itensTela, projetada.itens, contrato)
   const avisos = avisosTaxasUnicas(itensTela, saldosTaxa, contrato)
   const montado = montarConferencia(contrato, projetada, itensTela, {
-    periodo: cab.periodo.trim(), saldo_anterior: saldoExtrato, total: numOuNull(cab.total), repasse: numOuNull(cab.repasse),
+    periodo: cab.periodo.trim(), saldo_anterior: saldoExtrato, total: totalExtrato, repasse: numOuNull(cab.repasse),
   }, { origem, hoje: hojeStr() })
 
   const mudar = (i, campos) => { setErro(''); setLinhas(prev => prev.map((l, j) => (j === i ? { ...l, ...campos } : l))) }
   const incluir = () => setLinhas(prev => [...prev, paraTela({ id: `n${Date.now().toString(36)}`, descricao: '', valor: -0, tipo: 'despesa', natureza: 'outra', taxa_id: null })])
   const criarAjuste = () => setLinhas(prev => [...prev, { ...paraTela(linhaAjusteSaldo(difSaldo.diferenca)), ajusteSaldo: true }])
   // "Passar adiante" vale para a diferença escolhida; se os números mudarem, pergunta de novo.
-  const difRepasse = linha.foraDoSaldo ? null : conferirRepasse(numOuNull(cab.repasse), montado.resumo.saldo)
+  const difRepasse = linha.foraDoSaldo ? null : conferirRepasse(numOuNull(cab.repasse), montado.resumo.saldo, totalExtrato)
   const decidido = !difRepasse || (passarDif != null && Math.abs(passarDif - difRepasse.diferenca) < 0.005)
   const ajustarRepasse = () => { setPassarDif(null); setLinhas(prev => [...prev, paraTela(linhaAjusteRepasse(difRepasse.diferenca))]) }
 
   const confirmar = async () => {
-    if (!decidido) return setErro('Escolha o que fazer com a diferença entre o líquido do extrato e os itens conferidos.')
+    if (!decidido) return setErro('Escolha o que fazer com a diferença entre o extrato e os itens conferidos.')
     const sem = itensTela.find(l => !String(l.descricao || '').trim())
     if (sem) return setErro('Informe a descrição de todos os itens.')
     setSalvando(true)
@@ -167,9 +169,15 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
               <CampoValor className="input py-1 text-sm min-w-0" value={cab.saldoTexto} onChange={v => setCab(c => ({ ...c, saldoTexto: v }))} aria-label="Saldo anterior do extrato" placeholder="Opcional" />
             </div>
           </div>
-          <label>Total do extrato
-            <CampoValor className="input py-1 text-sm" value={cab.total} onChange={v => setCab(c => ({ ...c, total: v }))} aria-label="Total do extrato" placeholder="Opcional" />
-          </label>
+          <div>
+            <span>Total do extrato</span>
+            <div className="flex gap-1">
+              <select className="input py-1 text-xs w-14 px-1" value={cab.totalSinal} onChange={e => setCab(c => ({ ...c, totalSinal: Number(e.target.value) }))} aria-label="Sinal do total do extrato" title="+ a administradora me deve · − eu devo (passa para o mês seguinte)">
+                <option value={1}>+</option><option value={-1}>−</option>
+              </select>
+              <CampoValor className="input py-1 text-sm min-w-0" value={cab.total} onChange={v => setCab(c => ({ ...c, total: v }))} aria-label="Total do extrato" placeholder="Opcional" />
+            </div>
+          </div>
           <label>Valor do repasse (líquido)
             <CampoValor className="input py-1 text-sm" value={cab.repasse} onChange={v => setCab(c => ({ ...c, repasse: v }))} aria-label="Valor do repasse do extrato" placeholder={`Calculado: ${valorBRFormatado(montado.resumo.saldo > 0 ? montado.resumo.saldo : 0)}`} />
           </label>
@@ -238,7 +246,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
           <div role="alert" data-testid="aviso-repasse" className="p-2 rounded-lg border border-aviso/50 bg-aviso/10 text-xs text-texto-1 space-y-2">
             <p className="flex items-start gap-1">
               <AlertTriangle size={14} className="text-aviso shrink-0" />
-              O líquido do extrato ({fmt(difRepasse.extrato)}) não bate com os itens conferidos ({fmt(difRepasse.calculado)}) — diferença de {fmt(difRepasse.diferenca)}. Falta algum item?
+              {difRepasse.fonte === 'total' ? 'O total do extrato' : 'O líquido do extrato'} ({fmt(difRepasse.extrato)}) não bate com os itens conferidos ({fmt(difRepasse.calculado)}) — diferença de {fmt(difRepasse.diferenca)}. Falta algum item?
             </p>
             {podeEditar && (
               <div className="flex flex-wrap gap-3">

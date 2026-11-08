@@ -132,7 +132,7 @@ export const DEFINICAO_EXTRATO = {
     properties: {
       periodo: { type: ['string', 'null'], description: 'Período/competência do extrato como está escrito (ex.: "02/2026", "01/02 a 28/02/2026"); null se não houver.' },
       saldo_anterior: { type: ['number', 'null'], description: 'Saldo anterior do proprietário com a administradora, em reais, ponto decimal. POSITIVO se a administradora devia ao proprietário; NEGATIVO se o proprietário devia (saldo devedor). null se não houver.' },
-      total_extrato: { type: ['number', 'null'], description: 'Total/saldo do extrato (créditos − débitos, incluindo o saldo anterior se o extrato somar), em reais; null se não houver.' },
+      total_extrato: { type: ['number', 'null'], description: 'O "Total do Extrato" LÍQUIDO: o valor da última linha (saldo anterior + créditos − débitos), em reais, COM SINAL — NEGATIVO quando o proprietário fica devendo (ex.: -606.35; é o saldo do extrato quando não há repasse). null se não houver.' },
       valor_repasse: { type: ['number', 'null'], description: 'Valor efetivamente repassado/depositado ao proprietário, em reais; 0 se o extrato diz que não houve repasse; null se não estiver escrito.' },
       itens: {
         type: 'array',
@@ -158,6 +158,7 @@ export const INSTRUCOES_EXTRATO = `Você lê EXTRATOS/DEMONSTRATIVOS DO PROPRIET
 Chame a ferramenta ${FERRAMENTA_EXTRATO} UMA vez com o que está ESCRITO no documento.
 - Cada lançamento com a descrição como está, o valor POSITIVO e a natureza: crédito (a favor do proprietário) ou débito (descontado dele). O tipo é só uma sugestão.
 - Saldo anterior, total e valor repassado NÃO são lançamentos: vão nos campos próprios. Saldo anterior devedor (o proprietário devia) é NEGATIVO.
+- total_extrato = o "Total do Extrato" líquido, o valor da última linha, com sinal: negativo quando o proprietário fica devendo (ex.: -606.35). Quando o extrato não tem repasse, esse é o saldo do extrato — não confunda com o total de créditos ou de débitos.
 - Não invente: campo ilegível = null; lançamento ilegível fica de fora.`
 
 // Saída da ferramenta → { periodo, saldo_anterior, total_extrato, valor_repasse, itens: [{ descricao, valor, natureza, tipo, natureza_despesa }] }

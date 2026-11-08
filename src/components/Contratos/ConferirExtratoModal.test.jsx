@@ -79,6 +79,58 @@ describe('Conferir extrato', () => {
   })
 })
 
+// Caso de maio: sem repasse, "Total do Extrato" −606,35 × saldo do Finup −653,35 (aluguel 2.200, adm.
+// 10% = 1.980; intermediação 2.633,35 de uma vez em 05/2026 → −653,35).
+const CONTRATO_MAIO = {
+  ...CONTRATO, id: 'c10', data_inicio: '2026-05-01', data_fim: '2026-12-31',
+  itens_repasse: [{ id: 'tu5', tipo_repasse: 'taxa_unica', descricao: 'Intermediação', valor: 2633.35, valores_parcelas: null, vigencia_inicio: '2026-05', ativo: true }],
+}
+describe('Conferir extrato — total do extrato negativo (maio: −606,35 × −653,35)', () => {
+  const abrirMaio = (ler = vi.fn()) => render(<ConferirExtratoModal contrato={CONTRATO_MAIO} competencia="2026-05" onClose={() => {}} ler={ler} />)
+
+  it('lido pela IA: total −606,35 vem com sinal e pergunta; "Criar ajuste de R$ 47,00" fecha', async () => {
+    abrirMaio(vi.fn(async () => ({
+      periodo: '05/2026', saldo_anterior: 0, total_extrato: -606.35, valor_repasse: null,
+      itens: [
+        { descricao: 'Aluguel 05/2026', valor: 2200, natureza: 'credito', tipo: 'aluguel' },
+        { descricao: 'Taxa de administração', valor: 220, natureza: 'debito', tipo: 'taxa_adm' },
+        { descricao: 'Intermediação', valor: 2633.35, natureza: 'debito', tipo: 'taxa_unica' },
+      ],
+    })))
+    fireEvent.change(screen.getByLabelText('Arquivo do extrato'), { target: { files: [new File(['x'], 'maio.pdf', { type: 'application/pdf' })] } })
+    await vi.waitFor(() => expect(screen.getAllByTestId('item-extrato')).toHaveLength(3))
+    expect(screen.getByLabelText('Sinal do total do extrato').value).toBe('-1')
+    const aviso = screen.getByTestId('aviso-repasse')
+    expect(nbsp(aviso.textContent)).toContain('O total do extrato (-R$ 606,35) não bate com os itens conferidos (-R$ 653,35) — diferença de R$ 47,00. Falta algum item?')
+    expect(screen.getByRole('button', { name: 'Confirmar conferência' }).disabled).toBe(true)
+    fireEvent.click(within(aviso).getByLabelText('Criar ajuste de R$ 47,00 nesta competência'))
+    expect(screen.queryByTestId('aviso-repasse')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar conferência' }))
+    await vi.waitFor(() => expect(salvarCompetenciaRepasse).toHaveBeenCalled())
+    const [, comp] = salvarCompetenciaRepasse.mock.calls[0]
+    expect(comp.itens.at(-1)).toMatchObject({ tipo: 'ajuste', valor: 47 })
+    expect(comp.conferencia).toMatchObject({ total_extrato: -606.35, repasse: 0 })
+  })
+
+  it('digitado: − 606,35 pergunta e "passar adiante" grava sem ajuste; − 653,35 (igual) não pergunta', async () => {
+    abrirMaio()
+    fireEvent.click(screen.getByRole('button', { name: /Digitar/ }))
+    expect(screen.queryByTestId('aviso-repasse')).toBeNull() // sem total: não pergunta
+    fireEvent.change(screen.getByLabelText('Sinal do total do extrato'), { target: { value: '-1' } })
+    fireEvent.change(screen.getByLabelText('Total do extrato'), { target: { value: '653,35' } })
+    expect(screen.queryByTestId('aviso-repasse')).toBeNull() // iguais
+    fireEvent.change(screen.getByLabelText('Total do extrato'), { target: { value: '606,35' } })
+    const aviso = screen.getByTestId('aviso-repasse')
+    expect(nbsp(aviso.textContent)).toMatch(/diferença de R\$ 47,00/)
+    fireEvent.click(within(aviso).getByLabelText('Passar a diferença para a competência seguinte'))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar conferência' }))
+    await vi.waitFor(() => expect(salvarCompetenciaRepasse).toHaveBeenCalled())
+    const [, comp] = salvarCompetenciaRepasse.mock.calls[0]
+    expect(comp.itens.some(i => i.tipo === 'ajuste')).toBe(false)
+    expect(comp.conferencia.total_extrato).toBe(-606.35)
+  })
+})
+
 describe('Conferir extrato — líquido do extrato diferente dos itens conferidos', () => {
   const abrirJunho = () => {
     render(<ConferirExtratoModal contrato={CONTRATO} competencia="2026-06" onClose={() => {}} ler={vi.fn()} />)

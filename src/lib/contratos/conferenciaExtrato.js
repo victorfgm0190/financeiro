@@ -174,17 +174,24 @@ export function lembreteDaParcela(contrato, competencia, hoje) {
   return `Extrato de ${fmtYm(competencia)} da ${contrato.favorecido || 'administradora'} ainda não conferido`
 }
 
-// Líquido do extrato × itens conferidos: o repasse informado no extrato deve ser o saldo (saldo
-// anterior do Finup + itens). → null (bate, ou extrato sem líquido) ou { extrato, calculado, diferenca }
-// (diferenca = extrato − calculado: o ajuste que faz os itens chegarem no líquido). Sem repasse no
-// extrato (0) e saldo ≤ 0 também bate (não há repasse).
-export function conferirRepasse(repasseExtrato, saldoCalculado) {
-  if (repasseExtrato == null || repasseExtrato === '' || !Number.isFinite(Number(repasseExtrato))) return null
-  const extrato = r2(repasseExtrato)
+// Saldo do extrato × itens conferidos: o valor do extrato deve ser o saldo do Finup (saldo anterior do
+// Finup + itens). Valor do extrato = o repasse (líquido) quando houve repasse; sem repasse, o "Total do
+// Extrato" com sinal (ex.: −606,35, saldo devedor que passa para o mês seguinte) — também comparado
+// quando os dois são negativos. → null (bate, ou o extrato não traz o valor) ou
+// { extrato, calculado, diferenca, fonte: 'repasse' | 'total' } (diferenca = extrato − calculado: o
+// ajuste que faz os itens chegarem no extrato). Repasse 0 sem total e saldo ≤ 0 também bate.
+const informado = (v) => v != null && v !== '' && Number.isFinite(Number(v))
+export function conferirRepasse(repasseExtrato, saldoCalculado, totalExtrato = null) {
   const calculado = r2(saldoCalculado)
-  if (extrato <= ZERO && calculado <= ZERO) return null
-  const diferenca = r2(extrato - calculado)
-  return Math.abs(diferenca) > ZERO ? { extrato, calculado, diferenca } : null
+  const comparar = (valor, fonte) => {
+    const extrato = r2(valor)
+    const diferenca = r2(extrato - calculado)
+    return Math.abs(diferenca) > ZERO ? { extrato, calculado, diferenca, fonte } : null
+  }
+  if (informado(repasseExtrato) && r2(repasseExtrato) > ZERO) return comparar(repasseExtrato, 'repasse')
+  if (informado(totalExtrato)) return comparar(totalExtrato, 'total')
+  if (!informado(repasseExtrato) || calculado <= ZERO) return null
+  return comparar(repasseExtrato, 'repasse')
 }
 
 export const linhaAjusteRepasse = (diferenca) => ({
