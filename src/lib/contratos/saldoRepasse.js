@@ -83,6 +83,22 @@ export function blocoDoRepasse(linhas, competencia) {
 // (valor real − calculado). A soma das partes é sempre o valor recebido.
 //   linhas: competenciasDoRepasse do contrato.
 // → [{ tipo, descricao, valor, categoria_id, competencia }] ou null (competência fora da conta).
+// TOTAL DA COMPOSIÇÃO DO REPASSE no agendamento (resumo do Registrar): itens + saldo anterior; se o
+// repasse gravado (líquido conferido do extrato) for outro, a diferença entra como linha própria.
+// → { itens: [{ descricao, valor }] (os da composição, o saldo anterior e a diferença), total }
+export function totalDoRepasse(composicao) {
+  const itens = (composicao?.itens || []).map(i => ({ descricao: i.desc ?? i.descricao, valor: r2(i.valor), previsto: !!i.previsto }))
+  const antes = r2(composicao?.saldo_anterior)
+  if (Math.abs(antes) > POSITIVO) itens.push({ descricao: 'Saldo anterior com a administradora', valor: antes, tipo: 'saldo_anterior' })
+  const soma = r2(itens.reduce((a, i) => a + i.valor, 0))
+  const repasse = Number(composicao?.repasse)
+  if (Number.isFinite(repasse) && repasse > POSITIVO && Math.abs(repasse - soma) > POSITIVO) {
+    itens.push({ descricao: 'Diferença conferida no extrato', valor: r2(repasse - soma), tipo: 'diferenca' })
+    return { itens, total: r2(repasse) }
+  }
+  return { itens, total: soma }
+}
+
 export function composicaoDoRecebimento(linhas, competencia, valor) {
   const bloco = blocoDoRepasse(linhas, competencia)
   if (!bloco) return null

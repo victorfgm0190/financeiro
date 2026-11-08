@@ -25,10 +25,14 @@ export const regraAbatimento = (contrato) => contrato?.credito_abatimento || 'pr
 // Valor digitado à mão fora do contrato (não marcado como manual): crédito não entra sozinho.
 export const bloqueiaCredito = (s) => valorManual(s) && !s?.composicao?.manual
 
+// Agendamento do repasse (contrato a receber por administradora): o valor é o repasse da competência
+// (saldo, com o saldo anterior) — NÃO a soma dos itens. Não recebe créditos.
+const ehRepasse = (s) => s?.composicao?.tipo === 'repasse'
+
 // Parcelas principais pendentes do contrato, por vencimento efetivo (inclusive as de valor manual).
 export function aluguelPendentes(contrato, schedules) {
   return (schedules || [])
-    .filter(s => ehParcelaGerada(s, contrato.id) && s.contratoPapel === 'aluguel' && !parcelaPaga(s) && !(s.skipped || []).includes(s.startDate))
+    .filter(s => ehParcelaGerada(s, contrato.id) && s.contratoPapel === 'aluguel' && !ehRepasse(s) && !parcelaPaga(s) && !(s.skipped || []).includes(s.startDate))
     .sort((a, b) => vencimento(a).localeCompare(vencimento(b)))
 }
 
@@ -118,6 +122,16 @@ export function planoCreditosAluguel(contrato, schedules, creditos) {
     const novo = composicaoComCreditos(s, dist.get(s.id) || [])
     const mudou = idsCredito(s) !== idsCredito({ composicao: novo.composicao }) || r2(s.amount) !== novo.amount
     if (mudou) out.push({ id: s.id, antes: s, changes: novo })
+  }
+  // Repasse pendente com valor ≠ repasse da composição (ex.: gravado antes como a soma dos itens):
+  // volta ao repasse. Valor marcado à mão (composicao.manual) fica.
+  for (const s of schedules || []) {
+    if (!ehRepasse(s) || !ehParcelaGerada(s, contrato.id) || parcelaPaga(s) || s.composicao.manual) continue
+    const repasse = Number(s.composicao.repasse)
+    if (!Number.isFinite(repasse) || !(repasse > 0)) continue
+    if (r2(s.amount) !== r2(repasse) || r2(s.composicao.total) !== r2(repasse)) {
+      out.push({ id: s.id, antes: s, changes: { amount: r2(repasse), composicao: { ...s.composicao, total: r2(repasse) } } })
+    }
   }
   return out
 }

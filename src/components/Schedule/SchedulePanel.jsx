@@ -27,6 +27,7 @@ import { linhasDosAgendamentos, linhasDosPagos, linhasDasFaturas, specAgendament
 import SeloContrato from '../Contratos/SeloContrato'
 import BotaoComposicaoParcela from '../Contratos/BotaoComposicaoParcela'
 import ComposicaoParcelaResumo from '../Contratos/ComposicaoParcelaResumo'
+import { totalDoRepasse } from '../../lib/contratos/saldoRepasse'
 import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
 import { rotuloParcela } from '../../lib/numeroParcela'
@@ -252,7 +253,11 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   // ocorrências" (overrides[nextDate]) manda; sem ele, o valor base. Antes os campos nasciam em
   // schedule.amount e ignoravam a edição por ocorrência que a lista já exibia.
   const occ = nextDate ? occEfetiva(schedule, nextDate) : { date: today, amount: schedule.amount }
-  const occAmount = inicial?.amount > 0 ? valorParaInput(inicial.amount) : valorParaInput(occ.amount)
+  // Repasse de contrato (administradora): o valor é o total da composição (itens + saldo anterior),
+  // salvo valor marcado à mão ou override da ocorrência.
+  const repasseComp = schedule.contratoId && schedule.composicao?.tipo === 'repasse' && !schedule.composicao.manual
+    && Math.round(Number(occ.amount) * 100) === Math.round(Number(schedule.amount) * 100) ? totalDoRepasse(schedule.composicao).total : null
+  const occAmount = inicial?.amount > 0 ? valorParaInput(inicial.amount) : valorParaInput(repasseComp > 0 ? repasseComp : occ.amount)
   const occDate = inicial?.date || occ.date || today
   const occDataVenc = occ.date || today
   // Vencimento dos atalhos "Hoje"/"Vencimento" do campo Data: a data efetiva da ocorrência
