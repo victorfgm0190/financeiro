@@ -3,7 +3,7 @@ import { CalendarDays, Smartphone, Copy, Check, RefreshCw, Info, AlertTriangle }
 import ConfirmDialog from '../shared/ConfirmDialog'
 import { useApp } from '../../context/AppContext'
 import {
-  obterAgendaFeed, criarAgendaFeed, alterarAgendaFeed, linksDoFeed, avisarFeedMudou,
+  obterAgendaFeed, criarAgendaFeed, alterarAgendaFeed, linksDoFeed, avisarFeedMudou, EVENTO_AGENDA_PUBLICADO,
 } from '../../lib/agendaFeedApi'
 import { NOMES_CALENDARIO, TIPOS_FEED } from '../../lib/agendaIcs'
 
@@ -54,6 +54,17 @@ export default function AgendaCelularPanel({ emJanela = false }) {
       .catch(e => vivo && (setEstado({ carregando: false, configurado: false, feed: null }), setErro(e.message)))
     return () => { vivo = false }
   }, [doCadastro])
+
+  // O gerador gravou o .ics (depois de criar, gerar novo link ou mudar opções): "Atualizada em…" na hora.
+  useEffect(() => {
+    const ouvir = (e) => {
+      const { feedId, gravados } = e.detail || {}
+      if (!feedId || !gravados) return
+      setEstado(s => (s.feed?.id === feedId ? { ...s, feed: { ...s.feed, cache: { ...(s.feed.cache || {}), ...gravados } } } : s))
+    }
+    window.addEventListener(EVENTO_AGENDA_PUBLICADO, ouvir)
+    return () => window.removeEventListener(EVENTO_AGENDA_PUBLICADO, ouvir)
+  }, [])
 
   const aplicar = async (fn, opcoes) => {
     setErro('')

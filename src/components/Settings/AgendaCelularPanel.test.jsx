@@ -15,6 +15,7 @@ vi.mock('../../context/AppContext', () => ({
 vi.mock('../../context/atalhosHooks', async (orig) => ({ ...(await orig()), useAtalho: () => {}, useTituloAtalho: (t) => t, useCamadaModal: () => {} }))
 
 const { default: AgendaCelularPanel } = await import('./AgendaCelularPanel.jsx')
+const { avisarFeedPublicado } = await import('../../lib/agendaFeedApi')
 
 const feedSemToken = { id: 'f1', tipos: ['despesa', 'receita'], mostrarValores: true, token: null, cache: {} }
 const feedNovo = { ...feedSemToken, id: 'f2', token: 'tokenFicticio123' }
@@ -49,5 +50,33 @@ describe('AgendaCelularPanel — link atual irrecuperável (chave mudou)', () =>
     expect(screen.getAllByText('Adicionar ao iPhone')).toHaveLength(2)
     expect(screen.getAllByText('Adicionar ao Google Agenda')).toHaveLength(2)
     expect(screen.getByLabelText('Link Despesas').textContent).toContain('/api/agenda?t=tokenFicticio123&tipo=despesa')
+  })
+})
+
+describe('AgendaCelularPanel — "Gerando…" vira "Atualizada em…" sem reabrir a tela', () => {
+  const gravados = { despesa: { hash: 'h1', geradoEm: '2026-11-09T18:04:00.000Z' }, receita: { hash: 'h2', geradoEm: '2026-11-09T18:04:00.000Z' } }
+  const cantos = () => screen.getAllByText(/^(Gerando…|Atualizada em )/).map(e => e.textContent.startsWith('Gerando') ? 'gerando' : 'atualizada')
+
+  it('criar a agenda pela 1ª vez: o envio do gerador atualiza os dois cartões', async () => {
+    api.obter.mockResolvedValue({ configurado: true, feed: null })
+    render(<AgendaCelularPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Criar minha agenda' }))
+    await screen.findAllByText('Adicionar ao iPhone')
+    expect(cantos()).toEqual(['gerando', 'gerando'])
+    expect(api.avisar).toHaveBeenCalledWith(feedNovo)
+    avisarFeedPublicado('f2', gravados)
+    await waitFor(() => expect(cantos()).toEqual(['atualizada', 'atualizada']))
+  })
+
+  it('depois de "Gerar novo link"; envio de outro feed (antigo) é ignorado', async () => {
+    render(<AgendaCelularPanel />)
+    const bloco = await screen.findByTestId('agenda-link-irrecuperavel')
+    fireEvent.click(within(bloco).getByRole('button', { name: /Gerar novo link/ }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Gerar novo link' }).at(-1))
+    await screen.findAllByText('Adicionar ao iPhone')
+    avisarFeedPublicado('f1', gravados)
+    expect(cantos()).toEqual(['gerando', 'gerando'])
+    avisarFeedPublicado('f2', { despesa: gravados.despesa })
+    await waitFor(() => expect(cantos()).toEqual(['atualizada', 'gerando']))
   })
 })

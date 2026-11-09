@@ -39,6 +39,13 @@ export const avisarFeedMudou = (feed) => {
 // Mudou o que vai para a agenda ("Sincronizar com a agenda do celular", individual ou em lote):
 // regera e envia o feed na hora, sem esperar o próximo carregamento nem os 15 s de espera.
 export const EVENTO_AGENDA_PUBLICAR_JA = 'finup:agenda-publicar-ja'
+
+// O gerador (useAgendaFeed) gravou o .ics: a tela troca "Gerando…" por "Atualizada em…" na hora.
+// detail = { feedId, gravados: { despesa?: { hash, geradoEm }, receita?: … } }
+export const EVENTO_AGENDA_PUBLICADO = 'finup:agenda-publicado'
+export const avisarFeedPublicado = (feedId, gravados) => {
+  try { window.dispatchEvent(new CustomEvent(EVENTO_AGENDA_PUBLICADO, { detail: { feedId, gravados } })) } catch { /* ignore */ }
+}
 export const publicarAgendaJa = () => {
   try { window.dispatchEvent(new CustomEvent(EVENTO_AGENDA_PUBLICAR_JA)) } catch { /* ignore */ }
 }

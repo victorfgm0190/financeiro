@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useApp } from '../context/AppContext'
 import { gerarFeed } from '../lib/agendaFeed'
-import { obterAgendaFeed, publicarAgendaFeed, EVENTO_AGENDA_FEED, EVENTO_AGENDA_PUBLICAR_JA } from '../lib/agendaFeedApi'
+import { obterAgendaFeed, publicarAgendaFeed, avisarFeedPublicado, EVENTO_AGENDA_FEED, EVENTO_AGENDA_PUBLICAR_JA } from '../lib/agendaFeedApi'
 import { enderecoDoAmbiente } from '../lib/ambienteHost'
 
 // AGENDA NO CELULAR — gera o .ics do feed do usuário logado NO NAVEGADOR (dados já carregados) e
@@ -50,6 +50,7 @@ export function useAgendaFeed() {
       if (Object.keys(conteudos).length === 0) return
       const r = await publicarAgendaFeed(conteudos)
       feed.cache = { ...(feed.cache || {}), ...(r.gravados || {}) }
+      avisarFeedPublicado(feed.id, r.gravados || {})
     } catch (err) {
       console.warn('[agenda no celular] não publicou:', err.message)
     } finally {
