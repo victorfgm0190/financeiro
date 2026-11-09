@@ -12,23 +12,40 @@ const commitCurto = (() => {
   try { return execSync('git rev-parse --short=7 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { return 'dev' }
 })()
 
+// Testes de tela (projeto 'telas' do Vitest); o resto, fora de api/, é lógica.
+const PASTAS_DE_TELA = ['src/components', 'src/pages', 'src/mobile']
+
 export default defineConfig({
-  // Vitest em dois projetos. Os testes de api/ sobem um Postgres em WASM (PGlite) — vários por arquivo,
-  // às vezes um por teste — e, disputando a CPU com a suíte inteira em paralelo, estouravam timeouts
-  // de forma intermitente (passavam na 2ª rodada). Eles rodam DEPOIS do resto (groupOrder) e com
-  // poucos workers; os timeouts maiores só valem para eles. Sozinho, o teste mais lento leva ~12 s.
+  // Vitest em três projetos (comandos em docs/testes.md):
+  //   npm run test:logica → 'logica' + 'api'    npm run test:telas → 'telas'    npm test → os dois em sequência
+  // - logica: tudo fora de api/ e das telas (src/lib, hooks, context, help, scripts…). Limite padrão (5 s).
+  // - api: sobe um Postgres em WASM (PGlite), às vezes um por teste. Roda DEPOIS da lógica (groupOrder),
+  //   com poucos workers e limites maiores; sozinho, o teste mais lento leva ~12 s.
+  // - telas: src/components, src/pages, src/mobile (jsdom + React). Montar uma tela grande leva 1–4 s
+  //   sozinho; com todos os núcleos ocupados passava dos 5 s (falso alarme). Limite de 15 s e workers
+  //   limitados só aqui.
   test: {
     hookTimeout: 30_000,
     projects: [
       {
         extends: true,
-        test: { name: 'unit', exclude: [...configDefaults.exclude, 'api/**'], sequence: { groupOrder: 0 } },
+        test: {
+          name: 'logica', sequence: { groupOrder: 0 }, maxWorkers: 6,
+          exclude: [...configDefaults.exclude, 'api/**', ...PASTAS_DE_TELA.map(p => `${p}/**`)],
+        },
       },
       {
         extends: true,
         test: {
           name: 'api', include: ['api/**/*.test.js'], sequence: { groupOrder: 1 },
           maxWorkers: 4, testTimeout: 30_000, hookTimeout: 60_000,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'telas', include: PASTAS_DE_TELA.map(p => `${p}/**/*.test.{js,jsx}`), sequence: { groupOrder: 2 },
+          maxWorkers: 4, testTimeout: 15_000,
         },
       },
     ],

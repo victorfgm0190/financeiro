@@ -53,6 +53,7 @@ ambiente existente (`siglaOcupada` olha `plataforma_clientes` e `ambientes`).
 | `vm.finup.app.br` | redireciona para o www (`vercel.json`) |
 | `<sigla>.finup.app.br` | a sigla; campo Ambiente oculto ("Ambiente: CM") |
 | `financeiro-gnsm.vercel.app`, `localhost` | `AMBIENTE_PADRAO` (variável; valor `vm`), como o www |
+| `teste1.finup.app.br` e URLs de Preview (`…vercel.app` de outras branches) | `teste1`: deploy da branch `homologacao` / `AMBIENTE_PADRAO=teste1` em Preview (`docs/deploy-vercel.md`) |
 
 - JWT ganha `amb` (id) e `amb_sigla`. Em cada requisição o ambiente do token tem de ser o do
   endereço: no www só vale token do `vm`; em `<sigla>.finup.app.br` só da sigla. Token antigo (sem
@@ -213,6 +214,7 @@ ambiente existente (`siglaOcupada` olha `plataforma_clientes` e `ambientes`).
 | `vm.finup.app.br` | redireciona para o www (`vercel.json`) |
 | `<sigla>.finup.app.br` | a sigla; campo Ambiente oculto ("Ambiente: CM") |
 | `financeiro-gnsm.vercel.app`, `localhost` | `AMBIENTE_PADRAO` (variável; valor `vm`), como o www |
+| `teste1.finup.app.br` e URLs de Preview (`…vercel.app` de outras branches) | `teste1`: deploy da branch `homologacao` / `AMBIENTE_PADRAO=teste1` em Preview (`docs/deploy-vercel.md`) |
 
 - JWT ganha `amb` (id) e `amb_sigla`. Em cada requisição o ambiente do token tem de ser o do
   endereço: no www só vale token do `vm`; em `<sigla>.finup.app.br` só da sigla. Token antigo (sem
@@ -324,7 +326,7 @@ registra as primeiras `schema_versao` migrações como linha de base, sem rodá-
 | variável | onde | valor |
 |---|---|---|
 | `CENTRAL_DATABASE_URL` | Vercel + `.env.local` | URL do `finup_central` |
-| `AMBIENTE_PADRAO` | Vercel (+ local) | `vm` — ambiente de `financeiro-gnsm.vercel.app` e `localhost` |
+| `AMBIENTE_PADRAO` | Vercel (+ local) | `vm` em Production e local — ambiente de `financeiro-gnsm.vercel.app` e `localhost`; `teste1` em Preview |
 | `NEON_DATABASE_URL` | só scripts (`gerar-estrutura-base`, antigos) | a API não usa mais |
 | `NEON_API_KEY` | Vercel + `.env.local` (Secret) | chave do projeto finup — cria o database do cliente |
 | `NEON_PROJECT_ID` / `NEON_BRANCH_ID` | Vercel + `.env.local` | projeto finup / branch production |

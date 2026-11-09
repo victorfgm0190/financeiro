@@ -7,10 +7,13 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "npm run test:logica && npm run test:telas",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "help:check": "node scripts/help-check.mjs"
+    "help:check": "node scripts/help-check.mjs",
+    "test:logica": "vitest run --project logica --project api",
+    "test:telas": "vitest run --project telas",
+    "test:tudo": "npm run test:logica && npm run test:telas"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

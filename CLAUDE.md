@@ -42,6 +42,19 @@ Invariantes que valem para qualquer mudança:
   cv e ggsm só com o OK deles.
 - **Correção urgente:** branch a partir do `main` → merge no `main` (com OK) → merge no
   `homologacao`, para os dois não divergirem.
+- **Conferir o deploy:** depois do push, o rodapé do teste1 tem de mostrar "teste1 · <hash novo>".
+- **Vercel (09/11/2026, detalhes em `docs/deploy-vercel.md`):**
+  - `teste1.finup.app.br` está ligado à `homologacao` (Preview).
+  - `AMBIENTE_PADRAO` vale `vm` em Production e `teste1` em Preview.
+  - Ficam só em Production: `ALLOW_ENV_ADMIN`, `ADMIN_USER`, `ADMIN_PASS`, `PLATAFORMA_ADMIN` e `NEON_API_KEY`/`_PROJECT_ID`/`_BRANCH_ID`.
+  - `AGENDA_TOKEN_KEY` não existe: a Agenda no celular fica indisponível.
+  - Não há Ignored Build Step: outras branches geram Preview e caem no teste1.
+  - Vercel Authentication está desligada, porque bloqueava o `/api`.
+
+## Testes
+
+`npm test` roda a lógica (`test:logica`) e depois as telas (`test:telas`), em sequência. Use sempre
+esses comandos (detalhes em `docs/testes.md`).
 
 ## Pendências aguardando autorização
 
