@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import Modal from '../shared/Modal'
 import SearchableSelect from '../shared/SearchableSelect'
+import HelpCampo from '../shared/HelpCampo'
 import DataPagamentoField from '../shared/DataPagamentoField'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
@@ -49,23 +50,24 @@ export default function EfetivarModal({ prov, onConfirmar, onClose }) {
 
   return (
     <Modal open onClose={onClose} title="Efetivar provisório">
-      <div className="space-y-4">
+      <div className="space-y-4" data-help-form="efetivarProvisorio">
         <div className="text-sm">
           <p className="text-texto-1 font-medium">{prov.description}</p>
           <p className="text-texto-2">{entrada ? 'Entrada' : 'Saída'} de {fmt(prov.amount)} em {fmtDate(prov.date)}</p>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2" data-help-id="efetivarProvisorio.modo" role="radiogroup" aria-label="Efetivar como">
+          <p className="label">Efetivar como<HelpCampo campo="efetivarProvisorio.modo" /></p>
           {opcao('agendamento', `Agendamento (${entrada ? 'a receber' : 'a pagar'})`, 'Vira um agendamento "Uma vez" na data do provisório; o saldo da conta não muda até ele ser registrado.')}
           {opcao('lancamento', 'Lançamento realizado', 'Grava o lançamento na conta agora (mexe no saldo se a data for hoje ou anterior).')}
         </div>
         {modo === 'lancamento' && (
-          <div>
-            <label className="label">Data do lançamento</label>
+          <div data-help-id="efetivarProvisorio.data">
+            <label className="label">Data do lançamento<HelpCampo campo="efetivarProvisorio.data" /></label>
             <DataPagamentoField value={date} onChange={e => setDate(e.target.value)} vencimento={prov.date} />
           </div>
         )}
-        <div>
-          <label className="label">Categoria</label>
+        <div data-help-id="efetivarProvisorio.categoria">
+          <label className="label">Categoria<HelpCampo campo="efetivarProvisorio.categoria" /></label>
           <SearchableSelect
             options={catOpts}
             preserveGroupOrder

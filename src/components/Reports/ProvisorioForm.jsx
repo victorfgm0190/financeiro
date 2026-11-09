@@ -8,6 +8,7 @@ import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 
 // Formulário do lançamento PROVISÓRIO do Fluxo de Caixa por Conta: uma entrada/saída de
 // simulação gravada em fluxo_provisorios (tabela à parte — não é agendamento nem lançamento).
@@ -66,7 +67,7 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4" data-help-form="provisorio">
       <div className="flex items-start gap-2 p-3 bg-surface-2 border border-dashed border-borda-forte rounded-lg">
         <Info size={14} className="text-texto-2 shrink-0 mt-0.5" />
         <p className="text-xs text-texto-2 leading-snug">
@@ -76,8 +77,8 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
         </p>
       </div>
 
-      <div>
-        <label className="label">Descrição *</label>
+      <div data-help-id="provisorio.descricao">
+        <label className="label">Descrição *<HelpCampo campo="provisorio.descricao" /></label>
         <input
           className="input"
           value={form.description}
@@ -88,12 +89,12 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Data *</label>
+        <div data-help-id="provisorio.data">
+          <label className="label">Data *<HelpCampo campo="provisorio.data" /></label>
           <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required hoje />
         </div>
-        <div>
-          <label className="label">Valor (R$) *</label>
+        <div data-help-id="provisorio.valor">
+          <label className="label">Valor (R$) *<HelpCampo campo="provisorio.valor" /></label>
           <InputMoeda
             min="0.01"
             value={form.amount}
@@ -105,13 +106,14 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Tipo *</label>
+        <div data-help-id="provisorio.tipo">
+          <label className="label">Tipo *<HelpCampo campo="provisorio.tipo" /></label>
           <div className="flex rounded-lg overflow-hidden border border-borda-forte">
             {[['entrada', 'Entrada'], ['saida', 'Saída']].map(([v, l]) => (
               <button
                 type="button"
                 key={v}
+                aria-pressed={form.type === v}
                 onClick={() => setForm(f => ({ ...f, type: v, category_id: '' }))}
                 className={`flex-1 py-2 text-sm font-medium transition-colors ${
                   form.type === v
@@ -124,8 +126,8 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
             ))}
           </div>
         </div>
-        <div>
-          <label className="label">Conta *</label>
+        <div data-help-id="provisorio.conta">
+          <label className="label">Conta *<HelpCampo campo="provisorio.conta" /></label>
           <select className="input" value={form.account_id} onChange={e => set('account_id', e.target.value)} required>
             <AccountOptions
               accounts={contas || accounts}
@@ -136,8 +138,8 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
         </div>
       </div>
 
-      <div>
-        <label className="label">Categoria (opcional)</label>
+      <div data-help-id="provisorio.categoria">
+        <label className="label">Categoria (opcional)<HelpCampo campo="provisorio.categoria" /></label>
         <SearchableSelect
           options={catOpts}
           preserveGroupOrder

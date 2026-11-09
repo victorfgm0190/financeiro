@@ -172,3 +172,18 @@ Agendamentos têm roteiro de Preenchimento Guiado (`formularios`); os demais tê
 - `valoresBem` fica em `PatrimonioEditavel.jsx`, componente protegido. A mudança foi autorizada pelo usuário em 09/11/2026 **somente** para a marcação de ajuda (`data-help-form`, `data-help-id`, ⓘ). Nenhum cálculo, gravação, estado ou fluxo foi alterado.
 - Teste: `src/components/Patrimonio/ajudaCampos.test.jsx`. Ele audita o DOM dos formulários, inclusive os campos que só aparecem depois de uma escolha (terceiro + receita, trade-in, financiamento aberto na venda, custos com categoria).
 
+### Bloco 2 — Fluxo de Caixa e Provisão
+
+- O conteúdo está em `src/help/fluxo.js`.
+- Formulários (`data-help-form`):
+  - `efetivarProvisorio`: como efetivar, data do lançamento e categoria;
+  - `mudarData`: nova data, simular ou gravar, e quais ocorrências;
+  - `provisao`: Provisão nova e editar;
+  - `provisorio`: Provisório do Fluxo por Conta e do Fluxo de Caixa Futuro.
+- Componentes compartilhados:
+  - `CampoParcelamento` ganhou `helpId`; o padrão continua `agendamento.parcelasPorOcorrencia`, e a Provisão usa `provisao.parcelasPorOcorrencia`;
+  - `PerguntaFluxoPrincipal` ganhou `helpId` opcional, que mostra o ⓘ.
+- As escolhas por rádio (efetivar como, onde vale a nova data, quais ocorrências) ganharam um rótulo com ⓘ e `role="radiogroup"`.
+- O Tipo do provisório ganhou `aria-pressed`.
+- Teste: `src/components/CashFlow/ajudaCampos.test.jsx`.
+

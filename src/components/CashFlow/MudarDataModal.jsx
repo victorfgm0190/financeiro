@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Modal from '../shared/Modal'
 import DateInput from '../shared/DateInput'
+import HelpCampo from '../shared/HelpCampo'
 import { fmt, fmtDate } from '../shared/utils'
 import { opcoesAplicarData } from '../../lib/fluxoCaixaDatas'
 
@@ -44,18 +45,19 @@ export default function MudarDataModal({ linha, schedule, primeiraPendente, onSi
 
   return (
     <Modal open onClose={onClose} title="Mudar data">
-      <div className="space-y-4">
+      <div className="space-y-4" data-help-form="mudarData">
         <div className="text-sm">
           <p className="text-texto-1 font-medium">{linha.description}</p>
           <p className="text-texto-2">{fmt(linha.saida || linha.entrada)}</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap" data-help-id="mudarData.nova">
           <span className="text-sm text-texto-3 line-through">{fmtDate(dataReal)}</span>
           <span className="text-texto-3">→</span>
-          <DateInput className="input w-auto" value={nova} onChange={e => setNova(e.target.value)} hoje />
+          <DateInput className="input w-auto" aria-label="Nova data" value={nova} onChange={e => setNova(e.target.value)} hoje /><HelpCampo campo="mudarData.nova" />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2" data-help-id="mudarData.destino" role="radiogroup" aria-label="Onde vale a nova data">
+          <p className="label">Onde vale a nova data<HelpCampo campo="mudarData.destino" /></p>
           {radio(destino === 'simular', () => setDestino('simular'), false, 'Só simular nesta tela',
             linha._scheduleId
               ? 'Data provisória: muda o fluxo (aqui e no relatório Fluxo de Caixa), não o agendamento.'
@@ -68,7 +70,8 @@ export default function MudarDataModal({ linha, schedule, primeiraPendente, onSi
           op.once ? (
             <p className="text-xs text-texto-2">Agendamento <span className="text-texto-1">Única</span>: a data dele passa a ser {fmtDate(nova)}.</p>
           ) : (
-            <div className="space-y-2 pl-5">
+            <div className="space-y-2 pl-5" data-help-id="mudarData.escopo" role="radiogroup" aria-label="Quais ocorrências">
+              <p className="label">Quais ocorrências<HelpCampo campo="mudarData.escopo" /></p>
               {radio(modoEfetivo === 'ocorrencia', () => setModo('ocorrencia'), false, 'Só esta ocorrência', 'Exceção desta ocorrência; a série não muda.')}
               {radio(modoEfetivo === 'serie', () => setModo('serie'), !op.serie.ok, 'Esta e as próximas (move a série)',
                 op.serie.ok ? 'A série passa a partir desta nova data.' : op.serie.motivo)}

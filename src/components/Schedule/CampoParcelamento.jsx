@@ -3,11 +3,11 @@ import { maxParcelas } from '../../lib/parcelasOcorrencia'
 
 // "Dividir cada ocorrência em [N] parcelas mensais": mesmo campo no Agendamento e na Provisão. O limite
 // por frequência e as mensagens vêm de src/lib/parcelasOcorrencia.js.
-export default function CampoParcelamento({ frequency, value, onChange, disabled = false, erro = null, bloqueado = false }) {
+export default function CampoParcelamento({ frequency, value, onChange, disabled = false, erro = null, bloqueado = false, helpId = 'agendamento.parcelasPorOcorrencia' }) {
   return (
-    <div data-guia="agendamento-form.parcelas-por-ocorrencia" data-help-id="agendamento.parcelasPorOcorrencia" className="sm:col-span-2">
+    <div data-guia="agendamento-form.parcelas-por-ocorrencia" data-help-id={helpId} className="sm:col-span-2">
       <label className="label">
-        <span className="inline-flex items-center">Parcelamento<HelpCampo campo="agendamento.parcelasPorOcorrencia" /></span>
+        <span className="inline-flex items-center">Parcelamento<HelpCampo campo={helpId} /></span>
       </label>
       <div className="flex flex-wrap items-center gap-2 text-sm text-texto-2">
         <span>{frequency === 'once' ? 'Dividir em' : 'Dividir cada ocorrência em'}</span>

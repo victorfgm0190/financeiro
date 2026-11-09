@@ -7,6 +7,7 @@ import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/cate
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { contaCentralDoPerfil, msgSemContaCentral } from '../../lib/contaCentral'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import PerguntaFluxoPrincipal from '../shared/PerguntaFluxoPrincipal'
 import { perguntaFluxoPrincipal, considerarFluxoParaGravar } from '../../lib/fluxoPrincipal'
@@ -318,7 +319,7 @@ export default function ProvisaoForm({ initial, onClose }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4" data-help-form="provisao">
       <div className="flex items-start gap-2 p-3 bg-surface-2 border border-borda-forte rounded-lg">
         <Info size={14} className="text-texto-2 shrink-0 mt-0.5" />
         <p className="text-xs text-texto-2 leading-snug">
@@ -329,8 +330,8 @@ export default function ProvisaoForm({ initial, onClose }) {
       </div>
 
       {mostraSelectPerfil && (
-        <div>
-          <label className="label">Perfil *</label>
+        <div data-help-id="provisao.perfil">
+          <label className="label">Perfil *<HelpCampo campo="provisao.perfil" /></label>
           <select className="input" value={perfilEscolhido} required
             onChange={e => { setPerfilEscolhido(e.target.value); setErroCentral(null) }}>
             <option value="">Selecione o perfil...</option>
@@ -344,8 +345,8 @@ export default function ProvisaoForm({ initial, onClose }) {
       )}
 
       {/* Descrição */}
-      <div data-guia="provisao-form.descricao">
-        <label className="label">Descrição *</label>
+      <div data-guia="provisao-form.descricao" data-help-id="provisao.descricao">
+        <label className="label">Descrição *<HelpCampo campo="provisao.descricao" /></label>
         <input
           className="input"
           value={form.description}
@@ -357,8 +358,8 @@ export default function ProvisaoForm({ initial, onClose }) {
 
       <div className="grid grid-cols-2 gap-4">
         {/* Valor estimado */}
-        <div data-guia="provisao-form.valor">
-          <label className="label">{nForm > 1 ? 'Valor total estimado da ocorrência (R$) *' : 'Valor estimado (R$) *'}</label>
+        <div data-guia="provisao-form.valor" data-help-id="provisao.valor">
+          <label className="label">{nForm > 1 ? 'Valor total estimado da ocorrência (R$) *' : 'Valor estimado (R$) *'}<HelpCampo campo="provisao.valor" /></label>
           <InputMoeda
             min="0.01"
             value={form.amount}
@@ -371,8 +372,8 @@ export default function ProvisaoForm({ initial, onClose }) {
         </div>
 
         {/* Data estimada (1ª ocorrência quando recorrente) */}
-        <div data-guia="provisao-form.data">
-          <label className="label">{isRecorrente ? 'Data estimada (1ª ocorrência) *' : 'Data estimada *'}</label>
+        <div data-guia="provisao-form.data" data-help-id="provisao.data">
+          <label className="label">{isRecorrente ? 'Data estimada (1ª ocorrência) *' : 'Data estimada *'}<HelpCampo campo="provisao.data" /></label>
           <input
             className="input"
             type="date"
@@ -387,8 +388,8 @@ export default function ProvisaoForm({ initial, onClose }) {
 
       {/* Frequência + Ocorrência (mesmo padrão do agendamento normal) */}
       <div className="grid grid-cols-2 gap-4">
-        <div data-guia="provisao-form.frequencia">
-          <label className="label">Frequência *</label>
+        <div data-guia="provisao-form.frequencia" data-help-id="provisao.frequencia">
+          <label className="label">Frequência *<HelpCampo campo="provisao.frequencia" /></label>
           <SearchableSelect
             options={FREQ_OPTIONS}
             value={form.frequency}
@@ -403,8 +404,8 @@ export default function ProvisaoForm({ initial, onClose }) {
 
       {/* Até quando — o mesmo do agendamento */}
       {isRecorrente && (
-        <div>
-          <label className="label">Até quando</label>
+        <div data-help-id="provisao.ateQuando">
+          <label className="label">Até quando<HelpCampo campo="provisao.ateQuando" /></label>
           <FimRepeticao
             inicio={form.startDate}
             recorrencia={form.frequency}
@@ -424,6 +425,7 @@ export default function ProvisaoForm({ initial, onClose }) {
           value={form.parcelasPorOcorrencia}
           onChange={v => { setErroParcelamento(''); set('parcelasPorOcorrencia', v) }}
           bloqueado={parcelamentoBloqueado}
+          helpId="provisao.parcelasPorOcorrencia"
           erro={erroLimite || erroParcelamento}
         />
       )}
@@ -462,8 +464,8 @@ export default function ProvisaoForm({ initial, onClose }) {
       )}
 
       {/* Conta (de onde o dinheiro sai) — padrão: Conta central do perfil */}
-      <div data-guia="provisao-form.conta">
-        <label className="label">Conta (de onde o dinheiro sai) *</label>
+      <div data-guia="provisao-form.conta" data-help-id="provisao.conta">
+        <label className="label">Conta (de onde o dinheiro sai) *<HelpCampo campo="provisao.conta" /></label>
         <SearchableSelect
           options={contaOpts}
           value={contaProvisao?.id || ''}
@@ -473,21 +475,24 @@ export default function ProvisaoForm({ initial, onClose }) {
           ungroupedLast
         />
       </div>
-      <PerguntaFluxoPrincipal
-        pergunta={perguntaFluxo}
-        valor={form.considerarFluxoPrincipal}
-        onChange={v => set('considerarFluxoPrincipal', v)}
-      />
+      <div className="contents" data-help-id="provisao.fluxoPrincipal">
+        <PerguntaFluxoPrincipal
+          pergunta={perguntaFluxo}
+          valor={form.considerarFluxoPrincipal}
+          onChange={v => set('considerarFluxoPrincipal', v)}
+          helpId="provisao.fluxoPrincipal"
+        />
+      </div>
 
       {/* Favorecido */}
-      <div>
-        <label className="label">Favorecido</label>
+      <div data-help-id="provisao.favorecido">
+        <label className="label">Favorecido<HelpCampo campo="provisao.favorecido" /></label>
         <FavorecidoAutocomplete value={form.payee} onChange={v => set('payee', v)} suggestions={sortedPayees} />
       </div>
 
       {/* Categoria (opcional) */}
-      <div data-guia="provisao-form.categoria">
-        <label className="label">Categoria</label>
+      <div data-guia="provisao-form.categoria" data-help-id="provisao.categoria">
+        <label className="label">Categoria<HelpCampo campo="provisao.categoria" /></label>
         <SearchableSelect
           options={expenseCatOpts}
           preserveGroupOrder
@@ -501,19 +506,19 @@ export default function ProvisaoForm({ initial, onClose }) {
 
       {/* Será pago com reserva */}
       <div data-guia="provisao-form.reserva" className="bg-surface-2/40 rounded-xl p-3.5 space-y-3">
-        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+        <label data-help-id="provisao.comReserva" className="flex items-center gap-2.5 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={form.comReserva}
             onChange={e => setForm(f => ({ ...f, comReserva: e.target.checked, reservaFuncaoId: e.target.checked ? f.reservaFuncaoId : '' }))}
             className="w-4 h-4 rounded accent-primary cursor-pointer"
           />
-          <span className="text-sm text-texto-2">Será pago com reserva</span>
+          <span className="text-sm text-texto-2">Será pago com reserva<HelpCampo campo="provisao.comReserva" /></span>
         </label>
 
         {form.comReserva && (
-          <div>
-            <label className="label text-reserva">Função de Reserva *</label>
+          <div data-help-id="provisao.funcaoReserva">
+            <label className="label text-reserva">Função de Reserva *<HelpCampo campo="provisao.funcaoReserva" /></label>
             <select
               className="input"
               value={form.reservaFuncaoId}
