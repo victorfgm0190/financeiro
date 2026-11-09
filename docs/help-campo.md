@@ -71,16 +71,26 @@ Camada de ajuda por **campo**, ao lado do help de tela (`src/lib/ajudaTelas.js`,
 - Fluxo:
   1. Pré-requisitos, só se faltar algum. "Cadastrar agora" fecha o formulário e abre o Faça comigo; no fim, "Voltar para …" reabre o formulário já guiado.
   2. Objetivo.
-  3. Campos na ordem de `ordemCampos`:
+  3. Todos os campos marcados com `data-help-id` (com conteúdo na base), na ordem visual da tela (de cima para baixo, da esquerda para a direita; vale no celular):
      - pula os que não estão na tela;
      - põe o foco no campo;
      - acompanha a troca de etapa do wizard.
-  4. Obrigatórios vazios.
+     - `ordemCampos` não decide a ordem.
+     - O teste `camposDoGuia` garante que todo campo visível tem passo (`controlesSemPasso`).
+  4. O que a validação do formulário barra.
   5. "Ao salvar, vai acontecer…".
   6. Acende o Salvar.
   7. Pronto.
+- "Obrigatório" e o bloqueio do Próximo vêm da validação do próprio formulário, via prop `validacao` (`erros()`, `obrigatorio(id)`):
+  - agendamento: `errosDoAgendamento`, a mesma do Salvar;
+  - contrato: `errosDaEtapa`, a mesma do Avançar. O fim da vigência é obrigatório só sem "Sem data de fim".
+  - Sem `validacao`, vale a base mais campo vazio.
+  - Avançar/Salvar barrado: o guia volta ao primeiro campo com erro.
 - Teclas e botões:
   - Enter avança, exceto com lista aberta ou em texto longo.
+  - Seletor próprio (`aria-haspopup`) fechado: com valor (`data-preenchido="sim"`), Enter avança; vazio, Enter abre a lista.
+  - Botão de escolha (`aria-pressed`): Enter no já escolhido avança.
+  - Liga/desliga (`role="switch"`): Enter avança.
   - Esc sai; com o help de campo aberto, o Esc é dele.
   - Próximo segura um obrigatório vazio; Pular passa direto.
 - Faça comigo (Sim no fim do tour, Fazer agora da jornada e dos pré-requisitos): quando a tarefa abre um formulário com roteiro, o guia assume. Ao salvar, a tarefa conta como concluída.

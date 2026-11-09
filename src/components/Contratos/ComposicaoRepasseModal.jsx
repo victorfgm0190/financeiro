@@ -171,7 +171,7 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
                           {Object.entries(NATUREZAS_DESPESA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                         </select>
                       )}
-                      <input className="input py-1 text-sm" value={l.descricao || ''} disabled={!podeEditar} placeholder="Descrição" aria-label="Descrição do item"
+                      <input data-help-id="repasseComposicao.descricaoItem" className="input py-1 text-sm" value={l.descricao || ''} disabled={!podeEditar} placeholder="Descrição" aria-label="Descrição do item"
                         onChange={e => mudar(i, { descricao: e.target.value })} maxLength={200} />
                     </div>
                   )}

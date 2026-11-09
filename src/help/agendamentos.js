@@ -47,6 +47,37 @@ export const campos = {
     relacaoComTela: 'Vai para cada lançamento gravado e ajuda a reconhecer o pagamento na importação do extrato.',
     obrigatorio: false,
   },
+  'agendamento.tipoDocumento': {
+    titulo: 'Tipo de documento',
+    paraQueServe: 'Documento que gera a cobrança (boleto, nota, carnê…).',
+    relacaoComTela: 'Vai para cada lançamento gravado e serve de filtro em Agendamentos e nos relatórios. Alguns tipos mostram o campo "Nº do contrato".',
+    obrigatorio: true,
+    atencao: 'Obrigatório ao criar despesa ou receita; na edição pode ficar "Sem tipo".',
+  },
+  'agendamento.numeroContrato': {
+    titulo: 'Nº do contrato',
+    paraQueServe: 'Número do contrato que aparece no documento (boleto, carnê).',
+    relacaoComTela: 'Se bater com um contrato cadastrado, o Finup oferece vincular este agendamento a ele; vinculado, ele passa a aparecer na ficha do contrato.',
+    obrigatorio: false,
+  },
+  'agendamento.categoriasPerfis': {
+    titulo: 'Categorias em cada perfil',
+    paraQueServe: 'Na transferência entre CPF e CNPJ, a categoria do valor na visão de cada perfil.',
+    relacaoComTela: 'Para a empresa o valor sai como despesa (ex.: pró-labore) e para a pessoa entra como receita; cada perfil vê a sua categoria nos relatórios.',
+    obrigatorio: false,
+  },
+  'agendamento.fluxoPrincipal': {
+    titulo: 'Considerar no Fluxo de Caixa principal',
+    paraQueServe: 'Diz se esta movimentação entra no Fluxo de Caixa principal, quando a conta não decide sozinha.',
+    relacaoComTela: 'Muda só onde o valor aparece no Fluxo de Caixa; o saldo da conta é o mesmo.',
+    obrigatorio: false,
+  },
+  'agendamento.categoriaReserva': {
+    titulo: 'Categoria (reserva livre)',
+    paraQueServe: 'Categoria da despesa ou do resgate quando a transferência envolve uma reserva livre.',
+    relacaoComTela: 'É a categoria em que o valor aparece nos relatórios quando o dinheiro entra ou sai da reserva.',
+    obrigatorio: true,
+  },
   'agendamento.frequency': {
     titulo: 'Frequência',
     paraQueServe: 'Intervalo entre uma ocorrência e a próxima.',
@@ -168,6 +199,24 @@ export const campos = {
     titulo: 'Classificação gerencial (registrar)',
     paraQueServe: 'Grupo gerencial do lançamento criado nesta ocorrência.',
     relacaoComTela: 'Define em que grupo o valor aparece no controle gerencial; vem do agendamento e pode ser outro só nesta ocorrência.',
+    obrigatorio: false,
+  },
+  'registrarAgendamento.ajusteRateio': {
+    titulo: 'Ajuste do rateio',
+    paraQueServe: 'Como repartir a diferença quando o valor pago é diferente do previsto num agendamento dividido em categorias.',
+    relacaoComTela: 'Proporcional muda todas as linhas na mesma proporção; "A diferença na linha" põe a diferença inteira numa categoria só.',
+    obrigatorio: false,
+  },
+  'registrarAgendamento.quitarDesconto': {
+    titulo: 'Quitar com desconto',
+    paraQueServe: 'Encerra a parcela com desconto por antecipação quando o valor pago cobre o principal.',
+    relacaoComTela: 'Marcado, a parcela fica quitada e a diferença vira desconto; desmarcado, o pagamento é parcial e o restante continua em aberto.',
+    obrigatorio: false,
+  },
+  'registrarAgendamento.vincular': {
+    titulo: 'Vincular a um lançamento',
+    paraQueServe: 'Dá baixa nesta ocorrência apontando um lançamento que já existe, sem criar outro.',
+    relacaoComTela: 'Use quando o pagamento já foi lançado à mão ou importado do extrato: evita contar o mesmo valor duas vezes.',
     obrigatorio: false,
   },
   'registrarAgendamento.anotacoes': {

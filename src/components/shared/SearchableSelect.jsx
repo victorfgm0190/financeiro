@@ -300,6 +300,7 @@ export default function SearchableSelect({
         onKeyDown={handleTriggerKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
+        data-preenchido={selected ? 'sim' : 'nao'}
         className={`${triggerClassName} flex items-center justify-between gap-2 text-left w-full ${!selected ? 'text-texto-3' : ''}`}
       >
         <span className={`flex-1 min-w-0 ${quebrarRotulo ? 'whitespace-normal break-words' : 'truncate'}`}>{selected ? selected.label : placeholder}</span>

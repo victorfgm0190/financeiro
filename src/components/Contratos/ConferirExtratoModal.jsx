@@ -109,7 +109,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
           {linha.linha?.conferencia && (
             <p className="text-xs text-receita flex items-center gap-1"><CheckCircle size={12} /> Já conferida em {linha.linha.conferencia.conferido_em.split('-').reverse().join('/')} — conferir de novo substitui.</p>
           )}
-          <input ref={arquivoRef} type="file" accept="image/*,application/pdf" className="hidden" aria-label="Arquivo do extrato"
+          <input ref={arquivoRef} data-guia-fora type="file" accept="image/*,application/pdf" className="hidden" aria-label="Arquivo do extrato"
             onChange={e => lerArquivo(e.target.files?.[0])} />
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-primary flex items-center gap-1" disabled={lendo || !podeEditar} onClick={() => arquivoRef.current?.click()} data-help-id="conferenciaExtrato.arquivo">
@@ -232,7 +232,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
         <div className="space-y-2">
           {linhas.map((l, i) => (
             <div key={l.id} data-testid="item-extrato" className="grid grid-cols-2 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_130px_28px] gap-2 items-center p-2 rounded-lg bg-surface-2/60">
-              <input className="input py-1 text-sm col-span-2 sm:col-span-1" value={l.descricao} onChange={e => mudar(i, { descricao: e.target.value })} aria-label="Descrição do item do extrato" maxLength={200} placeholder="Descrição" />
+              <input data-help-id="conferenciaExtrato.itemDescricao" className="input py-1 text-sm col-span-2 sm:col-span-1" value={l.descricao} onChange={e => mudar(i, { descricao: e.target.value })} aria-label="Descrição do item do extrato" maxLength={200} placeholder="Descrição" />
               <select className="input py-1 text-xs" value={l.tipo} aria-label={`Tipo de ${l.descricao || 'item'}`} data-help-id="conferenciaExtrato.itemTipo"
                 onChange={e => { const tipo = e.target.value; mudar(i, { tipo, sinal: tipo === 'aluguel' ? 1 : l.tipo === 'aluguel' ? -1 : l.sinal, taxa_id: tipo === 'taxa_unica' && unicas.length === 1 ? unicas[0].id : null, natureza: tipo === 'despesa' ? l.natureza || 'outra' : null }) }}>
                 {TIPOS_EXTRATO.map(t => <option key={t} value={t}>{ROTULOS_TIPO_EXTRATO[t]}</option>)}

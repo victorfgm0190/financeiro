@@ -176,3 +176,14 @@ describe('Conferir extrato — líquido do extrato diferente dos itens conferido
     expect(comp.conferencia.repasse).toBe(1360)
   })
 })
+
+describe('Preenchimento Guiado na conferência', () => {
+  it('todo campo visível tem passo no guia (digitando a partir do projetado)', async () => {
+    const { controlesSemPasso } = await import('../../help/guiaPreenchimento.js')
+    render(<ConferirExtratoModal contrato={CONTRATO} competencia="2026-02" onClose={() => {}} ler={vi.fn()} />)
+    const raiz = () => document.querySelector('[data-help-form="conferenciaExtrato"]')
+    expect(controlesSemPasso(raiz()).map(c => c.outerHTML.slice(0, 160)), 'início').toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: /Digitar/ }))
+    expect(controlesSemPasso(raiz()).map(c => c.outerHTML.slice(0, 160)), 'digitando').toEqual([])
+  })
+})

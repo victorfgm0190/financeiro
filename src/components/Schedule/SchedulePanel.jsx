@@ -384,7 +384,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   const somaRateioAg = Math.round(scheduleRateios.reduce((s, r) => s + (Number(r.valor) || 0), 0) * 100) / 100
   const rateioDiverge = tab !== 'transferencia' && scheduleRateios.length > 1 && valorOk && Math.abs(valorAba - somaRateioAg) > 0.004
   const blocoAjusteRateio = rateioDiverge ? (
-    <div className="sm:col-span-2 rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2 text-xs space-y-1">
+    <div data-help-id="registrarAgendamento.ajusteRateio" className="sm:col-span-2 rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2 text-xs space-y-1">
       <p className="text-texto-1">O valor ({fmt(valorAba)}) difere do previsto ({fmt(somaRateioAg)}). Como ajustar o rateio?</p>
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="radio" className="accent-primary" checked={ajusteRateio.modo === 'proporcional'} onChange={() => setAjusteRateio(a => ({ ...a, modo: 'proporcional' }))} />
@@ -514,6 +514,18 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   const pagamentoCartao = ehPagamentoDeCartao(scheduleProp, accounts) || contaEhCartao(accounts, trfToId)
   const TAB_LABELS = { pagamento: 'Pagamento', recebimento: 'Recebimento', transferencia: pagamentoCartao ? ROTULO_PAGAMENTO_CARTAO : 'Transferência' }
   const rotuloConfirmar = tab === 'transferencia' && pagamentoCartao ? 'Confirmar pagamento de cartão' : `Confirmar ${TAB_LABELS[tab]}`
+  // Preenchimento Guiado: a mesma validação do Confirmar (valorOk; na parcela de financiamento, as
+  // checagens de handleConfirmFinanciamento).
+  const validacaoGuia = {
+    erros: () => (parcelaFin
+      ? [
+        ...(!finAccountId ? [{ id: 'registrarAgendamento.conta', msg: 'Escolha a conta de origem.' }] : []),
+        ...(!(finValorNum > 0) ? [{ id: 'registrarAgendamento.valor', msg: 'Informe quanto você vai pagar.' }]
+          : finExcede ? [{ id: 'registrarAgendamento.valor', msg: `O valor não pode passar de ${fmt(parcelaFin.total)}.` }] : []),
+      ]
+      : valorOk ? [] : [{ id: 'registrarAgendamento.valor', msg: 'Valor inválido.' }]),
+    obrigatorio: (id) => id === 'registrarAgendamento.valor' || (!!parcelaFin && id === 'registrarAgendamento.conta'),
+  }
   // Preenchimento Guiado: "Ao salvar, vai acontecer…" com os dados escolhidos.
   const resumoGuia = () => {
     const nome = (id) => { const a = accounts.find(x => x.id === id); return a?.apelido || a?.name || '—' }
@@ -559,7 +571,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
         )}
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-          <BotaoPreencherGuia form="registrarAgendamento" resumo={resumoGuia} onFechar={onClose} className="-mt-1 -mb-1" />
+          <BotaoPreencherGuia form="registrarAgendamento" resumo={resumoGuia} validacao={validacaoGuia} onFechar={onClose} className="-mt-1 -mb-1" />
           {!parcelaFin && scheduleProp.contratoId && <ComposicaoParcelaResumo schedule={scheduleProp} />}
           {parcelaFin && (
             <>
@@ -596,7 +608,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
               </div>
 
               {finRateio?.oferecerQuitar && !finExcede && (
-                <label className="flex items-start gap-2 rounded-lg border border-borda-forte bg-surface-2/40 px-3 py-2.5 text-sm text-texto-1 cursor-pointer">
+                <label data-help-id="registrarAgendamento.quitarDesconto" className="flex items-start gap-2 rounded-lg border border-borda-forte bg-surface-2/40 px-3 py-2.5 text-sm text-texto-1 cursor-pointer">
                   <input type="checkbox" className="mt-0.5 accent-primary" checked={finQuitar} onChange={e => setFinQuitarEscolha(e.target.checked)} />
                   <span>
                     Quitar com desconto (pagamento antecipado)
@@ -782,6 +794,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
               </div>
               {/* Resgate detalhado é registrado pelo motor (registerScheduleOccurrence), que herda as categorias. */}
               {!hasDetalhe && (
+                <div className="contents" data-help-id="agendamento.categoriasPerfis">
                 <TransferenciaPerfisCategorias
                   fromAccount={trfFromAcc}
                   toAccount={trfToAcc}
@@ -790,6 +803,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                   onChangeCnpj={id => setTrfCatCnpj(id || '')}
                   onChangeCpf={id => setTrfCatCpf(id || '')}
                 />
+                </div>
               )}
               <div data-guia="baixa-form.data" data-help-id="registrarAgendamento.data">
                 <label className="label">Data<HelpCampo campo="registrarAgendamento.data" /></label>
@@ -826,6 +840,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
           {/* Baixa apontando um lançamento que já existe (sem gerar outro). Fora do resgate com
               detalhamento (um lançamento por função) e da parcela de financiamento (endpoint). */}
           {!parcelaFin && !hasDetalhe && (
+            <div className="contents" data-help-id="registrarAgendamento.vincular">
             <VincularLancamento
               schedule={scheduleProp}
               data={nextDate || today}
@@ -840,6 +855,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 concluir()
               }}
             />
+            </div>
           )}
         </div>
 

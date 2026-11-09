@@ -102,3 +102,12 @@ describe('Etapa 4 — registrar pelo contrato', () => {
     expect(screen.getByText('Ligue um bem ao contrato para somar ao custo')).toBeTruthy()
   })
 })
+
+describe('Preenchimento Guiado na composição', () => {
+  it('todo campo visível tem passo no guia', async () => {
+    const { controlesSemPasso } = await import('../../help/guiaPreenchimento.js')
+    render(<ComposicaoRepasseModal contrato={CONTRATO} competencia="2026-02" onClose={() => {}} />)
+    const raiz = document.querySelector('[data-help-form="repasseComposicao"]')
+    expect(controlesSemPasso(raiz).map(c => c.outerHTML.slice(0, 160))).toEqual([])
+  })
+})

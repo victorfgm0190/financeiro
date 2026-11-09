@@ -199,3 +199,97 @@ describe('Preencher com guia', () => {
     expect(balao().dataset.fase).toBe('objetivo')
   })
 })
+
+describe('Preencher com guia — correções da Etapa 4', () => {
+  // Formulário com toggle (aria-pressed), seletor próprio (aria-haspopup + data-preenchido), "Fim"
+  // condicional (data OU "Sem data de fim") e validação própria (provedor) — a mesma do Salvar.
+  function Form({ onSalvar = () => {} }) {
+    const [tipo, setTipo] = useState('expense')
+    const [conta, setConta] = useState('')
+    const [aberta, setAberta] = useState(false)
+    const [fim, setFim] = useState('')
+    const [semFim, setSemFim] = useState(false)
+    const erros = () => [
+      ...(!conta ? [{ id: 'agendamento.account', msg: 'Escolha a conta.' }] : []),
+      ...(!semFim && !fim ? [{ id: 'contrato.fim', msg: 'Informe o fim ou marque "Sem data de fim".' }] : []),
+    ]
+    const validacao = {
+      erros,
+      obrigatorio: (id) => (id === 'agendamento.account') || (id === 'contrato.fim' && !semFim),
+    }
+    return (
+      <div data-help-form="agendamento">
+        <BotaoPreencherGuia form="agendamento" oferecer={false} validacao={validacao} />
+        <div data-help-id="agendamento.transactionType">
+          {['expense', 'income'].map(t => <button key={t} type="button" aria-pressed={tipo === t} onClick={() => setTipo(t)}>{t}</button>)}
+        </div>
+        <div data-help-id="agendamento.account">
+          <button type="button" aria-label="Conta" aria-haspopup="listbox" aria-expanded={aberta} data-preenchido={conta ? 'sim' : 'nao'}
+            onKeyDown={e => { if (e.key === 'Enter') setAberta(true) }}>{conta || 'Selecione'}</button>
+          <button type="button" onClick={() => { setConta('c1'); setAberta(false) }}>escolher conta</button>
+        </div>
+        {/* Fora do roteiro (ordemCampos) do agendamento: tem passo do mesmo jeito (ordem visual). */}
+        <div data-help-id="contrato.fim">
+          <input type="date" aria-label="Fim" value={fim} disabled={semFim} onChange={e => setFim(e.target.value)} />
+          <label><input type="checkbox" aria-label="Sem data de fim" checked={semFim} onChange={e => setSemFim(e.target.checked)} />Sem data de fim</label>
+        </div>
+        <button type="button" data-help-salvar="agendamento" onClick={() => { if (!erros().length) onSalvar() }}>Salvar</button>
+      </div>
+    )
+  }
+
+  it('Enter: toggle já escolhido avança; seletor fechado vazio abre, com valor avança; linha do botão some ao guiar', () => {
+    render(<><Form /><GuiaPreenchimento /></>)
+    fireEvent.click(screen.getByTestId('botao-preencher-guia'))
+    expect(screen.queryByTestId('botao-preencher-guia')).toBeNull() // sem espaço em branco no topo
+    fireEvent.click(screen.getByRole('button', { name: 'Começar' }))
+    expect(balao().dataset.campo).toBe('agendamento.transactionType')
+    enter(screen.getByRole('button', { name: 'income' })) // não escolhido: Enter é dele (escolhe)
+    expect(balao().dataset.campo).toBe('agendamento.transactionType')
+    enter(screen.getByRole('button', { name: 'expense' })) // já escolhido: Próximo
+    expect(balao().dataset.campo).toBe('agendamento.account')
+    const conta = screen.getByRole('button', { name: 'Conta' })
+    act(() => conta.focus())
+    // Vazio: o guia não segura o Enter (a lista abre); obrigatório pela validação do formulário.
+    expect(balao().textContent).toContain('Obrigatório')
+    const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    act(() => { conta.dispatchEvent(ev) })
+    expect(ev.defaultPrevented).toBe(false)
+    expect(balao().dataset.campo).toBe('agendamento.account')
+    fireEvent.click(screen.getByRole('button', { name: 'escolher conta' }))
+    enter(screen.getByRole('button', { name: 'Conta' })) // fechado e com valor: Próximo
+    expect(balao().dataset.campo).toBe('contrato.fim')
+  })
+
+  it('obrigatório condicional (data OU "Sem data de fim"): bloqueia o Próximo até um dos dois', async () => {
+    render(<><Form /><GuiaPreenchimento /></>)
+    fireEvent.click(screen.getByTestId('botao-preencher-guia'))
+    fireEvent.click(screen.getByRole('button', { name: 'Começar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'escolher conta' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    expect(balao().dataset.campo).toBe('contrato.fim')
+    expect(balao().textContent).toContain('Obrigatório')
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    expect(screen.getByRole('alert').textContent).toContain('Sem data de fim')
+    expect(balao().dataset.campo).toBe('contrato.fim')
+    fireEvent.click(screen.getByLabelText('Sem data de fim'))
+    await waitFor(() => expect(balao().textContent).not.toContain('Obrigatório'))
+    expect(screen.queryByRole('alert')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    expect(balao().dataset.fase).toBe('resumo')
+  })
+
+  it('Salvar barrado pela validação: o guia volta ao primeiro campo com erro', async () => {
+    render(<><Form /><GuiaPreenchimento /></>)
+    fireEvent.click(screen.getByTestId('botao-preencher-guia'))
+    fireEvent.click(screen.getByRole('button', { name: 'Começar' }))
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: 'Pular' }))
+    expect(balao().dataset.fase).toBe('faltando')
+    fireEvent.click(screen.getByRole('button', { name: 'Seguir mesmo assim' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    expect(balao().dataset.fase).toBe('salvar')
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(balao().dataset.campo).toBe('agendamento.account'))
+  })
+})

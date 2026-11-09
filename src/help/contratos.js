@@ -349,6 +349,18 @@ export const campos = {
     obrigatorio: false,
   },
   // ── Composição do repasse ─────────────────────────────────────────────────────────────────────
+  'conferenciaExtrato.itemDescricao': {
+    titulo: 'Descrição do item do extrato',
+    paraQueServe: 'Nome do item como está no extrato da administradora.',
+    relacaoComTela: 'Identifica o item na comparação com o projetado e na composição gravada; não muda valores.',
+    obrigatorio: false,
+  },
+  'repasseComposicao.descricaoItem': {
+    titulo: 'Descrição do item',
+    paraQueServe: 'Nome do item da composição (IPTU, reparo, taxa…), como aparece no extrato.',
+    relacaoComTela: 'Só identifica o item na composição, na conferência e no lançamento; não muda valores.',
+    obrigatorio: false,
+  },
   'repasseComposicao.valorItem': {
     titulo: 'Valor do item',
     paraQueServe: 'Valor do item nesta competência. Item do contrato digitado à mão fica "informado" (o calculado aparece ao lado).',

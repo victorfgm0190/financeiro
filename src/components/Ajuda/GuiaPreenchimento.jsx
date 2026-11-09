@@ -1,9 +1,11 @@
-// PREENCHIMENTO GUIADO — um por vez no app (montado no App). Percorre o roteiro do formulário
-// (src/help/<tela>.js › formularios) acendendo cada campo com um balão: pré-requisitos ("Cadastrar
-// agora" e voltar) → objetivo → campos na ordem (pula os escondidos; acompanha a troca de etapa do
-// wizard) → obrigatórios vazios → "Ao salvar, vai acontecer…" com os dados reais → acende o Salvar.
-// Não bloqueia nada: a pessoa digita no próprio campo. Enter avança (fora de lista aberta e de texto
-// longo), Esc sai (com o help de campo aberto, o Esc é dele). O guia NUNCA preenche nem salva.
+// PREENCHIMENTO GUIADO — um por vez no app (montado no App). Percorre o formulário acendendo cada
+// campo com um balão: pré-requisitos ("Cadastrar agora" e voltar) → objetivo → TODO campo marcado
+// (data-help-id) na ORDEM VISUAL (pula os escondidos; acompanha a troca de etapa do wizard) → o que a
+// validação do formulário barra → "Ao salvar, vai acontecer…" com os dados reais → acende o Salvar.
+// "Obrigatório" e o bloqueio do Próximo vêm da validação do próprio formulário (provedor), não de
+// lista manual. Avançar/Salvar barrado pela validação: o guia volta ao primeiro campo com erro.
+// Não bloqueia nada: a pessoa digita no próprio campo. Enter avança (lista aberta e texto longo são
+// deles), Esc sai (com o help de campo aberto, o Esc é dele). O guia NUNCA preenche nem salva.
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { Wand2, X, CheckCircle2, Circle } from 'lucide-react'
@@ -11,6 +13,7 @@ import { helpDoCampo, helpDoFormulario } from '../../help/index.js'
 import {
   lerPreenchimento, assinarPreenchimento, encerrarPreenchimento, provedorGuia, raizDoForm, elementoDoCampo,
   controleDo, campoVazio, botaoDoForm, faseDepoisDosCampos, definirRetornoGuia, visivel, ABRIR_FORMULARIO, armarPreenchimento,
+  camposNaTela, caixaDe, obrigatorioNoForm, erroDoCampo, faltandoNaTela, campoComErroNaTela,
 } from '../../help/guiaPreenchimento.js'
 import { lerHelpCampo } from '../../help/helpCampoEstado.js'
 import { MARGEM, LARGURA_BALAO, posicaoBalao } from '../BoasVindas/tourPassos'
@@ -32,7 +35,6 @@ export default function GuiaPreenchimento() {
 function Guia({ ativo }) {
   const { form, tarefaId } = ativo
   const roteiro = helpDoFormulario(form)
-  const ordem = roteiro?.ordemCampos || []
   const isMobile = useIsMobile()
   const ctx = useContextoAjuda()
   // Fase inicial: pré-requisitos só se falta algo.
@@ -67,16 +69,16 @@ function Guia({ ativo }) {
     const raiz = raizDoForm(form)
     const visitados = new Set(trilha)
     if (extraVisitado) visitados.add(extraVisitado)
-    const r = faseDepoisDosCampos({ raiz, form, ordem, visitados })
+    const r = faseDepoisDosCampos({ raiz, form, visitados })
     setAviso('')
     if (r.fase === 'campo') irPara(r.id)
     else { if (r.fase === 'faltando') setFaltam(r.faltam); setFase(r.fase) }
-  }, [form, ordem, trilha, irPara])
+  }, [form, trilha, irPara])
 
   const proximo = useCallback(({ pular = false } = {}) => {
     if (fase === 'campo') {
-      const el = elementoDoCampo(raizDoForm(form), id)
-      if (!pular && campo?.obrigatorio && campoVazio(el)) { setAviso('Este campo é obrigatório. Preencha ou use "Pular".'); return }
+      const msg = pular ? null : erroDoCampo(form, raizDoForm(form), id)
+      if (msg) { setAviso(`${msg} Preencha ou use "Pular".`); return }
       // Já passou por um campo depois deste (voltou): segue a trilha se ele ainda está na tela.
       const adiante = trilha.slice(pos + 1).find(x => elementoDoCampo(raizDoForm(form), x))
       if (adiante) return irPara(adiante)
@@ -86,7 +88,7 @@ function Guia({ ativo }) {
     if (fase === 'faltando') return setFase(botaoDoForm(form, 'avancar') ? 'avancar' : 'resumo')
     if (fase === 'resumo') return setFase('salvar')
     if (fase === 'pronto') return encerrarPreenchimento()
-  }, [fase, form, id, campo, trilha, pos, irPara, seguir])
+  }, [fase, form, id, trilha, pos, irPara, seguir])
 
   const voltar = useCallback(() => {
     const raiz = raizDoForm(form)
@@ -102,6 +104,16 @@ function Guia({ ativo }) {
     for (let i = de; i >= 0; i--) if (elementoDoCampo(raiz, trilha[i])) return true
     return false
   })()
+
+  // O formulário mudou (digitou, escolheu, marcou): redesenha o balão ("Obrigatório" e o aviso
+  // dependem dos valores). Depois do commit do formulário, para ler a validação nova.
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    let t = 0
+    const mexeu = () => { clearTimeout(t); t = setTimeout(() => setTick(n => n + 1), 0) }
+    for (const ev of ['input', 'change', 'click']) document.addEventListener(ev, mexeu, true)
+    return () => { clearTimeout(t); for (const ev of ['input', 'change', 'click']) document.removeEventListener(ev, mexeu, true) }
+  }, [])
 
   // Elemento aceso da fase.
   const alvo = useCallback(() => {
@@ -128,7 +140,7 @@ function Guia({ ativo }) {
       sumiuDesde.current = 0
       if (fase === 'campo' && !elementoDoCampo(raiz, id)) seguir(id)
       else if (fase === 'avancar') {
-        const r = faseDepoisDosCampos({ raiz, form, ordem, visitados: new Set(trilha) })
+        const r = faseDepoisDosCampos({ raiz, form, visitados: new Set(trilha) })
         if (r.fase === 'campo') irPara(r.id)
         else if (!botaoDoForm(form, 'avancar')) setFase('resumo')
       } else if (fase === 'salvar' && !botaoDoForm(form, 'salvar')) {
@@ -137,7 +149,7 @@ function Guia({ ativo }) {
       }
     }, VIGIA_MS)
     return () => clearInterval(t)
-  }, [form, fase, id, trilha, ordem, tarefaId, seguir, irPara])
+  }, [form, fase, id, trilha, tarefaId, seguir, irPara])
 
   // Campo novo: rola até ele e põe o foco no controle (a pessoa já digita). Outras fases: foco no balão.
   useEffect(() => {
@@ -151,13 +163,32 @@ function Guia({ ativo }) {
     }
   }, [fase, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Clique no Salvar (para saber, quando o formulário fechar, que foi salvo e não cancelado).
+  // Clique no Avançar/Salvar: o Salvar marca que foi salvo (o formulário fechando = Pronto). Se a
+  // validação do formulário barrar (a tela não mudou), o guia volta ao primeiro campo com erro.
   useEffect(() => {
-    if (fase !== 'salvar') return
-    const clique = (e) => { const b = botaoDoForm(form, 'salvar'); if (b && b.contains(e.target)) clicouSalvar.current = true }
+    if (fase !== 'salvar' && fase !== 'avancar') return
+    let timer = 0
+    const clique = (e) => {
+      const b = botaoDoForm(form, fase)
+      if (!b || !b.contains(e.target)) return
+      if (fase === 'salvar') clicouSalvar.current = true
+      const raiz = raizDoForm(form)
+      const antes = camposNaTela(raiz).join('|')
+      const inicio = Date.now()
+      const conferir = () => {
+        const r = raizDoForm(form)
+        if (!r) return
+        const mudou = camposNaTela(r).join('|') !== antes
+        if (fase === 'avancar' && mudou) return // etapa nova: a vigia segue
+        const alvoErro = faltandoNaTela(form, r)[0] || campoComErroNaTela(r)
+        if (alvoErro) { clicouSalvar.current = false; irPara(alvoErro); return }
+        if (Date.now() - inicio < 1200) timer = setTimeout(conferir, 150)
+      }
+      timer = setTimeout(conferir, 200)
+    }
     document.addEventListener('click', clique, true)
-    return () => document.removeEventListener('click', clique, true)
-  }, [fase, form])
+    return () => { clearTimeout(timer); document.removeEventListener('click', clique, true) }
+  }, [fase, form, irPara])
 
   // Posição do elemento aceso (ou do formulário, para o balão ficar ao lado).
   useEffect(() => {
@@ -165,7 +196,7 @@ function Guia({ ativo }) {
     let ultimo = ''
     const medir = () => {
       const el = alvo() || raizDoForm(form)
-      const r = el && visivel(el) ? el.getBoundingClientRect() : null
+      const r = el && visivel(el) ? caixaDe(el) : null
       const k = r ? `${r.top}|${r.left}|${r.width}|${r.height}` : ''
       if (k !== ultimo) { ultimo = k; setRect(r && r.width > 0 ? { top: r.top, left: r.left, width: r.width, height: r.height, bottom: r.bottom, right: r.right } : null) }
       raf = requestAnimationFrame(medir)
@@ -217,7 +248,15 @@ function Guia({ ativo }) {
       const el = elementoDoCampo(raizDoForm(form), id)
       if (!el || !el.contains(t)) return
       if (t.tagName === 'TEXTAREA' || t.closest?.('[aria-expanded="true"]') || t.getAttribute?.('aria-expanded') === 'true') return
-      if (t.tagName === 'BUTTON') return
+      const botao = t.closest?.('button')
+      if (botao) {
+        // Seletor próprio FECHADO: com valor, Enter = Próximo; vazio, Enter abre a lista (dele).
+        if (botao.getAttribute('aria-haspopup')) { if (campoVazio(el)) return }
+        // Botões de escolha (Despesa/Receita…): Enter no já escolhido = Próximo; no outro, escolhe.
+        else if (botao.hasAttribute('aria-pressed')) { if (botao.getAttribute('aria-pressed') !== 'true') return }
+        // Liga/desliga: Enter = Próximo (Espaço liga/desliga).
+        else if (botao.getAttribute('role') !== 'switch') return
+      }
       e.preventDefault(); e.stopPropagation()
       proximo()
     }
@@ -286,11 +325,11 @@ function Guia({ ativo }) {
     titulo = campo.titulo
     corpo = (
       <>
-        {campo.obrigatorio && <p className="text-[11px] font-medium text-aviso">Obrigatório</p>}
+        {obrigatorioNoForm(form, id) && <p className="text-[11px] font-medium text-aviso">Obrigatório</p>}
         <p className="text-sm text-texto-1 leading-relaxed">{campo.paraQueServe}</p>
         {campo.relacaoComTela && <p className="text-xs text-texto-2 mt-1.5 leading-relaxed">{campo.relacaoComTela}</p>}
         {campo.exemplo && <p className="text-xs text-texto-3 mt-1.5">Exemplo: {campo.exemplo}</p>}
-        {aviso && <p role="alert" className="text-xs text-perigo mt-2">{aviso}</p>}
+        {aviso && erroDoCampo(form, raizDoForm(form), id) && <p role="alert" className="text-xs text-perigo mt-2">{aviso}</p>}
       </>
     )
     acoes = (

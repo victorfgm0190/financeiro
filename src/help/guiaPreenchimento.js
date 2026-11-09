@@ -81,6 +81,8 @@ export function visivel(el) {
   if (r && r.length) return true
   // jsdom não tem layout: vale o estilo.
   if (typeof window === 'undefined' || !window.getComputedStyle) return true
+  // display: contents (contêiner sem caixa própria): visível se algum filho for.
+  if (window.getComputedStyle(el).display === 'contents') return [...el.children].some(visivel)
   for (let e = el; e && e.nodeType === 1; e = e.parentElement) {
     const s = window.getComputedStyle(e)
     if (s.display === 'none' || s.visibility === 'hidden') return false
@@ -89,16 +91,37 @@ export function visivel(el) {
 }
 // Contêiner visível do campo `id` dentro da raiz (o primeiro, se houver mais de um).
 export function elementoDoCampo(raiz, id) {
-  if (!raiz) return null
+  if (!raiz || !id) return null
   return [...raiz.querySelectorAll(`[data-help-id="${esc(id)}"]`)].find(visivel) || null
 }
-// Próximo campo do roteiro: o primeiro da ordem ainda não visitado e visível agora.
-export function proximoCampo(raiz, ordem, visitados) {
-  for (const id of ordem || []) {
-    if (visitados.has(id)) continue
-    if (elementoDoCampo(raiz, id)) return id
+// Campos com passo na tela agora, na ORDEM VISUAL (linha de cima primeiro; na mesma linha, da
+// esquerda para a direita — vale no celular, onde a ordem do CSS muda). Todo campo marcado com
+// data-help-id e com conteúdo na base tem passo; o roteiro (ordemCampos) não decide a ordem.
+const LINHA_PX = 6
+export function camposNaTela(raiz) {
+  if (!raiz) return []
+  const vistos = new Set()
+  const itens = []
+  for (const el of raiz.querySelectorAll('[data-help-id]')) {
+    const id = el.getAttribute('data-help-id')
+    if (vistos.has(id) || !helpDoCampo(id) || !visivel(el)) continue
+    vistos.add(id)
+    const r = caixaDe(el)
+    itens.push({ id, top: r.top, left: r.left, i: itens.length })
   }
-  return null
+  itens.sort((a, b) => (Math.abs(a.top - b.top) > LINHA_PX ? a.top - b.top : a.left - b.left || a.i - b.i))
+  return itens.map(x => x.id)
+}
+// Caixa na tela (display: contents não tem: usa a do primeiro filho visível).
+export function caixaDe(el) {
+  const r = el.getBoundingClientRect()
+  if (r.width || r.height || typeof window === 'undefined' || window.getComputedStyle(el).display !== 'contents') return r
+  const f = [...el.children].find(visivel)
+  return f ? caixaDe(f) : r
+}
+// Próximo campo: o primeiro (na ordem visual) ainda não visitado.
+export function proximoCampo(raiz, visitados) {
+  return camposNaTela(raiz).find(id => !visitados.has(id)) || null
 }
 // O que dá para preencher dentro do contêiner (para focar e conferir se está vazio).
 const CONTROLES = 'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
@@ -107,21 +130,55 @@ export function controleDo(el) {
   if (el.matches?.(CONTROLES)) return el
   return [...el.querySelectorAll(CONTROLES)].find(visivel) || el.querySelector('button:not([disabled])') || null
 }
-// Vazio: texto/número/data/seletor sem valor; grupo de opções sem nenhuma marcada. Controle
-// próprio (botões, seletor de categoria) não dá para saber → não acusa.
+// Vazio: texto/número/data/seletor sem valor; grupo de opções sem nenhuma marcada; seletor próprio
+// (SearchableSelect) com data-preenchido="nao". Sem nada disso (botões) → não acusa.
 export function campoVazio(el) {
   if (!el) return false
   const ctrls = el.matches?.(CONTROLES) ? [el] : [...el.querySelectorAll(CONTROLES)]
-  if (!ctrls.length) return false
+  const proprios = [...el.querySelectorAll('[data-preenchido]')]
+  if (!ctrls.length) return proprios.length > 0 && proprios.every(p => p.getAttribute('data-preenchido') === 'nao')
   const radios = ctrls.filter(c => c.type === 'radio')
   if (radios.length) return !radios.some(r => r.checked)
   const textos = ctrls.filter(c => c.type !== 'checkbox')
   if (!textos.length) return false
   return textos.every(c => String(c.value ?? '').trim() === '')
 }
-// Obrigatórios (pela base) visíveis e vazios agora, na ordem do roteiro.
-export function obrigatoriosVazios(raiz, ordem) {
-  return (ordem || []).filter(id => helpDoCampo(id)?.obrigatorio && campoVazio(elementoDoCampo(raiz, id)))
+
+// ── Obrigatório = a validação do próprio formulário ──────────────────────────────────────────────
+// O formulário informa pelo provedor: erros() → [{ id, msg }] (os que barram o Avançar/Salvar agora,
+// na ordem da validação) e obrigatorio(id) → boolean (barraria se ficasse vazio). Sem provedor de
+// validação, vale a base (obrigatorio) + campo vazio.
+const validacaoDe = (form) => provedores.get(form)?.validacao || null
+export function obrigatorioNoForm(form, id) {
+  const v = validacaoDe(form)
+  if (v?.obrigatorio) { try { return !!v.obrigatorio(id) } catch { return false } }
+  return !!helpDoCampo(id)?.obrigatorio
+}
+export function errosDoForm(form) {
+  const v = validacaoDe(form)
+  if (!v?.erros) return null
+  try { return v.erros() || [] } catch { return [] }
+}
+// Mensagem que barra o campo agora (ou null).
+export function erroDoCampo(form, raiz, id) {
+  const erros = errosDoForm(form)
+  if (erros) return erros.find(e => e.id === id)?.msg || null
+  return helpDoCampo(id)?.obrigatorio && campoVazio(elementoDoCampo(raiz, id)) ? 'Este campo é obrigatório.' : null
+}
+// Campos visíveis que barram agora, na ordem visual.
+export function faltandoNaTela(form, raiz) {
+  const naTela = camposNaTela(raiz)
+  const erros = errosDoForm(form)
+  if (erros) {
+    const ids = new Set(erros.map(e => e.id))
+    return naTela.filter(id => ids.has(id))
+  }
+  return naTela.filter(id => helpDoCampo(id)?.obrigatorio && campoVazio(elementoDoCampo(raiz, id)))
+}
+// Primeiro campo com erro mostrado pelo próprio formulário (data-erro) — quando não há provedor.
+export function campoComErroNaTela(raiz) {
+  const el = raiz ? [...raiz.querySelectorAll('[data-erro]')].find(visivel) : null
+  return el ? el.closest('[data-help-id]')?.getAttribute('data-help-id') || el.getAttribute('data-help-id') : null
 }
 // Botão de avançar etapa (wizard) e o de salvar: data-help-avancar / data-help-salvar = id do form.
 export function botaoDoForm(form, tipo) {
@@ -133,13 +190,25 @@ export function botaoDoForm(form, tipo) {
 }
 
 // Fases: 'prereq' → 'objetivo' → 'campo' (um por vez) → 'avancar' (wizard: próxima etapa) →
-// 'faltando' (obrigatórios vazios) → 'resumo' → 'salvar' → 'pronto'.
+// 'faltando' (o que a validação barra) → 'resumo' → 'salvar' → 'pronto'.
 // Depois do campo atual: o próximo campo; sem ele, a próxima fase.
-export function faseDepoisDosCampos({ raiz, form, ordem, visitados }) {
-  const prox = proximoCampo(raiz, ordem, visitados)
+export function faseDepoisDosCampos({ raiz, form, visitados }) {
+  const prox = proximoCampo(raiz, visitados)
   if (prox) return { fase: 'campo', id: prox }
-  const faltam = obrigatoriosVazios(raiz, ordem)
+  const faltam = faltandoNaTela(form, raiz)
   if (faltam.length) return { fase: 'faltando', faltam }
   if (botaoDoForm(form, 'avancar')) return { fase: 'avancar' }
   return { fase: 'resumo' }
+}
+
+// Diagnóstico (dev e testes): controles visíveis do formulário sem passo no guia (fora de um
+// data-help-id com conteúdo). [data-guia-fora] marca o que não é campo (ex.: o próprio botão do guia).
+const SEL_CAMPOS = 'input:not([type=hidden]), select, textarea, [aria-haspopup="listbox"], [role="switch"]'
+export function controlesSemPasso(raiz) {
+  if (!raiz) return []
+  return [...raiz.querySelectorAll(SEL_CAMPOS)].filter(c => {
+    if (!visivel(c) || c.closest('[data-guia-fora]') || c.closest('[role="dialog"][data-modal-painel]') && !raiz.contains(c)) return false
+    const ct = c.closest('[data-help-id]')
+    return !(ct && raiz.contains(ct) && helpDoCampo(ct.getAttribute('data-help-id')))
+  })
 }

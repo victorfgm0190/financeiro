@@ -90,12 +90,38 @@ function Toggle({ value, onChange }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={!!value}
       onClick={() => onChange(!value)}
       className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${value ? 'bg-primary' : 'bg-borda-campo'}`}
     >
       <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
     </button>
   )
+}
+
+// Validação do Salvar — FONTE ÚNICA do handleSubmit e do Preenchimento Guiado ("Obrigatório" e o
+// bloqueio do Próximo). → [{ id (do help de campo), msg }], na ordem em que a tela barra.
+export function errosDoAgendamento(form, { tipoDocObrigatorio = false, precisaCategoriaReserva = false } = {}) {
+  const e = []
+  const add = (id, msg) => e.push({ id, msg })
+  if (!form.description) add('agendamento.description', 'Preencha a descrição.')
+  if (!form.accountId) add('agendamento.account', 'Escolha a conta.')
+  if (!form.amount) add('agendamento.amount', 'Informe o valor.')
+  if (form.transactionType === 'transfer' && !form.toAccountId) add('agendamento.toAccount', 'Escolha a conta de destino.')
+  if (form.transactionType === 'transfer' && precisaCategoriaReserva && !form.reservaExpenseCategoryId) add('agendamento.categoriaReserva', 'Escolha a categoria.')
+  if (tipoDocObrigatorio && !form.tipoDocumentoId) add('agendamento.tipoDocumento', 'Selecione o tipo de documento.')
+  if (!form.frequency) add('agendamento.frequency', 'Escolha a frequência.')
+  if (!form.startDate) add('agendamento.startDate', 'Informe a data de início.')
+  if (form.frequency && form.frequency !== 'once' && form.occurrenceType === 'installment' && Number(form.installments) < 1) add('agendamento.occurrence', 'Informe o número de ocorrências.')
+  return e
+}
+// Campo do formulário de cada passo (para saber se ele barraria vazio).
+const CHAVE_DO_HELP = {
+  'agendamento.description': 'description', 'agendamento.account': 'accountId', 'agendamento.amount': 'amount',
+  'agendamento.toAccount': 'toAccountId', 'agendamento.categoriaReserva': 'reservaExpenseCategoryId',
+  'agendamento.tipoDocumento': 'tipoDocumentoId', 'agendamento.frequency': 'frequency', 'agendamento.startDate': 'startDate',
+  'agendamento.occurrence': 'installments',
 }
 
 function buildCatOpts(categories, type) {
@@ -699,16 +725,21 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     return true
   }
 
+  const regrasValidacao = { tipoDocObrigatorio, precisaCategoriaReserva: !!schNeedsReservaCategorySelect }
+  // Preenchimento Guiado: a mesma validação do Salvar.
+  const validacaoGuia = {
+    erros: () => errosDoAgendamento(form, regrasValidacao),
+    obrigatorio: (id) => !!CHAVE_DO_HELP[id] && errosDoAgendamento({ ...form, [CHAVE_DO_HELP[id]]: '' }, regrasValidacao).some(x => x.id === id),
+  }
+
   const handleSubmit = async (e, decisao = null) => {
     if (!podeGravarForm) { e?.preventDefault?.(); return }
     e?.preventDefault?.()
     // Mudou fora enquanto o usuário editava: só grava depois da escolha (Recarregar × Manter).
     if (mudouFora) return
-    if (!form.description || !form.amount || !form.accountId || !form.frequency) return
-    if (form.frequency !== 'once' && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
-    if (form.transactionType === 'transfer' && !form.toAccountId) return
-    if (form.transactionType === 'transfer' && schNeedsReservaCategorySelect && !form.reservaExpenseCategoryId) return
-    if (tipoDocObrigatorio && !form.tipoDocumentoId) { setErroTipoDoc('Selecione o tipo de documento.'); return }
+    const erros = errosDoAgendamento(form, regrasValidacao)
+    if (erros.some(x => x.id !== 'agendamento.tipoDocumento')) return
+    if (erros.length) { setErroTipoDoc(erros[0].msg); return }
     if (erroLimite) { setErroParcelamento(erroLimite); return }
     setErroParcelamento('')
     // Rateio: só grava quando as linhas fecham o valor do agendamento.
@@ -907,7 +938,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       {!initial?.id && <AvisoPrerequisitos funcao="agendamento" onIr={onClose} />}
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-help-form="agendamento">
         {podeGravarForm && (
-          <BotaoPreencherGuia form="agendamento" funcao={initial?.id ? null : 'agendamento'} resumo={resumoGuia} oferecer={!initial?.id}
+          <BotaoPreencherGuia form="agendamento" funcao={initial?.id ? null : 'agendamento'} resumo={resumoGuia} validacao={validacaoGuia} oferecer={!initial?.id}
             onFechar={onClose} className="max-sm:-order-2 sm:col-span-2 -mb-2" />
         )}
         {initial?.id && (
@@ -967,6 +998,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
               <button
                 type="button"
                 key={t}
+                aria-pressed={form.transactionType === t}
                 onClick={() => setContas({ transactionType: t })}
                 className={`flex-1 min-w-0 px-1 py-2.5 sm:py-2 text-[13px] sm:text-sm font-medium truncate transition-colors ${
                   form.transactionType === t
@@ -1094,7 +1126,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Transferência entre perfis (CPF↔CNPJ): categoria em cada visão. Mesmo bloco do Novo Lançamento. */}
         {entrePerfis(form) && (
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2" data-help-id="agendamento.categoriasPerfis">
             <TransferenciaPerfisCategorias
               fromAccount={schFromAcc}
               toAccount={schToAcc}
@@ -1107,12 +1139,14 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         )}
 
         {/* Fluxo de Caixa principal (só quando a conta não decide sozinha) */}
-        <PerguntaFluxoPrincipal
-          pergunta={perguntaFluxo}
-          valor={form.considerarFluxoPrincipal}
-          onChange={v => set('considerarFluxoPrincipal', v)}
-          className="sm:col-span-2"
-        />
+        <div className="contents" data-help-id="agendamento.fluxoPrincipal">
+          <PerguntaFluxoPrincipal
+            pergunta={perguntaFluxo}
+            valor={form.considerarFluxoPrincipal}
+            onChange={v => set('considerarFluxoPrincipal', v)}
+            className="sm:col-span-2"
+          />
+        </div>
 
         {/* Reserva category — quando transferência envolve conta reserva */}
         {form.transactionType === 'transfer' && (schIsDepositToReserva || schIsWithdrawFromReserva) && (
@@ -1121,7 +1155,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
               📂 {schIsDepositToReserva ? 'Despesa a classificar' : 'Categoria do resgate'}
             </p>
             {schNeedsReservaCategorySelect ? (
-              <>
+              <div data-help-id="agendamento.categoriaReserva">
                 <SearchableSelect
                   options={expenseCatOpts}
                   preserveGroupOrder
@@ -1134,7 +1168,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
                 {!form.reservaExpenseCategoryId && (
                   <p className="text-xs text-aviso">⚠ Obrigatório para reserva livre</p>
                 )}
-              </>
+              </div>
             ) : (
               <p className="text-xs text-texto-2">
                 {schIsDepositToReserva ? 'Despesa em:' : 'Categoria:'}{' '}
@@ -1148,8 +1182,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
                 o resgate já tem detalhamento por função (schedule_reserva_funcoes) — nesse caso
                 exibimos a árvore somente-leitura abaixo. */}
             {!hasReservaDetalhe && (
-              <div>
-                <label className="label text-reserva">Função de Reserva</label>
+              <div data-help-id="agendamento.funcaoReserva">
+                <label className="label text-reserva">Função de Reserva<HelpCampo campo="agendamento.funcaoReserva" /></label>
                 <select
                   className="input"
                   value={form.reservaFuncaoId}
@@ -1227,8 +1261,9 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         )}
 
         {/* Tipo de documento */}
-        <div>
+        <div data-help-id="agendamento.tipoDocumento">
           <TipoDocumentoSelect
+            help="agendamento.tipoDocumento"
             value={form.tipoDocumentoId}
             onChange={v => { setErroTipoDoc(''); set('tipoDocumentoId', v || '') }}
             tipoMov={form.transactionType}
@@ -1240,13 +1275,16 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Nº do contrato (boleto/carnê) e vínculo manual a um contrato cadastrado */}
         {form.transactionType !== 'transfer' && (
+          <div data-help-id="agendamento.numeroContrato">
           <ContratoDoAgendamento
+            help="agendamento.numeroContrato"
             numero={form.numeroContrato}
             onNumero={v => set('numeroContrato', v)}
             schedule={initial?.id ? schedules.find(s => s.id === initial.id) || initial : null}
             confira={!!destaques?.includes('numeroContrato')}
             tipoDocumentoId={form.tipoDocumentoId}
           />
+          </div>
         )}
 
         {/* Frequência — parcela de contrato: do contrato, só leitura */}
@@ -1259,7 +1297,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           </div>
         ) : (
         <div data-help-id="agendamento.frequency" data-guia="agendamento-form.frequencia">
-          <LabelTip help="agendamento.frequency">Frequência</LabelTip>
+          <LabelTip help="agendamento.frequency" required>Frequência</LabelTip>
           <SearchableSelect
             options={FREQ_OPTIONS}
             value={form.frequency}

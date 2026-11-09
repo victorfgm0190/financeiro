@@ -6,13 +6,14 @@ import { rotuloPapel } from '../../lib/contratos/rotulos'
 import { contratoPorNumero } from '../../lib/contratos/numero'
 import { computeOccurrences } from '../../lib/occurrences'
 import { mostrarNumeroContrato } from '../../lib/tiposDocumento'
+import HelpCampo from '../shared/HelpCampo'
 
 const rotulo = (c) => [c.numero ? `nº ${c.numero}` : null, c.objeto || c.favorecido].filter(Boolean).join(' · ') || 'Contrato'
 
 // Nº do contrato do agendamento (campo próprio) + vínculo MANUAL a um contrato cadastrado. O vínculo
 // reaproveita o do módulo Contratos (VinculoModal → vincularEGerarContrato): mesma prévia das parcelas,
 // mesmo evento na linha do tempo do contrato. Só em agendamento já salvo e com permissão de contratos.
-export default function ContratoDoAgendamento({ numero, onNumero, schedule = null, confira = false, tipoDocumentoId = null }) {
+export default function ContratoDoAgendamento({ numero, onNumero, schedule = null, confira = false, tipoDocumentoId = null, help = null }) {
   const { contratos = [], contratosHabilitado, contratoPorId, abrirFichaContrato, pode, tiposDocumento = [] } = useApp()
   // Nº do contrato: só com tipo de documento que costuma tê-lo, já preenchido ou pedido (mesma regra do lançamento).
   const [pedido, setPedido] = useState(false)
@@ -47,7 +48,7 @@ export default function ContratoDoAgendamento({ numero, onNumero, schedule = nul
       {mostrar ? (
         <div>
           <label className="label" htmlFor="ag-numero-contrato">
-            Nº do contrato{confira && <span className="ml-1 text-[10px] font-semibold text-aviso">confira</span>}
+            Nº do contrato{help && <HelpCampo campo={help} />}{confira && <span className="ml-1 text-[10px] font-semibold text-aviso">confira</span>}
           </label>
           <input id="ag-numero-contrato" className="input" value={numero || ''} maxLength={40}
             onChange={e => onNumero(e.target.value)} placeholder="Número do contrato do documento (opcional)" />

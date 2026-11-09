@@ -18,7 +18,7 @@ import TaxasRepasse from './TaxasRepasse'
 import { CampoErroContext, CLASSE_ERRO } from './campoErro'
 import { taxaParaForm, formParaTaxa, erroTaxa, taxaParaItem, chaveTaxas } from '../../lib/contratos/taxasRepasseForm'
 import { taxaDoItem, BASES_TAXA_ADM } from '../../lib/contratos/composicaoRepasse'
-import { validarEtapaCampo, sugerirCategoria } from '../../lib/contratos/validacao'
+import { validarEtapaCampo, errosDaEtapa, sugerirCategoria } from '../../lib/contratos/validacao'
 import { useRolarAoTopo, rolarAteElemento } from '../shared/rolagemModal'
 import { candidatosVinculo } from '../../lib/contratos/vinculo'
 import { MODALIDADES, ehAluguel, rotuloPapel, rotulosContrato } from '../../lib/contratos/rotulos'
@@ -418,11 +418,23 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
     l.push(edicao ? 'Aditivo: as parcelas pendentes são recalculadas; as já pagas não mudam.' : `Gera ${repasse ? 'os repasses' : 'as parcelas'} a partir de ${fmtYm(apartirDe)}.`)
     return l
   }
+  // Preenchimento Guiado: a MESMA validação do Avançar (errosDaEtapa), ligada aos passos pelo DOM
+  // (cada Campo tem data-campo e data-help-id). "Fim da vigência": obrigatório só sem "Sem data de fim".
+  const chaveCampo = (c) => CAMPO_DO_ERRO[c] || c
+  const validacaoGuia = {
+    erros: () => errosDaEtapa(etapa, f)
+      .map(e => ({ id: raizRef.current?.querySelector(`[data-campo="${chaveCampo(e.campo)}"]`)?.getAttribute('data-help-id'), msg: e.erro }))
+      .filter(e => e.id),
+    obrigatorio: (id) => {
+      const campo = raizRef.current?.querySelector(`[data-help-id="${id}"][data-campo]`)?.getAttribute('data-campo')
+      return !!campo && errosDaEtapa(etapa, { ...f, [campo]: '' }).some(e => chaveCampo(e.campo) === campo)
+    },
+  }
   return (
     <CampoErroContext.Provider value={erro && falha.campo ? { campo: falha.campo, erro } : null}>
     <div ref={raizRef} className="space-y-4" data-help-form="contrato">
       {!contrato && <AvisoPrerequisitos funcao="contrato" onIr={onClose} />}
-      <BotaoPreencherGuia form="contrato" funcao={contrato ? null : 'contrato'} resumo={resumoGuia} oferecer={!contrato} onFechar={onClose} className="-mb-2" />
+      <BotaoPreencherGuia form="contrato" funcao={contrato ? null : 'contrato'} resumo={resumoGuia} validacao={validacaoGuia} oferecer={!contrato} onFechar={onClose} className="-mb-2" />
       <ol data-guia="contrato-form.etapas" className="flex flex-wrap gap-1.5 text-[11px]">
         {etapasVisiveis.map((e, pos) => (
           <li key={e.i}>
