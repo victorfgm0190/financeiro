@@ -62,7 +62,7 @@ export default function FavorecidosPanel() {
   }
 
   return (
-    <div className="card space-y-4">
+    <div className="card space-y-4" data-help-form="favorecidos">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-texto-2">Favorecidos ({data.payees.length})</h2>
@@ -75,9 +75,9 @@ export default function FavorecidosPanel() {
       </div>
 
       {sync && (
-        <div className="rounded-xl border border-borda-forte p-3 space-y-3">
+        <div data-help-id="favorecido.sincronizar" className="rounded-xl border border-borda-forte p-3 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-texto-1">{faltando.length} nome{faltando.length !== 1 ? 's' : ''} em uso fora do cadastro</p>
+            <p className="text-sm text-texto-1">{faltando.length} nome{faltando.length !== 1 ? 's' : ''} em uso fora do cadastro<HelpCampo campo="favorecido.sincronizar" /></p>
             <label className="flex items-center gap-2 text-xs text-texto-2 min-h-[44px] cursor-pointer">
               <input type="checkbox" className="accent-primary w-4 h-4"
                 checked={sync.size === faltando.length}
@@ -104,9 +104,12 @@ export default function FavorecidosPanel() {
         </div>
       )}
 
-      <div data-guia="settings:favorecidos.busca" className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
-        <input className="input pl-9 min-h-[44px]" placeholder="Buscar favorecido" value={busca} onChange={e => setBusca(e.target.value)} />
+      <div data-guia="settings:favorecidos.busca" data-help-id="favorecido.busca" className="flex items-center gap-1">
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
+          <input className="input pl-9 min-h-[44px]" aria-label="Buscar favorecido" placeholder="Buscar favorecido" value={busca} onChange={e => setBusca(e.target.value)} />
+        </div>
+        <HelpCampo campo="favorecido.busca" />
       </div>
 
       {selecionados.length >= 2 && (
@@ -134,7 +137,8 @@ export default function FavorecidosPanel() {
         </div>
       )}
 
-      <div className="rounded-lg border border-borda divide-y divide-borda">
+      <p data-testid="legenda-favorecidos" className="text-[11px] text-texto-3 -mb-2">Marque 2 ou mais nomes para mesclar<HelpCampo campo="favorecido.selecionar" /></p>
+      <div data-help-id="favorecido.selecionar" className="rounded-lg border border-borda divide-y divide-borda">
         {filtrada.slice(0, LIMITE_LISTA).map(f => (
           <div key={f.nome} className="flex items-center gap-2 px-2.5 py-1">
             <input type="checkbox" data-guia={f === filtrada[0] ? 'settings:favorecidos.selecionar' : undefined} className="accent-primary w-4 h-4 shrink-0" checked={marcados.has(f.nome)}

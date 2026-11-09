@@ -48,6 +48,8 @@ export default function PerfisMultiSelect({ value, onChange, profiles, className
       <button
         ref={btnRef}
         type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => (open ? setOpen(false) : abrir())}
         title="Perfis em que esta categoria aparece nas listas de escolha (nenhum = todos)"
         className={`input w-auto text-xs py-1 text-left truncate ${ids.length ? 'text-primary-fg' : 'text-texto-2'} ${className}`}

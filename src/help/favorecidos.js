@@ -27,6 +27,26 @@ export const campos = {
     relacaoComTela: 'Só os marcados recebem o novo nome. Desmarque o que não deve mudar.',
     obrigatorio: false,
   },
+
+  // ── Lista de favorecidos (Configurações › Favorecidos) ─────────────────────────────────────────
+  'favorecido.busca': {
+    titulo: 'Buscar favorecido',
+    paraQueServe: 'Filtra a lista pelo nome do favorecido.',
+    relacaoComTela: 'Só muda a exibição. A lista mostra os primeiros nomes; use a busca para chegar aos demais.',
+    obrigatorio: false,
+  },
+  'favorecido.selecionar': {
+    titulo: 'Selecionar favorecidos',
+    paraQueServe: 'Marque dois ou mais nomes para juntá-los num só.',
+    relacaoComTela: 'Com 2 ou mais marcados, aparece "Mesclar" com o novo nome e a prévia. "Renomear" na linha muda só aquele nome.',
+    obrigatorio: false,
+  },
+  'favorecido.sincronizar': {
+    titulo: 'Sincronizar com lançamentos',
+    paraQueServe: 'Inclui no cadastro os nomes usados em lançamentos, agendamentos e regras que ainda não estão nele.',
+    relacaoComTela: 'Só os marcados entram no cadastro ao clicar em "Incluir". Nenhum lançamento é alterado.',
+    obrigatorio: false,
+  },
 }
 
 export const formularios = {}

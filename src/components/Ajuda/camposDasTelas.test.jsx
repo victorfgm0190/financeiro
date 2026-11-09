@@ -41,7 +41,7 @@ const semPasso = (form) => {
 }
 
 describe('help:check (scripts/help-check.mjs)', () => {
-  it('limpo: nenhum campo sem data-help-id, nenhum id sem conteúdo, nada pendente', () => {
+  it('limpo: nenhum campo sem data-help-id, nenhum id sem conteúdo, nada pendente', LENTO, () => {
     const raiz = join(import.meta.dirname, '../../..')
     const listar = (d) => readdirSync(d).flatMap(n => { const p = join(d, n); return statSync(p).isDirectory() ? listar(p) : /\.jsx$/.test(n) && !/\.test\.jsx$/.test(n) ? [p] : [] })
     const r = checar(listar(join(raiz, 'src')).map(c => ({ caminho: relative(raiz, c), codigo: readFileSync(c, 'utf8') })), base)
@@ -108,5 +108,41 @@ describe('Lançamentos: todo campo visível tem passo', () => {
     cleanup()
     render(<TransactionForm initial={null} onClose={() => {}} onToast={() => {}} preLancamentos={[]} rapido />)
     expect(semPasso('lancamento'), 'rápido').toEqual([])
+  })
+})
+
+describe('Configurações › Cadastros: listas editáveis têm passo e ⓘ na legenda', () => {
+  it('Categorias, Centros de custo e Grupos de contas', LENTO, async () => {
+    const { default: SettingsPanel } = await import('../Settings/SettingsPanel.jsx')
+    const { CONFIG_ABAS, configHash } = await import('../../lib/configRota.js')
+    const abaDe = (s) => CONFIG_ABAS.find(a => a.secoes.some(x => x.id === s)).id
+    Object.assign(app, {
+      categories: [{ id: 'cat', name: 'Moradia', type: 'expense', group: 'Casa', geraEspelho: true }, { id: 'rec', name: 'Rendimentos', type: 'income' }],
+      categoryGroups: ['Casa'], gerencialGroups: [], costCenters: ['Obra'],
+      accountGroups: [{ id: 'g1', name: 'Grupo Exemplo', type: 'financeiro', order: 0 }],
+    })
+    const abrir = (s) => { cleanup(); window.location.hash = configHash(abaDe(s), s); render(<SettingsPanel />) }
+    abrir('categorias')
+    expect(semPasso('categoriaLista')).toEqual([])
+    const legenda = screen.getByTestId('legenda-categorias')
+    expect(legenda.querySelectorAll('[data-testid="help-campo"]').length).toBeGreaterThanOrEqual(5)
+    for (const id of ['categoriaLista.perfis', 'categoriaLista.grupo', 'categoriaLista.grupoGerencial', 'categoriaLista.espelho', 'categoriaLista.contaEspelho']) {
+      expect(document.querySelector(`[data-help-form="categoriaLista"] [data-help-id="${id}"]`), id).toBeTruthy()
+      expect(base.helpDoCampo(id), id).toBeTruthy()
+    }
+    abrir('centros-custo')
+    expect(semPasso('centroCusto')).toEqual([])
+    abrir('grupos-contas')
+    expect(semPasso('grupoConta')).toEqual([])
+    fireEvent.click(document.querySelector('[data-guia="settings:grupos-contas.editar"]'))
+    expect(semPasso('grupoConta'), 'editando').toEqual([])
+    window.location.hash = ''
+  })
+  it('Favorecidos: busca, seleção e sincronizar', LENTO, async () => {
+    const { default: FavorecidosPanel } = await import('../Settings/FavorecidosPanel.jsx')
+    app.data = { payees: [{ name: 'Loja Exemplo' }], transactions: [{ id: 't', payee: 'Mercado Exemplo' }], schedules: [], classificationRules: [] }
+    render(<FavorecidosPanel />)
+    expect(semPasso('favorecidos')).toEqual([])
+    expect(screen.getByTestId('legenda-favorecidos').querySelector('[data-testid="help-campo"]')).toBeTruthy()
   })
 })

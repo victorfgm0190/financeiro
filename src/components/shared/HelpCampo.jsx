@@ -9,11 +9,19 @@ import { assinarBoasVindas, estadoBoasVindas } from '../../lib/boasVindasApi'
 // ── Help de campo: ícone ⓘ discreto ao lado do rótulo ───────────────────────────────────────────
 //   <HelpCampo campo="cartao.fechamento" />   (texto em src/lib/helpCampos.js)
 //   <HelpCampo texto="..." />                 (texto direto, quando não há chave)
-// Desktop: abre ao passar o mouse (e ao focar pelo teclado). Mobile: abre ao tocar e fecha ao tocar
+// Desktop: abre ao passar o mouse (e ao chegar nele pelo Tab — nunca por foco programático). Mobile: abre ao tocar e fecha ao tocar
 // fora ou em Esc. O balão vai num portal com posição fixa — não é cortado por modal com rolagem.
 // Some quando o usuário desliga "Mostrar ícones de ajuda nos campos" (Configurações › Guias,
 // preferência no banco). Clique no ícone não aciona o campo/checkbox do rótulo.
 const LARGURA = 240
+// Foco vindo do Tab: só ele abre o balão. Foco programático (modal abrindo, guia, atalho) não.
+let ultimaFoiTab = false
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => { ultimaFoiTab = e.key === 'Tab' }, true)
+  window.addEventListener('pointerdown', () => { ultimaFoiTab = false }, true)
+  window.addEventListener('mousedown', () => { ultimaFoiTab = false }, true)
+}
+const focoPorTeclado = () => ultimaFoiTab
 
 function useAjudaCamposLigada() {
   const [e, setE] = useState(estadoBoasVindas)
@@ -87,7 +95,7 @@ export default function HelpCampo({ campo, texto }) {
         className="help-campo-alvo ml-1 inline-flex items-center justify-center align-middle rounded-full text-texto-3 hover:text-texto-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-help p-1 -m-1"
         onMouseEnter={abrir}
         onMouseLeave={() => { if (!fixoRef.current) setAberto(false) }}
-        onFocus={abrir}
+        onFocus={() => { if (focoPorTeclado()) abrir() }}
         onBlur={() => { if (!fixoRef.current) setAberto(false) }}
         onClick={(ev) => {
           ev.preventDefault()

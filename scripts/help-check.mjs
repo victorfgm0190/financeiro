@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as espree from 'espree'
 
 // Componentes do app que são um campo (além de input/select/textarea).
-export const COMPONENTES_CAMPO = new Set(['SearchableSelect', 'InputMoeda', 'DateInput', 'CategorySelect', 'TipoDocumentoSelect', 'Toggle', 'CampoValor', 'FavorecidoAutocomplete', 'TransferenciaPerfisCategorias', 'FimRepeticao'])
+export const COMPONENTES_CAMPO = new Set(['SearchableSelect', 'InputMoeda', 'DateInput', 'CategorySelect', 'TipoDocumentoSelect', 'Toggle', 'CampoValor', 'FavorecidoAutocomplete', 'TransferenciaPerfisCategorias', 'FimRepeticao', 'PerfisMultiSelect'])
 const INPUT_FORA = new Set(['hidden', 'submit', 'button', 'reset', 'image'])
 
 const nomeDo = (n) => n?.type === 'JSXIdentifier' ? n.name : n?.type === 'JSXMemberExpression' ? `${nomeDo(n.object)}.${n.property.name}` : ''

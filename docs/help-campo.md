@@ -131,3 +131,19 @@ Telas completas: Contratos, Agendamentos, Contas (`data-help-form="conta"`), Lan
 (`lancamento`), Categorias (`categoriaGrupo`, `categoria`), Perfis (`perfil`), Favorecidos
 (`favorecidoMescla`, `favorecidoRenomear`) e Reservas (`reserva`). Só os formulários de Contratos e
 Agendamentos têm roteiro de Preenchimento Guiado (`formularios`); os demais têm F1/ⓘ em todo campo.
+
+### Ajustes pós-Etapa 6
+
+- **Foco e balão do ⓘ:** o foco inicial do `Modal` vai para o primeiro focável que não é um ⓘ.
+  O balão abre só com hover, clique ou quando o usuário chega no ⓘ pelo Tab; foco programático
+  (modal abrindo, guia, atalho) não abre. Teste: `src/components/shared/HelpCampoFoco.test.jsx`.
+- **Listas editáveis de Configurações › Cadastros:** controles sem rótulo ganharam `data-help-id`
+  no próprio controle e o ⓘ numa legenda acima da lista. São eles:
+  - Categorias (`data-help-form="categoriaLista"`): perfis, grupo, grupo gerencial,
+    investimento, espelho, conta do espelho, renomear grupo e filtro de perfil.
+  - Centros de custo (`centroCusto`).
+  - Grupos de contas (`grupoConta`): tipo, nome, âncora e inibir.
+  - Favorecidos (`favorecidos`): busca, seleção e sincronizar.
+
+  O conteúdo está em `categorias.js`, `favorecidos.js` e `cadastros.js`. O `help:check` passou a
+  incluir `PerfisMultiSelect` como campo.

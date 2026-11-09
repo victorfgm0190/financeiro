@@ -16,8 +16,9 @@ import * as categorias from './categorias.js'
 import * as favorecidos from './favorecidos.js'
 import * as perfis from './perfis.js'
 import * as reservas from './reservas.js'
+import * as cadastros from './cadastros.js'
 
-const TELAS = { agendamentos, contratos, contas, lancamentos, categorias, favorecidos, perfis, reservas }
+const TELAS = { agendamentos, contratos, contas, lancamentos, categorias, favorecidos, perfis, reservas, cadastros }
 
 export const CAMPOS = Object.freeze(Object.assign({}, ...Object.values(TELAS).map(t => t.campos)))
 export const FORMULARIOS = Object.freeze(Object.assign({}, ...Object.values(TELAS).map(t => t.formularios)))

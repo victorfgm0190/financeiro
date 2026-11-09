@@ -50,7 +50,11 @@ export default function Modal({ open, onClose, title, children, size = 'md', cha
     const quemAbriu = document.activeElement
     const raf = requestAnimationFrame(() => {
       const painel = painelRef.current
-      if (painel && !painel.contains(document.activeElement)) focaveis(painel)[0]?.focus()
+      // O ⓘ do help de campo nunca recebe o foco inicial (o balão abriria cobrindo o formulário).
+      if (painel && !painel.contains(document.activeElement)) {
+        const lista = focaveis(painel)
+        ;(lista.find(el => !el.closest('[data-testid="help-campo"]')) || lista[0])?.focus()
+      }
     })
     const handler = (e) => {
       if (pilha[pilha.length - 1] !== id) return

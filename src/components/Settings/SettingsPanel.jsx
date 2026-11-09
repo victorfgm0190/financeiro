@@ -439,13 +439,17 @@ export default function SettingsPanel() {
         </span>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <PerfisMultiSelect
-          value={cat.perfilIds}
-          onChange={ids => updateCategory(cat.id, { perfilIds: ids })}
-          profiles={profiles}
-          className="max-w-[150px]"
-        />
+        <div data-help-id="categoriaLista.perfis" className="contents">
+          <PerfisMultiSelect
+            value={cat.perfilIds}
+            onChange={ids => updateCategory(cat.id, { perfilIds: ids })}
+            profiles={profiles}
+            className="max-w-[150px]"
+          />
+        </div>
         <select
+          data-help-id="categoriaLista.grupo"
+          aria-label={`Grupo de ${cat.name}`}
           data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-grupo' : undefined}
           className="input w-auto text-xs py-1 max-w-[140px]"
           title="Grupo da categoria — reclassifica para outro grupo (não altera lançamentos)"
@@ -456,6 +460,8 @@ export default function SettingsPanel() {
           {categoryGroups.map(g => <option key={g} value={g}>{g}</option>)}
         </select>
         <select
+          data-help-id="categoriaLista.grupoGerencial"
+          aria-label={`Grupo gerencial de ${cat.name}`}
           data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-gerencial' : undefined}
           className="input w-auto text-xs py-1 max-w-[150px]"
           title="Grupo Gerencial Padrão — pré-seleciona este grupo ao lançar/importar nesta categoria (regra por descrição tem prioridade)"
@@ -471,6 +477,8 @@ export default function SettingsPanel() {
         </select>
         {aplicAccounts.length > 0 && cat.type !== 'income' && (
           <select
+            data-help-id="categoriaLista.investimento"
+            aria-label={`Conta de investimento de ${cat.name}`}
             data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-investimento' : undefined}
             className="input w-auto text-xs py-1 max-w-[150px]"
             title="Conta de Investimento — despesas de cartão nesta categoria geram um aporte automático nesta conta"
@@ -485,6 +493,10 @@ export default function SettingsPanel() {
         )}
         <button
           type="button"
+          data-help-id="categoriaLista.espelho"
+          role="switch"
+          aria-checked={!!cat.geraEspelho}
+          aria-label={`Espelho de ${cat.name}`}
           data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-espelho' : undefined}
           onClick={() => updateCategory(cat.id, { geraEspelho: !cat.geraEspelho })}
           title={cat.geraEspelho ? 'Espelho ativo — clique para desativar' : 'Espelho inativo — clique para ativar'}
@@ -497,6 +509,8 @@ export default function SettingsPanel() {
         </button>
         {cat.geraEspelho && (
           <select
+            data-help-id="categoriaLista.contaEspelho"
+            aria-label={`Conta do espelho de ${cat.name}`}
             className="input w-auto text-xs py-1 max-w-[150px]"
             title="Conta vinculada (Empréstimos) — o lançamento espelho é criado nesta conta"
             value={cat.contaEspelhoId || ''}
@@ -1024,8 +1038,8 @@ export default function SettingsPanel() {
         </form>
 
         {profiles.length > 0 && (
-          <div data-guia="settings:categorias.filtro-perfil" className="flex items-center gap-2 mb-3">
-            <span className="text-xs text-texto-3">Mostrar categorias de:</span>
+          <div data-guia="settings:categorias.filtro-perfil" data-help-id="categoriaLista.filtroPerfil" className="flex items-center gap-2 mb-3">
+            <span className="text-xs text-texto-3">Mostrar categorias de:<HelpCampo campo="categoriaLista.filtroPerfil" /></span>
             <select className="input w-auto text-xs py-1" value={filtroPerfilCat} onChange={e => setFiltroPerfilCat(e.target.value)}>
               <option value="">Todos os perfis</option>
               {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -1034,8 +1048,18 @@ export default function SettingsPanel() {
           </div>
         )}
 
+        {/* Legenda dos controles de cada linha (não têm rótulo): ⓘ de cada um. */}
+        <p data-testid="legenda-categorias" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3 mb-2">
+          <span>Em cada linha:</span>
+          <span>Perfis<HelpCampo campo="categoriaLista.perfis" /></span>
+          <span>Grupo<HelpCampo campo="categoriaLista.grupo" /></span>
+          <span>Grupo gerencial<HelpCampo campo="categoriaLista.grupoGerencial" /></span>
+          {aplicAccounts.length > 0 && <span>Investimento<HelpCampo campo="categoriaLista.investimento" /></span>}
+          <span>Espelho<HelpCampo campo="categoriaLista.espelho" /></span>
+          <span>Conta do espelho<HelpCampo campo="categoriaLista.contaEspelho" /></span>
+        </p>
         {/* Lista de grupos com categorias aninhadas */}
-        <div className="space-y-3 mb-4 max-h-80 overflow-y-auto">
+        <div data-help-form="categoriaLista" className="space-y-3 mb-4 max-h-80 overflow-y-auto">
           {catsByGroup.map(({ group, cats }) => (
             <div key={group} className="rounded-lg border border-borda">
               <div
@@ -1053,6 +1077,8 @@ export default function SettingsPanel() {
                 {editingCatGroup === group ? (
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
                     <input
+                      data-help-id="categoriaLista.renomearGrupo"
+                      aria-label="Novo nome do grupo"
                       className="input text-xs py-1 flex-1"
                       value={catGroupDraft}
                       autoFocus
@@ -1308,7 +1334,7 @@ export default function SettingsPanel() {
 
       {/* Centros de Custo */}
       {secao === 'centros-custo' && (
-      <div className="card">
+      <div className="card" data-help-form="centroCusto">
         <h2 className="text-sm font-semibold text-texto-2 mb-1">Centros de Custo</h2>
         <p className="text-xs text-texto-3 mb-4">Rótulos livres para separar lançamentos por finalidade.</p>
         <div data-guia="settings:centros-custo.lista" className="flex flex-wrap gap-2 mb-4">
@@ -1317,7 +1343,10 @@ export default function SettingsPanel() {
           ))}
         </div>
         <div data-guia="settings:centros-custo.novo" className="flex gap-2">
-          <input className="input" placeholder="Centro de custo" value={newCC} onChange={e => setNewCC(e.target.value)} />
+          <div data-help-id="centroCusto.nome" className="flex-1 flex items-center gap-1">
+            <input className="input" aria-label="Novo centro de custo" placeholder="Centro de custo" value={newCC} onChange={e => setNewCC(e.target.value)} />
+            <HelpCampo campo="centroCusto.nome" />
+          </div>
           <button
             className="btn-secondary flex items-center gap-1"
             onClick={() => { if (newCC.trim()) { addCostCenter(newCC.trim()); setNewCC('') } }}
@@ -1330,11 +1359,17 @@ export default function SettingsPanel() {
 
       {/* Grupos de Contas */}
       {secao === 'grupos-contas' && (
-      <div className="card">
+      <div className="card" data-help-form="grupoConta">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-sm font-semibold text-texto-2">Grupos de Contas</h2>
             <p className="text-xs text-texto-3 mt-0.5">Arraste ⠿ ou use ↑↓ para definir a ordem exibida em todos os seletores</p>
+            <p data-testid="legenda-grupos-contas" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3 mt-1">
+              <span>Tipo<HelpCampo campo="grupoConta.tipo" /></span>
+              <span>Nome<HelpCampo campo="grupoConta.nome" /></span>
+              <span>Âncora (ao editar)<HelpCampo campo="grupoConta.ancora" /></span>
+              <span>Inibir<HelpCampo campo="grupoConta.inibir" /></span>
+            </p>
           </div>
           <button
             data-guia="settings:grupos-contas.padrao"
@@ -1378,6 +1413,8 @@ export default function SettingsPanel() {
               {agEditId === g.id ? (
                 <>
                   <input
+                    data-help-id="grupoConta.nome"
+                    aria-label="Nome do grupo"
                     className="input flex-1 py-1 text-sm min-w-0"
                     value={agEditName}
                     onChange={e => setAgEditName(e.target.value)}
@@ -1387,6 +1424,8 @@ export default function SettingsPanel() {
                     autoFocus
                   />
                   <select
+                    data-help-id="grupoConta.ancora"
+                    aria-label="Conta âncora"
                     className="input py-1 text-xs w-36 shrink-0"
                     value={agEditAnchorId}
                     onChange={e => setAgEditAnchorId(e.target.value)}
@@ -1444,6 +1483,7 @@ export default function SettingsPanel() {
                   {g.inibido ? (
                     <button
                       data-guia={i === 0 ? 'settings:grupos-contas.inibir' : undefined}
+                      data-help-id="grupoConta.inibir"
                       onClick={() => updateAccountGroup(g.id, { inibido: false })}
                       title="Reativar grupo"
                       className="p-1 rounded hover:bg-surface-hover text-primary-fg hover:text-texto-1 transition-colors shrink-0"
@@ -1453,6 +1493,7 @@ export default function SettingsPanel() {
                   ) : (
                     <button
                       data-guia={i === 0 ? 'settings:grupos-contas.inibir' : undefined}
+                      data-help-id="grupoConta.inibir"
                       onClick={() => updateAccountGroup(g.id, { inibido: true })}
                       title="Inibir grupo (ocultar do app)"
                       className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-ambar transition-colors shrink-0"
@@ -1490,6 +1531,8 @@ export default function SettingsPanel() {
         <div data-guia="settings:grupos-contas.novo" className="flex gap-2 pt-2 border-t border-borda-forte">
           <select
             data-guia="grupo-form.tipo"
+            data-help-id="grupoConta.tipo"
+            aria-label="Tipo do novo grupo"
             className="input w-36 text-sm"
             value={agNewType}
             onChange={e => setAgNewType(e.target.value)}
@@ -1499,6 +1542,8 @@ export default function SettingsPanel() {
           </select>
           <input
             data-guia="grupo-form.nome"
+            data-help-id="grupoConta.nome"
+            aria-label="Nome do novo grupo"
             className="input flex-1 text-sm"
             value={agNewName}
             onChange={e => setAgNewName(e.target.value)}
