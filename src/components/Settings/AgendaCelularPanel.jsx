@@ -136,9 +136,16 @@ export default function AgendaCelularPanel({ emJanela = false }) {
               {salvando ? 'Criando…' : 'Criar minha agenda'}
             </button>
           ) : !feed.token ? (
-            <p className="text-xs text-aviso bg-aviso/10 border border-aviso/30 rounded-lg px-3 py-2">
-              Não foi possível recuperar o link atual (a chave do servidor mudou). Use "Gerar novo link" e adicione a agenda de novo.
-            </p>
+            // Feed criado com outra chave: o link não pode ser mostrado. A saída é gerar outro (com confirmação).
+            <div data-testid="agenda-link-irrecuperavel" className="space-y-2">
+              <p className="text-xs text-aviso bg-aviso/10 border border-aviso/30 rounded-lg px-3 py-2">
+                Não foi possível recuperar o link atual (a chave do servidor mudou). Use "Gerar novo link" e adicione a agenda de novo.
+              </p>
+              <button type="button" data-guia="settings:agenda-celular.novo-link" onClick={() => setConfirmarNovo(true)} disabled={salvando}
+                className="btn-primary min-h-[44px] w-full sm:w-auto flex items-center justify-center gap-2 text-sm">
+                <RefreshCw size={14} /> {salvando ? 'Gerando…' : 'Gerar novo link'}
+              </button>
+            </div>
           ) : (
             <div className="space-y-3">
               {feed.tipos.map(tipo => {
@@ -188,7 +195,7 @@ export default function AgendaCelularPanel({ emJanela = false }) {
         onClose={() => setConfirmarNovo(false)}
         onConfirm={() => aplicar(criarAgendaFeed, { tipos, mostrarValores })}
         title="Gerar novo link?"
-        message="O link atual para de funcionar: no iPhone e no Google Agenda a assinatura antiga deixa de atualizar e você terá de adicionar a agenda de novo."
+        message="O link atual para de funcionar: no iPhone e no Google Agenda a assinatura antiga deixa de atualizar e você terá de adicionar a agenda de novo em cada aparelho."
         confirmLabel="Gerar novo link"
         danger
       />

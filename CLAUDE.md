@@ -47,7 +47,7 @@ Invariantes que valem para qualquer mudança:
   - `teste1.finup.app.br` está ligado à `homologacao` (Preview).
   - `AMBIENTE_PADRAO` vale `vm` em Production e `teste1` em Preview.
   - Ficam só em Production: `ALLOW_ENV_ADMIN`, `ADMIN_USER`, `ADMIN_PASS`, `PLATAFORMA_ADMIN` e `NEON_API_KEY`/`_PROJECT_ID`/`_BRANCH_ID`.
-  - `AGENDA_TOKEN_KEY` não existe: a Agenda no celular fica indisponível.
+  - `AGENDA_TOKEN_KEY` foi criada em 09/11, com uma chave diferente em Preview e em Production. Em produção ela só vale a partir do próximo deploy do `main`.
   - Não há Ignored Build Step: outras branches geram Preview e caem no teste1.
   - Vercel Authentication está desligada, porque bloqueava o `/api`.
 

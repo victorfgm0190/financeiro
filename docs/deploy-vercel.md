@@ -40,23 +40,30 @@ Há um projeto só na Vercel (`financeiro-gnsm`). O ambiente é escolhido pelo e
 | `PLATAFORMA_ADMIN` | ✓ | — | Controle de Clientes só em produção |
 | `NEON_API_KEY`, `NEON_PROJECT_ID`, `NEON_BRANCH_ID` | ✓ | — | criar o banco de um cliente (Aprovar) só funciona em produção |
 | `AMBIENTE_PADRAO` | `vm` | `teste1` | ambiente de `…vercel.app` e de hosts sem sigla |
-| `AGENDA_TOKEN_KEY` | — | — | **não existe**: Agenda no celular indisponível (ver abaixo) |
+| `AGENDA_TOKEN_KEY` | ✓ | ✓ | criada em 09/11/2026, **chaves diferentes** em cada ambiente, Sensitive (ver abaixo) |
 | `VERCEL_GIT_COMMIT_SHA` | auto | auto | variável de sistema; vira o hash do rodapé |
 
 Variável nova ou alterada só vale nos deploys feitos depois. Para aplicá-la, faça Redeploy do deploy
 atual da branch.
 
-### `AGENDA_TOKEN_KEY` ausente
+### `AGENDA_TOKEN_KEY`
 
-Ela só é usada pela "Agenda no celular" (Configurações; feed `.ics` por usuário; ver
+Criada em 09/11/2026: uma chave em Preview e outra, diferente, em Production. O redeploy foi feito só
+na `homologacao`; em produção, a chave passa a valer no próximo deploy do `main`. Chave diferente por
+ambiente funciona porque cada ambiente só lê os feeds da própria sigla.
+
+Se a chave mudar, as agendas já assinadas continuam atualizando: a rota pública procura o
+`token_hash` e não usa a chave. O que se perde é o dono rever o link na tela. Aparece "a chave
+do servidor mudou" com o botão **Gerar novo link**, que revoga o link antigo e cria outro.
+
+A chave só é usada pela "Agenda no celular" (Configurações; feed `.ics` por usuário; ver
 `docs/agenda-celular.md`). Sem ela:
 - a tela mostra o aviso "Agenda no celular indisponível: falta configurar a chave…" e não gera link;
 - `/api/agenda-feed` recusa a criação com 503;
 - nada mais no app depende dela.
 
-Para ligar o recurso, crie a chave (32 bytes em base64) em Production e, se quiser testar,
-também em Preview, como diz `docs/agenda-celular.md`. Depois de criada, não troque a chave: os links já
-gerados não poderiam mais ser mostrados de novo ao dono.
+Formato: 32 bytes aleatórios em base64 (44 caracteres) ou em hex (64 caracteres). Não troque a chave sem
+motivo: cada dono teria de usar "Gerar novo link" e adicionar a agenda de novo nos aparelhos.
 
 ## Conferir qual commit está no ar
 
