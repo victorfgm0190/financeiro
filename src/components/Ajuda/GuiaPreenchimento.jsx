@@ -132,7 +132,7 @@ function Guia({ ativo }) {
       const raiz = raizDoForm(form)
       if (!raiz) {
         if (fase === 'pronto') return
-        if (fase === 'salvar' && clicouSalvar.current) { if (tarefaId) marcarTarefaConcluida(tarefaId); setFase('pronto'); return }
+        if (clicouSalvar.current) { if (tarefaId) marcarTarefaConcluida(tarefaId); setFase('pronto'); return }
         if (!sumiuDesde.current) sumiuDesde.current = Date.now()
         else if (Date.now() - sumiuDesde.current > 600) encerrarPreenchimento()
         return
@@ -163,15 +163,17 @@ function Guia({ ativo }) {
     }
   }, [fase, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Clique no Avançar/Salvar: o Salvar marca que foi salvo (o formulário fechando = Pronto). Se a
-  // validação do formulário barrar (a tela não mudou), o guia volta ao primeiro campo com erro.
+  // Clique no Avançar/Salvar EM QUALQUER FASE do guia (não só no fim do roteiro): o Salvar marca que
+  // foi salvo (o formulário fechando = Pronto). Se a validação do formulário barrar (a tela não
+  // mudou), o guia vai ao primeiro campo com erro.
   useEffect(() => {
-    if (fase !== 'salvar' && fase !== 'avancar') return
+    if (fase === 'pronto' || !form) return
     let timer = 0
     const clique = (e) => {
-      const b = botaoDoForm(form, fase)
-      if (!b || !b.contains(e.target)) return
-      if (fase === 'salvar') clicouSalvar.current = true
+      const tipo = ['salvar', 'avancar'].find(t => botaoDoForm(form, t)?.contains(e.target))
+      if (!tipo) return
+      clearTimeout(timer)
+      if (tipo === 'salvar') clicouSalvar.current = true
       const raiz = raizDoForm(form)
       const antes = camposNaTela(raiz).join('|')
       const inicio = Date.now()
@@ -179,7 +181,7 @@ function Guia({ ativo }) {
         const r = raizDoForm(form)
         if (!r) return
         const mudou = camposNaTela(r).join('|') !== antes
-        if (fase === 'avancar' && mudou) return // etapa nova: a vigia segue
+        if (tipo === 'avancar' && mudou) return // etapa nova: a vigia segue
         const alvoErro = faltandoNaTela(form, r)[0] || campoComErroNaTela(r)
         if (alvoErro) { clicouSalvar.current = false; irPara(alvoErro); return }
         if (Date.now() - inicio < 1200) timer = setTimeout(conferir, 150)

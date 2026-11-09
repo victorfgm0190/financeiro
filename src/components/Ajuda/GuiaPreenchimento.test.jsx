@@ -292,4 +292,26 @@ describe('Preencher com guia — correções da Etapa 4', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(balao().dataset.campo).toBe('agendamento.account'))
   })
+
+  it('Salvar clicado no MEIO do roteiro: o clique passa (o guia não o engole) e, barrado, vai ao campo com erro', async () => {
+    const onSalvar = vi.fn()
+    render(<><Form onSalvar={onSalvar} /><GuiaPreenchimento /></>)
+    fireEvent.click(screen.getByTestId('botao-preencher-guia'))
+    fireEvent.click(screen.getByRole('button', { name: 'Começar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'escolher conta' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
+    expect(balao().dataset.campo).toBe('contrato.fim')
+    // Volta ao 1º campo (balão no meio) e clica direto no Salvar: falta o "Fim".
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+    expect(balao().dataset.campo).toBe('agendamento.transactionType')
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(balao().dataset.campo).toBe('contrato.fim'))
+    expect(onSalvar).not.toHaveBeenCalled()
+    // Corrigido: o Salvar no meio do roteiro grava.
+    fireEvent.click(screen.getByLabelText('Sem data de fim'))
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(onSalvar).toHaveBeenCalledTimes(1)
+  })
 })

@@ -285,6 +285,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   const [atualizadoFora, setAtualizadoFora] = useState(null) // campos atualizados sozinhos
   // Tipo de documento: obrigatório só ao CRIAR despesa/receita; na edição pode ficar vazio.
   const [erroTipoDoc, setErroTipoDoc] = useState('')
+  // Salvar barrado: o aviso fica até o campo que barrou ser corrigido (nunca barra em silêncio).
+  const [erroSalvar, setErroSalvar] = useState(null)
   const tipoDocObrigatorio = tipoDocumentoObrigatorio({ criando: !initial?.id, tipoMov: form.transactionType })
 
   // Conferência a cada versão nova do agendamento no app (o próprio Salvar não conta).
@@ -738,8 +740,12 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     // Mudou fora enquanto o usuário editava: só grava depois da escolha (Recarregar × Manter).
     if (mudouFora) return
     const erros = errosDoAgendamento(form, regrasValidacao)
-    if (erros.some(x => x.id !== 'agendamento.tipoDocumento')) return
-    if (erros.length) { setErroTipoDoc(erros[0].msg); return }
+    if (erros.length) {
+      setErroSalvar(erros[0])
+      if (erros[0].id === 'agendamento.tipoDocumento') setErroTipoDoc(erros[0].msg)
+      return
+    }
+    setErroSalvar(null)
     if (erroLimite) { setErroParcelamento(erroLimite); return }
     setErroParcelamento('')
     // Rateio: só grava quando as linhas fecham o valor do agendamento.
@@ -1577,6 +1583,9 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Celular: barra de ações presa ao pé da área que rola (Salvar sempre à mão), acima da
             safe area do iPhone. O fundo cobre o conteúdo que passa por baixo. */}
+        {erroSalvar && erroSalvar.id !== 'agendamento.tipoDocumento' && errosDoAgendamento(form, regrasValidacao).some(x => x.id === erroSalvar.id) && (
+          <p role="alert" data-testid="erro-salvar-agendamento" className="sm:col-span-2 text-sm text-perigo">{erroSalvar.msg}</p>
+        )}
         <div className="sm:col-span-2 flex gap-3 pt-1 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:bg-surface max-sm:border-t max-sm:border-borda max-sm:pt-3 acoes-safe-bottom">
           <button type="button" className="btn-secondary flex-1" onClick={() => { if (podeDescartar()) onClose() }}>Cancelar</button>
           {podeGravarForm

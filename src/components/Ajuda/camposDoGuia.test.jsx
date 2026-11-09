@@ -96,6 +96,13 @@ describe('"Obrigatório" do guia = validação do formulário', () => {
     expect(errosDoAgendamento(base, { tipoDocObrigatorio: true }).map(e => e.id)).toEqual(['agendamento.tipoDocumento'])
     expect(errosDoAgendamento({ ...base, occurrenceType: 'installment', installments: '' }).map(e => e.id)).toEqual(['agendamento.occurrence'])
   })
+  it('agendamento: Salvar barrado nunca é silencioso (aviso com o 1º erro, some ao corrigir)', () => {
+    render(<ScheduleForm initial={null} onClose={() => {}} onAviso={() => {}} />)
+    fireEvent.submit(document.querySelector('[data-help-form="agendamento"]'))
+    expect(screen.getByTestId('erro-salvar-agendamento').textContent).toBe('Preencha a descrição.')
+    fireEvent.change(document.querySelector('[data-help-id="agendamento.description"] input'), { target: { value: 'Luz' } })
+    expect(screen.queryByTestId('erro-salvar-agendamento')).toBeNull()
+  })
   it('contrato: errosDaEtapa lista tudo; o primeiro é o do Avançar; fim só obrigatório sem "Sem data de fim"', async () => {
     const { errosDaEtapa, validarEtapaCampo } = await import('../../lib/contratos/validacao.js')
     const f = { modalidade: 'outro', perfil_id: 'pf', favorecido: '', data_inicio: '2026-01-01', data_fim: '', sem_fim: false }
