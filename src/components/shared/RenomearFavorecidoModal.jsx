@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import Modal from './Modal'
+import HelpCampo from './HelpCampo'
 import { fmt, fmtDate } from './utils'
 import {
   baseDoFavorecido, criterioComecaCom, criterioExato, nomeFavorecido, selecionarAlvos,
@@ -89,15 +90,15 @@ export default function RenomearFavorecidoModal({
 
   return (
     <Modal open={open} onClose={onClose} title={titulo || 'Renomear favorecido'} size="lg">
-      <div className="space-y-4">
+      <div className="space-y-4" data-help-form="favorecidoRenomear">
         {nomes && nomes.length > 1 && (
           <p className="text-xs text-texto-2">
             Mesclar: {nomes.map(n => <span key={n} className="inline-block bg-surface-2 rounded px-1.5 py-0.5 mr-1 mb-1">{n}</span>)}
           </p>
         )}
         {nomeBase && (
-          <div className="space-y-1">
-            <p className="label">Aplicar em</p>
+          <div className="space-y-1" data-help-id="favorecido.aplicarEm">
+            <p className="label">Aplicar em<HelpCampo campo="favorecido.aplicarEm" /></p>
             <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[44px] cursor-pointer">
               <input type="radio" name="crit" checked={criterio === 'exato'} onChange={() => setCriterio('exato')} />
               Exatamente &ldquo;{nomeFavorecido(nomeBase)}&rdquo;
@@ -108,18 +109,18 @@ export default function RenomearFavorecidoModal({
             </label>
           </div>
         )}
-        <div>
-          <label className="label" htmlFor="fav-novo-nome">Novo nome</label>
+        <div data-help-id="favorecido.novoNome">
+          <label className="label" htmlFor="fav-novo-nome">Novo nome<HelpCampo campo="favorecido.novoNome" /></label>
           <input id="fav-novo-nome" className="input" value={para} onChange={e => setPara(e.target.value)} autoFocus />
         </div>
-        <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[44px] cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[44px] cursor-pointer" data-help-id="favorecido.aliasImportacao">
           <input type="checkbox" className="accent-primary w-4 h-4" checked={alias} onChange={e => setAlias(e.target.checked)} />
-          Usar esse nome nas próximas importações
+          Usar esse nome nas próximas importações<HelpCampo campo="favorecido.aliasImportacao" />
         </label>
 
-        <div className="space-y-3">
+        <div className="space-y-3" data-help-id="favorecido.previa">
           <p className="text-xs text-texto-3">
-            Prévia — {totalSel} registro{totalSel !== 1 ? 's' : ''} {novo ? <>passa{totalSel !== 1 ? 'm' : ''} a ter o favorecido &ldquo;{novo}&rdquo;</> : 'selecionado(s)'}. A descrição não muda.
+            Prévia<HelpCampo campo="favorecido.previa" /> — {totalSel} registro{totalSel !== 1 ? 's' : ''} {novo ? <>passa{totalSel !== 1 ? 'm' : ''} a ter o favorecido &ldquo;{novo}&rdquo;</> : 'selecionado(s)'}. A descrição não muda.
           </p>
           {grupo('lancamentos', 'Lançamentos', alvos.lancamentos, t => (
             <>

@@ -105,3 +105,29 @@ Camada de ajuda por **campo**, ao lado do help de tela (`src/lib/ajudaTelas.js`,
   - O botão "Preencher com guia" fica sempre no formulário.
 - "Reativar ofertas de guia": apaga `progresso.guiaOfertas` e religa a oferta. Cada formulário volta a oferecer uma vez.
 - Tudo por usuário em `boas_vindas_usuario` via `/api/boas-vindas` (POST `guiaOfertaLigada` / `guiaOfertasReativar`). Sem migração: usa colunas que já existem.
+
+## Conferência — `npm run help:check` (Etapa 6)
+
+`scripts/help-check.mjs` lê o JSX de `src/` (espree) e lista, saindo com código 1 se houver algo:
+
+1. **Campo sem `data-help-id`** — `input` (exceto hidden/submit/button), `select`, `textarea`, os
+   campos do app (`SearchableSelect`, `InputMoeda`, `DateInput`, `CategorySelect`,
+   `TipoDocumentoSelect`, `CampoValor`, `FavorecidoAutocomplete`, `TransferenciaPerfisCategorias`,
+   `FimRepeticao`), `role="switch"`, `aria-haspopup="listbox"` e componentes do próprio arquivo que
+   desenham um campo sem cobri-lo — dentro de um elemento com `data-help-form` e fora de um
+   contêiner `data-help-id` / `data-guia-fora`. Componente que repassa o id (`help`, `ajuda` ou
+   `helpId` com um id `tela.campo`) conta como contêiner.
+2. **Id sem conteúdo** — `data-help-id`, `<HelpCampo campo>` ou `help/ajuda/helpId` que não existe
+   em `src/help/`.
+3. **Conteúdo pendente** — campo da base com `pendente` ou sem `relacaoComTela`.
+
+O que vem de outro componente (não visível no JSX do arquivo) é conferido em tempo de execução:
+em `npm run dev`, `src/help/avisoDev.js` (instalado no `main.jsx`, fora do build de produção)
+avisa no console `[help:check] …`, uma vez por item, campo sem passo dentro de `data-help-form` e
+`data-help-id` sem conteúdo. `src/components/Ajuda/camposDasTelas.test.jsx` roda o check e audita
+o DOM de Contas (todos os tipos) e Lançamentos (rápido e completo).
+
+Telas completas: Contratos, Agendamentos, Contas (`data-help-form="conta"`), Lançamentos
+(`lancamento`), Categorias (`categoriaGrupo`, `categoria`), Perfis (`perfil`), Favorecidos
+(`favorecidoMescla`, `favorecidoRenomear`) e Reservas (`reserva`). Só os formulários de Contratos e
+Agendamentos têm roteiro de Preenchimento Guiado (`formularios`); os demais têm F1/ⓘ em todo campo.

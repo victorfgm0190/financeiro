@@ -240,25 +240,25 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
       mesVencimento: form.mesVencimento !== '' ? Number(form.mesVencimento) : null,
       categoryId: form.categoryId || null,
       exibirComoDespesa: !!form.exibirComoDespesa,
-    }) }} className="space-y-4">
+    }) }} className="space-y-4" data-help-form="reserva">
       {!initial && <AvisoPrerequisitos funcao="funcao-reserva" onIr={onClose} />}
-      <div data-guia="reserva-form.nome">
-        <label className="label">Nome da Função *</label>
+      <div data-guia="reserva-form.nome" data-help-id="reserva.nome">
+        <label className="label">Nome da Função *<HelpCampo campo="reserva.nome" /></label>
         <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Digite o nome da função" />
       </div>
-      <div data-guia="reserva-form.conta">
+      <div data-guia="reserva-form.conta" data-help-id="reserva.conta">
         <label className="label">Conta Vinculada<HelpCampo campo="reserva.conta" /></label>
         <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)}>
           <option value="">— Sem conta —</option>
           {accountsForView(accounts.filter(a => a.active !== false), isMobile).map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
         </select>
       </div>
-      <div data-guia="reserva-form.saldo-inicial">
+      <div data-guia="reserva-form.saldo-inicial" data-help-id="reserva.saldoInicial">
         <label className="label">Saldo Inicial (R$)<HelpCampo campo="reserva.saldoInicial" /></label>
         <InputMoeda negativo className="input" value={form.saldoInicial} onChange={e => set('saldoInicial', e.target.value)} placeholder="0,00 (aceita negativo)" />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <div data-guia="reserva-form.despesa-anual">
+        <div data-guia="reserva-form.despesa-anual" data-help-id="reserva.despesaAnual">
           <label className="label">Despesa Anual (R$)<HelpCampo campo="reserva.despesaAnual" /></label>
           <InputMoeda negativo className="input" value={form.despesaAnual} onChange={e => set('despesaAnual', e.target.value)} placeholder="0,00" />
           {suggestions && (suggestions.enough
@@ -268,7 +268,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
             : <p className="text-xs text-texto-3 mt-1">Dados insuficientes para calcular</p>
           )}
         </div>
-        <div data-guia="reserva-form.deposito-mensal">
+        <div data-guia="reserva-form.deposito-mensal" data-help-id="reserva.depositoMensal">
           <label className="label">Depósito Mensal (R$)<HelpCampo campo="reserva.depositoMensal" /></label>
           <InputMoeda negativo className="input" value={form.depositoMensal} onChange={e => set('depositoMensal', e.target.value)} placeholder="0,00" />
           {suggestions && (suggestions.enough
@@ -279,7 +279,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
           )}
         </div>
       </div>
-      <div data-guia="reserva-form.mes-vencimento">
+      <div data-guia="reserva-form.mes-vencimento" data-help-id="reserva.mesVencimento">
         <label className="label">Mês de Vencimento da Despesa<HelpCampo campo="reserva.mesVencimento" /></label>
         <select className="input" value={form.mesVencimento} onChange={e => set('mesVencimento', e.target.value)}>
           <option value="">Rateio mensal (÷ 12)</option>
@@ -292,7 +292,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
           </p>
         )}
       </div>
-      <div data-guia="reserva-form.categoria">
+      <div data-guia="reserva-form.categoria" data-help-id="reserva.categoria">
         <label className="label">Categoria da Despesa<HelpCampo campo="reserva.categoria" /></label>
         <select className="input" value={form.categoryId} onChange={e => set('categoryId', e.target.value)}>
           <option value="">Sem categoria vinculada</option>
@@ -300,7 +300,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
         </select>
         <p className="text-xs text-texto-3 mt-1">As sombras de reserva (depósitos e resgates) herdam esta categoria no Demonstrativo</p>
       </div>
-      <div>
+      <div data-help-id="reserva.contarComoDespesa">
         <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
@@ -308,7 +308,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
             checked={!!form.exibirComoDespesa}
             onChange={e => set('exibirComoDespesa', e.target.checked)}
           />
-          <span className="text-sm text-texto-1">Contar como despesa</span>
+          <span className="text-sm text-texto-1">Contar como despesa</span><HelpCampo campo="reserva.contarComoDespesa" />
         </label>
         <p className="text-xs text-texto-3 mt-1">
           Marcado: as transferências desta função (depósitos e resgates) entram nos totais de

@@ -179,7 +179,7 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
                 <div>
                   <div className="flex items-center gap-1">
                     {l.tipo === 'ajuste' ? (
-                      <select className="input py-1 text-xs w-12 px-1" value={l.sinal} disabled={!podeEditar} aria-label="Sinal do ajuste" onChange={e => mudarSinal(i, Number(e.target.value))}>
+                      <select data-help-id="repasseComposicao.valorItem" className="input py-1 text-xs w-12 px-1" value={l.sinal} disabled={!podeEditar} aria-label="Sinal do ajuste" onChange={e => mudarSinal(i, Number(e.target.value))}>
                         <option value={1}>+</option><option value={-1}>−</option>
                       </select>
                     ) : <span className={`text-xs ${l.sinal > 0 ? 'text-receita' : 'text-despesa'}`}>{l.sinal > 0 ? '+' : '−'}</span>}

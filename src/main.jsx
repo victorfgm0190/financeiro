@@ -21,6 +21,8 @@ if (import.meta.env.DEV) {
     .then(m => m.instalarModoDev())
     .catch(err => console.error('[modo dev]', err))
     .finally(iniciar)
+  // Help de campo: campo sem data-help-id / id sem conteúdo → aviso no console (npm run help:check).
+  import('./help/avisoDev.js').then(m => m.instalarAvisoHelpDev()).catch(() => {})
 } else {
   iniciar()
   // Service worker em autoUpdate: registra já no load e, quando um SW novo assume, recarrega a

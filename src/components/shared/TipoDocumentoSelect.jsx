@@ -14,7 +14,7 @@ export default function TipoDocumentoSelect({ value, onChange, tipoMov, required
     [tiposDocumento, tipoMov, value],
   )
   return (
-    <div>
+    <div data-help-id={help || undefined}>
       <label className="label">
         {label}{required ? ' *' : ''}{help && <HelpCampo campo={help} />}
         {confira && <span className="ml-1.5 text-[11px] font-medium text-aviso" title="Sugestão do assistente: confira">● confira</span>}

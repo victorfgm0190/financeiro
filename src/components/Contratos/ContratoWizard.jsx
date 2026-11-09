@@ -712,14 +712,14 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               const setI = (k, v) => setItens(p => p.map((x, j) => (j === i ? { ...x, [k]: v } : x)))
               return (
                 <div key={i} className="grid grid-cols-2 sm:grid-cols-[1fr_110px_120px_110px_32px] gap-2 items-end p-2 rounded-lg bg-surface-2/60">
-                  <input autoComplete="off" className="input py-1.5 text-sm col-span-2 sm:col-span-1" placeholder="Digite a descrição do item" value={it.descricao} onChange={e => setI('descricao', e.target.value)} />
-                  <select className="input py-1.5 text-sm" value={it.grupo} onChange={e => setI('grupo', e.target.value)}>
+                  <input data-help-id="contrato.itemDescricao" autoComplete="off" className="input py-1.5 text-sm col-span-2 sm:col-span-1" placeholder="Digite a descrição do item" value={it.descricao} onChange={e => setI('descricao', e.target.value)} />
+                  <select data-help-id="contrato.itemGrupo" aria-label="Grupo do item" className="input py-1.5 text-sm" value={it.grupo} onChange={e => setI('grupo', e.target.value)}>
                     {Object.entries(GRUPOS_ITEM).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
-                  <select className="input py-1.5 text-sm" value={it.responsavel} onChange={e => setI('responsavel', e.target.value)}>
+                  <select data-help-id="contrato.itemResponsavel" aria-label="Responsável pelo item" className="input py-1.5 text-sm" value={it.responsavel} onChange={e => setI('responsavel', e.target.value)}>
                     <option value="inquilino">Inquilino</option><option value="proprietario">Proprietário</option>
                   </select>
-                  <CampoValor className="input py-1.5 text-sm" placeholder="0,00" value={it.valor_previsto} onChange={v => setI('valor_previsto', v)} />
+                  <CampoValor helpId="contrato.itemValor" className="input py-1.5 text-sm" placeholder="0,00" value={it.valor_previsto} onChange={v => setI('valor_previsto', v)} />
                   <button type="button" className="p-1.5 text-texto-3 hover:text-perigo" title="Remover" onClick={() => setItens(p => p.filter((_, j) => j !== i))}><Trash2 size={14} /></button>
                 </div>
               )

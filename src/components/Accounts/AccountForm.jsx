@@ -26,16 +26,16 @@ const TYPES = [
 // Ícone ⓘ do campo: componente único do app (src/components/shared/HelpCampo.jsx).
 const Tooltip = ({ text }) => <HelpCampo texto={text} />
 
-function Toggle({ checked, onChange, label, tooltip }) {
+function Toggle({ checked, onChange, label, tooltip, helpId }) {
   return (
-    <label className="flex items-center gap-2.5 cursor-pointer">
+    <label className="flex items-center gap-2.5 cursor-pointer" data-help-id={helpId || undefined}>
       <div className="relative shrink-0">
         <input type="checkbox" checked={checked} onChange={onChange} className="sr-only peer" />
         <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
         <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
       </div>
       <span className="text-sm text-texto-2 select-none">{label}</span>
-      {tooltip && <Tooltip text={tooltip} />}
+      {helpId ? <HelpCampo campo={helpId} /> : tooltip && <Tooltip text={tooltip} />}
     </label>
   )
 }
@@ -63,12 +63,12 @@ function Bloco({ titulo, children }) {
 }
 
 // Linha de toggle: nome em negrito, ajuda fixa abaixo, toggle à direita. A linha toda é o rótulo.
-function LinhaToggle({ nome, ajuda, selo, checked, onChange, disabled = false, guia }) {
+function LinhaToggle({ nome, ajuda, selo, checked, onChange, disabled = false, guia, helpId }) {
   return (
-    <label data-guia={guia} className={`flex items-center gap-3 px-3 py-2.5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-primary ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-surface-hover/50'}`}>
+    <label data-guia={guia} data-help-id={helpId} className={`flex items-center gap-3 px-3 py-2.5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-primary ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-surface-hover/50'}`}>
       <div className="flex-1 min-w-0">
         <p className="flex items-center gap-1.5 text-sm font-semibold text-texto-1">
-          {nome}
+          {nome}{helpId && <HelpCampo campo={helpId} />}
           {selo && <span title={selo.title} className={`px-1.5 py-0.5 rounded text-xs font-bold ${selo.cls}`}>{selo.texto}</span>}
         </p>
         <p className="text-xs text-texto-3 leading-snug mt-0.5">{ajuda}</p>
@@ -291,8 +291,8 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div data-guia="conta-form.tipo">
+    <form onSubmit={handleSubmit} className="space-y-4" data-help-form="conta">
+      <div data-guia="conta-form.tipo" data-help-id="conta.tipo">
         <label className="label">Tipo de Conta<HelpCampo campo="conta.tipo" /></label>
         <div className="grid grid-cols-2 gap-2">
           {TYPES.map(t => (
@@ -320,8 +320,8 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <div data-guia="conta-form.nome" className="col-span-2">
-          <label className="label">Nome da Conta *</label>
+        <div data-guia="conta-form.nome" data-help-id="conta.nome" className="col-span-2">
+          <label className="label">Nome da Conta *<HelpCampo campo="conta.nome" /></label>
           <input
             className="input disabled:opacity-60 disabled:cursor-not-allowed"
             value={form.name}
@@ -332,7 +332,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
           />
           {nomeTravado && <p className="text-xs text-texto-3 mt-0.5">Nome usado pelo controle gerencial — não pode ser alterado.</p>}
         </div>
-        <div data-guia="conta-form.apelido">
+        <div data-guia="conta-form.apelido" data-help-id="conta.apelido">
           <label className="label flex items-center gap-1">
             Apelido
             <HelpCampo campo="conta.apelido" />
@@ -349,8 +349,8 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div data-guia="conta-form.banco">
-          <label className="label">Banco / Instituição</label>
+        <div data-guia="conta-form.banco" data-help-id="conta.banco">
+          <label className="label">Banco / Instituição<HelpCampo campo="conta.banco" /></label>
           <input
             className="input"
             value={form.bank}
@@ -358,7 +358,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             placeholder="Digite o nome do banco"
           />
         </div>
-        <div data-guia="conta-form.grupo">
+        <div data-guia="conta-form.grupo" data-help-id="conta.grupo">
           <label className="label">Grupo<HelpCampo campo="conta.grupo" /></label>
           <select className="input" value={form.accountGroupId || ''} onChange={e => set('accountGroupId', e.target.value || null)}>
             <option value="">Sem grupo</option>
@@ -369,7 +369,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
         </div>
       </div>
 
-      <div data-guia="conta-form.vinculo">
+      <div data-guia="conta-form.vinculo" data-help-id="conta.vinculo">
         <label className="label" htmlFor="conta-vinculo">Vínculo (CPF / CNPJ)<HelpCampo campo="conta.vinculo" /></label>
         {profiles.length > 0 ? (
           <>
@@ -399,7 +399,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
       </div>
 
       {!isCredit && !isPatrimonial && !initial && (
-        <div data-guia="conta-form.saldo-inicial">
+        <div data-guia="conta-form.saldo-inicial" data-help-id="conta.saldoInicial">
           <label className="label">Saldo Inicial (R$)<HelpCampo campo="conta.saldoInicial" /></label>
           <InputMoeda
             negativo
@@ -412,7 +412,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
       {!isCredit && !isPatrimonial && initial && (
         <div className="space-y-2">
-          <div data-guia="conta-form.saldo-inicial">
+          <div data-guia="conta-form.saldo-inicial" data-help-id="conta.saldoInicial">
             <label className="label">Saldo Inicial (R$)<HelpCampo campo="conta.saldoInicial" /></label>
             <InputMoeda
               negativo
@@ -446,8 +446,8 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
       {isPatrimonial && (
         <>
-          <div data-guia="conta-form.valor-atual">
-            <label className="label">{form.type === 'asset' ? 'Valor Atual (R$)' : saldoDoFinanciamento ? 'Saldo devedor (principal)' : 'Saldo Devedor (R$)'}</label>
+          <div data-guia="conta-form.valor-atual" data-help-id="conta.valorAtual">
+            <label className="label">{form.type === 'asset' ? 'Valor Atual (R$)' : saldoDoFinanciamento ? 'Saldo devedor (principal)' : 'Saldo Devedor (R$)'}<HelpCampo campo="conta.valorAtual" /></label>
             {saldoDoFinanciamento ? (
               <>
                 <div className="input bg-surface-hover/50 text-texto-2 cursor-not-allowed select-none">{fmt(initial.balance ?? 0)}</div>
@@ -463,8 +463,8 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div data-guia="conta-form.valor-aquisicao">
-              <label className="label">Valor de Aquisição (R$)</label>
+            <div data-guia="conta-form.valor-aquisicao" data-help-id="conta.valorAquisicao">
+              <label className="label">Valor de Aquisição (R$)<HelpCampo campo="conta.valorAquisicao" /></label>
               <InputMoeda
                 negativo
                 value={form.acquisitionValue}
@@ -472,8 +472,8 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
                 placeholder="0,00"
               />
             </div>
-            <div data-guia="conta-form.data-aquisicao">
-              <label className="label">Data de Aquisição</label>
+            <div data-guia="conta-form.data-aquisicao" data-help-id="conta.dataAquisicao">
+              <label className="label">Data de Aquisição<HelpCampo campo="conta.dataAquisicao" /></label>
               <DateInput
                 className="input"
                 value={form.acquisitionDate}
@@ -486,7 +486,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
       {isCredit && (
         <>
-          <div data-guia="conta-form.limite">
+          <div data-guia="conta-form.limite" data-help-id="cartao.limite">
             <label className="label">Limite do Cartão (R$)<HelpCampo campo="cartao.limite" /></label>
             <InputMoeda
               negativo
@@ -502,7 +502,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             </p>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <div data-guia="conta-form.fechamento">
+            <div data-guia="conta-form.fechamento" data-help-id="cartao.fechamento">
               <label className="label">Dia de Fechamento *<HelpCampo campo="cartao.fechamento" /></label>
               <input
                 className="input"
@@ -514,7 +514,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
                 onChange={e => { set('closingDay', e.target.value); setDiasErro('') }}
               />
             </div>
-            <div data-guia="conta-form.vencimento">
+            <div data-guia="conta-form.vencimento" data-help-id="cartao.vencimento">
               <label className="label">Dia de Vencimento *<HelpCampo campo="cartao.vencimento" /></label>
               <input
                 className="input"
@@ -528,7 +528,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             </div>
           </div>
           {diasErro && <p className="text-xs text-perigo">{diasErro}</p>}
-          <div data-guia="conta-form.finais">
+          <div data-guia="conta-form.finais" data-help-id="cartao.finais">
             <label className="label">Finais do cartão<HelpCampo campo="cartao.finais" /></label>
             <input
               className="input"
@@ -542,22 +542,22 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
               : <p className="text-xs text-texto-3 mt-0.5">Últimos 4 dígitos. O assistente usa para reconhecer "final 4541".</p>}
           </div>
           <div className="grid grid-cols-2 gap-3 items-end">
-            <div>
+            <div data-help-id="cartao.spread">
               <label className="label">Spread do dólar (%)<HelpCampo campo="cartao.spread" /></label>
               <input className="input" inputMode="decimal" value={form.spreadCambio}
                 onChange={e => set('spreadCambio', e.target.value.replace(/[^\d.,]/g, ''))} placeholder="Percentual sobre a cotação (opcional)" />
             </div>
-            <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[40px] cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[40px] cursor-pointer" data-help-id="cartao.iofSeparado">
               <input type="checkbox" className="w-4 h-4 accent-primary" checked={form.iofLinhaSeparada}
                 onChange={e => set('iofLinhaSeparada', e.target.checked)} />
-              IOF em linha separada na fatura
+              IOF em linha separada na fatura<HelpCampo campo="cartao.iofSeparado" />
             </label>
           </div>
           <p className="text-xs text-texto-3 -mt-2">
             Compra em dólar pelo Assistente: R$ = US$ × PTAX × (1 + spread). O spread usado é a média das últimas 3 compras
             em dólar já conferidas pela fatura; sem elas, este (vazio = 2,5%).
           </p>
-          <div data-guia="conta-form.pagadora">
+          <div data-guia="conta-form.pagadora" data-help-id="cartao.contaPagadora">
             <label className="label">Conta Pagadora<HelpCampo campo="cartao.contaPagadora" /></label>
             <select
               className="input"
@@ -581,6 +581,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
         <Bloco titulo="Exibição">
           <LinhaToggle
             nome="Destacar em Lançamentos"
+            helpId="conta.destacar"
             ajuda="Fica no grupo do topo da lista e da escolha de conta em Lançamentos"
             checked={form.appPriority}
             onChange={e => set('appPriority', e.target.checked)}
@@ -588,6 +589,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
           <LinhaToggle
             guia="conta-form.favorita"
             nome="Conta favorita ★"
+            helpId="conta.favorita"
             ajuda="Marcada com ★ e listada primeiro em Lançamentos. Uma por perfil"
             checked={form.isMain}
             onChange={e => set('isMain', e.target.checked)}
@@ -601,6 +603,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
           <div className="hidden md:block">
             <LinhaToggle
               nome="Esconder no celular"
+              helpId="conta.esconderCelular"
               ajuda="Some das listas e seletores no celular; continua no desktop e nos saldos"
               checked={form.hideOnMobile}
               onChange={e => set('hideOnMobile', e.target.checked)}
@@ -612,6 +615,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
           <LinhaToggle
             guia="conta-form.fc"
             nome="Somar no Saldo Principal"
+            helpId="conta.somarSaldoPrincipal"
             selo={SELOS.FC}
             ajuda="Entra no Saldo Principal ('Como chegamos aqui'), no Fluxo de Caixa e nos relatórios por padrão"
             checked={form.fluxoCaixaPrincipal}
@@ -620,6 +624,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
           {!isCredit && (
             <LinhaToggle
               nome="Compensar resgate e aplicação"
+              helpId="conta.compensarResgate"
               ajuda="No extrato, resgate e aplicação na mesma data viram um único valor líquido"
               checked={form.contaAplicacao}
               onChange={e => set('contaAplicacao', e.target.checked)}
@@ -632,6 +637,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
             <LinhaToggle
               guia="conta-form.central"
               nome="Conta central"
+              helpId="conta.central"
               selo={SELOS.CC}
               ajuda="Paga faturas, movimenta o gerencial do cartão e recebe resgates de reserva. Só uma por vez"
               checked={form.contaCorrentePrincipal && !!perfilForm}
@@ -662,8 +668,8 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
         {!isCredit && !isPatrimonial && (
           <>
-            <fieldset data-guia="conta-form.vinculo-tipo">
-              <legend className="text-xs text-texto-3 uppercase tracking-wide mb-1.5">Finalidade da conta</legend>
+            <fieldset data-guia="conta-form.vinculo-tipo" data-help-id="conta.finalidade">
+              <legend className="text-xs text-texto-3 uppercase tracking-wide mb-1.5">Finalidade da conta<HelpCampo campo="conta.finalidade" /></legend>
               <div role="radiogroup" aria-label="Finalidade da conta" className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {FINALIDADES.map(f => {
                   const sel = form.vinculoTipo === f.value
@@ -699,7 +705,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
             {form.vinculoTipo === 'reserva' && (
               <div data-guia="conta-form.reserva" className="ml-3 space-y-3 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
-                <div>
+                <div data-help-id="conta.tipoReserva">
                   <label className="label">Tipo de reserva<HelpCampo campo="conta.tipoReserva" /></label>
                   <select
                     className="input"
@@ -711,7 +717,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
                   </select>
                 </div>
                 {form.reservaType === 'especifica' ? (
-                  <div>
+                  <div data-help-id="conta.categoriaReserva">
                     <label className="label">Categoria vinculada<HelpCampo campo="conta.categoriaReserva" /></label>
                     <CategorySelect
                       categories={categories}
@@ -733,8 +739,8 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
             {form.vinculoTipo === 'patrimonio' && (
               <div className="ml-3 space-y-2 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
-                <div>
-                  <label className="label">Categoria vinculada *<HelpCampo campo="conta.categoriaReserva" /></label>
+                <div data-help-id="conta.categoriaPatrimonio">
+                  <label className="label">Categoria vinculada *<HelpCampo campo="conta.categoriaPatrimonio" /></label>
                   <CategorySelect
                     categories={categories}
                     perfilId={form.profileId || undefined}
@@ -771,10 +777,10 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
               if (!v) set('investmentCategoryId', null)
             }}
             label="É Investimento?"
-            tooltip="Conta que acumula patrimônio com liquidez condicional (consórcio, imóvel na planta, previdência). Transferências para a conta geram despesa automática; resgates geram receita, na categoria vinculada."
+            helpId="conta.investimento"
           />
           {form.isInvestimento && (
-            <div className="ml-3 space-y-2 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
+            <div className="ml-3 space-y-2 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50" data-help-id="conta.categoriaInvestimento">
               <label className="label">Categoria do Investimento *<HelpCampo campo="conta.categoriaInvestimento" /></label>
               <CategorySelect
                 categories={categories}
@@ -798,7 +804,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
           e o app cria a receita da diferença. Opcional — sem categoria, nada aparece. */}
       <div className="space-y-3 pt-1 border-t border-borda">
         <p className="text-xs text-texto-3 uppercase tracking-wide pt-1">Rendimento</p>
-        <div>
+        <div data-help-id="conta.categoriaRendimento">
           <label className="label">Categoria de Rendimento<HelpCampo campo="conta.categoriaRendimento" /></label>
           <CategorySelect
             categories={categories}
@@ -815,7 +821,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
         </div>
 
         {form.rendimentoCategoriaId && (
-          <div className="ml-3 space-y-2 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
+          <div className="ml-3 space-y-2 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50" data-help-id="conta.rendimentoPor">
             <label className="label">Rendimento por<HelpCampo campo="conta.rendimentoPor" /></label>
             <div className="flex rounded-lg overflow-hidden border border-borda-forte">
               {[['conta', 'Conta'], ['grupo', 'Grupo']].map(([v, l]) => (

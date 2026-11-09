@@ -6,7 +6,7 @@
 //                              resumoAoSalvar } }
 // paraQueServe = o texto curto do ícone ⓘ (o mesmo de antes em src/lib/helpCampos.js, que agora só
 // lê daqui). relacaoComTela = como o campo afeta os outros campos e o resultado (o principal do help).
-// `pendente`: conteúdo só migrado, sem relacaoComTela ainda (completar tela a tela).
+// `pendente`: conteúdo só migrado, sem relacaoComTela — o `npm run help:check` acusa (Etapa 6: nenhum).
 // Nada específico de um cliente.
 import * as agendamentos from './agendamentos.js'
 import * as contratos from './contratos.js'

@@ -909,11 +909,11 @@ export default function SettingsPanel() {
         </div>
 
         {showProfileForm && (
-          <form onSubmit={handleProfileSubmit} className="border-t border-borda-forte pt-4 space-y-3">
+          <form onSubmit={handleProfileSubmit} className="border-t border-borda-forte pt-4 space-y-3" data-help-form="perfil">
             <p className="text-xs font-medium text-texto-2">{editingProfile ? 'Editar perfil' : 'Novo perfil'}</p>
 
             <div className="grid grid-cols-2 gap-3">
-              <div data-guia="perfil-form.tipo">
+              <div data-guia="perfil-form.tipo" data-help-id="perfil.tipo">
                 <label className="label">Tipo<HelpCampo campo="perfil.tipo" /></label>
                 <div className="flex rounded-lg overflow-hidden border border-borda-forte">
                   {[['pf', 'Pessoa Física'], ['pj', 'Pessoa Jurídica']].map(([v, l]) => (
@@ -924,13 +924,13 @@ export default function SettingsPanel() {
                   ))}
                 </div>
               </div>
-              <div data-guia="perfil-form.nome">
-                <label className="label">Nome / Razão Social *</label>
+              <div data-guia="perfil-form.nome" data-help-id="perfil.nome">
+                <label className="label">Nome / Razão Social *<HelpCampo campo="perfil.nome" /></label>
                 <input className="input" value={profileForm.name} onChange={e => setProfileField('name', e.target.value)} placeholder="Digite o nome ou razão social" required />
               </div>
             </div>
 
-            <div data-guia="perfil-form.documento">
+            <div data-guia="perfil-form.documento" data-help-id="perfil.documento">
               <label className="label">{profileForm.type === 'pf' ? 'CPF' : 'CNPJ'}<HelpCampo campo="perfil.documento" /></label>
               <input
                 className="input"
@@ -941,7 +941,7 @@ export default function SettingsPanel() {
               />
             </div>
 
-            <div data-guia="perfil-form.cor">
+            <div data-guia="perfil-form.cor" data-help-id="perfil.cor">
               <label className="label">Cor de identificação<HelpCampo campo="perfil.cor" /></label>
               <div className="flex gap-2 flex-wrap">
                 {PROFILE_COLORS.map(c => (
@@ -953,13 +953,13 @@ export default function SettingsPanel() {
               </div>
             </div>
 
-            <label data-guia="settings:perfis.principal" className="flex items-center gap-2.5 cursor-pointer">
+            <label data-guia="settings:perfis.principal" data-help-id="perfil.principal" className="flex items-center gap-2.5 cursor-pointer">
               <div data-guia="perfil-form.principal" className="relative shrink-0">
                 <input type="checkbox" checked={profileForm.isDefault} onChange={e => setProfileField('isDefault', e.target.checked)} className="sr-only peer" />
                 <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
-              <span className="text-sm text-texto-2 select-none">Perfil principal</span>
+              <span className="text-sm text-texto-2 select-none">Perfil principal</span><HelpCampo campo="perfil.principal" />
             </label>
 
             <div className="flex gap-2 pt-1">
@@ -1011,8 +1011,10 @@ export default function SettingsPanel() {
         )}
 
         {/* Criar grupo (só nome) */}
-        <form onSubmit={handleAddGroup} data-guia="settings:categorias.novo-grupo" className="flex gap-2 mb-4">
+        <form onSubmit={handleAddGroup} data-guia="settings:categorias.novo-grupo" data-help-form="categoriaGrupo" className="flex gap-2 mb-4">
           <input
+            data-help-id="categoria.novoGrupo"
+            aria-label="Novo grupo de categorias"
             className="input flex-1"
             placeholder="Grupo de categorias"
             value={newGroupName}
@@ -1112,10 +1114,12 @@ export default function SettingsPanel() {
         </div>
 
         {/* Criar categoria — Grupo obrigatório (escolher existente ou digitar novo) */}
-        <form onSubmit={handleAddCategory} data-guia="settings:categorias.nova-categoria" className="grid grid-cols-2 gap-2 sm:grid-cols-6">
-          <input data-guia="categoria-form.nome" className="input col-span-2 sm:col-span-1" placeholder="Digite o nome da categoria" value={newCategory.name} onChange={e => setNewCategory(f => ({ ...f, name: e.target.value }))} />
+        <form onSubmit={handleAddCategory} data-guia="settings:categorias.nova-categoria" data-help-form="categoria" className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+          <input data-guia="categoria-form.nome" data-help-id="categoria.nome" aria-label="Nome da categoria" className="input col-span-2 sm:col-span-1" placeholder="Digite o nome da categoria" value={newCategory.name} onChange={e => setNewCategory(f => ({ ...f, name: e.target.value }))} />
           <input
             data-guia="categoria-form.grupo"
+            data-help-id="categoria.grupo"
+            aria-label="Grupo da categoria"
             className="input"
             list="category-groups-list"
             placeholder="Nome do grupo"
@@ -1126,21 +1130,23 @@ export default function SettingsPanel() {
           <datalist id="category-groups-list">
             {categoryGroups.map(g => <option key={g} value={g} />)}
           </datalist>
-          <select data-guia="categoria-form.tipo" className="input" value={newCategory.type} onChange={e => setNewCategory(f => ({ ...f, type: e.target.value }))}>
+          <select data-guia="categoria-form.tipo" data-help-id="categoria.tipo" aria-label="Tipo da categoria" className="input" value={newCategory.type} onChange={e => setNewCategory(f => ({ ...f, type: e.target.value }))}>
             <option value="expense">Despesa</option>
             <option value="income">Receita</option>
             <option value="both">Ambos</option>
           </select>
-          <input data-guia="categoria-form.emoji" className="input" placeholder="Emoji" value={newCategory.icon} onChange={e => setNewCategory(f => ({ ...f, icon: e.target.value }))} maxLength={2} />
-          <PerfisMultiSelect
-            value={newCategory.perfilIds}
-            onChange={ids => setNewCategory(f => ({ ...f, perfilIds: ids }))}
-            profiles={profiles}
-            className="!w-full !py-2 !text-sm"
-          />
+          <input data-guia="categoria-form.emoji" data-help-id="categoria.emoji" aria-label="Emoji da categoria" className="input" placeholder="Emoji" value={newCategory.icon} onChange={e => setNewCategory(f => ({ ...f, icon: e.target.value }))} maxLength={2} />
+          <div className="contents" data-help-id="categoria.perfis">
+            <PerfisMultiSelect
+              value={newCategory.perfilIds}
+              onChange={ids => setNewCategory(f => ({ ...f, perfilIds: ids }))}
+              profiles={profiles}
+              className="!w-full !py-2 !text-sm"
+            />
+          </div>
           <button type="submit" data-guia="categoria-form.salvar" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
         </form>
-        <p className="text-[11px] text-texto-3 mt-1.5">O campo <span className="text-texto-2">Grupo</span><HelpCampo campo="categoria.grupo" /> é obrigatório — selecione um existente ou digite um novo para criá-lo junto. Tipo<HelpCampo campo="categoria.tipo" /> · Perfis<HelpCampo campo="categoria.perfis" /></p>
+        <p className="text-[11px] text-texto-3 mt-1.5">O campo <span className="text-texto-2">Grupo</span><HelpCampo campo="categoria.grupo" /> é obrigatório — selecione um existente ou digite um novo para criá-lo junto. Nome<HelpCampo campo="categoria.nome" /> · Tipo<HelpCampo campo="categoria.tipo" /> · Emoji<HelpCampo campo="categoria.emoji" /> · Perfis<HelpCampo campo="categoria.perfis" /></p>
         <AdicionarCategoriasKit />
       </div>
       )}

@@ -1434,8 +1434,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   if (rapido && !maisOpcoes) {
     const saida = form.type !== 'income'
     return (
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="flex rounded-xl overflow-hidden border border-borda-forte" role="group" aria-label="Tipo">
+      <form onSubmit={handleSubmit} className="space-y-4" data-help-form="lancamento">
+        <div className="flex rounded-xl overflow-hidden border border-borda-forte" role="group" aria-label="Tipo" data-help-id="lancamento.tipo">
           {[{ v: 'expense', l: 'Saída' }, { v: 'income', l: 'Entrada' }].map(t => (
             <button
               type="button"
@@ -1453,8 +1453,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           ))}
         </div>
 
-        <div className="text-center py-2">
-          <label htmlFor="valor-rapido" className="text-xs text-texto-3">Valor</label>
+        <div className="text-center py-2" data-help-id="lancamento.valor">
+          <label htmlFor="valor-rapido" className="text-xs text-texto-3">Valor<HelpCampo campo="lancamento.valor" /></label>
           <div className={`flex items-baseline justify-center gap-1 ${saida ? 'text-despesa' : 'text-receita'}`}>
             <span className="text-xl font-semibold">R$</span>
             <InputMoeda
@@ -1469,13 +1469,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           </div>
         </div>
 
-        <div>
-          <label className="label">Descrição</label>
+        <div data-help-id="lancamento.descricao">
+          <label className="label">Descrição<HelpCampo campo="lancamento.descricao" /></label>
           <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Digite a descrição do lançamento" />
         </div>
 
-        <div>
-          <label className="label">Conta *</label>
+        <div data-help-id="lancamento.conta">
+          <label className="label">Conta *<HelpCampo campo="lancamento.conta" /></label>
           <SearchableSelect
             options={accountOpts}
             value={form.accountId}
@@ -1487,8 +1487,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           />
         </div>
 
-        <div>
-          <label className="label">Categoria</label>
+        <div data-help-id="lancamento.categoria">
+          <label className="label">Categoria<HelpCampo campo="lancamento.categoria" /></label>
           <SearchableSelect
             options={categoryOpts}
             preserveGroupOrder
@@ -1507,6 +1507,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             tipoMov={form.type}
             required
             erro={erroTipoDoc}
+            help="lancamento.tipoDocumento"
           />
         )}
 
@@ -1524,7 +1525,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   return (
     <>
     {!initial?.id && <AvisoPrerequisitos funcao="lancamento" onIr={onClose} />}
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4" data-help-form="lancamento">
       {initial?.id && (
         <div className="flex items-center justify-end gap-2 -mb-2">
           {seloParcela && (
@@ -1572,7 +1573,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           onClose={() => setShowRateio(false)}
         />
       )}
-      <div data-guia="lancamento-form.tipo">
+      <div data-guia="lancamento-form.tipo" data-help-id="lancamento.tipo">
         <label className="label">Tipo<HelpCampo campo="lancamento.tipo" /></label>
         <div className="flex rounded-lg overflow-hidden border border-borda-forte">
           {TYPE_OPTIONS.map(t => (
@@ -1603,8 +1604,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <div data-guia="lancamento-form.conta">
-          <label className="label">Conta {form.type === 'transfer' ? 'Origem' : ''} *{confira('accountId')}</label>
+        <div data-guia="lancamento-form.conta" data-help-id="lancamento.conta">
+          <label className="label">Conta {form.type === 'transfer' ? 'Origem' : ''} *{confira('accountId')}<HelpCampo campo="lancamento.conta" /></label>
           {trava
             ? <div className="input opacity-60 cursor-not-allowed" title={trava}>{selectedAccount?.apelido || selectedAccount?.name || '—'}</div>
             : <SearchableSelect
@@ -1618,8 +1619,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               />}
         </div>
         {form.type === 'transfer' ? (
-          <div data-guia="lancamento-form.conta-destino">
-            <label className="label">Conta Destino *{confira('toAccountId')}</label>
+          <div data-guia="lancamento-form.conta-destino" data-help-id="lancamento.contaDestino">
+            <label className="label">Conta Destino *{confira('toAccountId')}<HelpCampo campo="lancamento.contaDestino" /></label>
             <SearchableSelect
               options={destAccountOpts}
               value={form.toAccountId}
@@ -1631,8 +1632,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             />
           </div>
         ) : (
-          <div data-guia="lancamento-form.valor">
-            <label className="label">{isCredit && form.type === 'expense' && form.installments > 1 ? 'Total (R$) *' : 'Valor (R$) *'}{confira('amount')}</label>
+          <div data-guia="lancamento-form.valor" data-help-id="lancamento.valor">
+            <label className="label">{isCredit && form.type === 'expense' && form.installments > 1 ? 'Total (R$) *' : 'Valor (R$) *'}{confira('amount')}<HelpCampo campo="lancamento.valor" /></label>
             <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required disabled={!!trava} />
           </div>
         )}
@@ -1643,13 +1644,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {form.type === 'transfer' && (
         <>
-          <div data-guia="lancamento-form.valor">
-            <label className="label">Valor (R$) *{confira('amount')}</label>
+          <div data-guia="lancamento-form.valor" data-help-id="lancamento.valor">
+            <label className="label">Valor (R$) *{confira('amount')}<HelpCampo campo="lancamento.valor" /></label>
             <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required />
           </div>
           {transferToAcc?.type === 'credit' && (
-            <div>
-              <label className="label">Fatura de referência<HelpCampo campo="lancamento.faturaReferencia" /></label>
+            <div data-help-id="lancamento.faturaPagamento">
+              <label className="label">Fatura de referência<HelpCampo campo="lancamento.faturaPagamento" /></label>
               <select className="input" value={form.faturaMonthYear} onChange={e => set('faturaMonthYear', e.target.value)}>
                 <option value="">Sem vínculo (transferência comum)</option>
                 {faturaCardOpts.map(o => {
@@ -1687,9 +1688,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             )
           })()}
           {(isDepositToReserva || isWithdrawFromReserva) && !form.reservaFuncaoId && (
-            <div className="p-3 bg-reserva-bg border border-reserva/30 rounded-lg space-y-2">
+            <div className="p-3 bg-reserva-bg border border-reserva/30 rounded-lg space-y-2" data-help-id="lancamento.categoriaReserva">
               <p className="text-xs font-medium text-reserva flex items-center gap-1.5">
-                📂 {isDepositToReserva ? 'Despesa a classificar' : 'Categoria do resgate'}
+                📂 {isDepositToReserva ? 'Despesa a classificar' : 'Categoria do resgate'}<HelpCampo campo="lancamento.categoriaReserva" />
               </p>
               {/* Categoria sempre editável (inclusive em reserva especifica/função única):
                   o padrão da reserva é só uma dica; o usuário pode alterar ou limpar. */}
@@ -1716,7 +1717,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             </div>
           )}
           {showReservaFuncao && (
-            <div>
+            <div data-help-id="lancamento.funcaoReserva">
               <label className="label">Função de Reserva<HelpCampo campo="lancamento.funcaoReserva" /></label>
               <select
                 className="input"
@@ -1732,8 +1733,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             </div>
           )}
           {isTransferToAplicacao && (
-            <div>
-              <label className="label">Categoria</label>
+            <div data-help-id="lancamento.categoriaAplicacao">
+              <label className="label">Categoria<HelpCampo campo="lancamento.categoriaAplicacao" /></label>
               <SearchableSelect
                 options={expenseCatOpts}
                 preserveGroupOrder
@@ -1752,8 +1753,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           )}
           {isTransferDeBem && (
             <>
-              <div>
-                <label className="label">Categoria</label>
+              <div data-help-id="lancamento.categoria">
+                <label className="label">Categoria<HelpCampo campo="lancamento.categoria" /></label>
                 <SearchableSelect
                   options={categoryOpts}
                   preserveGroupOrder
@@ -1765,8 +1766,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 />
                 {categoriaForaDoPerfil && <p className="text-[11px] text-aviso mt-0.5">⚠ Categoria de outro perfil</p>}
               </div>
-              <div>
-                <label className="label">Favorecido</label>
+              <div data-help-id="lancamento.favorecido">
+                <label className="label">Favorecido<HelpCampo campo="lancamento.favorecido" /></label>
                 <FavorecidoAutocomplete
                   value={form.payee}
                   onChange={onPayeeChange}
@@ -1779,14 +1780,14 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               </div>
             </>
           )}
-          <TransferenciaPerfisCategorias
+          <div className="contents" data-help-id="lancamento.categoriasPerfis"><TransferenciaPerfisCategorias
             fromAccount={transferFromAcc}
             toAccount={transferToAcc}
             categoriaCnpjId={form.categoriaCnpjId}
             categoriaCpfId={form.categoriaCpfId}
             onChangeCnpj={id => set('categoriaCnpjId', id)}
             onChangeCpf={id => set('categoriaCpfId', id)}
-          />
+          /></div>
         </>
       )}
 
@@ -1797,15 +1798,16 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         required={tipoDocObrigatorio}
         erro={erroTipoDoc}
         confira={!!destaques?.includes('tipoDocumentoId')}
+        help="lancamento.tipoDocumento"
       />
 
-      <div data-guia="lancamento-form.data">
-        <label className="label">Data *{confira('date')}</label>
+      <div data-guia="lancamento-form.data" data-help-id="lancamento.data">
+        <label className="label">Data *{confira('date')}<HelpCampo campo="lancamento.data" /></label>
         <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required hoje disabled={!!trava} />
       </div>
 
       {isCredit && form.type === 'expense' && (
-        <div>
+        <div data-help-id="lancamento.dataBanco">
           <label className="label">Data Banco<HelpCampo campo="lancamento.dataBanco" /></label>
           <DateInput className="input" value={form.dateCartao} onChange={e => set('dateCartao', e.target.value)} disabled={!!trava} />
           <p className="text-xs text-texto-3 mt-1.5 leading-relaxed">
@@ -1817,8 +1819,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {form.type !== 'transfer' && (
         <>
-          <div data-guia="lancamento-form.categoria">
-            <label className="label">Categoria{confira('categoryId')}</label>
+          <div data-guia="lancamento-form.categoria" data-help-id="lancamento.categoria">
+            <label className="label">Categoria{confira('categoryId')}<HelpCampo campo="lancamento.categoria" /></label>
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
                 <ResumoRateio linhas={rateioRows} categories={categories} total={Number(form.amount) || 0} />
@@ -1843,9 +1845,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             {erroRateio && <p className="text-[11px] text-aviso mt-1" role="alert">{erroRateio}</p>}
           </div>
 
-          <div data-guia="lancamento-form.favorecido">
+          <div data-guia="lancamento-form.favorecido" data-help-id="lancamento.favorecido">
             <div className="flex items-center justify-between gap-2">
-              <label className="label">Favorecido{confira('payee')}</label>
+              <label className="label">Favorecido{confira('payee')}<HelpCampo campo="lancamento.favorecido" /></label>
               {initial?.id && (initial.payee || '').trim() && (
                 <button type="button" onClick={() => setRenomearFav(true)}
                   className="text-[11px] text-texto-2 hover:text-texto-1 min-h-[32px] px-1"
@@ -1872,7 +1874,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             />
           )}
 
-          <div>
+          <div data-help-id="lancamento.centroCusto">
             <label className="label">Centro de Custo{confira('costCenter')}<HelpCampo campo="lancamento.centroCusto" /></label>
             <select className="input" value={form.costCenter} onChange={e => set('costCenter', e.target.value)}>
               <option value="">Sem centro de custo</option>
@@ -1882,13 +1884,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         </>
       )}
 
-      <div data-guia="lancamento-form.descricao">
-        <label className="label">Descrição{confira('description')}</label>
+      <div data-guia="lancamento-form.descricao" data-help-id="lancamento.descricao">
+        <label className="label">Descrição{confira('description')}<HelpCampo campo="lancamento.descricao" /></label>
         <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Digite a descrição do lançamento" />
       </div>
 
       {showFaturaRef && (
-        <div>
+        <div data-help-id="lancamento.faturaReferencia">
           <label className="label">Fatura de Referência<HelpCampo campo="lancamento.faturaReferencia" /></label>
           <input
             className="input"
@@ -1901,7 +1903,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {/* Item 6: card "Parcela N de M" editável (override manual) + irmãs + geração das faltantes. */}
       {eligivelParcela && (
-        <div className={`p-3 rounded-lg space-y-2 border ${parcelaSeries ? 'bg-surface-2 border-borda-forte' : 'bg-surface-2/40 border-borda-forte/50'}`}>
+        <div data-help-id="lancamento.parcelaSerie" className={`p-3 rounded-lg space-y-2 border ${parcelaSeries ? 'bg-surface-2 border-borda-forte' : 'bg-surface-2/40 border-borda-forte/50'}`}>
           <div className="flex items-center justify-between gap-2">
             {editInst ? (
               <div className="flex items-center gap-1.5 flex-1">
@@ -1971,13 +1973,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         </div>
       )}
 
-      <div>
-        <label className="label">Observações{confira('notes')}</label>
+      <div data-help-id="lancamento.observacoes">
+        <label className="label">Observações{confira('notes')}<HelpCampo campo="lancamento.observacoes" /></label>
         <textarea className="input resize-none" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Digite observações adicionais (opcional)" />
       </div>
 
       {form.type !== 'transfer' && (mostrarNumeroContrato({ tipoDocumentoId: form.tipoDocumentoId, numeroContrato: form.numeroContrato, tipos: tiposDocumento, pedido: pedeNumeroContrato }) ? (
-        <div>
+        <div data-help-id="lancamento.numeroContrato">
           <label className="label" htmlFor="tx-numero-contrato">Nº do contrato{confira('numeroContrato')}<HelpCampo campo="lancamento.numeroContrato" /></label>
           <input id="tx-numero-contrato" className="input" value={form.numeroContrato} maxLength={40} onChange={e => set('numeroContrato', e.target.value)} placeholder="Número do contrato do documento (opcional)" />
         </div>
@@ -1989,7 +1991,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {form.type === 'expense' && reservaAccounts.length > 0 && (
         <div data-bloco-switch className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">
-          <label className="flex items-center gap-2.5 cursor-pointer">
+          <label className="flex items-center gap-2.5 cursor-pointer" data-help-id="lancamento.usarReserva">
             <div className="relative shrink-0">
               <input
                 ref={reservaSwitchRef}
@@ -2007,7 +2009,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
             </div>
             <PiggyBank size={14} className="text-reserva shrink-0" />
-            <span className="text-sm text-reserva select-none">Será pago com reserva</span>
+            <span className="text-sm text-reserva select-none">Será pago com reserva</span><HelpCampo campo="lancamento.usarReserva" />
             <ShortcutHint actionId="lancamento.toggleReserva" habilitado={atalhosForm} className="text-reserva" />
             {matchingSpecificReserva && !form.useReserva && (
               <span className="text-xs text-texto-2 ml-1">sugerida: {matchingSpecificReserva.apelido || matchingSpecificReserva.name}</span>
@@ -2015,6 +2017,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           </label>
           {form.useReserva && (
             <div className="space-y-2">
+              <div data-help-id="lancamento.contaReserva" className="space-y-2">
               <label className="label" style={{ marginBottom: 0 }}>Conta de Reserva{confira('reservaAccountId')}<HelpCampo campo="lancamento.contaReserva" /></label>
               <select
                 className="input"
@@ -2031,8 +2034,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   </option>
                 ))}
               </select>
+              </div>
               {form.reservaAccountId && (reservaContaFuncs.length > 0 || funcaoForaDaConta) && (
-                <>
+                <div data-help-id="lancamento.funcaoReserva" className="space-y-2">
                   <label className="label" style={{ marginBottom: 0 }}>Função de Reserva{confira('reservaFuncaoId')}<HelpCampo campo="lancamento.funcaoReserva" /></label>
                   <select
                     className="input"
@@ -2044,7 +2048,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                     {funcaoForaDaConta && <option value={funcaoForaDaConta.id}>{funcaoForaDaConta.name} (de outra conta)</option>}
                     {reservaContaFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                   </select>
-                </>
+                </div>
               )}
               {grupoTravado ? (
                 reservaContaFuncs.length > 0 ? (
@@ -2070,7 +2074,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {isCredit && form.type === 'expense' && !initial?.id && (
         <div className="p-3 bg-surface-2/60 border border-borda-forte rounded-lg space-y-3" data-guia="lancamento-form.parcelado">
-          <label className="flex items-center gap-2.5 cursor-pointer">
+          <label className="flex items-center gap-2.5 cursor-pointer" data-help-id="lancamento.parcelado">
             <div className="relative shrink-0">
               <input
                 type="checkbox"
@@ -2081,11 +2085,11 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
               <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
             </div>
-            <span className="text-sm text-texto-2 select-none">Parcelado</span>
+            <span className="text-sm text-texto-2 select-none">Parcelado</span><HelpCampo campo="lancamento.parcelado" />
           </label>
           {form.installments > 1 && (
-            <div className="flex items-center gap-3">
-              <label className="text-xs text-texto-2 shrink-0">Parcelas:</label>
+            <div className="flex items-center gap-3" data-help-id="lancamento.parcelas">
+              <label className="text-xs text-texto-2 shrink-0">Parcelas:<HelpCampo campo="lancamento.parcelas" /></label>
               <input
                 data-guia="lancamento-form.parcelas"
                 className="input w-20 text-center"
@@ -2109,7 +2113,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       )}
 
       {isCredit && form.type === 'expense' && (
-        <div data-guia="lancamento-form.fatura">
+        <div data-guia="lancamento-form.fatura" data-help-id="lancamento.faturaReferencia">
           <label className="label">Fatura de referência{confira('faturaMonthYear')}<HelpCampo campo="lancamento.faturaReferencia" /></label>
           <select
             className="input disabled:opacity-60"
@@ -2140,6 +2144,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {showGerencial && (
         <div className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">
+          <div data-help-id="lancamento.classificacaoGerencial" className="space-y-3">
           <label className="label" style={{ marginBottom: 0 }}>Classificação Gerencial{confira('grupoGerencial')}<HelpCampo campo="lancamento.classificacaoGerencial" /></label>
           {grupoTravado ? (
             <div className="input flex flex-wrap items-center gap-x-2 gap-y-0.5 opacity-90 cursor-default" aria-readonly="true">
@@ -2153,6 +2158,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               grupos={gerencialGroups}
             />
           )}
+          </div>
 
           {form.grupoGerencial && (() => {
             const g = gerencialGroups.find(x => x.id === form.grupoGerencial)
@@ -2173,8 +2179,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   {selectedAccount?.type === 'credit' && contaCentralPara(accounts, profiles, selectedAccount).erro && (
                     <p className="text-xs text-aviso">{contaCentralPara(accounts, profiles, selectedAccount).erro}</p>
                   )}
-                  <div>
-                    <label className="label text-xs uppercase tracking-wide text-reserva">Conta Destino{confira('gerencialContaId')}</label>
+                  <div data-help-id="lancamento.gerencialContaDestino">
+                    <label className="label text-xs uppercase tracking-wide text-reserva">Conta Destino{confira('gerencialContaId')}<HelpCampo campo="lancamento.gerencialContaDestino" /></label>
                     <select
                       className="input"
                       value={gerencialContaId}
@@ -2244,7 +2250,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       {/* Repetir este lançamento — só no formulário de NOVO lançamento (fora da prévia com cartões) */}
       {!initial?.id && !repeticaoExterna && (
         <div data-bloco-switch className="p-3 bg-surface-2/60 border border-borda-forte rounded-lg space-y-3">
-          <label className="flex items-center gap-2.5 cursor-pointer">
+          <label className="flex items-center gap-2.5 cursor-pointer" data-help-id="lancamento.repetir">
             <div className="relative shrink-0">
               <input
                 ref={repetirSwitchRef}
@@ -2257,14 +2263,14 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
             </div>
             <Repeat size={14} className="text-texto-2 shrink-0" />
-            <span className="text-sm text-texto-2 select-none">Repetir este lançamento{confira('repeat')}</span>
+            <span className="text-sm text-texto-2 select-none">Repetir este lançamento{confira('repeat')}</span><HelpCampo campo="lancamento.repetir" />
             <ShortcutHint actionId="lancamento.toggleRepetir" habilitado={atalhosForm} className="text-texto-2" />
           </label>
 
           {form.repeat && (
             <div className="space-y-3 pt-1">
-              <div>
-                <label className="label">Frequência</label>
+              <div data-help-id="lancamento.repetirFrequencia">
+                <label className="label">Frequência<HelpCampo campo="lancamento.repetirFrequencia" /></label>
                 <select
                   className="input"
                   value={form.repeatFrequency}
@@ -2281,8 +2287,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               </div>
 
               {form.repeatFrequency !== 'once' && (
-                <div>
-                  <label className="label">Até quando</label>
+                <div data-help-id="lancamento.repetirAte">
+                  <label className="label">Até quando<HelpCampo campo="lancamento.repetirAte" /></label>
                   <FimRepeticao
                     inicio={form.repeatStartDate || form.date}
                     recorrencia={form.repeatFrequency}
@@ -2293,8 +2299,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 </div>
               )}
 
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm text-texto-2">Lembrete</span>
+              <div className="flex items-center justify-between gap-3" data-help-id="lancamento.repetirLembrete">
+                <span className="text-sm text-texto-2">Lembrete<HelpCampo campo="lancamento.repetirLembrete" /></span>
                 <div className="flex items-center gap-2">
                   {form.repeatRemindDaysBefore > 0 && (
                     <>
@@ -2311,6 +2317,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   )}
                   <button
                     type="button"
+                    role="switch"
+                    aria-checked={form.repeatRemindDaysBefore > 0}
+                    aria-label="Lembrete"
                     onClick={() => set('repeatRemindDaysBefore', form.repeatRemindDaysBefore > 0 ? 0 : 3)}
                     className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${form.repeatRemindDaysBefore > 0 ? 'bg-primary' : 'bg-borda-campo'}`}
                   >

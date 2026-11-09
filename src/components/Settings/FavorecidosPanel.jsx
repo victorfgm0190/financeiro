@@ -110,16 +110,16 @@ export default function FavorecidosPanel() {
       </div>
 
       {selecionados.length >= 2 && (
-        <div data-guia="settings:favorecidos.mesclar" className="rounded-xl border border-primary/30 bg-primary/10 p-3 space-y-3">
+        <div data-guia="settings:favorecidos.mesclar" data-help-form="favorecidoMescla" className="rounded-xl border border-primary/30 bg-primary/10 p-3 space-y-3">
           <p className="text-sm text-texto-1 flex items-center gap-2"><Merge size={14} /> Mesclar {selecionados.length} nomes em um só</p>
-          <div>
+          <div data-help-id="favorecido.novoNome">
             <label className="label" htmlFor="fav-mescla-nome">Novo nome<HelpCampo campo="favorecido.novoNome" /></label>
             <input id="fav-mescla-nome" className="input min-h-[44px]" value={novoNomeMescla || sugestaoMescla}
               onChange={e => setNovoNomeMescla(e.target.value)} />
           </div>
-          <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[44px] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[44px] cursor-pointer" data-help-id="favorecido.aliasImportacao">
             <input type="checkbox" className="accent-primary w-4 h-4" checked={aliasMescla} onChange={e => setAliasMescla(e.target.checked)} />
-            Usar esse nome nas próximas importações
+            Usar esse nome nas próximas importações<HelpCampo campo="favorecido.aliasImportacao" />
           </label>
           <div className="flex gap-2 justify-end">
             <button type="button" className="btn-secondary min-h-[44px]" onClick={() => setMarcados(new Set())}>Limpar seleção</button>

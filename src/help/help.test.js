@@ -4,7 +4,8 @@ import { HELP_CAMPOS, textoHelpCampo } from '../lib/helpCampos.js'
 
 // Base do help de campo (Etapa 1): estrutura, conteúdo completo de Contratos e Agendamentos e o
 // adaptador antigo (src/lib/helpCampos.js) lendo daqui, sem texto duplicado.
-const COMPLETAS = ['contratos', 'agendamentos']
+// Etapa 6: todas as telas completas (npm run help:check limpo).
+const COMPLETAS = ['contratos', 'agendamentos', 'contas', 'lancamentos', 'categorias', 'favorecidos', 'perfis', 'reservas']
 const texto = (v) => typeof v === 'string' && v.trim().length > 0
 
 describe('base do help de campo', () => {
@@ -19,7 +20,7 @@ describe('base do help de campo', () => {
     }
   })
 
-  it('Contratos e Agendamentos completos: relação com a tela em todos, nada pendente', () => {
+  it('todas as telas completas: relação com a tela em todos, nada pendente', () => {
     const ids = Object.keys(CAMPOS).filter(id => COMPLETAS.includes(telaDoCampo(id)))
     expect(ids.length).toBeGreaterThan(100 - 40)
     for (const id of ids) {

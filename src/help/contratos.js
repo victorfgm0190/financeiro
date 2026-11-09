@@ -240,6 +240,34 @@ export const campos = {
     relacaoComTela: 'Meses anteriores não ganham parcela: ficam na ficha para você ligar o pagamento que já fez.',
     obrigatorio: true,
   },
+  // Itens previstos (IPTU, seguro…) — só registro, não geram agendamento.
+  'contrato.itemDescricao': {
+    titulo: 'Descrição do item',
+    paraQueServe: 'Nome do gasto previsto ligado ao imóvel, como "IPTU 2026" ou "Seguro incêndio".',
+    relacaoComTela: 'Só fica registrado no contrato para consulta; não cria agendamento nem lançamento nesta versão.',
+    obrigatorio: false,
+    exemplo: 'IPTU 2026',
+  },
+  'contrato.itemGrupo': {
+    titulo: 'Grupo do item',
+    paraQueServe: 'Tipo do gasto previsto: IPTU, seguro, condomínio ou outro.',
+    relacaoComTela: 'Organiza a lista de itens do contrato. Não muda valores nem parcelas.',
+    obrigatorio: false,
+  },
+  'contrato.itemResponsavel': {
+    titulo: 'Responsável pelo item',
+    paraQueServe: 'Quem paga o gasto previsto: o inquilino ou o proprietário.',
+    relacaoComTela: 'Só registro: ajuda a lembrar quem arca com o gasto. Não gera cobrança nem desconto no aluguel.',
+    obrigatorio: false,
+  },
+  'contrato.itemValor': {
+    titulo: 'Valor previsto do item',
+    paraQueServe: 'Valor estimado do gasto previsto.',
+    relacaoComTela: 'Fica só no cadastro do contrato; não entra no Fluxo Futuro nem nos agendamentos.',
+    obrigatorio: false,
+    exemplo: '1.200,00',
+  },
+
   // ── Modo administradora (repasse) ─────────────────────────────────────────────────────────────
   'contrato.diaRepasse': {
     titulo: 'Dia do repasse',
