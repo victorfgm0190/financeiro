@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link2, Search } from 'lucide-react'
 import Modal from '../shared/Modal'
+import HelpCampo from '../shared/HelpCampo'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { r2 } from '../../lib/contratos/parcelas'
@@ -56,7 +57,7 @@ export default function VincularPagamentoModal({ contrato, linha = null, tx = nu
 
   return (
     <Modal open onClose={salvando ? () => {} : onClose} title={linha ? 'Vincular pagamento' : 'Associar a uma parcela'} size="lg">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="vincularPagamento">
         {revisar && txEscolhido && linhaEscolhida ? (
           <div className="space-y-2">
             <p className="text-texto-2">Confira antes de gravar:</p>
@@ -75,18 +76,19 @@ export default function VincularPagamentoModal({ contrato, linha = null, tx = nu
               {rotuloLinha(contrato, linha)} · esperado <strong className="text-texto-1">{fmt(linha.valor)}</strong>.
               Escolha o lançamento já feito (mesma conta ou perfil, sem contrato e sem agendamento).
             </p>
+            <p data-testid="legenda-vincular-pagamento" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3"><span>Buscar<HelpCampo campo="vincularPagamento.busca" /></span><span>Período<HelpCampo campo="vincularPagamento.periodo" /></span><span>Lançamento<HelpCampo campo="vincularPagamento.lancamento" /></span></p>
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-end">
-              <div className="relative">
+              <div className="relative" data-help-id="vincularPagamento.busca">
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-texto-3" />
-                <input className="input pl-8" value={texto} onChange={e => setTexto(e.target.value)} placeholder="Buscar por favorecido, descrição ou valor" />
+                <input className="input pl-8" aria-label="Buscar lançamento" value={texto} onChange={e => setTexto(e.target.value)} placeholder="Buscar por favorecido, descrição ou valor" />
               </div>
-              <input type="date" className="input" value={de} onChange={e => setDe(e.target.value)} aria-label="Pagamentos a partir de" />
-              <input type="date" className="input" value={ate} onChange={e => setAte(e.target.value)} aria-label="Pagamentos até" />
+              <input type="date" className="input" data-help-id="vincularPagamento.periodo" value={de} onChange={e => setDe(e.target.value)} aria-label="Pagamentos a partir de" />
+              <input type="date" className="input" data-help-id="vincularPagamento.periodo" value={ate} onChange={e => setAte(e.target.value)} aria-label="Pagamentos até" />
             </div>
             <div className="max-h-[45vh] overflow-y-auto space-y-1">
               {candidatos.length === 0 && <p className="text-xs text-texto-3 py-3 text-center">Nenhum lançamento livre com esses filtros. Amplie o período ou limpe a busca.</p>}
               {candidatos.map(c => (
-                <label key={c.tx.id} className={`flex items-start gap-2 rounded-lg px-2 py-1.5 cursor-pointer ${txId === c.tx.id ? 'bg-primary/10 outline outline-1 outline-primary' : 'bg-surface-2/60 hover:bg-surface-hover'}`}>
+                <label key={c.tx.id} data-help-id="vincularPagamento.lancamento" className={`flex items-start gap-2 rounded-lg px-2 py-1.5 cursor-pointer ${txId === c.tx.id ? 'bg-primary/10 outline outline-1 outline-primary' : 'bg-surface-2/60 hover:bg-surface-hover'}`}>
                   <input type="radio" name="vinc-tx" className="accent-primary mt-1" checked={txId === c.tx.id} onChange={() => setTxId(c.tx.id)} />
                   <span className="min-w-0 flex-1">
                     <span className="flex justify-between gap-2 text-xs">
@@ -103,12 +105,12 @@ export default function VincularPagamentoModal({ contrato, linha = null, tx = nu
         ) : (
           <>
             <p className="text-texto-2">
-              Pagamento de {fmtDate(tx.date)} · {tx.payee || tx.description} · <strong className="text-texto-1">{fmt(tx.amount)}</strong>. Escolha a parcela que ele pagou:
+              Pagamento de {fmtDate(tx.date)} · {tx.payee || tx.description} · <strong className="text-texto-1">{fmt(tx.amount)}</strong>. Escolha a parcela que ele pagou:<HelpCampo campo="vincularPagamento.parcela" />
             </p>
             <div className="max-h-[45vh] overflow-y-auto space-y-1">
               {linhasAbertas.length === 0 && <p className="text-xs text-texto-3 py-3 text-center">Nenhuma parcela sem pagamento.</p>}
               {linhasAbertas.map(l => (
-                <label key={l.key} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer text-xs ${linhaKey === l.key ? 'bg-primary/10 outline outline-1 outline-primary' : 'bg-surface-2/60 hover:bg-surface-hover'}`}>
+                <label key={l.key} data-help-id="vincularPagamento.parcela" className={`flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer text-xs ${linhaKey === l.key ? 'bg-primary/10 outline outline-1 outline-primary' : 'bg-surface-2/60 hover:bg-surface-hover'}`}>
                   <input type="radio" name="vinc-linha" className="accent-primary" checked={linhaKey === l.key} onChange={() => setLinhaKey(l.key)} />
                   <span className="flex-1 text-texto-1">{rotuloLinha(contrato, l)}{l.semParcela ? ' · sem pagamento vinculado' : ''}</span>
                   <span className="text-texto-2 whitespace-nowrap">{fmt(l.valor)}</span>

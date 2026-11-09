@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link2, Loader2 } from 'lucide-react'
 import Modal from '../shared/Modal'
+import HelpCampo from '../shared/HelpCampo'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { fmtYm, hojeStr } from '../../lib/contratos/datas'
@@ -53,11 +54,11 @@ export default function BuscarRepassesModal({ contrato, linhas, onClose }) {
   const feitos = Object.values(resultado).filter(r => r.ok).length
   return (
     <Modal open onClose={gravando ? () => {} : onClose} title={`Repasses já lançados — ${contrato.favorecido || 'administradora'}`} size="lg">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="buscarRepasse">
         <p className="text-xs text-texto-2">
           Recebimentos que já estão na conta do contrato, sem contrato, com favorecido parecido com a administradora, valor
           igual ao repasse (até ±5%) e data a até {JANELA_DIAS} dias do repasse. Confira cada sugestão: troque o lançamento
-          ou pule. O lançamento não muda (valor, data, categoria e conta ficam); o repasse da competência é baixado por ele.
+          ou pule. O lançamento não muda (valor, data, categoria e conta ficam); o repasse da competência é baixado por ele.<HelpCampo campo="buscarRepasse.lancamento" />
         </p>
         {busca.length === 0 && <p className="text-xs text-texto-3 py-3 text-center">Nenhuma competência com repasse em aberto.</p>}
         <div className="space-y-2 max-h-[55vh] overflow-y-auto">
@@ -77,7 +78,7 @@ export default function BuscarRepassesModal({ contrato, linhas, onClose }) {
                     ? <p className="text-xs text-texto-2">Previsto</p>
                     : <p className="text-xs text-aviso">{TEXTO_NAO_ENCONTRADO}</p>
                 ) : (
-                  <select className="input py-1 text-xs" value={escolha[b.competencia]} disabled={gravando || !podeEditar}
+                  <select className="input py-1 text-xs" data-help-id="buscarRepasse.lancamento" value={escolha[b.competencia]} disabled={gravando || !podeEditar}
                     aria-label={`Lançamento para ${fmtYm(b.competencia)}`} onChange={e => setEscolha(x => ({ ...x, [b.competencia]: e.target.value }))}>
                     {b.candidatos.map(c => (
                       <option key={c.tx.id} value={c.tx.id}>

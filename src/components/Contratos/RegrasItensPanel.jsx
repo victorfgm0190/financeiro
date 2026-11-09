@@ -5,6 +5,7 @@ import { fmt } from '../shared/utils'
 import { parsearTextoBoleto, classificarItens, resumoItens } from '../../lib/contratos/composicao'
 import { rotuloContrato } from '../../lib/contratos/parcelas'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
+import HelpCampo from '../shared/HelpCampo'
 
 const TIPOS = { comeca_com: 'começa com', contem: 'contém' }
 const RESP = { inquilino: 'Inquilino', proprietario: 'Proprietário' }
@@ -19,12 +20,12 @@ function FormRegra({ inicial, onSalvar, onCancelar }) {
   }
   return (
     <div className="grid grid-cols-2 sm:grid-cols-[1fr_130px_150px_auto] gap-2 items-center p-2 rounded-lg bg-surface-2/60">
-      <input className="input py-1.5 text-sm col-span-2 sm:col-span-1" autoFocus value={f.padrao} placeholder="Digite o texto do item"
+      <input className="input py-1.5 text-sm col-span-2 sm:col-span-1" data-help-id="regraItem.texto" aria-label="Texto do item" autoFocus value={f.padrao} placeholder="Digite o texto do item"
         onChange={e => { setErro(''); setF(p => ({ ...p, padrao: e.target.value })) }} />
-      <select className="input py-1.5 text-sm" value={f.tipo_match} onChange={e => setF(p => ({ ...p, tipo_match: e.target.value }))}>
+      <select className="input py-1.5 text-sm" data-help-id="regraItem.tipoMatch" aria-label="Casa se" value={f.tipo_match} onChange={e => setF(p => ({ ...p, tipo_match: e.target.value }))}>
         {Object.entries(TIPOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
       </select>
-      <select className="input py-1.5 text-sm" value={f.responsavel} onChange={e => setF(p => ({ ...p, responsavel: e.target.value }))}>
+      <select className="input py-1.5 text-sm" data-help-id="regraItem.responsavel" aria-label="De quem é" value={f.responsavel} onChange={e => setF(p => ({ ...p, responsavel: e.target.value }))}>
         {Object.entries(RESP).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
       </select>
       <div className="flex gap-1 justify-end">
@@ -59,10 +60,10 @@ export default function RegrasItensPanel() {
   const nomeContrato = (id) => { const c = contratos.find(x => x.id === id); return c ? rotuloContrato(c) : 'Contrato' }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-help-form="regraItem">
       <div className="flex flex-wrap items-end gap-2">
-        <div>
-          <label className="label text-xs">Regras de</label>
+        <div data-help-id="regraItem.escopo">
+          <label className="label text-xs">Regras de<HelpCampo campo="regraItem.escopo" /></label>
           <select className="input py-1.5 text-sm" data-guia="contratos:regras.escopo" value={escopo} onChange={e => { setEscopo(e.target.value); setNovo(false) }}>
             <option value="">Todos os contratos (globais)</option>
             {contratos.map(c => <option key={c.id} value={c.id}>{rotuloContrato(c)}</option>)}
@@ -76,8 +77,8 @@ export default function RegrasItensPanel() {
       <div className="card p-0 overflow-x-auto" data-guia="contratos:regras.lista">
         <table className="w-full text-sm">
           <thead><tr className="text-xs text-texto-3 border-b border-borda">
-            <th className="px-3 py-2 text-left">Item</th><th className="px-3 py-2 text-left">Casa se</th>
-            <th className="px-3 py-2 text-left">De quem é</th><th className="px-3 py-2 text-left">Origem</th><th className="px-3 py-2 w-20" />
+            <th className="px-3 py-2 text-left">Item<HelpCampo campo="regraItem.texto" /></th><th className="px-3 py-2 text-left">Casa se<HelpCampo campo="regraItem.tipoMatch" /></th>
+            <th className="px-3 py-2 text-left">De quem é<HelpCampo campo="regraItem.responsavel" /></th><th className="px-3 py-2 text-left">Origem</th><th className="px-3 py-2 w-20" />
           </tr></thead>
           <tbody>
             {lista.map(r => editando === r.id ? (
@@ -103,9 +104,9 @@ export default function RegrasItensPanel() {
         </table>
       </div>
 
-      <div className="card space-y-2">
-        <p className="label">Testar: cole o texto do boleto</p>
-        <textarea className="input min-h-[110px] font-mono text-xs" data-guia="contratos:regras.testar" value={texto} onChange={e => setTexto(e.target.value)} placeholder={'Taxa de Condomínio 795,11\nFundo de Reserva 79,10'} />
+      <div className="card space-y-2" data-help-id="regraItem.testar">
+        <p className="label">Testar: cole o texto do boleto<HelpCampo campo="regraItem.testar" /></p>
+        <textarea className="input min-h-[110px] font-mono text-xs" data-guia="contratos:regras.testar" value={texto} onChange={e => setTexto(e.target.value)} aria-label="Texto do boleto para testar" placeholder="Cole o texto do boleto, um item por linha" />
         {teste && (
           <>
             <table className="w-full text-xs">

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link2 } from 'lucide-react'
 import Modal from '../shared/Modal'
+import HelpCampo from '../shared/HelpCampo'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { gerarPlanoParcelas, r2 } from '../../lib/contratos/parcelas'
@@ -106,7 +107,7 @@ export default function VinculoModal({ contrato, candidatos, lancamentos = [], a
 
   return (
     <Modal open onClose={salvando ? () => {} : onClose} title="Detectamos agendamentos já existentes" size="xl">
-      <div className="space-y-4 text-sm">
+      <div className="space-y-4 text-sm" data-help-form="vinculoContrato">
         <p className="text-texto-2">
           Estes agendamentos parecem ser deste contrato. Vinculados, o histórico de pagos fica na ficha e o contrato
           gera só os meses que eles ainda não cobrem — nada é duplicado nem apagado.
@@ -115,13 +116,13 @@ export default function VinculoModal({ contrato, candidatos, lancamentos = [], a
           <table className="w-full text-xs">
             <thead>
               <tr className="text-texto-3 border-b border-borda">
-                <th className="px-2 py-2 w-8" />
+                <th className="px-2 py-2 w-8"><HelpCampo campo="vinculoContrato.selecionar" /></th>
                 <th className="px-2 py-2 text-left">Favorecido / descrição</th>
                 <th className="px-2 py-2 text-right">Valor</th>
                 <th className="px-2 py-2 text-left">Próx. / freq.</th>
                 <th className="px-2 py-2 text-center">Pagas</th>
                 <th className="px-2 py-2 text-center">Pendentes</th>
-                <th className="px-2 py-2 text-left">Papel</th>
+                <th className="px-2 py-2 text-left">Papel<HelpCampo campo="vinculoContrato.papel" /></th>
               </tr>
             </thead>
             <tbody>
@@ -130,8 +131,8 @@ export default function VinculoModal({ contrato, candidatos, lancamentos = [], a
                 const st = sel[s.id] || {}
                 return (
                   <tr key={s.id} className="border-b border-borda/50 align-top">
-                    <td className="px-2 py-2">
-                      <input type="checkbox" className="accent-primary w-4 h-4" checked={!!st.on}
+                    <td className="px-2 py-2" data-help-id="vinculoContrato.selecionar">
+                      <input type="checkbox" className="accent-primary w-4 h-4" aria-label={`Vincular ${s.description || s.payee || 'agendamento'}`} checked={!!st.on}
                         onChange={() => setSel(p => ({ ...p, [s.id]: { ...st, on: !st.on } }))} />
                     </td>
                     <td className="px-2 py-2">
@@ -147,7 +148,7 @@ export default function VinculoModal({ contrato, candidatos, lancamentos = [], a
                     <td className="px-2 py-2 text-center text-texto-2">{c.pagas}</td>
                     <td className="px-2 py-2 text-center text-texto-2">{c.pendentes == null ? 'contínuo' : c.pendentes}</td>
                     <td className="px-2 py-2">
-                      <select className="input py-1 text-xs" value={st.papel} onChange={e => setSel(p => ({ ...p, [s.id]: { ...st, papel: e.target.value } }))}>
+                      <select className="input py-1 text-xs" data-help-id="vinculoContrato.papel" aria-label="Papel" value={st.papel} onChange={e => setSel(p => ({ ...p, [s.id]: { ...st, papel: e.target.value } }))}>
                         <option value="aluguel">{rotuloPapel(contrato, 'aluguel')}</option>
                         {contrato.tem_condominio && <option value="condominio">{rotuloPapel(contrato, 'condominio')}</option>}
                       </select>
@@ -163,13 +164,13 @@ export default function VinculoModal({ contrato, candidatos, lancamentos = [], a
           <div key={c.schedule.id} className="rounded-lg border border-borda-forte p-3 space-y-2">
             <p className="text-xs text-texto-2">
               <strong className="text-texto-1">{c.schedule.description}</strong> tem valor {fmt(c.schedule.amount)}, diferente do calculado pelo contrato.
-              Marque os meses em que quer manter o valor atual:
+              Marque os meses em que quer manter o valor atual:<HelpCampo campo="vinculoContrato.manterValor" />
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
               {linhas.map(l => {
                 const mantido = manter[papel]?.[l.competencia] != null
                 return (
-                  <label key={l.id} className="flex items-center justify-between gap-2 text-xs bg-surface-2/60 rounded px-2 py-1.5">
+                  <label key={l.id} data-help-id="vinculoContrato.manterValor" className="flex items-center justify-between gap-2 text-xs bg-surface-2/60 rounded px-2 py-1.5">
                     <span className="text-texto-2">{fmtYm(l.competencia)} · {rotuloPapel(contrato, papel)}</span>
                     <span className="flex items-center gap-2">
                       <span className={mantido ? 'text-texto-3 line-through' : 'text-texto-1 font-medium'}>{fmt(l.valor)}</span>
@@ -187,11 +188,11 @@ export default function VinculoModal({ contrato, candidatos, lancamentos = [], a
         {lancamentos.length > 0 && (
           <div className="rounded-lg border border-borda-forte p-3 space-y-2">
             <p className="text-xs text-texto-2">
-              <strong className="text-texto-1">Lançamentos já feitos</strong> que parecem deste contrato (sem agendamento). Marque os que quer ligar a uma parcela — nada é marcado sozinho.
+              <strong className="text-texto-1">Lançamentos já feitos</strong><HelpCampo campo="vinculoContrato.lancamentos" /> que parecem deste contrato (sem agendamento). Marque os que quer ligar a uma parcela — nada é marcado sozinho.
             </p>
             <div className="space-y-1 max-h-[30vh] overflow-y-auto">
               {lancamentos.map(c => (
-                <label key={c.tx.id} className="flex items-start gap-2 text-xs bg-surface-2/60 rounded px-2 py-1.5">
+                <label key={c.tx.id} data-help-id="vinculoContrato.lancamentos" className="flex items-start gap-2 text-xs bg-surface-2/60 rounded px-2 py-1.5">
                   <input type="checkbox" className="accent-primary mt-0.5" checked={!!selTx[c.tx.id]} onChange={e => setSelTx(p => ({ ...p, [c.tx.id]: e.target.checked }))} />
                   <span className="min-w-0 flex-1">
                     <span className="flex justify-between gap-2"><span className="text-texto-1 truncate">{fmtDate(c.tx.date)} · {c.tx.payee || c.tx.description}</span><span className="text-texto-1 whitespace-nowrap">{fmt(c.tx.amount)}</span></span>

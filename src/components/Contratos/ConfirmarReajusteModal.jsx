@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Modal from '../shared/Modal'
+import HelpCampo from '../shared/HelpCampo'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
@@ -32,18 +33,18 @@ export default function ConfirmarReajusteModal({ contrato, parcela, onClose, onC
   }
   return (
     <Modal open onClose={onClose} title="Confirmar reajuste" size="sm">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="reajusteContrato">
         <p className="text-texto-2">
           Parcela de {fmtDate(parcela.startDate)} (ciclo {parcela.composicao?.ciclo ?? 0}). Projeção: <strong className="text-texto-1">{fmt(projetado)}</strong>
           {contrato.indice_reajuste !== 'FIXO' && contrato.indice_reajuste !== 'NENHUM' ? ` pelo ${contrato.indice_reajuste}` : ''}.
         </p>
-        <div>
-          <label className="label">Aluguel contratual reajustado (sem bonificação)</label>
+        <div data-help-id="reajusteContrato.valor">
+          <label className="label">Aluguel contratual reajustado (sem bonificação)<HelpCampo campo="reajusteContrato.valor" /></label>
           <CampoValor value={valor} onChange={v => { setErro(''); setValor(v) }} autoFocus />
           {bonif !== 0 && <p className="text-[11px] text-texto-3 mt-1">Esta parcela ainda tem bonificação de {fmt(-bonif)}, descontada do total.</p>}
         </div>
-        <fieldset className="space-y-1.5">
-          <legend className="label">Aplicar às próximas parcelas do ciclo?</legend>
+        <fieldset className="space-y-1.5" data-help-id="reajusteContrato.escopo">
+          <legend className="label">Aplicar às próximas parcelas do ciclo?<HelpCampo campo="reajusteContrato.escopo" /></legend>
           <label className="flex items-center gap-2 text-texto-2"><input type="radio" className="accent-primary" checked={escopo === 'ciclo'} onChange={() => setEscopo('ciclo')} /> Sim — esta e as seguintes do ciclo (e reprojeta os próximos)</label>
           <label className="flex items-center gap-2 text-texto-2"><input type="radio" className="accent-primary" checked={escopo === 'so_esta'} onChange={() => setEscopo('so_esta')} /> Não — só esta parcela</label>
         </fieldset>
@@ -83,14 +84,14 @@ export function ConfirmarReajusteRepasseModal({ contrato, pendente, onClose, onC
   const comp = `${pendente.competencia.slice(5, 7)}/${pendente.competencia.slice(0, 4)}`
   return (
     <Modal open onClose={onClose} title="Confirmar reajuste" size="sm">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="reajusteRepasse">
         <p className="text-texto-2">
           Reajuste a partir da competência {comp} (ciclo {pendente.ciclo}). Aluguel anterior {fmt(pendente.baseAnterior)};
           projeção <strong className="text-texto-1">{fmt(pendente.base)}</strong>
           {contrato.indice_reajuste !== 'FIXO' && contrato.indice_reajuste !== 'NENHUM' ? ` pelo ${contrato.indice_reajuste}` : ''}.
         </p>
-        <div>
-          <label className="label">Aluguel bruto reajustado</label>
+        <div data-help-id="reajusteRepasse.valor">
+          <label className="label">Aluguel bruto reajustado<HelpCampo campo="reajusteRepasse.valor" /></label>
           <CampoValor value={valor} onChange={v => { setErro(''); setValor(v) }} autoFocus aria-label="Aluguel reajustado" />
           <p className="text-[11px] text-texto-3 mt-1">Vale de {comp} em diante; a taxa de administração recalcula sobre ele. Competências conferidas não mudam.</p>
         </div>

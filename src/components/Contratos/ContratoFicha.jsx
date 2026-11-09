@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ExternalLink, Pencil, RefreshCw, Search, Ban, Trash2, Unlink, TrendingUp, Link2, Plus } from 'lucide-react'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import HelpCampo from '../shared/HelpCampo'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { buscarContratoApi } from '../../lib/contratosApi'
@@ -559,9 +560,9 @@ function RenovarModal({ contrato, onClose, onRenovar }) {
   const [data, setData] = useState(() => addMesesData(contrato.data_fim, 12))
   return (
     <Modal open onClose={onClose} title="Renovar contrato" size="sm">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="renovarContrato">
         <p className="text-texto-2">Fim atual: {fmtDate(contrato.data_fim)}. As parcelas do novo período são geradas com a projeção do reajuste.</p>
-        <div><label className="label">Novo fim da vigência</label><input type="date" className="input" value={data} min={contrato.data_fim} onChange={e => setData(e.target.value)} /></div>
+        <div data-help-id="renovarContrato.fim"><label className="label">Novo fim da vigência<HelpCampo campo="renovarContrato.fim" /></label><input type="date" className="input" aria-label="Novo fim da vigência" value={data} min={contrato.data_fim} onChange={e => setData(e.target.value)} /></div>
         <div className="flex justify-end gap-2">
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
           <button className="btn-primary" disabled={!data || data <= contrato.data_fim} onClick={() => onRenovar(data)}>Renovar</button>
@@ -577,11 +578,11 @@ function RescindirModal({ contrato, parcelas, onClose, onRescindir }) {
   const canceladas = parcelas.filter(s => !parcelaPaga(s) && s.startDate > data)
   return (
     <Modal open onClose={onClose} title={`Rescindir — ${rotuloContrato(contrato)}`} size="md">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="rescindirContrato">
         <p className="text-texto-2">As parcelas pendentes com vencimento depois da data de saída são canceladas; as pagas ficam. A multa rescisória e o simulador chegam na próxima entrega.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div><label className="label">Data de saída</label><input type="date" className="input" value={data} onChange={e => setData(e.target.value)} /></div>
-          <div><label className="label">Motivo (opcional)</label><input className="input" value={motivo} onChange={e => setMotivo(e.target.value)} maxLength={200} placeholder="Por que o contrato foi encerrado" /></div>
+          <div data-help-id="rescindirContrato.data"><label className="label">Data de saída<HelpCampo campo="rescindirContrato.data" /></label><input type="date" className="input" aria-label="Data de saída" value={data} onChange={e => setData(e.target.value)} /></div>
+          <div data-help-id="rescindirContrato.motivo"><label className="label">Motivo (opcional)<HelpCampo campo="rescindirContrato.motivo" /></label><input className="input" aria-label="Motivo" value={motivo} onChange={e => setMotivo(e.target.value)} maxLength={200} placeholder="Por que o contrato foi encerrado" /></div>
         </div>
         <p className="text-xs text-texto-2">
           Serão canceladas <strong className="text-texto-1">{canceladas.length}</strong> parcela(s) — {fmt(r2(canceladas.reduce((a, s) => a + Number(s.amount), 0)))}.

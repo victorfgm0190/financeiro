@@ -15,6 +15,7 @@ import {
   composicaoDaParcela, creditoPrevistoDaParcela, creditoDaParcela, previaDoAbatimento, vencimentoParcela,
 } from '../../lib/contratos/composicaoAberta'
 import CampoValor from './CampoValor'
+import HelpCampo from '../shared/HelpCampo'
 import ComposicaoReciboAluguel from './ComposicaoReciboAluguel'
 
 const RESPONSAVEIS = [['inquilino', 'Inquilino (meu)'], ['proprietario', 'Proprietário (dono)']]
@@ -160,7 +161,7 @@ function ComposicaoBoletoCondominio({
 
   return (
     <Modal open onClose={salvando ? () => {} : onClose} title="Composição do boleto do condomínio" size="xl">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="composicaoBoleto">
         <p className="text-texto-2">
           {rotuloContrato(contrato)}
           {aberta
@@ -169,29 +170,31 @@ function ComposicaoBoletoCondominio({
           {' '}Itens do proprietário viram crédito {aberta ? 'previsto ' : ''}a abater {regraAbatimento(contrato) === 'mes_seguinte' ? 'no aluguel do mês seguinte' : 'no próximo aluguel pendente'}.
           {modo === 'informar' && ' O valor do lançamento não muda.'}
         </p>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1" data-help-id="composicaoBoleto.entrada">
           {tab('digitar', 'Digitar itens', ListPlus)}
           {tab('colar', 'Colar texto', ClipboardPaste)}
           {tab('foto', LEITURA_DE_IMAGEM_DISPONIVEL ? 'Foto ou PDF' : 'Foto (em breve)', Camera, !LEITURA_DE_IMAGEM_DISPONIVEL)}
+          <HelpCampo campo="composicaoBoleto.entrada" />
         </div>
 
         {entrada === 'colar' && (
           <div className="space-y-2">
-            <textarea className="input min-h-[140px] font-mono text-xs" value={texto} onChange={e => setTexto(e.target.value)}
-              placeholder={'Cole aqui o texto do app do condomínio, um item por linha:\nTaxa de Condomínio 795,11\nFundo de Reserva 79,10'} />
-            <button type="button" className="btn-primary text-xs" onClick={lerTexto} disabled={!texto.trim()}>Ler texto</button>
+            <textarea className="input min-h-[140px] font-mono text-xs" data-help-id="composicaoBoleto.texto" aria-label="Texto do boleto" value={texto} onChange={e => setTexto(e.target.value)}
+              placeholder="Cole aqui o texto do app do condomínio, um item por linha" />
+            <div className="flex items-center gap-1"><button type="button" className="btn-primary text-xs" onClick={lerTexto} disabled={!texto.trim()}>Ler texto</button><HelpCampo campo="composicaoBoleto.texto" /></div>
           </div>
         )}
         {entrada === 'foto' && (
           <div className="space-y-2">
             <p className="text-xs text-texto-2">Tire uma foto do boleto ou anexe uma foto, um print ou o PDF. O Assistente lê o vencimento, o total e os itens; você confere antes de gravar. O arquivo não fica guardado.</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2" data-help-id="composicaoBoleto.foto">
               <button type="button" className="btn-secondary text-xs inline-flex items-center gap-1.5 min-h-[40px]" disabled={lendo} onClick={() => cameraRef.current?.click()}>
                 <Camera size={14} /> Tirar foto
               </button>
               <button type="button" className="btn-secondary text-xs inline-flex items-center gap-1.5 min-h-[40px]" disabled={lendo} onClick={() => arquivoRef.current?.click()}>
                 <ImagePlus size={14} /> Anexar foto, print ou PDF
               </button>
+              <HelpCampo campo="composicaoBoleto.foto" />
               <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={lerArquivo} data-testid="foto-camera" />
               <input ref={arquivoRef} type="file" accept="image/*,application/pdf,.pdf" className="hidden" onChange={lerArquivo} data-testid="foto-arquivo" />
             </div>
@@ -213,8 +216,8 @@ function ComposicaoBoletoCondominio({
         )}
 
         {aberta && (
-          <div className="max-w-xs">
-            <label className="label">Total do boleto</label>
+          <div className="max-w-xs" data-help-id="composicaoBoleto.total">
+            <label className="label">Total do boleto<HelpCampo campo="composicaoBoleto.total" /></label>
             <CampoValor className="input py-1.5 text-sm" value={totalTexto} onChange={setTotalTexto} placeholder="Valor a pagar do boleto" />
             <p className="text-[11px] text-texto-3 mt-0.5">Vazio: o total é a soma dos itens.</p>
           </div>
@@ -222,33 +225,34 @@ function ComposicaoBoletoCondominio({
 
         {entrada === 'digitar' && (
           <div className="space-y-1.5">
+            <p data-testid="legenda-itens-boleto" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3"><span>Descrição<HelpCampo campo="composicaoBoleto.itemDescricao" /></span><span>Valor<HelpCampo campo="composicaoBoleto.itemValor" /></span><span>De quem é<HelpCampo campo="composicaoBoleto.itemResponsavel" /></span><span>Lembrar<HelpCampo campo="composicaoBoleto.lembrar" /></span><span>Só neste boleto<HelpCampo campo="composicaoBoleto.soNesteBoleto" /></span><span>Dividir<HelpCampo campo="composicaoBoleto.dividir" /></span></p>
             {itens.map((it, i) => (
               <div key={i} className={`grid grid-cols-[1fr_110px] sm:grid-cols-[1fr_120px_170px_28px] gap-2 items-start p-2 rounded-lg ${it.responsavel ? 'bg-surface-2/60' : 'bg-surface-2/60 outline outline-1 outline-aviso'}`}>
                 <div className="min-w-0">
-                  <input className="input py-1.5 text-sm" value={linhas[i].desc} onChange={e => setLinha(i, { desc: e.target.value })} placeholder="Descrição do item" />
+                  <input className="input py-1.5 text-sm" data-help-id="composicaoBoleto.itemDescricao" aria-label="Descrição do item" value={linhas[i].desc} onChange={e => setLinha(i, { desc: e.target.value })} placeholder="Descrição do item" />
                   <p className="text-[11px] mt-0.5 text-texto-3 truncate">
                     {it.regra ? `regra: ${it.regra}` : it.responsavel ? 'marcado à mão' : <span className="text-aviso">⚠ Sem regra — de quem é?</span>}
                   </p>
                 </div>
-                <CampoValor className="input py-1.5 text-sm" value={linhas[i].valorTexto} onChange={v => setLinha(i, { valorTexto: v })} placeholder="Valor do item" />
+                <CampoValor className="input py-1.5 text-sm" helpId="composicaoBoleto.itemValor" aria-label="Valor do item" value={linhas[i].valorTexto} onChange={v => setLinha(i, { valorTexto: v })} placeholder="Valor do item" />
                 <div className="col-span-2 sm:col-span-1">
-                  <select className="input py-1.5 text-sm" value={it.responsavel || ''} onChange={e => setLinha(i, { responsavel: e.target.value || null, manual: !!e.target.value })}>
+                  <select className="input py-1.5 text-sm" data-help-id="composicaoBoleto.itemResponsavel" aria-label="De quem é" value={it.responsavel || ''} onChange={e => setLinha(i, { responsavel: e.target.value || null, manual: !!e.target.value })}>
                     <option value="">De quem é?</option>
                     {RESPONSAVEIS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                   {!it.regra_id && it.responsavel && (
-                    <label className="flex items-center gap-1.5 text-[11px] text-texto-2 mt-1">
+                    <label data-help-id="composicaoBoleto.lembrar" className="flex items-center gap-1.5 text-[11px] text-texto-2 mt-1">
                       <input type="checkbox" className="accent-primary" checked={!!lembrar[i]} onChange={e => setLembrar(p => ({ ...p, [i]: e.target.checked }))} />
                       <span className="min-w-0 truncate">Lembrar para os próximos{padraoDaRegra(it.desc) ? <> (itens que começam com "<span data-testid="padrao-regra">{padraoDaRegra(it.desc)}</span>")</> : null}</span>
                     </label>
                   )}
-                  <label className="flex items-center gap-1.5 text-[11px] text-texto-2 mt-1" title="Item eventual: fica fora da previsão dos próximos condomínios. Não muda o crédito nem o valor do lançamento">
+                  <label data-help-id="composicaoBoleto.soNesteBoleto" className="flex items-center gap-1.5 text-[11px] text-texto-2 mt-1" title="Item eventual: fica fora da previsão dos próximos condomínios. Não muda o crédito nem o valor do lançamento">
                     <input type="checkbox" className="accent-primary" checked={!!linhas[i].so_neste_boleto} onChange={e => setLinha(i, { so_neste_boleto: e.target.checked })} />
                     Só neste boleto
                   </label>
                   {dividindo[i] != null ? (
                     <div className="flex items-center gap-1.5 mt-1">
-                      <CampoValor className="input py-1 text-xs" value={dividindo[i]} onChange={v => setDividindo(p => ({ ...p, [i]: v }))} placeholder="Parte do proprietário" />
+                      <CampoValor className="input py-1 text-xs" helpId="composicaoBoleto.dividir" aria-label="Parte do proprietário" value={dividindo[i]} onChange={v => setDividindo(p => ({ ...p, [i]: v }))} placeholder="Parte do proprietário" />
                       <button type="button" className="btn-secondary text-[11px] py-1" onClick={() => {
                         const partes = dividirItem({ desc: linhas[i].desc, valor: it.valor }, parseValorBR(dividindo[i]) || 0).map(comoLinha)
                         setLinhas(p => [...p.slice(0, i), ...partes, ...p.slice(i + 1)])

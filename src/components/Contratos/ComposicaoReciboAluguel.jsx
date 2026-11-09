@@ -13,6 +13,7 @@ import {
   TIPOS_ITEM_ALUGUEL, classificarRecibo, esperadoDaComposicao, creditosLigaveis, validarRecibo, ehLinhaDeTotal,
 } from '../../lib/contratos/composicaoAluguel'
 import CampoValor from './CampoValor'
+import HelpCampo from '../shared/HelpCampo'
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 const MANUAL = '__manual'
@@ -133,36 +134,38 @@ export default function ComposicaoReciboAluguel({ contrato, parcela, tx = null, 
 
   return (
     <Modal open onClose={salvando ? () => {} : onClose} title="Composição do recibo do aluguel" size="xl">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="composicaoRecibo">
         <p className="text-texto-2">
           {rotuloContrato(contrato)}
           {paga
             ? <> · pagamento de {fmtDate(tx.date)} · valor pago <strong className="text-texto-1">{fmt(tx.amount)}</strong>. O lançamento não muda: só a composição.</>
             : <> · parcela de {fmtDate(parcela.startDate)} (pendente) · valor atual <strong className="text-texto-1">{fmt(parcela.amount)}</strong>. O valor da parcela passa a ser o total do recibo (só esta parcela).</>}
         </p>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1" data-help-id="composicaoRecibo.entrada">
           {tab('digitar', 'Digitar itens', ListPlus)}
           {tab('colar', 'Colar texto', ClipboardPaste)}
           {tab('foto', 'Foto ou PDF', Camera)}
+          <HelpCampo campo="composicaoRecibo.entrada" />
         </div>
 
         {entrada === 'colar' && (
           <div className="space-y-2">
-            <textarea className="input min-h-[140px] font-mono text-xs" value={texto} onChange={e => setTexto(e.target.value)}
-              placeholder={'Cole aqui o texto do recibo, um item por linha (desconto com "-" ou "(-)"):\nAluguel 3.900,00\nSeguro incêndio 3/36 49,06\nFundo de reserva -79,14'} />
-            <button type="button" className="btn-primary text-xs" onClick={lerTexto} disabled={!texto.trim()}>Ler texto</button>
+            <textarea className="input min-h-[140px] font-mono text-xs" data-help-id="composicaoRecibo.texto" aria-label="Texto do recibo" value={texto} onChange={e => setTexto(e.target.value)}
+              placeholder={'Cole aqui o texto do recibo, um item por linha (desconto com "-" ou "(-)")'} />
+            <div className="flex items-center gap-1"><button type="button" className="btn-primary text-xs" onClick={lerTexto} disabled={!texto.trim()}>Ler texto</button><HelpCampo campo="composicaoRecibo.texto" /></div>
           </div>
         )}
         {entrada === 'foto' && (
           <div className="space-y-2">
             <p className="text-xs text-texto-2">Tire uma foto do recibo ou anexe uma foto, um print ou o PDF. O Assistente lê a referência, as datas, o valor pago e os itens (débito soma, crédito subtrai); você confere antes de gravar. O arquivo não fica guardado.</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2" data-help-id="composicaoRecibo.foto">
               <button type="button" className="btn-secondary text-xs inline-flex items-center gap-1.5 min-h-[40px]" disabled={lendo} onClick={() => cameraRef.current?.click()}>
                 <Camera size={14} /> Tirar foto
               </button>
               <button type="button" className="btn-secondary text-xs inline-flex items-center gap-1.5 min-h-[40px]" disabled={lendo} onClick={() => arquivoRef.current?.click()}>
                 <ImagePlus size={14} /> Anexar foto, print ou PDF
               </button>
+              <HelpCampo campo="composicaoRecibo.foto" />
               <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={lerArquivo} data-testid="recibo-camera" />
               <input ref={arquivoRef} type="file" accept="image/*,application/pdf,.pdf" className="hidden" onChange={lerArquivo} data-testid="recibo-arquivo" />
             </div>
@@ -181,8 +184,8 @@ export default function ComposicaoReciboAluguel({ contrato, parcela, tx = null, 
         )}
 
         {!paga && (
-          <div className="max-w-xs">
-            <label className="label">Total do recibo</label>
+          <div className="max-w-xs" data-help-id="composicaoRecibo.total">
+            <label className="label">Total do recibo<HelpCampo campo="composicaoRecibo.total" /></label>
             <CampoValor className="input py-1.5 text-sm" value={totalTexto} onChange={setTotalTexto} placeholder="Valor total a pagar do recibo" />
             <p className="text-[11px] text-texto-3 mt-0.5">Vazio: o total é a soma dos itens.</p>
           </div>
@@ -190,18 +193,19 @@ export default function ComposicaoReciboAluguel({ contrato, parcela, tx = null, 
 
         {entrada === 'digitar' && (
           <div className="space-y-1.5">
+            <p data-testid="legenda-itens-recibo" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3"><span>Descrição<HelpCampo campo="composicaoRecibo.itemDescricao" /></span><span>Valor<HelpCampo campo="composicaoRecibo.itemValor" /></span><span>Débito/crédito<HelpCampo campo="composicaoRecibo.itemNatureza" /></span><span>Tipo<HelpCampo campo="composicaoRecibo.itemTipo" /></span><span>Crédito do proprietário<HelpCampo campo="composicaoRecibo.credito" /></span><span>Tornar recorrente<HelpCampo campo="composicaoRecibo.recorrente" /></span></p>
             {itens.map((it, i) => {
               const destinoAtual = it.tipo === 'credito' && it.credito_id ? destinos.get(it.credito_id)?.parcela : null
               return (
                 <div key={i} className="grid grid-cols-[1fr_110px] sm:grid-cols-[1fr_120px_120px_190px_28px] gap-2 items-start p-2 rounded-lg bg-surface-2/60" data-testid="item-recibo">
-                  <input className="input py-1.5 text-sm" value={it.desc} onChange={e => setLinha(i, { desc: e.target.value })} placeholder="Descrição do item do recibo" />
-                  <CampoValor className="input py-1.5 text-sm" value={it.valorTexto} onChange={v => setLinha(i, { valorTexto: v })} placeholder="Valor do item" />
-                  <select className="input py-1.5 text-sm" value={it.natureza} aria-label="Débito ou crédito" onChange={e => setLinha(i, { natureza: e.target.value })}>
+                  <input className="input py-1.5 text-sm" data-help-id="composicaoRecibo.itemDescricao" aria-label="Descrição do item" value={it.desc} onChange={e => setLinha(i, { desc: e.target.value })} placeholder="Descrição do item do recibo" />
+                  <CampoValor className="input py-1.5 text-sm" helpId="composicaoRecibo.itemValor" aria-label="Valor do item" value={it.valorTexto} onChange={v => setLinha(i, { valorTexto: v })} placeholder="Valor do item" />
+                  <select className="input py-1.5 text-sm" data-help-id="composicaoRecibo.itemNatureza" value={it.natureza} aria-label="Débito ou crédito" onChange={e => setLinha(i, { natureza: e.target.value })}>
                     <option value="debito">Débito (+)</option>
                     <option value="credito">Crédito (−)</option>
                   </select>
                   <div className="col-span-2 sm:col-span-1 space-y-1">
-                    <select className="input py-1.5 text-sm" value={it.tipo} aria-label="Tipo do item"
+                    <select className="input py-1.5 text-sm" data-help-id="composicaoRecibo.itemTipo" value={it.tipo} aria-label="Tipo do item"
                       onChange={e => setLinha(i, { tipo: e.target.value, acao: e.target.value === 'credito' ? (it.credito_id ? 'ligar' : MANUAL) : null })}>
                       {Object.entries(TIPOS_ITEM_ALUGUEL).filter(([k]) => k !== 'ajuste').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                     </select>
@@ -209,7 +213,7 @@ export default function ComposicaoReciboAluguel({ contrato, parcela, tx = null, 
                       <div className="text-[11px] text-aviso">
                         Previsto {fmt(Math.abs(it.esperado))} — vale só nesta parcela.
                         {it.encargo_id && (
-                          <label className="flex items-center gap-1.5 text-texto-2 mt-0.5">
+                          <label data-help-id="composicaoRecibo.seguir" className="flex items-center gap-1.5 text-texto-2 mt-0.5">
                             <input type="checkbox" className="accent-primary" checked={!!it.seguir} onChange={e => setLinha(i, { seguir: e.target.checked })} />
                             Usar {fmt(Math.abs(it.valor))} nas próximas parcelas
                           </label>
@@ -218,7 +222,7 @@ export default function ComposicaoReciboAluguel({ contrato, parcela, tx = null, 
                     )}
                     {it.tipo === 'credito' && (
                       <>
-                        <select className="input py-1.5 text-xs" aria-label="Crédito do proprietário" value={it.acao === MANUAL ? MANUAL : (it.credito_id || '')}
+                        <select className="input py-1.5 text-xs" data-help-id="composicaoRecibo.credito" aria-label="Crédito do proprietário" value={it.acao === MANUAL ? MANUAL : (it.credito_id || '')}
                           onChange={e => setLinha(i, e.target.value === MANUAL ? { acao: MANUAL, credito_id: null } : { acao: 'ligar', credito_id: e.target.value || null })}>
                           <option value="">Escolha o crédito…</option>
                           {ligaveis.filter(c => c.id === it.credito_id || !usados.has(c.id)).map(c => <option key={c.id} value={c.id}>{rotuloCredito(c)}</option>)}
@@ -230,7 +234,7 @@ export default function ComposicaoReciboAluguel({ contrato, parcela, tx = null, 
                       </>
                     )}
                     {it.tipo === 'unico' && (
-                      <label className="flex items-center gap-1.5 text-[11px] text-texto-2">
+                      <label data-help-id="composicaoRecibo.recorrente" className="flex items-center gap-1.5 text-[11px] text-texto-2">
                         <input type="checkbox" className="accent-primary" checked={!!it.recorrente} onChange={e => setLinha(i, { recorrente: e.target.checked })} />
                         Tornar recorrente
                       </label>
@@ -238,10 +242,10 @@ export default function ComposicaoReciboAluguel({ contrato, parcela, tx = null, 
                     {it.tipo === 'unico' && it.recorrente && (
                       <div className="flex items-center gap-1 text-[11px] text-texto-2">
                         <span>nesta parcela é a</span>
-                        <input type="number" min="1" className="input py-1 px-1.5 text-xs w-14" value={it.parcelaAtual} aria-label="Parcela atual do item"
+                        <input type="number" min="1" className="input py-1 px-1.5 text-xs w-14" data-help-id="composicaoRecibo.parcelaAtual" value={it.parcelaAtual} aria-label="Parcela atual do item"
                           placeholder="nº" onChange={e => setLinha(i, { parcelaAtual: e.target.value })} />
                         <span>de</span>
-                        <input type="number" min="1" className="input py-1 px-1.5 text-xs w-16" value={it.parcelasTotal} aria-label="Total de parcelas do item"
+                        <input type="number" min="1" className="input py-1 px-1.5 text-xs w-16" data-help-id="composicaoRecibo.parcelasTotal" value={it.parcelasTotal} aria-label="Total de parcelas do item"
                           placeholder="total" onChange={e => setLinha(i, { parcelasTotal: e.target.value })} />
                       </div>
                     )}

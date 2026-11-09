@@ -187,3 +187,20 @@ Agendamentos têm roteiro de Preenchimento Guiado (`formularios`); os demais tê
 - O Tipo do provisório ganhou `aria-pressed`.
 - Teste: `src/components/CashFlow/ajudaCampos.test.jsx`.
 
+### Bloco 3 — Contratos
+
+- O conteúdo está em `src/help/contratosAcoes.js`. O wizard da ficha continua em `contratos.js`.
+- Formulários (`data-help-form`):
+  - `vinculoContrato`: agendamentos e lançamentos detectados;
+  - `vincularPagamento`;
+  - `reajusteContrato` e `reajusteRepasse`;
+  - `creditoManual`, `trocarDestino` e `justificarDiferenca`;
+  - `composicaoBoleto` e `composicaoRecibo`;
+  - `regraItem`: Regras de itens, com o teste;
+  - `renovarContrato` e `rescindirContrato`;
+  - `buscarRepasse`.
+- Os Encargos e descontos na parcela usam os ids `encargoParcela.*` dentro do formulário `contrato`.
+- Linhas editáveis sem rótulo (itens do boleto e do recibo, encargos, lançamentos para vincular) recebem `data-help-id` no próprio controle e um ⓘ numa legenda acima da lista. É o mesmo padrão das listas de Cadastros.
+- Placeholders com exemplo passaram a descrever a função. São eles: os textos para colar do boleto, do recibo e do teste de regras, o motivo do crédito e a descrição do encargo.
+- Teste: `src/components/Contratos/ajudaCampos.test.jsx`.
+

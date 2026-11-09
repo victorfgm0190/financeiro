@@ -9,8 +9,9 @@ import { diferencaDoPagamento, esperadoDoPagamento } from '../../lib/contratos/e
 import { rotuloPapel, rotulosContrato } from '../../lib/contratos/rotulos'
 import { hojeStr } from '../../lib/contratos/datas'
 import CampoValor from './CampoValor'
+import HelpCampo from '../shared/HelpCampo'
 
-const Campo = ({ label, children }) => <div><label className="label">{label}</label>{children}</div>
+const Campo = ({ label, children, help }) => <div data-help-id={help}><label className="label">{label}{help && <HelpCampo campo={help} />}</label>{children}</div>
 const rotuloParcela = (contrato, s) => `${rotuloPapel(contrato, 'aluguel')} de ${fmtDate(s.startDate)} · ${fmt(s.amount)}`
 
 // Seletor de parcela pendente (destino de crédito). '' = seguir a regra do contrato.
@@ -45,16 +46,16 @@ export function CreditoManualModal({ contrato, onClose, onConcluido }) {
   }
   return (
     <Modal open onClose={salvando ? () => {} : onClose} title="Novo crédito manual" size="md">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="creditoManual">
         <p className="text-texto-2">Um valor a abater numa parcela pendente. Não gera lançamento: aparece na composição da parcela.</p>
-        <Campo label="Descrição">
-          <input className="input" value={descricao} onChange={e => setDescricao(e.target.value)} maxLength={200} placeholder="Motivo do crédito (ex.: reembolso de conserto)" />
+        <Campo label="Descrição" help="creditoContrato.descricao">
+          <input className="input" value={descricao} onChange={e => setDescricao(e.target.value)} maxLength={200} placeholder="Motivo do crédito" />
         </Campo>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Campo label="Valor"><CampoValor value={valor} onChange={setValor} placeholder="Valor a abater" /></Campo>
-          <Campo label="Data do crédito"><input type="date" className="input" value={data} onChange={e => setData(e.target.value)} /></Campo>
+          <Campo label="Valor" help="creditoContrato.valor"><CampoValor value={valor} onChange={setValor} placeholder="Valor a abater" /></Campo>
+          <Campo label="Data do crédito" help="creditoContrato.data"><input type="date" className="input" value={data} onChange={e => setData(e.target.value)} /></Campo>
         </div>
-        <Campo label="Abater em"><SeletorDestino contrato={contrato} valor={destino} onChange={setDestino} /></Campo>
+        <Campo label="Abater em" help="creditoContrato.destino"><SeletorDestino contrato={contrato} valor={destino} onChange={setDestino} /></Campo>
         {erro && <p className="text-xs text-perigo">{erro}</p>}
         <div className="flex justify-end gap-2">
           <button className="btn-secondary" disabled={salvando} onClick={onClose}>Cancelar</button>
@@ -80,9 +81,9 @@ export function TrocarDestinoModal({ contrato, credito, onClose, onConcluido }) 
   }
   return (
     <Modal open onClose={salvando ? () => {} : onClose} title="Trocar parcela de destino" size="md">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="trocarDestino">
         <p className="text-texto-2">{credito.descricao || 'Crédito'} · <strong className="text-texto-1">{fmt(credito.valor)}</strong>. Escolha em qual parcela pendente ele será abatido.</p>
-        <SeletorDestino contrato={contrato} valor={destino} onChange={setDestino} />
+        <Campo label="Abater em" help="creditoContrato.destino"><SeletorDestino contrato={contrato} valor={destino} onChange={setDestino} /></Campo>
         {erro && <p className="text-xs text-perigo">{erro}</p>}
         <div className="flex justify-end gap-2">
           <button className="btn-secondary" disabled={salvando} onClick={onClose}>Cancelar</button>
@@ -125,14 +126,14 @@ export function JustificarDiferencaModal({ contrato, linha, esperado: esperadoDa
   }
   return (
     <Modal open onClose={salvando ? () => {} : onClose} title="Justificar diferença" size="md">
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 text-sm" data-help-form="justificarDiferenca">
         <div className="grid grid-cols-3 gap-2 p-3 rounded-lg bg-surface-2/60 text-xs">
           <div><p className="text-texto-3">Esperado</p><p className="text-texto-1">{fmt(previsto)}</p></div>
           <div><p className="text-texto-3">Pago em {fmtDate(tx.date)}</p><p className="text-texto-1">{fmt(tx.amount)}</p></div>
           <div><p className="text-texto-3">Diferença</p><p className="text-aviso font-semibold">{fmt(diferenca)}</p></div>
         </div>
-        <div>
-          <p className="label">Créditos abertos ({rot.abaCreditos.toLowerCase()})</p>
+        <div data-help-id="justificarDiferenca.creditos">
+          <p className="label">Créditos abertos ({rot.abaCreditos.toLowerCase()})<HelpCampo campo="justificarDiferenca.creditos" /></p>
           {abertos.length === 0 ? <p className="text-xs text-texto-3">Nenhum crédito aberto.</p> : (
             <div className="space-y-1">
               {abertos.map(c => (
@@ -149,10 +150,10 @@ export function JustificarDiferencaModal({ contrato, linha, esperado: esperadoDa
           )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-2">
-          <Campo label="Crédito manual (opcional)">
+          <Campo label="Crédito manual (opcional)" help="justificarDiferenca.descricao">
             <input className="input" value={desc} onChange={e => setDesc(e.target.value)} maxLength={200} placeholder="Motivo do desconto já praticado" />
           </Campo>
-          <Campo label="Valor"><CampoValor value={valorManual} onChange={setValorManual} placeholder="Valor do desconto" /></Campo>
+          <Campo label="Valor" help="justificarDiferenca.valor"><CampoValor value={valorManual} onChange={setValorManual} placeholder="Valor do desconto" /></Campo>
         </div>
         <p className={`text-xs ${passa ? 'text-perigo' : 'text-texto-2'}`}>
           Justificado: <strong>{fmt(soma)}</strong> de {fmt(diferenca)}.{' '}
