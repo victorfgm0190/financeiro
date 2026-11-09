@@ -2,6 +2,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Check, Plus, Trash2 } from 'lucide-react'
 import HelpCampo from '../shared/HelpCampo'
 import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
+import BotaoPreencherGuia from '../Ajuda/BotaoPreencherGuia'
 import { useApp } from '../../context/AppContext'
 import CategorySelect from '../shared/CategorySelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
@@ -404,10 +405,24 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   const proxReaj = proximoReajuste(dados, hoje)
   // Aditivo no modo repasse que traz o início para antes do atual: oferece buscar os repasses já lançados.
   const inicioNoPassado = edicao && repasse && !!contrato?.data_inicio && !!f.data_inicio && f.data_inicio < contrato.data_inicio
+  // Preenchimento Guiado: "Ao salvar, vai acontecer…" com os dados do formulário.
+  const resumoGuia = () => {
+    const conta = accounts.find(a => a.id === f.conta_id)
+    const cat = categories.find(c => c.id === f.categoria_id)
+    const valor = num(f.valor_base)
+    const l = [`Contrato ${f.tipo === 'receber' ? 'a receber' : 'a pagar'}${f.objeto ? ` "${f.objeto}"` : ''}${valor ? ` de ${fmt(valor)}` : ''}, a partir de ${fmtDate(f.data_inicio)}.`]
+    if (repasse) l.push(`Modo repasse: o recebimento previsto é o repasse líquido da administradora${f.dia_repasse ? `, todo dia ${f.dia_repasse}` : ''}.`)
+    else if (f.dia_vencimento) l.push(`As parcelas vencem todo dia ${f.dia_vencimento}.`)
+    if (conta) l.push(`Conta: ${conta.apelido || conta.name}.`)
+    if (cat) l.push(`Categoria: ${cat.name}.`)
+    l.push(edicao ? 'Aditivo: as parcelas pendentes são recalculadas; as já pagas não mudam.' : `Gera ${repasse ? 'os repasses' : 'as parcelas'} a partir de ${fmtYm(apartirDe)}.`)
+    return l
+  }
   return (
     <CampoErroContext.Provider value={erro && falha.campo ? { campo: falha.campo, erro } : null}>
     <div ref={raizRef} className="space-y-4" data-help-form="contrato">
       {!contrato && <AvisoPrerequisitos funcao="contrato" onIr={onClose} />}
+      <BotaoPreencherGuia form="contrato" funcao={contrato ? null : 'contrato'} resumo={resumoGuia} oferecer={!contrato} onFechar={onClose} className="-mb-2" />
       <ol data-guia="contrato-form.etapas" className="flex flex-wrap gap-1.5 text-[11px]">
         {etapasVisiveis.map((e, pos) => (
           <li key={e.i}>
@@ -759,9 +774,9 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           <ChevronLeft size={14} /> {etapa === 0 ? 'Cancelar' : 'Voltar'}
         </button>
         {etapa < ULTIMA ? (
-          <button type="button" data-guia="contrato-form.avancar" className="btn-primary flex items-center gap-1" onClick={avancar}>Avançar <ChevronRight size={14} /></button>
+          <button type="button" data-guia="contrato-form.avancar" data-help-avancar="contrato" className="btn-primary flex items-center gap-1" onClick={avancar}>Avançar <ChevronRight size={14} /></button>
         ) : (
-          <button type="button" data-guia="contrato-form.salvar" className="btn-primary flex items-center gap-1" disabled={salvando} onClick={confirmar}>
+          <button type="button" data-guia="contrato-form.salvar" data-help-salvar="contrato" className="btn-primary flex items-center gap-1" disabled={salvando} onClick={confirmar}>
             <Check size={14} /> {edicao ? 'Salvar aditivo' : 'Confirmar'}
           </button>
         )}

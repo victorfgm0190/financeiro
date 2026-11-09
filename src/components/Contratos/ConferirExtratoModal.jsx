@@ -3,6 +3,7 @@ import { Plus, Trash2, Upload, Pencil, Loader2, AlertTriangle, CheckCircle } fro
 import Modal from '../shared/Modal'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
+import BotaoPreencherGuia from '../Ajuda/BotaoPreencherGuia'
 import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
 import CampoValor from './CampoValor'
 import HelpCampo from '../shared/HelpCampo'
@@ -169,6 +170,13 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
   return (
     <Modal open onClose={onClose} title={titulo} size="xl">
       <div className="space-y-3 text-sm" data-help-form="conferenciaExtrato">
+        {podeEditar && (
+          <BotaoPreencherGuia form="conferenciaExtrato" onFechar={onClose} className="-mb-2"
+            resumo={() => [
+              ...(totalExtrato != null ? [`Total do extrato: ${fmt(totalExtrato)}.`] : []),
+              ...(numOuNull(cab.repasse) != null ? [`Repasse do extrato: ${fmt(numOuNull(cab.repasse))}.`] : []),
+            ]} />
+        )}
         {outroMes && (
           <div role="alert" data-testid="aviso-periodo" className="p-3 rounded-lg border-2 border-perigo/60 bg-perigo/10 text-sm text-texto-1 space-y-2">
             <p className="flex items-start gap-2 font-medium">
@@ -306,7 +314,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
         {erro && <p role="alert" className="text-xs text-perigo">{erro}</p>}
         <div className="flex justify-end gap-2 pt-2 border-t border-borda">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-          {podeEditar && <button type="button" className="btn-primary" disabled={salvando || !decidido || !!outroMes} title={outroMes ? 'O extrato é de outra competência' : decidido ? undefined : 'Escolha o que fazer com a diferença do repasse'} onClick={confirmar}>Confirmar conferência</button>}
+          {podeEditar && <button type="button" data-help-salvar="conferenciaExtrato" className="btn-primary" disabled={salvando || !decidido || !!outroMes} title={outroMes ? 'O extrato é de outra competência' : decidido ? undefined : 'Escolha o que fazer com a diferença do repasse'} onClick={confirmar}>Confirmar conferência</button>}
         </div>
       </div>
     </Modal>

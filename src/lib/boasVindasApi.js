@@ -81,6 +81,16 @@ export const ocultarGuia = (tela) => gravar('POST', { guiaOculto: tela }, (e) =>
 export const ocultarTodosGuias = (telas = []) => gravar('POST', { guiasTodos: true }, () => ({ guiasOcultos: telas }))
 export const reativarTodosGuias = () => gravar('DELETE', null, () => ({ guiasOcultos: [] }))
 export const reativarGuia = (tela) => gravar('POST', { guiaReativar: tela }, (e) => ({ guiasOcultos: (e.guiasOcultos || []).filter(t => t !== tela) }))
+// Preenchimento Guiado: resposta à oferta da 1ª abertura do formulário ('vista' | 'sim' | 'nao' | 'nunca').
+export const responderOfertaGuia = (form, resposta) => gravar('POST', { guiaOferta: { form, resposta } }, (e) => ({
+  progresso: {
+    ...(e.progresso || {}),
+    guiaOfertas: { ...(e.progresso?.guiaOfertas || {}), [form]: resposta },
+    ...(resposta === 'nunca' ? { guiaOfertaDesligada: true } : {}),
+  },
+}))
+// Oferta já respondida neste formulário, ou desligada ("Não perguntar mais")?
+export const ofertaGuiaRespondida = (e, form) => !!(e?.progresso?.guiaOfertaDesligada || e?.progresso?.guiaOfertas?.[form])
 // Interruptor geral (Configurações › Geral › Guias das telas). Desligado: nada abre sozinho e o "?" some.
 export const definirGuiasLigados = (ligados) => gravar('POST', { guiasLigados: !!ligados }, () => ({ guiasLigados: !!ligados }))
 export const definirAjudaCampos = (ligada) => gravar('POST', { ajudaCampos: !!ligada }, () => ({ ajudaCampos: !!ligada }))

@@ -162,13 +162,19 @@ describe('tour da tela', () => {
     expect(screen.getByTestId('guia-tela')).toBeTruthy()
     await waitFor(() => expect(screen.getAllByTestId('selo-guia')).toHaveLength(2))
   })
-  it('Configurações: na primeira visita o tour geral (abas) vem antes do tour da seção', async () => {
+  it('Configurações: abrindo uma seção, só o tour da seção abre sozinho (o geral não vem antes)', async () => {
     const Perfis = () => { useSubtelaGuia('settings:perfis'); return null }
     render(<><Perfis /><AjudaTela pagina="settings" /><GuiaInterativo /></>)
     await esperarTour()
-    expect(screen.getByTestId('balao-tour').textContent).toContain(AJUDA_TELAS.settings.descricao)
+    expect(screen.getByTestId('balao-tour').textContent).toContain(AJUDA_TELAS['settings:perfis'].descricao)
     fireEvent.keyDown(window, { key: 'Escape' })
-    await waitFor(() => expect(screen.getByTestId('balao-tour').textContent).toContain(AJUDA_TELAS['settings:perfis'].descricao), { timeout: 3000 })
+    await new Promise(r => setTimeout(r, 1200))
+    expect(screen.queryByTestId('balao-tour')).toBeNull()
+  })
+  it('Configurações: na tela inicial (sem seção) abre o tour geral', async () => {
+    render(<><AjudaTela pagina="settings" /><GuiaInterativo /></>)
+    await esperarTour()
+    expect(screen.getByTestId('balao-tour').textContent).toContain(AJUDA_TELAS.settings.descricao)
   })
 })
 

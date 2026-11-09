@@ -22,6 +22,24 @@ import { encerrarTour, iniciarTarefa } from './tourEstado'
 import { MARGEM, LARGURA_BALAO, posicaoBalao } from './tourPassos'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { ESPERA_ELEMENTO_MS, PAUSA_DIGITACAO_MS, passosDaTarefa, itemNovo } from './tarefaPassos'
+import { retornoGuia, limparRetornoGuia, armarPreenchimento, ABRIR_FORMULARIO } from '../../help/guiaPreenchimento.js'
+
+// "Cadastrar agora" do Preenchimento Guiado: no fim da tarefa, volta ao formulário (que abre guiado).
+function voltarAoFormulario(r) {
+  limparRetornoGuia()
+  encerrarTour()
+  const a = ABRIR_FORMULARIO[r.form]
+  if (!a) return
+  armarPreenchimento(r.form)
+  navegarPara(a.tela)
+  const inicio = Date.now()
+  const tentar = () => {
+    const b = elementoPorGuia(a.novo)
+    if (b && b.getClientRects().length) { b.click(); return }
+    if (Date.now() - inicio < ESPERA_ELEMENTO_MS) setTimeout(tentar, 250)
+  }
+  setTimeout(tentar, 300)
+}
 
 export default function TarefaGuiada({ tarefaId }) {
   const app = useApp()
@@ -143,6 +161,7 @@ export default function TarefaGuiada({ tarefaId }) {
   })
   const esperaClique = passo?.espera === 'clique' && !naoAchou
   const demais = terminou ? tarefasDaTela(t.tela, ctx, { celular: isMobile }).filter(x => x.id !== t.id) : []
+  const retorno = terminou ? retornoGuia() : null
 
   return createPortal(
     <div className="fixed inset-0 z-[100] pointer-events-none" data-testid="tarefa-guiada">
@@ -175,6 +194,11 @@ export default function TarefaGuiada({ tarefaId }) {
                   <li key={x.id}><button type="button" className="w-full text-left text-sm text-primary-fg hover:underline min-h-[36px]" onClick={() => iniciarTarefa(x.id)}>{x.titulo}</button></li>
                 ))}
               </ul>
+            )}
+            {retorno && (
+              <button type="button" data-testid="voltar-ao-formulario" className="btn-primary text-sm min-h-[40px] w-full" onClick={() => voltarAoFormulario(retorno)}>
+                Voltar para {retorno.titulo}
+              </button>
             )}
             <div className="flex gap-2">
               {demais.length > 0 && !outras && <button type="button" className="btn-secondary text-sm min-h-[40px]" onClick={() => setOutras(true)}>Fazer outra tarefa</button>}

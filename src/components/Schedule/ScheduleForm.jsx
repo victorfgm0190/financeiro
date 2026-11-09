@@ -8,7 +8,8 @@ import HelpCampo from '../shared/HelpCampo'
 import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
 import { publicarAgendaJa } from '../../lib/agendaFeedApi'
 import { useApp } from '../../context/AppContext'
-import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
+import { today, fmt, fmtDate, buildAccountSelectOptions } from '../shared/utils'
+import BotaoPreencherGuia from '../Ajuda/BotaoPreencherGuia'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import { rotuloParcela } from '../../lib/numeroParcela'
 import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
@@ -882,6 +883,22 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     )
   }
 
+  // Preenchimento Guiado: "Ao salvar, vai acontecer…" com os dados do formulário.
+  const resumoGuia = () => {
+    const nome = (a) => a?.apelido || a?.name
+    const conta = accounts.find(a => a.id === form.accountId)
+    const destino = accounts.find(a => a.id === form.toAccountId)
+    const cat = categories.find(c => c.id === form.categoryId)
+    const freq = FREQUENCIES.find(x => x.value === form.frequency)?.label
+    const tipo = { income: 'Receita', expense: 'Despesa', transfer: 'Transferência' }[form.transactionType] || 'Movimentação'
+    const l = [`${tipo} "${form.description || 'sem descrição'}" de ${fmt(Number(form.amount) || 0)}${freq ? `, ${freq.toLowerCase()}` : ''}${form.startDate ? `, a partir de ${fmtDate(form.startDate)}` : ''}.`]
+    if (conta) l.push(form.transactionType === 'transfer' && destino ? `Sai de ${nome(conta)} e entra em ${nome(destino)}.` : `Conta: ${nome(conta)}.`)
+    if (cat && form.transactionType !== 'transfer') l.push(`Categoria: ${cat.name}.`)
+    if (form.frequency && form.frequency !== 'once') l.push(form.occurrenceType === 'installment' ? `${Number(form.installments) || 0} ocorrências e depois encerra.` : 'Repete sem data de fim.')
+    if (form.autoRegister) l.push('Registra sozinho na data, sem pedir confirmação.')
+    return l
+  }
+
   return (
     <>
       {/* Celular (< sm): 1 coluna. Os blocos com max-sm:-order-1 (até o Valor) sobem juntos, na
@@ -889,6 +906,10 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           a ordem e as 2 colunas são as de sempre. */}
       {!initial?.id && <AvisoPrerequisitos funcao="agendamento" onIr={onClose} />}
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-help-form="agendamento">
+        {podeGravarForm && (
+          <BotaoPreencherGuia form="agendamento" funcao={initial?.id ? null : 'agendamento'} resumo={resumoGuia} oferecer={!initial?.id}
+            onFechar={onClose} className="max-sm:-order-2 sm:col-span-2 -mb-2" />
+        )}
         {initial?.id && (
           <div className="max-sm:-order-1 sm:col-span-2 flex items-center justify-end -mb-2">
             <button type="button" onClick={() => setVerHistorico(true)} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5" title="Histórico de alterações">
@@ -1521,7 +1542,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         <div className="sm:col-span-2 flex gap-3 pt-1 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:bg-surface max-sm:border-t max-sm:border-borda max-sm:pt-3 acoes-safe-bottom">
           <button type="button" className="btn-secondary flex-1" onClick={() => { if (podeDescartar()) onClose() }}>Cancelar</button>
           {podeGravarForm
-            ? <button type="submit" disabled={!!mudouFora} data-guia="agendamento-form.salvar" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
+            ? <button type="submit" disabled={!!mudouFora} data-guia="agendamento-form.salvar" data-help-salvar="agendamento" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
             : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
         </div>
       </form>

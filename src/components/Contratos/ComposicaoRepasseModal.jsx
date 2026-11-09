@@ -5,6 +5,7 @@ import CategorySelect from '../shared/CategorySelect'
 import HelpCampo from '../shared/HelpCampo'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
+import BotaoPreencherGuia from '../Ajuda/BotaoPreencherGuia'
 import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
 import CampoValor from './CampoValor'
 import DateInput from '../shared/DateInput'
@@ -130,6 +131,10 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
   return (
     <Modal open onClose={onClose} title={`Composição do repasse — ${fmtYm(competencia)}`} size="lg">
       <div className="space-y-3 text-sm" data-help-form="repasseComposicao">
+        {podeEditar && (
+          <BotaoPreencherGuia form="repasseComposicao" onFechar={onClose} className="-mb-2"
+            resumo={() => [`Bruto ${fmt(bruto)}, deduções ${fmt(deducoes)}.`, saldo == null ? 'Competência fora do saldo com a administradora.' : `Repasse desta competência: ${fmt(repasse)}.`]} />
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className={`text-xs font-medium ${linha.linha?.conferencia ? 'text-receita' : 'text-aviso'}`}>
             {linha.linha?.conferencia ? `Conferida com o extrato em ${linha.linha.conferencia.conferido_em.split('-').reverse().join('/')}` : 'Projetada pelo Finup — extrato ainda não conferido'}
@@ -288,7 +293,7 @@ export default function ComposicaoRepasseModal({ contrato, competencia, onClose 
           </div>
           <div className="flex gap-2">
             <button type="button" className="btn-secondary" onClick={onClose}>{podeEditar ? 'Cancelar' : 'Fechar'}</button>
-            {podeEditar && <button type="button" className="btn-primary" disabled={salvando} onClick={() => gravar(false)}>Gravar</button>}
+            {podeEditar && <button type="button" data-help-salvar="repasseComposicao" className="btn-primary" disabled={salvando} onClick={() => gravar(false)}>Gravar</button>}
           </div>
         </div>
       </div>

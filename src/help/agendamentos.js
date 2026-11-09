@@ -152,6 +152,30 @@ export const campos = {
     relacaoComTela: 'O saldo desta conta é que muda; pode ser outra conta só nesta ocorrência.',
     obrigatorio: true,
   },
+  'registrarAgendamento.favorecido': {
+    titulo: 'Favorecido / Pagador',
+    paraQueServe: 'Quem recebeu o pagamento ou quem pagou o valor nesta ocorrência.',
+    relacaoComTela: 'Vai para o lançamento criado; vem preenchido com o favorecido do agendamento e pode ser outro só nesta ocorrência.',
+    obrigatorio: false,
+  },
+  'registrarAgendamento.contaDestino': {
+    titulo: 'Banco para (transferência)',
+    paraQueServe: 'Conta que recebe o valor da transferência.',
+    relacaoComTela: 'O valor sai da conta de origem e entra nesta; as duas mudam de saldo e o total do patrimônio não muda.',
+    obrigatorio: true,
+  },
+  'registrarAgendamento.gerencial': {
+    titulo: 'Classificação gerencial (registrar)',
+    paraQueServe: 'Grupo gerencial do lançamento criado nesta ocorrência.',
+    relacaoComTela: 'Define em que grupo o valor aparece no controle gerencial; vem do agendamento e pode ser outro só nesta ocorrência.',
+    obrigatorio: false,
+  },
+  'registrarAgendamento.anotacoes': {
+    titulo: 'Anotações',
+    paraQueServe: 'Observação livre gravada no lançamento.',
+    relacaoComTela: 'Não muda valores nem saldos; aparece no detalhe do lançamento.',
+    obrigatorio: false,
+  },
 }
 
 export const formularios = {
@@ -172,7 +196,10 @@ export const formularios = {
   registrarAgendamento: {
     objetivo: 'Registrar que esta ocorrência foi paga ou recebida.',
     preRequisitos: [],
-    ordemCampos: ['registrarAgendamento.valor', 'registrarAgendamento.data', 'registrarAgendamento.conta'],
+    ordemCampos: [
+      'registrarAgendamento.conta', 'registrarAgendamento.contaDestino', 'registrarAgendamento.favorecido', 'registrarAgendamento.valor',
+      'registrarAgendamento.data', 'agendamento.category', 'registrarAgendamento.gerencial', 'registrarAgendamento.anotacoes',
+    ],
     resumoAoSalvar: 'Cria o lançamento na conta (o saldo muda) e marca a ocorrência como paga; a próxima ocorrência passa a ser a pendente.',
   },
 }

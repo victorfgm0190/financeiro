@@ -49,6 +49,7 @@ import ContratosPanel from './components/Contratos/ContratosPanel'
 import ContratoFichaHost from './components/Contratos/ContratoFichaHost'
 import ContratoEfetivacaoHost from './components/Contratos/ContratoEfetivacaoHost'
 import HelpCampoPainel from './components/Ajuda/HelpCampoPainel'
+import GuiaPreenchimento from './components/Ajuda/GuiaPreenchimento'
 import AvisoAtalhosMigrados from './components/shared/AvisoAtalhosMigrados'
 import ComposicaoParcelaHost from './components/Contratos/ComposicaoParcelaHost'
 import MonthStartModal from './components/shared/MonthStartModal'
@@ -273,6 +274,7 @@ function AppContent() {
       <JornadaBarra />
       <GuiaInterativo />
       <HelpCampoPainel />
+      <GuiaPreenchimento />
     </>
   )
 

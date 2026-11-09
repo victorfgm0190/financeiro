@@ -56,3 +56,34 @@ Camada de ajuda por **campo**, ao lado do help de tela (`src/lib/ajudaTelas.js`,
   - com foco em campo de digitação, só dispara com Ctrl ou Alt (como o Alt+G de gravar);
   - nunca recebe a F1.
 - Migração: ao carregar, atalho gravado que viola as regras volta ao padrão. Se o padrão estiver ocupado, é desativado. A correção é gravada no banco e mostra um aviso único (`AvisoAtalhosMigrados`).
+
+## Preenchimento Guiado (Etapa 4)
+
+- Estado e regras puras: `src/help/guiaPreenchimento.js`. Balão: `GuiaPreenchimento` (montado no App).
+- `BotaoPreencherGuia` vai dentro do contêiner `data-help-form`. Só aparece com roteiro na base (`formularios[form]`).
+  - Props:
+    - `resumo()`: linhas com os dados reais;
+    - `funcao`: os pré-requisitos de `src/lib/prerequisitos.js`;
+    - `oferecer`;
+    - `onFechar`.
+  - Atende o rodapé do help de campo (`finup:preencher-guia`).
+- O botão de salvar leva `data-help-salvar="<form>"`. No wizard, o de avançar etapa leva `data-help-avancar="<form>"`.
+- Fluxo:
+  1. Pré-requisitos, só se faltar algum. "Cadastrar agora" fecha o formulário e abre o Faça comigo; no fim, "Voltar para …" reabre o formulário já guiado.
+  2. Objetivo.
+  3. Campos na ordem de `ordemCampos`:
+     - pula os que não estão na tela;
+     - põe o foco no campo;
+     - acompanha a troca de etapa do wizard.
+  4. Obrigatórios vazios.
+  5. "Ao salvar, vai acontecer…".
+  6. Acende o Salvar.
+  7. Pronto.
+- Teclas e botões:
+  - Enter avança, exceto com lista aberta ou em texto longo.
+  - Esc sai; com o help de campo aberto, o Esc é dele.
+  - Próximo segura um obrigatório vazio; Pular passa direto.
+- Faça comigo (Sim no fim do tour, Fazer agora da jornada e dos pré-requisitos): quando a tarefa abre um formulário com roteiro, o guia assume. Ao salvar, a tarefa conta como concluída.
+- Oferta discreta na 1ª abertura de cada formulário novo: Sim / Não / Não perguntar mais.
+  - A resposta é gravada por usuário: `progresso.guiaOfertas.<form>` e `progresso.guiaOfertaDesligada` (POST `guiaOferta`).
+- O guia NUNCA preenche nem salva nada.

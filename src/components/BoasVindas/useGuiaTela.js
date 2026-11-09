@@ -21,8 +21,9 @@ export function useEstadoBoasVindas() {
   return e
 }
 
-// `tela`: o guia desta tela (ou da subtela aberta). `primeiraTela` (opcional): um tour que vem ANTES
-// na primeira visita (ex.: o tour geral de Configurações, antes do da seção).
+// `tela`: o guia desta tela (ou da subtela aberta). `primeiraTela` (opcional): um tour relacionado que
+// pode ser aberto pelo menu (ex.: o geral de Configurações dentro de uma seção). Ele NÃO abre sozinho
+// junto: só o tour da seção aberta; o geral abre sozinho na tela inicial de Configurações.
 export function useGuiaTela(tela, { primeiraTela = null } = {}) {
   const { dbStatus } = useApp()
   const estado = useEstadoBoasVindas()
@@ -35,13 +36,11 @@ export function useGuiaTela(tela, { primeiraTela = null } = {}) {
 
   useEffect(() => { if (dbStatus === 'connected') carregarBoasVindas() }, [dbStatus])
 
-  // Qual tour abriria sozinho agora: o "primeiro" (se ainda não visto) ou o desta tela.
+  // Qual tour abriria sozinho agora: só o desta tela (ou subtela).
   const pronto = !!estado && ligados && !!estado.tourVistoEm && !estado.tourAberto && !tour
   // Tela já vista pela jornada ("Entendi"): não abre de novo sozinha.
   const pendente = (t) => !ocultas.includes(t) && !telaConcluidaNaJornada(t, estado?.progresso)
-  const alvoAuto = !pronto ? null
-    : primeiraTela && ajudaDaTela(primeiraTela) && pendente(primeiraTela) ? primeiraTela
-      : temGuia && pendente(tela) ? tela : null
+  const alvoAuto = pronto && temGuia && pendente(tela) ? tela : null
   const iniciado = useRef(null)
   useEffect(() => {
     if (!alvoAuto || iniciado.current === alvoAuto) return

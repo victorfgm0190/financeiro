@@ -1,6 +1,6 @@
 // /api/boas-vindas: gravação só dos campos pedidos (tour visto não volta a ficar vazio). Sem banco.
 import { describe, it, expect } from 'vitest'
-import { DDL_BOAS_VINDAS, DDL_AJUDA_CAMPOS, DDL_JORNADA, gravarBoasVindas, gravarAjudaCampos, gravarJornadaLigada, refazerJornada, gravarEtapa, gravarPreferenciaJornada, gravarPeriodoFluxo } from './boas-vindas.js'
+import { DDL_BOAS_VINDAS, DDL_AJUDA_CAMPOS, DDL_JORNADA, gravarBoasVindas, gravarAjudaCampos, gravarJornadaLigada, refazerJornada, gravarEtapa, gravarPreferenciaJornada, gravarPeriodoFluxo, gravarOfertaGuia } from './boas-vindas.js'
 import { ETAPAS_JORNADA } from '../src/lib/onboardingSteps.js'
 
 const fakeQ = () => {
@@ -10,6 +10,17 @@ const fakeQ = () => {
 }
 
 describe('/api/boas-vindas', () => {
+  it('oferta do Preenchimento Guiado: resposta por formulário em progresso; "nunca" desliga todas; inválido → null', async () => {
+    const { q, chamadas } = fakeQ()
+    expect(await gravarOfertaGuia(q, 'u1', { form: 'agendamento', resposta: 'nao' })).not.toBeNull()
+    expect(chamadas[0].sql).toContain("'{guiaOfertas}'")
+    expect(chamadas[0].params).toEqual(['u1', 'agendamento', 'nao', '{}'])
+    await gravarOfertaGuia(q, 'u1', { form: 'contrato', resposta: 'nunca' })
+    expect(chamadas[1].params[3]).toBe('{"guiaOfertaDesligada":true}')
+    expect(await gravarOfertaGuia(q, 'u1', { form: 'x; drop', resposta: 'sim' })).toBeNull()
+    expect(await gravarOfertaGuia(q, 'u1', { form: 'agendamento', resposta: 'talvez' })).toBeNull()
+    expect(chamadas).toHaveLength(2)
+  })
   it('tabela por usuário (user_id TEXT, sem FK — login de emergência não tem linha em usuarios)', () => {
     expect(DDL_BOAS_VINDAS).toMatch(/CREATE TABLE IF NOT EXISTS boas_vindas_usuario/)
     expect(DDL_BOAS_VINDAS).toMatch(/user_id TEXT PRIMARY KEY/)

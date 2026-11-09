@@ -42,12 +42,13 @@ describe('F1 no Registrar Agendamento', () => {
     expect(f1().defaultPrevented).toBe(true)
     const p = screen.getByTestId('help-campo-painel')
     expect(p.textContent).toContain('Quanto foi pago ou recebido de fato nesta ocorrência.')
-    // Rodapé: ajuda da tela; "Preencher com guia" escondido até o formulário guiado (Etapa 4).
+    // Rodapé: ajuda da tela e "Preencher com guia" (o Registrar tem roteiro).
     expect(screen.getByRole('button', { name: /Ajuda da tela/ })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /Preencher com guia/ })).toBeNull()
-    // ⓘ em cada campo marcado do Registrar.
-    expect(document.querySelector('[data-help-id="registrarAgendamento.valor"] [data-testid="help-campo"]')).toBeTruthy()
-    expect(document.querySelector('[data-help-id="registrarAgendamento.data"] [data-testid="help-campo"]')).toBeTruthy()
+    expect(p.querySelector('button[title^="Percorre os campos"]')).toBeTruthy()
+    // ⓘ em cada campo marcado do Registrar — Favorecido e Anotações inclusive.
+    for (const id of ['valor', 'data', 'conta', 'favorecido', 'anotacoes']) {
+      expect(document.querySelector(`[data-help-id="registrarAgendamento.${id}"] [data-testid="help-campo"]`), id).toBeTruthy()
+    }
   })
 
   it('sem campo com foco: o help do formulário', () => {

@@ -10,6 +10,7 @@ import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
+import BotaoPreencherGuia from '../Ajuda/BotaoPreencherGuia'
 import { rateioComQuitacao, quitarPorPadrao, podeQuitarComDesconto } from '../../lib/financiamento'
 import ExecutarGerenciaisModal from './ExecutarGerenciaisModal'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
@@ -513,6 +514,15 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   const pagamentoCartao = ehPagamentoDeCartao(scheduleProp, accounts) || contaEhCartao(accounts, trfToId)
   const TAB_LABELS = { pagamento: 'Pagamento', recebimento: 'Recebimento', transferencia: pagamentoCartao ? ROTULO_PAGAMENTO_CARTAO : 'Transferência' }
   const rotuloConfirmar = tab === 'transferencia' && pagamentoCartao ? 'Confirmar pagamento de cartão' : `Confirmar ${TAB_LABELS[tab]}`
+  // Preenchimento Guiado: "Ao salvar, vai acontecer…" com os dados escolhidos.
+  const resumoGuia = () => {
+    const nome = (id) => { const a = accounts.find(x => x.id === id); return a?.apelido || a?.name || '—' }
+    const cat = (id) => categories.find(c => c.id === id)?.name
+    if (parcelaFin) return [`Pagamento de ${fmt(finValorNum || 0)} da parcela em ${fmtDate(finDate)}, saindo de ${nome(finAccountId)}.`]
+    if (tab === 'pagamento') return [`Despesa de ${fmt(Number(payAmount) || 0)} em ${fmtDate(payDate)}, saindo de ${nome(payAccountId)}.`, ...(cat(payCategoryId) ? [`Categoria: ${cat(payCategoryId)}.`] : [])]
+    if (tab === 'recebimento') return [`Receita de ${fmt(Number(recAmount) || 0)} em ${fmtDate(recDate)}, entrando em ${nome(recAccountId)}.`, ...(cat(recCategoryId) ? [`Categoria: ${cat(recCategoryId)}.`] : [])]
+    return [`Transferência de ${fmt(Number(hasDetalhe ? detalheTotal : trfAmount) || 0)} em ${fmtDate(trfDate)}: sai de ${nome(trfFromId)} e entra em ${nome(trfToId)}.`]
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -549,6 +559,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
         )}
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          <BotaoPreencherGuia form="registrarAgendamento" resumo={resumoGuia} onFechar={onClose} className="-mt-1 -mb-1" />
           {!parcelaFin && scheduleProp.contratoId && <ComposicaoParcelaResumo schedule={scheduleProp} />}
           {parcelaFin && (
             <>
@@ -658,8 +669,8 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
               </div>
-              <div>
-                <label className="label">Favorecido</label>
+              <div data-help-id="registrarAgendamento.favorecido">
+                <label className="label">Favorecido<HelpCampo campo="registrarAgendamento.favorecido" /></label>
                 <FavorecidoAutocomplete value={payPayee} onChange={setPayPayee} suggestions={sortedPayees} placeholder="Digite o nome do favorecido" />
               </div>
               <div data-guia="baixa-form.valor" data-help-id="registrarAgendamento.valor">
@@ -677,16 +688,16 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 <CategorySelect categories={categories} perfilId={accounts.find(a => a.id === payAccountId)?.profileId || undefined} type="expense" value={payCategoryId} onChange={e => setPayCategoryId(e.target.value)} />
               </div>
               {gerencialLigado && (
-              <div>
-                <label className="label">Classificação Gerencial</label>
+              <div data-help-id="registrarAgendamento.gerencial">
+                <label className="label">Classificação Gerencial<HelpCampo campo="registrarAgendamento.gerencial" /></label>
                 <select className="input" value={payGrupo} onChange={e => setPayGrupo(e.target.value)}>
                   <option value="">Sem grupo</option>
                   {gerencialGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </div>
               )}
-              <div>
-                <label className="label">Anotações</label>
+              <div data-help-id="registrarAgendamento.anotacoes">
+                <label className="label">Anotações<HelpCampo campo="registrarAgendamento.anotacoes" /></label>
                 <input className="input" value={payNotes} onChange={e => setPayNotes(e.target.value)} placeholder="Digite observações adicionais (opcional)" />
               </div>
             </>
@@ -700,8 +711,8 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
               </div>
-              <div>
-                <label className="label">Pagador</label>
+              <div data-help-id="registrarAgendamento.favorecido">
+                <label className="label">Pagador<HelpCampo campo="registrarAgendamento.favorecido" /></label>
                 <FavorecidoAutocomplete value={recPayee} onChange={setRecPayee} suggestions={sortedPayees} placeholder="Digite o nome do pagador" />
               </div>
               <div data-guia="baixa-form.valor" data-help-id="registrarAgendamento.valor">
@@ -718,8 +729,8 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 <label className="label">Categoria<HelpCampo campo="agendamento.category" /></label>
                 <CategorySelect categories={categories} perfilId={accounts.find(a => a.id === recAccountId)?.profileId || undefined} type="income" value={recCategoryId} onChange={e => setRecCategoryId(e.target.value)} />
               </div>
-              <div>
-                <label className="label">Anotações</label>
+              <div data-help-id="registrarAgendamento.anotacoes">
+                <label className="label">Anotações<HelpCampo campo="registrarAgendamento.anotacoes" /></label>
                 <input className="input" value={recNotes} onChange={e => setRecNotes(e.target.value)} placeholder="Digite observações adicionais (opcional)" />
               </div>
             </>
@@ -751,8 +762,8 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
               </div>
-              <div>
-                <label className="label">Banco para</label>
+              <div data-help-id="registrarAgendamento.contaDestino">
+                <label className="label">Banco para<HelpCampo campo="registrarAgendamento.contaDestino" /></label>
                 <select className="input" value={trfToId} onChange={e => setTrfContas(trfFromId, e.target.value)} disabled={hasDetalhe}>
                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
@@ -784,8 +795,8 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 <label className="label">Data<HelpCampo campo="registrarAgendamento.data" /></label>
                 <DataPagamentoField value={trfDate} onChange={e => setTrfDate(e.target.value)} vencimento={occVenc} />
               </div>
-              <div>
-                <label className="label">Anotações</label>
+              <div data-help-id="registrarAgendamento.anotacoes">
+                <label className="label">Anotações<HelpCampo campo="registrarAgendamento.anotacoes" /></label>
                 <input className="input" value={trfNotes} onChange={e => setTrfNotes(e.target.value)} placeholder="Digite observações adicionais (opcional)" />
               </div>
             </>
@@ -860,7 +871,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
               {finLoading ? 'Baixando...' : 'Confirmar Pagamento'}
             </button>
           ) : (
-            <button data-guia="baixa-form.confirmar" className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40" disabled={!valorOk || !!avisoPulo} onClick={() => handleConfirm()}>
+            <button data-guia="baixa-form.confirmar" data-help-salvar="registrarAgendamento" className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40" disabled={!valorOk || !!avisoPulo} onClick={() => handleConfirm()}>
               <CheckCircle size={14} /> {duplicado ? 'Registrar mesmo assim' : rotuloConfirmar}
             </button>
           )}

@@ -25,6 +25,9 @@ const ETAPAS_ACEITAS = new Set([...ETAPAS_CHECKLIST, ...ETAPAS_JORNADA])
 //                                           'feita' (etapas sem dado próprio, ex.: usou o Assistente) |
 //                                           null (desfaz). Fica em progresso.etapas.<id> = { estado, em }.
 //   POST { tarefaConcluida: '<id>' }      → tarefa guiada "Faça comigo" concluída (progresso.tarefas.<id> = data)
+//   POST { guiaOferta: { form, resposta } } → oferta do Preenchimento Guiado na 1ª abertura do formulário:
+//                                           'vista' (apareceu, sem resposta) | 'sim' | 'nao' (progresso.guiaOfertas.<form>) | 'nunca'
+//                                           (também progresso.guiaOfertaDesligada = true)
 //   POST { tourVisto: true }              → marca o tour como visto (pular ou concluir)
 //   POST { checklistOculto: true|false }  → oculta (ou volta a mostrar) o checklist
 //   POST { guiaOculto: '<tela>' }         → "Não mostrar mais" o guia desta tela
@@ -150,6 +153,22 @@ export async function gravarPreferenciaJornada(q, userId, { expandida, objetivo 
   return linhaParaJson(r)
 }
 
+// Oferta do Preenchimento Guiado (1ª abertura de cada formulário): a resposta fica em
+// progresso.guiaOfertas.<form>; "Não perguntar mais" também liga progresso.guiaOfertaDesligada.
+const RESPOSTAS_OFERTA = ['sim', 'nao', 'nunca', 'vista']
+export async function gravarOfertaGuia(q, userId, { form, resposta } = {}) {
+  if (typeof form !== 'string' || !/^[a-zA-Z]{1,40}$/.test(form) || !RESPOSTAS_OFERTA.includes(resposta)) return null
+  const extra = JSON.stringify(resposta === 'nunca' ? { guiaOfertaDesligada: true } : {})
+  const [r] = await q(
+    `INSERT INTO boas_vindas_usuario (user_id, progresso) VALUES ($1, jsonb_build_object('guiaOfertas', jsonb_build_object($2::text, $3::text)) || $4::jsonb)
+     ON CONFLICT (user_id) DO UPDATE SET progresso = jsonb_set(COALESCE(boas_vindas_usuario.progresso, '{}'::jsonb), '{guiaOfertas}',
+       COALESCE(boas_vindas_usuario.progresso->'guiaOfertas', '{}'::jsonb) || jsonb_build_object($2::text, $3::text)) || $4::jsonb, updated_at = now()
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
+    [userId, form, resposta, extra],
+  )
+  return linhaParaJson(r)
+}
+
 // Período do Fluxo Futuro (Reservas) em `progresso.fluxoPeriodo`, relativo ao mês atual
 // (src/lib/fluxoPeriodo.js). null = padrão (tira a chave). Formato inválido → null (400).
 export async function gravarPeriodoFluxo(q, userId, pref) {
@@ -254,6 +273,10 @@ async function handler(req, res) {
       }
       if (body && 'fluxoPeriodo' in body) {
         if (!(await gravarPeriodoFluxo(query, userId, body.fluxoPeriodo))) return res.status(400).json({ error: 'Período do Fluxo Futuro inválido' })
+        fez = true
+      }
+      if (body && 'guiaOferta' in body) {
+        if (!(await gravarOfertaGuia(query, userId, body.guiaOferta || {}))) return res.status(400).json({ error: 'Oferta do guia inválida' })
         fez = true
       }
       if (typeof body?.tarefaConcluida === 'string') {
