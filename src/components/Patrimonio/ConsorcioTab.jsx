@@ -16,6 +16,7 @@ import {
 import PlanoVendaConsorcio from './PlanoVendaConsorcio'
 import VenderCotaModal from './VenderCotaModal'
 import { isoLocal } from '../../lib/hoje'
+import HelpCampo from '../shared/HelpCampo'
 
 const ROTULO_EVENTO = {
   vender_cota: 'Venda da cota', contemplar: 'Contemplação', reajuste: 'Reajuste', vender: 'Venda', usar_carta: 'Uso da carta' }
@@ -48,18 +49,18 @@ function FormEvento({ tipo, contas, onCancel, onConfirmar }) {
   const rotulo = tipo === 'vender' ? 'Valor recebido (R$)' : tipo === 'usar_carta' ? 'Valor do bem comprado (R$)' : 'Nova parcela por cota (R$)'
   const dica = tipo === 'vender' ? 'Quanto entrou na conta pela venda' : tipo === 'usar_carta' ? 'Valor do bem comprado com a carta' : 'Valor mensal de cada cota a partir da data'
   return (
-    <form onSubmit={enviar} className="space-y-3">
-      <div>
-        <label className="label">{tipo === 'reajuste' ? 'Vale a partir de' : 'Data'}</label>
+    <form onSubmit={enviar} className="space-y-3" data-help-form="eventoConsorcio">
+      <div data-help-id="eventoConsorcio.data">
+        <label className="label">{tipo === 'reajuste' ? 'Vale a partir de' : 'Data'}<HelpCampo campo="eventoConsorcio.data" /></label>
         <DateInput className="input" required value={data} onChange={e => setData(e.target.value)} />
       </div>
-      <div>
-        <label className="label">{rotulo} *</label>
+      <div data-help-id="eventoConsorcio.valor">
+        <label className="label">{rotulo} *<HelpCampo campo="eventoConsorcio.valor" /></label>
         <InputMoeda required value={valor} onChange={e => setValor(e.target.value)} placeholder={dica} autoFocus />
       </div>
       {tipo === 'vender' && (
-        <div>
-          <label className="label">Conta que recebeu *</label>
+        <div data-help-id="eventoConsorcio.conta">
+          <label className="label">Conta que recebeu *<HelpCampo campo="eventoConsorcio.conta" /></label>
           <select className="input" required value={contaId} onChange={e => setContaId(e.target.value)}>
             <option value="">Selecione a conta...</option>
             {contas.map(c => <option key={c.id} value={c.id}>{c.apelido || c.name}</option>)}

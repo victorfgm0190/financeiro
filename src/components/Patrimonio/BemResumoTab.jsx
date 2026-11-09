@@ -8,6 +8,7 @@ import { extratoDoBem, resumoDoBem, linhaDoTempo, ROTULO_CLASSE, CLASSE } from '
 import BaixasDoBem from './BaixasDoBem'
 import { isoLocal } from '../../lib/hoje'
 import { isInvestAutoOrigin, isPatrimonioOrigin } from '../../lib/origins'
+import HelpCampo from '../shared/HelpCampo'
 
 function Linha({ label, valor, destaque, dica }) {
   return (
@@ -63,9 +64,9 @@ function LigarReceitaModal({ bemId, onClose, onLigar }) {
 
   return (
     <Modal open onClose={onClose} title="Ligar uma receita a este bem" size="lg">
-      <div className="space-y-3">
-        <div>
-          <label className="label">Buscar receita</label>
+      <div className="space-y-3" data-help-form="receitaBem">
+        <div data-help-id="receitaBem.busca">
+          <label className="label">Buscar receita<HelpCampo campo="receitaBem.busca" /></label>
           <input className="input" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Nome de quem pagou ou descrição da receita" autoFocus />
         </div>
         <div className="max-h-64 overflow-y-auto rounded-lg border border-borda divide-y divide-borda/60">
@@ -83,8 +84,8 @@ function LigarReceitaModal({ bemId, onClose, onLigar }) {
             </button>
           ))}
         </div>
-        <div>
-          <label className="label">O que é esta receita?</label>
+        <div data-help-id="receitaBem.papel">
+          <label className="label">O que é esta receita?<HelpCampo campo="receitaBem.papel" /></label>
           <select className="input" value={papel} onChange={e => setPapel(e.target.value)}>
             {PAPEIS.map(p => <option key={p.id} value={p.id}>{p.rotulo}</option>)}
           </select>

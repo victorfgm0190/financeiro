@@ -9,6 +9,7 @@ import { agendamentosDoBem, prazoDaCota } from '../../lib/consorcio'
 import { projetarPlano, custoAtualPorCota, cotaVendida } from '../../lib/planoVendaConsorcio'
 import { previsoesDasFuncoes } from '../../lib/previsaoReserva'
 import { indexarReserva, saldoDaFuncao } from '../../lib/saldoReserva'
+import HelpCampo from '../shared/HelpCampo'
 
 // Quadro "Plano de venda" do consórcio. A projeção é recalculada com os dados reais a cada abertura: parcelas
 // pagas e custo vêm do extrato do bem, e cota vendida sai sozinha. Só o que é previsão fica gravado por cota.
@@ -88,7 +89,7 @@ export default function PlanoVendaConsorcio({ bemId, consorcio, resumo, pagasPor
   const td = 'text-right px-2 py-1 text-xs whitespace-nowrap'
 
   return (
-    <div className="card space-y-3" data-testid="plano-venda">
+    <div className="card space-y-3" data-testid="plano-venda" data-help-form="planoVenda">
       <div>
         <h3 className="text-sm font-semibold text-texto-1">Plano de venda</h3>
         <p className="text-xs text-texto-3">Simulação: nada aqui gera lançamento. A projeção usa o valor atual da parcela e os dados reais do bem.</p>
@@ -102,25 +103,25 @@ export default function PlanoVendaConsorcio({ bemId, consorcio, resumo, pagasPor
           return (
             <div key={c.numero} className="grid grid-cols-1 sm:grid-cols-[6rem_1fr_1fr_auto] gap-2 items-end" data-testid={`plano-cota-${c.numero}`}>
               <p className="text-xs font-medium text-texto-1 pb-2">Cota {c.numero}</p>
-              <label className="text-[11px] text-texto-2">Mês previsto de venda
+              <label className="text-[11px] text-texto-2" data-help-id="planoVenda.mes">Mês previsto de venda<HelpCampo campo="planoVenda.mes" />
                 <input type="month" className="input mt-1 w-full text-xs" disabled={!podeEditar || fora} value={p.mes} onChange={e => alterar(c.numero, 'mes', e.target.value)} />
               </label>
-              <label className="text-[11px] text-texto-2">Valor de venda esperado
+              <label className="text-[11px] text-texto-2" data-help-id="planoVenda.valor">Valor de venda esperado<HelpCampo campo="planoVenda.valor" />
                 <InputMoeda className="input mt-1 w-full text-xs" disabled={!podeEditar || fora} value={p.valor} onChange={e => alterar(c.numero, 'valor', e.target.value)} />
               </label>
               {real
                 ? <p className="text-[11px] text-texto-3 pb-2" data-testid={`plano-venda-real-${c.numero}`}>Vendida em {fmtDate(c.vendida_em)}</p>
                 : (
-                  <label className="flex items-center gap-1.5 text-[11px] text-texto-2 pb-2" title="Só para cota vendida antes da venda por cota existir: não gera lançamento. Para vender agora, use Vender cota.">
-                    <input type="checkbox" className="accent-primary" disabled={!podeEditar || vendido} checked={fora} onChange={e => alterar(c.numero, 'vendida', e.target.checked)} /> Vendida antes (sem lançamento)
+                  <label data-help-id="planoVenda.vendidaAntes" className="flex items-center gap-1.5 text-[11px] text-texto-2 pb-2" title="Só para cota vendida antes da venda por cota existir: não gera lançamento. Para vender agora, use Vender cota.">
+                    <input type="checkbox" className="accent-primary" disabled={!podeEditar || vendido} checked={fora} onChange={e => alterar(c.numero, 'vendida', e.target.checked)} /> Vendida antes (sem lançamento)<HelpCampo campo="planoVenda.vendidaAntes" />
                   </label>
                 )}
               {p.vendida && !vendido && !real && (
                 <div className="sm:col-start-2 sm:col-span-2 grid grid-cols-2 gap-2">
-                  <label className="text-[11px] text-texto-2">Vendida em
+                  <label className="text-[11px] text-texto-2" data-help-id="planoVenda.vendidaEm">Vendida em<HelpCampo campo="planoVenda.vendidaEm" />
                     <input type="date" className="input mt-1 w-full text-xs" disabled={!podeEditar} value={p.vendidaEm} onChange={e => alterar(c.numero, 'vendidaEm', e.target.value)} />
                   </label>
-                  <label className="text-[11px] text-texto-2">Valor recebido
+                  <label className="text-[11px] text-texto-2" data-help-id="planoVenda.vendidaValor">Valor recebido<HelpCampo campo="planoVenda.vendidaValor" />
                     <InputMoeda className="input mt-1 w-full text-xs" disabled={!podeEditar} value={p.vendidaValor} onChange={e => alterar(c.numero, 'vendidaValor', e.target.value)} />
                   </label>
                 </div>
@@ -130,7 +131,7 @@ export default function PlanoVendaConsorcio({ bemId, consorcio, resumo, pagasPor
         })}
       </div>
 
-      <label className="block text-[11px] text-texto-2">Função de reserva que paga as parcelas (opcional)
+      <label className="block text-[11px] text-texto-2" data-help-id="planoVenda.funcao">Função de reserva que paga as parcelas (opcional)<HelpCampo campo="planoVenda.funcao" />
         <select className="input mt-1 w-full text-xs" disabled={!podeEditar} value={funcaoId} onChange={e => setFuncaoId(e.target.value)}>
           <option value="">Nenhuma: mostrar só o bem</option>
           {funcoes.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}

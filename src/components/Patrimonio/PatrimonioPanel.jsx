@@ -19,6 +19,7 @@ import ConsultaFinanciamentoModal from './ConsultaFinanciamentoModal'
 import { ehContaDeFinanciamento } from '../../lib/financiamento'
 import { useThemeColors } from '../../hooks/useTheme'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 
 function UpdateValueModal({ account, onClose }) {
   const { updateAccountValue, pode } = useApp()
@@ -35,15 +36,15 @@ function UpdateValueModal({ account, onClose }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4" data-help-form="atualizarValor">
       {lastEntry && (
         <div className="p-3 bg-surface-2 rounded-lg text-xs text-texto-2">
           Último valor: <span className="text-texto-1 font-medium">{fmt(lastEntry.value)}</span> em {lastEntry.date}
           {lastEntry.note && <span className="ml-1 italic">— {lastEntry.note}</span>}
         </div>
       )}
-      <div>
-        <label className="label">Novo Valor (R$) *</label>
+      <div data-help-id="atualizarValor.novoValor">
+        <label className="label">Novo Valor (R$) *<HelpCampo campo="atualizarValor.novoValor" /></label>
         <InputMoeda
           negativo
           value={newValue}
@@ -53,8 +54,8 @@ function UpdateValueModal({ account, onClose }) {
           required
         />
       </div>
-      <div>
-        <label className="label">Observação</label>
+      <div data-help-id="atualizarValor.observacao">
+        <label className="label">Observação<HelpCampo campo="atualizarValor.observacao" /></label>
         <input
           className="input"
           type="text"

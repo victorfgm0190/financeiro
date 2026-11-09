@@ -7,6 +7,7 @@ import { pagarParcela } from '../../lib/bemApi'
 import { fmtData, round2 } from './bemUtils'
 import { rateioComQuitacao, quitarPorPadrao, podeQuitarComDesconto } from '../../lib/financiamento'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 
 export default function PagarParcelaModal({
   bem, financiamento, parcela, contasCorrentes, contaCentralId = '', avisoContaCentral = null, onCancel, onSuccess, onErro,
@@ -66,7 +67,7 @@ export default function PagarParcelaModal({
   }
 
   return (
-    <form onSubmit={enviar} className="space-y-4">
+    <form onSubmit={enviar} className="space-y-4" data-help-form="pagarParcela">
       <div className="p-3 bg-surface-2/60 rounded-lg text-xs space-y-1">
         <div className="flex justify-between"><span className="text-texto-3">Bem</span><span className="text-texto-1">{bem.nome}</span></div>
         <div className="flex justify-between"><span className="text-texto-3">Parcela</span><span className="text-texto-1">{parcela.numero}/{financiamento?.num_parcelas}</span></div>
@@ -86,8 +87,8 @@ export default function PagarParcelaModal({
         )}
       </div>
 
-      <div>
-        <label className="label">Quanto você vai pagar? (R$) *</label>
+      <div data-help-id="pagarParcela.valor">
+        <label className="label">Quanto você vai pagar? (R$) *<HelpCampo campo="pagarParcela.valor" /></label>
         <InputMoeda
           min="0.01" required autoFocus
           value={valorPago}
@@ -96,12 +97,12 @@ export default function PagarParcelaModal({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="label">Data do Pagamento *</label>
+        <div data-help-id="pagarParcela.data">
+          <label className="label">Data do Pagamento *<HelpCampo campo="pagarParcela.data" /></label>
           <DataPagamentoField required value={dataPagamento} onChange={e => setDataPagamento(e.target.value)} vencimento={parcela.data_vencimento} />
         </div>
-        <div>
-          <label className="label">Conta de Origem</label>
+        <div data-help-id="pagarParcela.conta">
+          <label className="label">Conta de Origem<HelpCampo campo="pagarParcela.conta" /></label>
           <select className="input" value={contaOrigemId} onChange={e => setContaOrigemId(e.target.value)} required>
             <option value="">{contasCorrentes.length === 0 ? 'Nenhuma conta corrente' : 'Selecione a conta...'}</option>
             {contasCorrentes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -111,10 +112,10 @@ export default function PagarParcelaModal({
       </div>
 
       {rateio?.oferecerQuitar && (
-        <label className="flex items-start gap-2 rounded-lg border border-borda-forte bg-surface-2/40 px-3 py-2.5 text-sm text-texto-1 cursor-pointer">
+        <label data-help-id="pagarParcela.quitar" className="flex items-start gap-2 rounded-lg border border-borda-forte bg-surface-2/40 px-3 py-2.5 text-sm text-texto-1 cursor-pointer">
           <input type="checkbox" className="mt-0.5 accent-primary" checked={quitar} onChange={e => setQuitarEscolha(e.target.checked)} />
           <span>
-            Quitar com desconto (pagamento antecipado)
+            Quitar com desconto (pagamento antecipado)<HelpCampo campo="pagarParcela.quitar" />
             <span className="block text-xs text-texto-3">
               O principal está pago inteiro; a diferença dos juros fica como desconto e a parcela fica paga.
               Desmarcado, o pagamento é parcial e o restante continua em aberto.

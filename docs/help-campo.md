@@ -147,3 +147,28 @@ Agendamentos têm roteiro de Preenchimento Guiado (`formularios`); os demais tê
 
   O conteúdo está em `categorias.js`, `favorecidos.js` e `cadastros.js`. O `help:check` passou a
   incluir `PerfisMultiSelect` como campo.
+
+## Etapa 3 — formulários que faltavam (em blocos)
+
+### Bloco 1 — Patrimônio
+
+- O conteúdo está em `src/help/patrimonio.js`.
+- Formulários (`data-help-form`), com todo campo coberto:
+  - `financiamento` (Criar financiamento);
+  - `aberturaFinanciamento` (Histórico de abertura; usa os ids `financiamento.abertura*`);
+  - `consorcio` (dados e cotas);
+  - `eventoConsorcio` (contemplação, reajuste, venda e uso da carta);
+  - `planoVenda` (Plano de venda);
+  - `pagarParcela`;
+  - `baixaBem` (Marcar como paga / crédito);
+  - `vendaCota`;
+  - `vendaBem`;
+  - `entradaBem` (Registrar entrada à vista, com trade-in);
+  - `parametrizarBem`;
+  - `favorecidoFinanciamento`;
+  - `receitaBem` (Ligar uma receita ao bem);
+  - `atualizarValor` (Patrimônio e Contas);
+  - `valoresBem` (Valores do bem).
+- `valoresBem` fica em `PatrimonioEditavel.jsx`, componente protegido. A mudança foi autorizada pelo usuário em 09/11/2026 **somente** para a marcação de ajuda (`data-help-form`, `data-help-id`, ⓘ). Nenhum cálculo, gravação, estado ou fluxo foi alterado.
+- Teste: `src/components/Patrimonio/ajudaCampos.test.jsx`. Ele audita o DOM dos formulários, inclusive os campos que só aparecem depois de uma escolha (terceiro + receita, trade-in, financiamento aberto na venda, custos com categoria).
+

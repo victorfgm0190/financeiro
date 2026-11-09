@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Loader2, Plus, Building2 } from 'lucide-react'
 import { atualizarFavorecido } from '../../lib/bemApi'
 import { contasFavorecidasElegiveis, sugestoesFavorecido, textoFavorecido } from './bemUtils'
+import HelpCampo from '../shared/HelpCampo'
 
 // Troca o FAVORECIDO do financiamento — quem recebe as parcelas. Vale para o financiamento
 // INTEIRO: o endpoint reaplica o mesmo favorecido nos agendamentos de TODAS as parcelas na
@@ -75,7 +76,7 @@ export default function EditarFavorecidoModal({
   }
 
   return (
-    <form onSubmit={enviar} className="space-y-4">
+    <form onSubmit={enviar} className="space-y-4" data-help-form="favorecidoFinanciamento">
       <div className="rounded-lg border border-borda bg-surface-2/40 px-3 py-2.5">
         <p className="text-xs text-texto-3">Favorecido atual</p>
         <p className="text-sm text-texto-1 flex items-center gap-1.5 mt-0.5">
@@ -107,8 +108,8 @@ export default function EditarFavorecidoModal({
 
       {modo === 'existente' ? (
         <div className="space-y-3">
-          <div>
-            <label className="label">Favorecido *</label>
+          <div data-help-id="favorecidoFinanciamento.favorecido">
+            <label className="label">Favorecido *<HelpCampo campo="favorecidoFinanciamento.favorecido" /></label>
             <input
               className="input" list="favorecidos-financiamento" autoFocus
               value={texto}
@@ -127,12 +128,12 @@ export default function EditarFavorecidoModal({
                 </p>
               )}
           </div>
-          <div>
+          <div data-help-id="favorecidoFinanciamento.conta">
             {/* Rotulado como CONTA, não como "Banco favorecido": com o campo Favorecido logo
                 acima, dois rótulos quase iguais faziam este select parecer uma segunda forma de
                 dizer a mesma coisa — e a diferença (um é texto exibido, o outro é vínculo
                 contábil) desaparecia. */}
-            <label className="label">Conta vinculada</label>
+            <label className="label">Conta vinculada<HelpCampo campo="favorecidoFinanciamento.conta" /></label>
             <select className="input" value={contaId} onChange={e => escolherConta(e.target.value)}>
               <option value="">Nenhuma conta vinculada</option>
               {elegiveis.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -146,8 +147,8 @@ export default function EditarFavorecidoModal({
         </div>
       ) : (
         <div className="space-y-3">
-          <div>
-            <label className="label">Nome do banco *</label>
+          <div data-help-id="favorecidoFinanciamento.nomeBanco">
+            <label className="label">Nome do banco *<HelpCampo campo="favorecidoFinanciamento.nomeBanco" /></label>
             <input
               className="input" type="text" autoFocus value={nomeNovo}
               onChange={e => setNomeNovo(e.target.value)} placeholder="Digite o nome do banco"
@@ -156,8 +157,8 @@ export default function EditarFavorecidoModal({
               Se já existir uma conta com este nome, ela é reaproveitada em vez de duplicada.
             </p>
           </div>
-          <div>
-            <label className="label">Tipo</label>
+          <div data-help-id="favorecidoFinanciamento.tipoBanco">
+            <label className="label">Tipo<HelpCampo campo="favorecidoFinanciamento.tipoBanco" /></label>
             <select className="input" value={tipoNovo} onChange={e => setTipoNovo(e.target.value)}>
               <option value="checking">Conta Corrente</option>
               <option value="savings">Poupança</option>

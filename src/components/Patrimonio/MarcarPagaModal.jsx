@@ -6,6 +6,7 @@ import DateInput from '../shared/DateInput'
 import { registrarBaixaBem } from '../../lib/bemApi'
 import { MOTIVOS_BAIXA } from '../../lib/extratoBem'
 import { isoLocal } from '../../lib/hoje'
+import HelpCampo from '../shared/HelpCampo'
 
 // "Marcar como paga": a parcela conta como paga no bem e nenhum saldo de conta muda. A única exceção é a
 // receita de benefício opcional do pagamento por terceiro. alvo = { parcelaId } | { scheduleId, ocorrencia }
@@ -54,11 +55,11 @@ export default function MarcarPagaModal({ bemId, alvo = {}, rotulo = '', valorSu
   }
 
   return (
-    <form onSubmit={enviar} className="space-y-3">
+    <form onSubmit={enviar} className="space-y-3" data-help-form="baixaBem">
       {rotulo && <p className="text-sm text-texto-2">{rotulo}</p>}
       {!soCredito && (
-        <div>
-          <label className="label" htmlFor="baixa-motivo">Motivo *</label>
+        <div data-help-id="baixaBem.motivo">
+          <label className="label" htmlFor="baixa-motivo">Motivo *<HelpCampo campo="baixaBem.motivo" /></label>
           <select id="baixa-motivo" className="input" required value={form.tipo} onChange={campo('tipo')}>
             <option value="">Selecione o motivo...</option>
             {MOTIVOS_BAIXA.map(m => <option key={m.id} value={m.id}>{m.rotulo}</option>)}
@@ -66,18 +67,18 @@ export default function MarcarPagaModal({ bemId, alvo = {}, rotulo = '', valorSu
         </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="label" htmlFor="baixa-valor">{form.tipo === 'credito' ? 'Valor do crédito (R$) *' : 'Valor (R$) *'}</label>
+        <div data-help-id="baixaBem.valor">
+          <label className="label" htmlFor="baixa-valor">{form.tipo === 'credito' ? 'Valor do crédito (R$) *' : 'Valor (R$) *'}<HelpCampo campo="baixaBem.valor" /></label>
           <InputMoeda id="baixa-valor" required value={form.valor} onChange={campo('valor')} placeholder="Pode ser diferente do valor da parcela" />
         </div>
-        <div>
-          <label className="label" htmlFor="baixa-data">Data *</label>
+        <div data-help-id="baixaBem.data">
+          <label className="label" htmlFor="baixa-data">Data *<HelpCampo campo="baixaBem.data" /></label>
           <DateInput id="baixa-data" className="input" required value={form.data} onChange={campo('data')} />
         </div>
       </div>
       {cotas.length > 0 && (
-        <div>
-          <label className="label" htmlFor="baixa-cota">Cota</label>
+        <div data-help-id="baixaBem.cota">
+          <label className="label" htmlFor="baixa-cota">Cota<HelpCampo campo="baixaBem.cota" /></label>
           <select id="baixa-cota" className="input" value={form.cota_numero} onChange={campo('cota_numero')}>
             <option value="">Sem cota específica</option>
             {cotas.map(c => <option key={c.numero} value={c.numero}>{c.numero}</option>)}
@@ -86,20 +87,20 @@ export default function MarcarPagaModal({ bemId, alvo = {}, rotulo = '', valorSu
       )}
       {form.tipo === 'terceiro' && (
         <>
-          <div>
-            <label className="label" htmlFor="baixa-favorecido">Quem pagou *</label>
+          <div data-help-id="baixaBem.quemPagou">
+            <label className="label" htmlFor="baixa-favorecido">Quem pagou *<HelpCampo campo="baixaBem.quemPagou" /></label>
             <select id="baixa-favorecido" className="input" required value={form.favorecido} onChange={campo('favorecido')}>
               <option value="">Selecione o favorecido...</option>
               {[...new Set(payees || [])].map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
-          <label className="flex items-center gap-2 text-sm text-texto-2 cursor-pointer">
+          <label data-help-id="baixaBem.gerarReceita" className="flex items-center gap-2 text-sm text-texto-2 cursor-pointer">
             <input type="checkbox" className="accent-primary" checked={form.gerar_receita} onChange={e => setForm(f => ({ ...f, gerar_receita: e.target.checked }))} />
-            Gerar a receita de benefício no Demonstrativo
+            Gerar a receita de benefício no Demonstrativo<HelpCampo campo="baixaBem.gerarReceita" />
           </label>
           {form.gerar_receita && (
-            <div>
-              <label className="label" htmlFor="baixa-categoria">Categoria da receita *</label>
+            <div data-help-id="baixaBem.categoria">
+              <label className="label" htmlFor="baixa-categoria">Categoria da receita *<HelpCampo campo="baixaBem.categoria" /></label>
               <select id="baixa-categoria" className="input" required value={form.categoria_id} onChange={campo('categoria_id')}>
                 <option value="">Selecione a categoria...</option>
                 {receitas.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -108,8 +109,8 @@ export default function MarcarPagaModal({ bemId, alvo = {}, rotulo = '', valorSu
           )}
         </>
       )}
-      <div>
-        <label className="label" htmlFor="baixa-descricao">Observação</label>
+      <div data-help-id="baixaBem.observacao">
+        <label className="label" htmlFor="baixa-descricao">Observação<HelpCampo campo="baixaBem.observacao" /></label>
         <input id="baixa-descricao" className="input" value={form.descricao} onChange={campo('descricao')} placeholder="Como aparece no extrato do bem" />
       </div>
       <p className="text-xs text-texto-3">

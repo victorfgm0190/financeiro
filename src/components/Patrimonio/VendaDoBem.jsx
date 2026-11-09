@@ -4,6 +4,7 @@ import Modal from '../shared/Modal'
 import InputMoeda from '../shared/InputMoeda'
 import CategorySelect from '../shared/CategorySelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import HelpCampo from '../shared/HelpCampo'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { useApp } from '../../context/AppContext'
 import { venderBem } from '../../lib/bemApi'
@@ -84,41 +85,41 @@ export function VenderBemModal({ conta, onCancelar, onVendido }) {
 
   return (
     <Modal open onClose={onCancelar} title={`Vender ${conta.apelido || conta.name}`}>
-      <div className="space-y-3 text-sm" data-testid="vender-bem">
+      <div className="space-y-3 text-sm" data-testid="vender-bem" data-help-form="vendaBem">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="label">Data da venda<input type="date" className="input mt-1" value={f.data} onChange={campo('data')} /></label>
-          <label className="label">Valor recebido<InputMoeda className="input mt-1" value={f.valor} onChange={campo('valor')} /></label>
-          <label className="label">Conta onde o dinheiro entrou
+          <label className="label" data-help-id="vendaBem.data">Data da venda<HelpCampo campo="vendaBem.data" /><input type="date" className="input mt-1" value={f.data} onChange={campo('data')} /></label>
+          <label className="label" data-help-id="vendaBem.valor">Valor recebido<HelpCampo campo="vendaBem.valor" /><InputMoeda className="input mt-1" value={f.valor} onChange={campo('valor')} /></label>
+          <label className="label" data-help-id="vendaBem.conta">Conta onde o dinheiro entrou<HelpCampo campo="vendaBem.conta" />
             <select className="input mt-1" value={f.conta} onChange={campo('conta')}>
               <option value="">Escolha…</option>
               {contasCaixa.map(c => <option key={c.id} value={c.id}>{c.apelido || c.name}</option>)}
             </select>
           </label>
-          <div className="label">Comprador
+          <div className="label" data-help-id="vendaBem.comprador">Comprador<HelpCampo campo="vendaBem.comprador" />
             <FavorecidoAutocomplete value={f.comprador} onChange={v => setF(p => ({ ...p, comprador: v?.target ? v.target.value : v }))} suggestions={payees || []} />
           </div>
-          <label className="label">Custos da venda (opcional)<InputMoeda className="input mt-1" value={f.custos} onChange={campo('custos')} /></label>
+          <label className="label" data-help-id="vendaBem.custos">Custos da venda (opcional)<HelpCampo campo="vendaBem.custos" /><InputMoeda className="input mt-1" value={f.custos} onChange={campo('custos')} /></label>
           {Number(f.custos) > 0 && (
-            <label className="label">Categoria dos custos
+            <label className="label" data-help-id="vendaBem.custosCategoria">Categoria dos custos<HelpCampo campo="vendaBem.custosCategoria" />
               <CategorySelect categories={categories} type="expense" value={f.custosCat} onChange={campo('custosCat')} className="input mt-1" />
             </label>
           )}
         </div>
-        <label className="label block">Observação<input className="input mt-1" value={f.observacao} onChange={campo('observacao')} /></label>
+        <label className="label block" data-help-id="vendaBem.observacao">Observação<HelpCampo campo="vendaBem.observacao" /><input className="input mt-1" placeholder="Anotação sobre a venda (opcional)" value={f.observacao} onChange={campo('observacao')} /></label>
 
         {divida && (
           <div className="rounded-lg border border-aviso/40 bg-aviso/5 p-3 space-y-2" data-testid="venda-divida">
             <p className="text-xs font-semibold text-texto-1">Este bem tem financiamento aberto: saldo devedor de {fmt(divida.saldo_devedor)} ({divida.parcelas_abertas} parcela{divida.parcelas_abertas === 1 ? '' : 's'}).</p>
-            <label className="flex items-center gap-2 text-xs text-texto-1"><input type="checkbox" className="accent-primary" checked={quitar} onChange={e => setQuitar(e.target.checked)} /> Quitar com o dinheiro da venda</label>
+            <label data-help-id="vendaBem.quitar" className="flex items-center gap-2 text-xs text-texto-1"><input type="checkbox" className="accent-primary" checked={quitar} onChange={e => setQuitar(e.target.checked)} /> Quitar com o dinheiro da venda<HelpCampo campo="vendaBem.quitar" /></label>
             {quitar
-              ? <label className="label">Valor da quitação<InputMoeda className="input mt-1" value={valorQuitacao === '' ? divida.saldo_devedor : valorQuitacao} onChange={e => setValorQuitacao(e.target.value)} /></label>
+              ? <label className="label" data-help-id="vendaBem.valorQuitacao">Valor da quitação<HelpCampo campo="vendaBem.valorQuitacao" /><InputMoeda className="input mt-1" value={valorQuitacao === '' ? divida.saldo_devedor : valorQuitacao} onChange={e => setValorQuitacao(e.target.value)} /></label>
               : <p className="text-xs text-aviso flex gap-1.5"><AlertTriangle size={13} className="shrink-0 mt-0.5" />A dívida continua aberta depois da venda, e as parcelas seguem a pagar.</p>}
           </div>
         )}
 
         {futuros.length > 0 && (
-          <div className="rounded-lg border border-borda p-3 space-y-1" data-testid="venda-agendamentos">
-            <p className="text-xs font-semibold text-texto-1">Agendamentos futuros deste bem: marque os que devem ser cancelados.</p>
+          <div className="rounded-lg border border-borda p-3 space-y-1" data-testid="venda-agendamentos" data-help-id="vendaBem.cancelarAgendamentos">
+            <p className="text-xs font-semibold text-texto-1">Agendamentos futuros deste bem: marque os que devem ser cancelados.<HelpCampo campo="vendaBem.cancelarAgendamentos" /></p>
             {futuros.map(s => (
               <label key={s.id} className="flex items-center gap-2 text-xs text-texto-2">
                 <input type="checkbox" className="accent-primary" checked={marcados.has(s.id)} onChange={() => alternar(s.id)} />
@@ -138,7 +139,7 @@ export function VenderBemModal({ conta, onCancelar, onVendido }) {
           </div>
         )}
         {resultado !== 0 && !categoriaDoBem && (
-          <label className="label block">Categoria de {resultado > 0 ? 'ganho' : 'perda'} (o bem não tem uma definida)
+          <label className="label block" data-help-id="vendaBem.categoriaResultado">Categoria de {resultado > 0 ? 'ganho' : 'perda'} (o bem não tem uma definida)<HelpCampo campo="vendaBem.categoriaResultado" />
             <CategorySelect categories={categories} type={resultado > 0 ? 'income' : 'expense'} value={f.categoriaResultado} onChange={campo('categoriaResultado')} className="input mt-1" />
           </label>
         )}

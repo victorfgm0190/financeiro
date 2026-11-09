@@ -29,6 +29,7 @@ import ParametrizarBemModal from './ParametrizarBemModal'
 import EditarFavorecidoModal from './EditarFavorecidoModal'
 import { transferenciasElegiveisEntrada } from './bemUtils'
 import { espelharBaixaParcela } from '../../lib/baixaParcela'
+import HelpCampo from '../shared/HelpCampo'
 
 const ABAS = [
   { id: 'informacoes', label: 'Informações', icone: Info },
@@ -56,20 +57,20 @@ function AberturaFinanciamentoForm({ financiamento, onCancel, onSuccess }) {
     }
   }
   return (
-    <form onSubmit={enviar} className="space-y-3">
+    <form onSubmit={enviar} className="space-y-3" data-help-form="aberturaFinanciamento">
       <p className="text-xs text-texto-3">
         As primeiras parcelas ficam pagas e somam no bem. Não cria lançamento, não entra no Demonstrativo e os agendamentos delas são removidos.
       </p>
-      <div>
-        <label className="label" htmlFor="abertura-parcelas">Parcelas já pagas antes do Finup *</label>
+      <div data-help-id="financiamento.aberturaParcelas">
+        <label className="label" htmlFor="abertura-parcelas">Parcelas já pagas antes do Finup *<HelpCampo campo="financiamento.aberturaParcelas" /></label>
         <input id="abertura-parcelas" className="input" type="number" min="1" step="1" required value={form.parcelas} onChange={e => setForm(f => ({ ...f, parcelas: e.target.value }))} placeholder="Quantidade paga antes de usar o Finup" />
       </div>
-      <div>
-        <label className="label" htmlFor="abertura-valor">Valor total pago até então (R$) *</label>
+      <div data-help-id="financiamento.aberturaValor">
+        <label className="label" htmlFor="abertura-valor">Valor total pago até então (R$) *<HelpCampo campo="financiamento.aberturaValor" /></label>
         <InputMoeda id="abertura-valor" required value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} placeholder="Soma das parcelas já pagas" />
       </div>
-      <div>
-        <label className="label" htmlFor="abertura-data">Data de referência *</label>
+      <div data-help-id="financiamento.aberturaData">
+        <label className="label" htmlFor="abertura-data">Data de referência *<HelpCampo campo="financiamento.aberturaData" /></label>
         <DateInput id="abertura-data" className="input" required value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} />
       </div>
       {erro && <p className="text-sm text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}

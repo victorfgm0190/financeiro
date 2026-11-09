@@ -7,6 +7,7 @@ import {
   hojeIso, round2, contasFavorecidasElegiveis, sugestoesFavorecido,
 } from './bemUtils'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 
 export default function FinanciamentoModal({
   bem, contasCorrentes, contaCentralId = '', avisoContaCentral = null, contas = [], favorecidos = [], onCancel, onSuccess, onErro,
@@ -94,7 +95,7 @@ export default function FinanciamentoModal({
   }
 
   return (
-    <form onSubmit={enviar} className="space-y-4">
+    <form onSubmit={enviar} className="space-y-4" data-help-form="financiamento">
       <div className="p-3 bg-surface-2/60 rounded-lg text-xs text-texto-2 space-y-1">
         <div className="flex justify-between"><span>Bem</span><span className="text-texto-1">{bem.nome}</span></div>
         <div className="flex justify-between"><span>Valor da nota fiscal</span><span className="text-texto-1">{fmt(bem.valor_nota_fiscal)}</span></div>
@@ -102,24 +103,24 @@ export default function FinanciamentoModal({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="label">Valor a Financiar (R$) *</label>
+        <div data-help-id="financiamento.valorPrincipal">
+          <label className="label">Valor a Financiar (R$) *<HelpCampo campo="financiamento.valorPrincipal" /></label>
           <InputMoeda
             min="0.01" required autoFocus
             value={form.valor_principal}
             onChange={e => set('valor_principal', e.target.value)}
           />
         </div>
-        <div>
-          <label className="label">Número de Parcelas *</label>
+        <div data-help-id="financiamento.numParcelas">
+          <label className="label">Número de Parcelas *<HelpCampo campo="financiamento.numParcelas" /></label>
           <input
             className="input" type="number" step="1" min="1" max="600" required
             value={form.num_parcelas}
             onChange={e => set('num_parcelas', e.target.value)}
           />
         </div>
-        <div>
-          <label className="label">Valor da Parcela (R$) *</label>
+        <div data-help-id="financiamento.valorParcela">
+          <label className="label">Valor da Parcela (R$) *<HelpCampo campo="financiamento.valorParcela" /></label>
           <InputMoeda
             min="0.01" required
             value={form.valor_parcela}
@@ -127,8 +128,8 @@ export default function FinanciamentoModal({
             placeholder="0,00"
           />
         </div>
-        <div>
-          <label className="label">Favorecido *</label>
+        <div data-help-id="financiamento.favorecido">
+          <label className="label">Favorecido *<HelpCampo campo="financiamento.favorecido" /></label>
           <input
             className="input" list="bancos-financiamento" required
             value={form.banco}
@@ -144,8 +145,8 @@ export default function FinanciamentoModal({
             : <p className="text-xs text-texto-3 mt-1">Quem recebe as parcelas. Vai para o favorecido dos 
               agendamentos e pode ser trocado depois na aba Parcelas.</p>}
         </div>
-        <div>
-          <label className="label">Banco favorecido (conta)</label>
+        <div data-help-id="financiamento.contaFavorecida">
+          <label className="label">Banco favorecido (conta)<HelpCampo campo="financiamento.contaFavorecida" /></label>
           <select
             className="input"
             value={form.banco_favorecido_id}
@@ -159,16 +160,16 @@ export default function FinanciamentoModal({
             conta, vale o texto do campo Banco. Dá para trocar depois na aba Parcelas.
           </p>
         </div>
-        <div>
-          <label className="label">1ª Parcela vence em *</label>
+        <div data-help-id="financiamento.primeiraParcela">
+          <label className="label">1ª Parcela vence em *<HelpCampo campo="financiamento.primeiraParcela" /></label>
           <DateInput
             className="input" required
             value={form.data_primeira_parcela}
             onChange={e => set('data_primeira_parcela', e.target.value)}
           />
         </div>
-        <div>
-          <label className="label">Conta que paga as parcelas</label>
+        <div data-help-id="financiamento.contaOrigem">
+          <label className="label">Conta que paga as parcelas<HelpCampo campo="financiamento.contaOrigem" /></label>
           <select
             className="input"
             value={form.conta_origem_id}
@@ -183,16 +184,16 @@ export default function FinanciamentoModal({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div>
-          <label className="label" htmlFor="fin-abertura-parcelas">Parcelas já pagas antes do Finup</label>
+        <div data-help-id="financiamento.aberturaParcelas">
+          <label className="label" htmlFor="fin-abertura-parcelas">Parcelas já pagas antes do Finup<HelpCampo campo="financiamento.aberturaParcelas" /></label>
           <input id="fin-abertura-parcelas" className="input" type="number" step="1" min="1" value={form.abertura_parcelas} onChange={e => set('abertura_parcelas', e.target.value)} placeholder="Quantidade paga antes" />
         </div>
-        <div>
-          <label className="label" htmlFor="fin-abertura-valor">Valor total pago até então (R$)</label>
+        <div data-help-id="financiamento.aberturaValor">
+          <label className="label" htmlFor="fin-abertura-valor">Valor total pago até então (R$)<HelpCampo campo="financiamento.aberturaValor" /></label>
           <InputMoeda id="fin-abertura-valor" value={form.abertura_valor} onChange={e => set('abertura_valor', e.target.value)} placeholder="Sem lançamento em conta" />
         </div>
-        <div>
-          <label className="label" htmlFor="fin-abertura-data">Data de referência</label>
+        <div data-help-id="financiamento.aberturaData">
+          <label className="label" htmlFor="fin-abertura-data">Data de referência<HelpCampo campo="financiamento.aberturaData" /></label>
           <DateInput id="fin-abertura-data" className="input" value={form.abertura_data} onChange={e => set('abertura_data', e.target.value)} />
         </div>
       </div>

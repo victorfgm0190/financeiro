@@ -4,6 +4,7 @@ import Modal from '../shared/Modal'
 import InputMoeda from '../shared/InputMoeda'
 import CategorySelect from '../shared/CategorySelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import HelpCampo from '../shared/HelpCampo'
 import { fmt, fmtSinal } from '../shared/utils'
 import { useApp } from '../../context/AppContext'
 import { previaVendaCota, registrarEventoConsorcio } from '../../lib/bemApi'
@@ -85,34 +86,34 @@ export default function VenderCotaModal({ bemId, cota, cotas, onCancelar, onVend
 
   return (
     <Modal open onClose={onCancelar} title={`Vender cota ${cota.numero}`}>
-      <div className="space-y-3 text-sm" data-testid="vender-cota">
+      <div className="space-y-3 text-sm" data-testid="vender-cota" data-help-form="vendaCota">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="label">Data da venda<input type="date" className="input mt-1" value={f.data} onChange={campo('data')} /></label>
-          <label className="label">Valor recebido<InputMoeda className="input mt-1" value={f.valor} onChange={campo('valor')} /></label>
-          <label className="label">Conta onde o dinheiro entrou
+          <label className="label" data-help-id="vendaCota.data">Data da venda<HelpCampo campo="vendaCota.data" /><input type="date" className="input mt-1" value={f.data} onChange={campo('data')} /></label>
+          <label className="label" data-help-id="vendaCota.valor">Valor recebido<HelpCampo campo="vendaCota.valor" /><InputMoeda className="input mt-1" value={f.valor} onChange={campo('valor')} /></label>
+          <label className="label" data-help-id="vendaCota.conta">Conta onde o dinheiro entrou<HelpCampo campo="vendaCota.conta" />
             <select className="input mt-1" value={f.conta} onChange={campo('conta')}>
               <option value="">Escolha…</option>
               {contasCaixa.map(c => <option key={c.id} value={c.id}>{c.apelido || c.name}</option>)}
             </select>
           </label>
-          <div className="label">Comprador
+          <div className="label" data-help-id="vendaCota.comprador">Comprador<HelpCampo campo="vendaCota.comprador" />
             <FavorecidoAutocomplete value={f.comprador} onChange={v => setF(p => ({ ...p, comprador: v?.target ? v.target.value : v }))} suggestions={payees || []} />
           </div>
-          <label className="label">Custos da venda (opcional)<InputMoeda className="input mt-1" value={f.custos} onChange={campo('custos')} /></label>
+          <label className="label" data-help-id="vendaCota.custos">Custos da venda (opcional)<HelpCampo campo="vendaCota.custos" /><InputMoeda className="input mt-1" value={f.custos} onChange={campo('custos')} /></label>
           {Number(f.custos) > 0 && (
-            <label className="label">Categoria dos custos
+            <label className="label" data-help-id="vendaCota.custosCategoria">Categoria dos custos<HelpCampo campo="vendaCota.custosCategoria" />
               <CategorySelect categories={categories} type="expense" value={f.custosCat} onChange={campo('custosCat')} className="input mt-1" />
             </label>
           )}
           {!previa?.ultima && (
-            <label className="label">Custo da cota
+            <label className="label" data-help-id="vendaCota.custoCota">Custo da cota<HelpCampo campo="vendaCota.custoCota" />
               <InputMoeda className="input mt-1" value={f.custoCota === '' ? (previa?.custo ?? '') : f.custoCota} max={previa?.saldo_bem} onChange={mudarCusto} />
               <span className="block text-[11px] text-texto-3 mt-0.5 font-normal">Estimado: pago próprio, por terceiro, abertura e créditos atribuídos à cota. Corrija se souber o valor exato.</span>
               {avisoCusto && <span className="block text-[11px] text-aviso mt-0.5 font-normal" role="status" data-testid="cota-aviso-custo">{avisoCusto}</span>}
             </label>
           )}
         </div>
-        <label className="label block">Observação<input className="input mt-1" value={f.observacao} onChange={campo('observacao')} /></label>
+        <label className="label block" data-help-id="vendaCota.observacao">Observação<HelpCampo campo="vendaCota.observacao" /><input className="input mt-1" placeholder="Anotação sobre a venda (opcional)" value={f.observacao} onChange={campo('observacao')} /></label>
 
         {previa && (
           <div className="rounded-lg bg-surface-2/40 p-3 space-y-0.5" data-testid="cota-previa">
@@ -141,7 +142,7 @@ export default function VenderCotaModal({ bemId, cota, cotas, onCancelar, onVend
           </p>
         )}
         {resultado !== 0 && !categoriaDoBem && (
-          <label className="label block">Categoria de {resultado > 0 ? 'ganho' : 'perda'} (o bem não tem uma definida)
+          <label className="label block" data-help-id="vendaCota.categoriaResultado">Categoria de {resultado > 0 ? 'ganho' : 'perda'} (o bem não tem uma definida)<HelpCampo campo="vendaCota.categoriaResultado" />
             <CategorySelect categories={categories} type={resultado > 0 ? 'income' : 'expense'} value={f.categoriaResultado} onChange={campo('categoriaResultado')} className="input mt-1" />
           </label>
         )}

@@ -6,6 +6,7 @@ import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import { registrarEntrada, getBem } from '../../lib/bemApi'
 import { fmtData, hojeIso, round2, montarAjustesEntrada } from './bemUtils'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 
 function Calculo({ label, children, cor }) {
   return (
@@ -150,26 +151,26 @@ export default function RegistrarEntradaModal({
   }
 
   return (
-    <form onSubmit={enviar} className="space-y-4">
+    <form onSubmit={enviar} className="space-y-4" data-help-form="entradaBem">
       <div className="p-3 bg-surface-2/60 rounded-lg text-xs space-y-1">
         <div className="flex justify-between"><span className="text-texto-3">Bem</span><span className="text-texto-1">{bem.nome}</span></div>
         <div className="flex justify-between"><span className="text-texto-3">Saldo atual</span><span className="text-texto-1">{fmt(bem.saldo)}</span></div>
       </div>
 
-      <div>
-        <label className="label">Data da Entrada *</label>
+      <div data-help-id="entradaBem.data">
+        <label className="label">Data da Entrada *<HelpCampo campo="entradaBem.data" /></label>
         <DateInput className="input" required value={data} onChange={e => setData(e.target.value)} hoje />
       </div>
 
-      <div>
+      <div data-help-id="entradaBem.transferencias">
         <div className="flex items-center justify-between mb-2">
-          <label className="label mb-0">Transferências Disponíveis</label>
+          <label className="label mb-0">Transferências Disponíveis<HelpCampo campo="entradaBem.transferencias" /></label>
           <span className="text-xs text-texto-3">{Object.keys(escolhidas).length} selecionada(s)</span>
         </div>
-        <div className="relative mb-2">
+        <div className="relative mb-2" data-help-id="entradaBem.busca">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
           <input
-            className="input pl-8" placeholder="Buscar por descrição ou conta..."
+            className="input pl-8" aria-label="Buscar transferências" placeholder="Buscar por descrição ou conta..."
             value={busca} onChange={e => setBusca(e.target.value)}
           />
         </div>
@@ -209,6 +210,8 @@ export default function RegistrarEntradaModal({
                 </label>
                 {marcada && categoriasBem.length > 0 && (
                   <select
+                    data-help-id="entradaBem.categoria"
+                    aria-label="Categoria da transferência"
                     className="input mt-2 text-xs py-1"
                     value={escolhidas[t.id] || ''}
                     onChange={e => setEscolhidas(prev => ({ ...prev, [t.id]: e.target.value }))}
@@ -223,8 +226,8 @@ export default function RegistrarEntradaModal({
         </div>
       </div>
 
-      <div>
-        <label className="label">Favorecido</label>
+      <div data-help-id="entradaBem.favorecido">
+        <label className="label">Favorecido<HelpCampo campo="entradaBem.favorecido" /></label>
         <FavorecidoAutocomplete
           value={favorecido}
           onChange={setFavorecido}
@@ -238,18 +241,18 @@ export default function RegistrarEntradaModal({
       </div>
 
       <div className="border border-borda rounded-lg p-3 space-y-3">
-        <label className="flex items-center gap-2.5 cursor-pointer">
+        <label data-help-id="entradaBem.tradeIn" className="flex items-center gap-2.5 cursor-pointer">
           <input
             type="checkbox" className="accent-primary" checked={usarBemAntigo}
             onChange={e => setUsarBemAntigo(e.target.checked)}
           />
-          <span className="text-sm text-texto-2">Usar um bem antigo como entrada (trade-in)</span>
+          <span className="text-sm text-texto-2">Usar um bem antigo como entrada (trade-in)<HelpCampo campo="entradaBem.tradeIn" /></span>
         </label>
 
         {usarBemAntigo && (
           <div className="space-y-3 pl-6">
-            <div>
-              <label className="label">Qual bem?</label>
+            <div data-help-id="entradaBem.bemAntigo">
+              <label className="label">Qual bem?<HelpCampo campo="entradaBem.bemAntigo" /></label>
               <select className="input" value={bemAntigoId} onChange={e => setBemAntigoId(e.target.value)}>
                 <option value="">Selecione...</option>
                 {bensDisponiveis.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -276,8 +279,8 @@ export default function RegistrarEntradaModal({
                     Este bem já consta como vendido — o backend vai recusar o trade-in.
                   </p>
                 )}
-                <div>
-                  <label className="label">Por quanto vai vender? (R$)</label>
+                <div data-help-id="entradaBem.valorTradeIn">
+                  <label className="label">Por quanto vai vender? (R$)<HelpCampo campo="entradaBem.valorTradeIn" /></label>
                   <InputMoeda
                     min="0.01"
                     value={valorVenda} onChange={e => setValorVenda(e.target.value)}

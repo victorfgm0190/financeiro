@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Pencil, Lock, Loader2, Wallet } from 'lucide-react'
 import { fmt } from '../shared/utils'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 
 // Card "Valores do Bem" da aba Informações: os dois números do bem e qual deles entra no
 // Patrimônio.
@@ -106,7 +107,7 @@ export default function PatrimonioEditavel({ bem, temMovimentacoes, onSalvar, on
   }
 
   return (
-    <div className="card">
+    <div className="card" data-help-form="valoresBem">
       <div className="flex items-center justify-between gap-3 mb-3">
         <h3 className="text-sm font-semibold text-texto-2 flex items-center gap-2">
           <Wallet size={14} className="text-receita" /> Valores do Bem
@@ -129,15 +130,15 @@ export default function PatrimonioEditavel({ bem, temMovimentacoes, onSalvar, on
 
       {editando ? (
         <div className="space-y-3">
-          <div>
-            <label className="label">Valor de Contrato / Nota Fiscal (R$)</label>
+          <div data-help-id="valoresBem.notaFiscal">
+            <label className="label">Valor de Contrato / Nota Fiscal (R$)<HelpCampo campo="valoresBem.notaFiscal" /></label>
             <InputMoeda
               className="input" min="0" placeholder="Deixe vazio se não souber"
               value={nf} onChange={e => setNf(e.target.value)}
             />
           </div>
-          <div>
-            <label className="label">Valor Pago / IR (R$)</label>
+          <div data-help-id="valoresBem.valorPago">
+            <label className="label">Valor Pago / IR (R$)<HelpCampo campo="valoresBem.valorPago" /></label>
             <InputMoeda
               className="input" min="0" placeholder="Deixe vazio para usar o saldo"
               value={pago} onChange={e => setPago(e.target.value)}
@@ -176,8 +177,8 @@ export default function PatrimonioEditavel({ bem, temMovimentacoes, onSalvar, on
         </div>
       )}
 
-      <div className="border-t border-borda mt-3 pt-3 space-y-2">
-        <p className="text-xs text-texto-3">Usar no Patrimônio</p>
+      <div className="border-t border-borda mt-3 pt-3 space-y-2" data-help-id="valoresBem.usarNoPatrimonio">
+        <p className="text-xs text-texto-3">Usar no Patrimônio<HelpCampo campo="valoresBem.usarNoPatrimonio" /></p>
         <Opcao
           ativa={metodo === 'nota_fiscal'} cor={COR_NF} titulo="Contrato / Nota Fiscal"
           valor={nfAtual} indefinido={nfAtual == null}

@@ -7,11 +7,12 @@ import { useApp } from '../../context/AppContext'
 import { filtrarCategoriasPorPerfil } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 
 // Liga uma conta patrimonial (type='asset') já existente ao módulo de bem: grava o valor da
 // nota fiscal e as 4 categorias. POST /api/bem/criar aceita conta_id e converte no lugar.
 
-function SelectCategoria({ label, valor, onChange, categorias }) {
+function SelectCategoria({ label, valor, onChange, categorias, helpId }) {
   const porGrupo = useMemo(() => {
     const grupos = {}
     for (const c of categorias) {
@@ -22,8 +23,8 @@ function SelectCategoria({ label, valor, onChange, categorias }) {
   }, [categorias])
 
   return (
-    <div>
-      <label className="label">{label} *</label>
+    <div data-help-id={helpId}>
+      <label className="label">{label} *<HelpCampo campo={helpId} /></label>
       <select className="input" value={valor} onChange={e => onChange(e.target.value)} required>
         <option value="">Selecione...</option>
         {Object.entries(porGrupo).map(([grupo, itens]) => (
@@ -107,14 +108,14 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
   }
 
   return (
-    <form onSubmit={enviar} className="space-y-4">
+    <form onSubmit={enviar} className="space-y-4" data-help-form="parametrizarBem">
       <p className="text-xs text-texto-3">
         Define a nota fiscal e as categorias que o módulo usa para lançar prestação, juros e
         perda/ganho na venda. O valor da nota fiscal é imutável depois de gravado.
       </p>
 
-      <div>
-        <label className="label">Valor da Nota Fiscal (R$) *</label>
+      <div data-help-id="parametrizarBem.notaFiscal">
+        <label className="label">Valor da Nota Fiscal (R$) *<HelpCampo campo="parametrizarBem.notaFiscal" /></label>
         <InputMoeda
           min="0.01" required autoFocus
           value={form.valor_nota_fiscal}
@@ -122,8 +123,8 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
         />
       </div>
 
-      <div>
-        <label className="label">Descrição</label>
+      <div data-help-id="parametrizarBem.descricao">
+        <label className="label">Descrição<HelpCampo campo="parametrizarBem.descricao" /></label>
         <input
           className="input" type="text"
           value={form.descricao}
@@ -139,19 +140,19 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <SelectCategoria
-          label="Perda de Venda de Bem" categorias={despesas}
+          label="Perda de Venda de Bem" helpId="parametrizarBem.categoriaPerda" categorias={despesas}
           valor={perdaId} onChange={v => set('categoria_perda_bem_id', v)}
         />
         <SelectCategoria
-          label="Ganho de Venda de Bem" categorias={receitas}
+          label="Ganho de Venda de Bem" helpId="parametrizarBem.categoriaGanho" categorias={receitas}
           valor={ganhoId} onChange={v => set('categoria_ganho_bem_id', v)}
         />
         <SelectCategoria
-          label="Prestação (Principal)" categorias={despesas}
+          label="Prestação (Principal)" helpId="parametrizarBem.categoriaPrestacao" categorias={despesas}
           valor={form.categoria_prestacao_id} onChange={v => set('categoria_prestacao_id', v)}
         />
         <SelectCategoria
-          label="Taxa de Financiamento (Juros)" categorias={despesas}
+          label="Taxa de Financiamento (Juros)" helpId="parametrizarBem.categoriaJuros" categorias={despesas}
           valor={form.categoria_taxa_finan_id} onChange={v => set('categoria_taxa_finan_id', v)}
         />
       </div>
