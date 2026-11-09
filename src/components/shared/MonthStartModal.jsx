@@ -6,6 +6,7 @@ import { occEfetiva, proximaEfetiva } from '../../lib/fluxoCaixa'
 import { candidatasInicioMes, idsJaExecutadas } from '../../lib/inicioMes'
 import { fetchTransferenciasExecutadas } from '../../lib/db'
 import { fmt, fmtDate } from './utils'
+import HelpCampo from './HelpCampo'
 
 const SESSION_KEY = 'monthStartModalDismissed'
 
@@ -141,12 +142,12 @@ export default function MonthStartModal() {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay" onClick={handleDismiss} />
-      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]" data-help-form="inicioMes">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
           <div>
-            <h3 className="font-semibold text-texto-1">Transferências do início do mês</h3>
+            <h3 className="font-semibold text-texto-1">Transferências do início do mês<HelpCampo campo="inicioMes.selecionar" /></h3>
             <p className="text-xs text-texto-3 mt-0.5 capitalize">{monthLabel}</p>
           </div>
           <button onClick={handleDismiss} className="p-1 text-texto-3 hover:text-texto-2 rounded transition-colors">
@@ -176,6 +177,8 @@ export default function MonthStartModal() {
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => toggleSelect(sch.id)}
+                  data-help-id="inicioMes.selecionar"
+                  aria-label={`Lançar ${sch.description}`}
                   onClick={e => e.stopPropagation()}
                   className="w-4 h-4 rounded accent-primary shrink-0 cursor-pointer"
                 />

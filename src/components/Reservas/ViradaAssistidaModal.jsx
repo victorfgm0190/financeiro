@@ -4,6 +4,7 @@ import Modal from '../shared/Modal'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { viradaReservaAcao } from '../../lib/db'
 import { rotuloMes, somarDias, dataBR } from '../../lib/mesFinanceiro'
+import HelpCampo from '../shared/HelpCampo'
 
 // ── Virada de saldo assistida ────────────────────────────────────────────────────────────────────
 // Passos: pergunta (meses pendentes, em ordem) → prévia (do servidor, com os dados do banco) →
@@ -71,7 +72,7 @@ const decisaoValida = (d) => d?.tipo === 'a_distribuir' || (d?.tipo === 'ajuste'
 function DecisaoDiferenca({ conta, decisao, onChange }) {
   const d = decisao || {}
   return (
-    <div className="rounded-lg border border-perigo/40 bg-perigo/5 p-3 space-y-2" role="alert" data-testid={`virada-decisao-${conta.accountId}`}>
+    <div className="rounded-lg border border-perigo/40 bg-perigo/5 p-3 space-y-2" role="alert" data-testid={`virada-decisao-${conta.accountId}`} data-help-form="viradaDecisao">
       <p className="text-xs font-semibold text-perigo flex items-center gap-1.5"><Lock size={12} /> {conta.nome}: {fmtSinal(conta.resto)} sem explicação por rendimento. A virada para aqui.</p>
       <ul className="text-[11px] text-texto-2 space-y-0.5">
         <li>Diferença total entre o saldo da conta e a soma das funções: <b>{fmtSinal(conta.diferenca)}</b></li>
@@ -80,19 +81,20 @@ function DecisaoDiferenca({ conta, decisao, onChange }) {
         {Math.abs(conta.aceitoAntes) > 0.005 && <li>Já estava a distribuir na virada anterior: {fmtSinal(conta.aceitoAntes)}</li>}
         {Math.abs(conta.lancamentosSemFuncao) > 0.005 && <li>Lançamentos do mês sem função, dentro do valor acima: {fmtSinal(conta.lancamentosSemFuncao)}</li>}
       </ul>
-      <div className="flex flex-wrap gap-3 text-xs text-texto-1">
+      <div className="flex flex-wrap items-center gap-3 text-xs text-texto-1" data-help-id="viradaDecisao.tipo">
         <label className="flex items-center gap-1.5"><input type="radio" className="accent-primary" checked={d.tipo === 'ajuste'} onChange={() => onChange({ tipo: 'ajuste', functionId: '', observacao: '' })} /> Lançar como Ajuste</label>
         <label className="flex items-center gap-1.5"><input type="radio" className="accent-primary" checked={d.tipo === 'a_distribuir'} onChange={() => onChange({ tipo: 'a_distribuir' })} /> Deixar a distribuir</label>
+        <HelpCampo campo="viradaDecisao.tipo" />
       </div>
       {d.tipo === 'ajuste' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <label className="text-[11px] text-texto-2">Função
+          <label className="text-[11px] text-texto-2" data-help-id="viradaDecisao.funcao">Função<HelpCampo campo="viradaDecisao.funcao" />
             <select className="input mt-1 w-full" value={d.functionId || ''} onChange={e => onChange({ ...d, functionId: e.target.value })}>
               <option value="">Escolha…</option>
               {conta.funcoes.map(f => <option key={f.functionId} value={f.functionId}>{f.nome}</option>)}
             </select>
           </label>
-          <label className="text-[11px] text-texto-2">Observação
+          <label className="text-[11px] text-texto-2" data-help-id="viradaDecisao.observacao">Observação<HelpCampo campo="viradaDecisao.observacao" />
             <input className="input mt-1 w-full" value={d.observacao || ''} onChange={e => onChange({ ...d, observacao: e.target.value })} />
           </label>
         </div>

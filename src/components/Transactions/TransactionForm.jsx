@@ -1395,7 +1395,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
   if (step === 'resgate' && resgateInfo) {
     return (
-      <div className="space-y-5 py-2">
+      <div className="space-y-5 py-2" data-help-form="resgate">
         <div className="text-center space-y-2">
           <div className="w-12 h-12 rounded-full bg-reserva/15 flex items-center justify-center mx-auto">
             <PiggyBank size={22} className="text-reserva" />
@@ -1414,8 +1414,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             <p className="text-xs text-aviso">{centralResgate.erro}</p>
           )}
         </div>
-        <div>
-          <label className="label">Data do resgate</label>
+        <div data-help-id="resgate.data">
+          <label className="label">Data do resgate<HelpCampo campo="resgate.data" /></label>
           <input
             type="date"
             className="input"

@@ -3,6 +3,7 @@ import { Globe, ExternalLink } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { aliquotaIof, iofEmLinhaSeparada, planoCompraEstrangeira, numeroDoTexto, MOEDAS } from '../../lib/cambio'
+import HelpCampo from '../shared/HelpCampo'
 
 const pct = (f) => `${(Number(f) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
 const num = (v, casas = 2) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas })
@@ -52,8 +53,8 @@ export default function MoedaEstrangeira({ tx, onRecalcular, onAbrir }) {
             {!tx.estimado && <> · valor real {fmt(tx.amount)}</>}
           </p>
           {tx.estimado && tx.cotacao > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <label htmlFor={`usd-${tx.id}`}>Valor em {simb}</label>
+            <div className="flex flex-wrap items-center gap-2" data-help-id="moedaEstrangeira.valor">
+              <label htmlFor={`usd-${tx.id}`}>Valor em {simb}<HelpCampo campo="moedaEstrangeira.valor" /></label>
               <input id={`usd-${tx.id}`} className="input !py-1 !text-xs w-28 text-right" inputMode="decimal" value={usd}
                 onChange={e => setUsd(e.target.value.replace(/[^\d.,]/g, ''))} />
               <button type="button" className="btn-secondary !py-1 text-xs" disabled={!mudou} onClick={recalcular}>Recalcular R$ e IOF</button>

@@ -3,6 +3,7 @@ import { Link2, Search, AlertTriangle, GitMerge } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from './utils'
 import { candidatosDoLancamento, divergenciaVinculo, CAMPOS_MESCLA, ROTULO_CAMPO_MESCLA } from '../../lib/vinculo'
+import HelpCampo from './HelpCampo'
 
 const fatura = (ym) => (ym ? `${ym.slice(5, 7)}/${ym.slice(0, 4)}` : '')
 
@@ -59,13 +60,13 @@ export default function VinculoPainel({ tx, onClose, onToast }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-help-form="vinculoLancamento">
       <p className="text-xs text-texto-2">
         <span className="font-medium text-texto-1">{tx.description || tx.payee || 'Lançamento'}</span> · {fmtDate(tx.date)} · {fmt(tx.amount)} · {conta(tx.accountId)}
       </p>
-      <div className="relative">
+      <div className="relative" data-help-id="vinculoLancamento.busca">
         <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-texto-3" />
-        <input className="input pl-8 text-sm" value={busca} onChange={e => { setBusca(e.target.value); setEscolhido(null) }} placeholder="Buscar agendamento ou parcela por descrição ou favorecido" aria-label="Buscar" />
+        <input className="input pl-8 text-sm" aria-label="Buscar agendamento ou parcela" value={busca} onChange={e => { setBusca(e.target.value); setEscolhido(null) }} placeholder="Buscar agendamento ou parcela por descrição ou favorecido" aria-label="Buscar" />
       </div>
       {!escolhido && (
         candidatos.length === 0
@@ -100,8 +101,8 @@ export default function VinculoPainel({ tx, onClose, onToast }) {
           <p className="text-texto-1">Vincular à ocorrência de <strong>{fmtDate(escolhido.data)}</strong> de "{escolhido.descricao}" ({fmt(escolhido.valor)}).</p>
           <p className="text-texto-3">A ocorrência fica baixada apontando este lançamento — nada novo é criado. As próximas não mudam.</p>
           {div?.diverge && (
-            <fieldset className="space-y-1">
-              <legend className="text-aviso mb-1">Valor ou data diferentes. O que fica na ocorrência?</legend>
+            <fieldset className="space-y-1" data-help-id="vinculoLancamento.manter">
+              <legend className="text-aviso mb-1">Valor ou data diferentes. O que fica na ocorrência?<HelpCampo campo="vinculoLancamento.manter" /></legend>
               <label className="flex items-start gap-2 cursor-pointer">
                 <input type="radio" name="manter" className="accent-primary mt-0.5" checked={manter === 'lancamento'} onChange={() => setManter('lancamento')} />
                 <span>Os do lançamento real: {fmt(tx.amount)} · {fmtDate(tx.date)}</span>
@@ -122,7 +123,8 @@ export default function VinculoPainel({ tx, onClose, onToast }) {
       {escolhido?.tipo === 'parcela' && (
         <div className="rounded-lg border border-borda-forte p-3 space-y-2 text-xs">
           <p className="text-texto-1">Mesclar com a parcela <strong>{escolhido.num}/{escolhido.total}</strong> (fatura {fatura(escolhido.fatura)}). A parcela fica; marque o que ela deve receber deste lançamento:</p>
-          <ul className="space-y-1">
+          <p className="text-[11px] text-texto-3">Campos a levar<HelpCampo campo="vinculoLancamento.campos" /></p>
+          <ul className="space-y-1" data-help-id="vinculoLancamento.campos">
             {CAMPOS_MESCLA.map(campo => (
               <li key={campo}>
                 <label className="flex items-start gap-2 cursor-pointer">

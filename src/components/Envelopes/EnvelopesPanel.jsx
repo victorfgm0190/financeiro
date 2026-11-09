@@ -14,6 +14,7 @@ import Modal from '../shared/Modal'
 import AccountOptions from '../shared/AccountOptions'
 import { TotaisEnvelopes, EnvelopeLinha, MenuEnvelope, EnvelopeDetalhe } from './EnvelopeResumo'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 
 // ── Period logic ──────────────────────────────────────────────────────────────
 // period runs from (dueDay+1) of one month to (dueDay) of the next
@@ -95,14 +96,14 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
   }, [expCats, categoryGroupOrder])
 
   return (
-    <div className="space-y-4">
-      <div data-guia="envelope-form.nome">
-        <label className="label">Nome do Envelope</label>
+    <div className="space-y-4" data-help-form="envelope">
+      <div data-guia="envelope-form.nome" data-help-id="envelope.nome">
+        <label className="label">Nome do Envelope<HelpCampo campo="envelope.nome" /></label>
         <input className="input" placeholder="Digite o nome do envelope" value={name} onChange={e => setName(e.target.value)} />
       </div>
 
-      <div data-guia="envelope-form.tipo">
-        <label className="label">Tipo de orçamento</label>
+      <div data-guia="envelope-form.tipo" data-help-id="envelope.tipo">
+        <label className="label">Tipo de orçamento<HelpCampo campo="envelope.tipo" /></label>
         <div className="flex flex-wrap gap-2">
           {Object.entries(TIPOS_ORCAMENTO).map(([k, rot]) => (
             <label key={k} className={`flex items-center gap-2 px-3 min-h-[40px] rounded-lg border cursor-pointer text-sm ${tipo === k ? 'border-primary bg-primary/10 text-texto-1' : 'border-borda-forte text-texto-2'}`}>
@@ -116,20 +117,20 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
       {diario ? (
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div data-guia="envelope-form.valor-dia">
-              <label className="label">Valor por dia (R$)</label>
+            <div data-guia="envelope-form.valor-dia" data-help-id="envelope.valorDia">
+              <label className="label">Valor por dia (R$)<HelpCampo campo="envelope.valorDia" /></label>
               <InputMoeda min="0" placeholder="Quanto pode gastar em cada dia que conta" value={valorDia} onChange={e => setValorDia(e.target.value)} />
             </div>
-            <div data-guia="envelope-form.dias">
-              <label className="label">Dias que contam</label>
+            <div data-guia="envelope-form.dias" data-help-id="envelope.dias">
+              <label className="label">Dias que contam<HelpCampo campo="envelope.dias" /></label>
               <select className="input" value={preset} onChange={e => setPreset(e.target.value)}>
                 {DIAS_PRESETS.map(p => <option key={p.id} value={p.id}>{p.rotulo}</option>)}
               </select>
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm text-texto-2 cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-texto-2 cursor-pointer" data-help-id="envelope.descontarFeriados">
             <input type="checkbox" className="accent-primary" checked={descontar} onChange={e => setDescontar(e.target.checked)} />
-            Descontar feriados <span className="text-xs text-texto-3">(Configurações → Cadastros → Feriados)</span>
+            Descontar feriados<HelpCampo campo="envelope.descontarFeriados" /> <span className="text-xs text-texto-3">(Configurações → Cadastros → Feriados)</span>
           </label>
           {previa && (
             <p className="text-xs text-texto-2 bg-surface-2/60 rounded-lg px-3 py-2" data-testid="previa-orcamento">
@@ -140,16 +141,16 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
         </div>
       ) : (
       <div className="grid grid-cols-2 gap-3">
-        <div data-guia="envelope-form.limite">
-          <label className="label">Limite Mensal (R$)</label>
+        <div data-guia="envelope-form.limite" data-help-id="envelope.limite">
+          <label className="label">Limite Mensal (R$)<HelpCampo campo="envelope.limite" /></label>
           <InputMoeda
             min="0"
             placeholder="0,00" value={limitAmount}
             onChange={e => setLimitAmount(e.target.value)}
           />
         </div>
-        <div data-guia="envelope-form.dia">
-          <label className="label">Dia de Vencimento (1–28)</label>
+        <div data-guia="envelope-form.dia" data-help-id="envelope.diaVencimento">
+          <label className="label">Dia de Vencimento (1–28)<HelpCampo campo="envelope.diaVencimento" /></label>
           <input
             className="input" type="number" min="1" max="28"
             value={dueDay} onChange={e => setDueDay(e.target.value)}
@@ -158,8 +159,8 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
       </div>
       )}
 
-      <div data-guia="envelope-form.conta">
-        <label className="label">Conta Vinculada</label>
+      <div data-guia="envelope-form.conta" data-help-id="envelope.conta">
+        <label className="label">Conta Vinculada<HelpCampo campo="envelope.conta" /></label>
         <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}>
           <AccountOptions
             accounts={nonCreditAc}
@@ -170,8 +171,8 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
         </select>
       </div>
 
-      <div data-guia="envelope-form.categorias">
-        <label className="label">Categorias Vinculadas ({categoryIds.length} selecionada{categoryIds.length !== 1 ? 's' : ''})</label>
+      <div data-guia="envelope-form.categorias" data-help-id="envelope.categorias">
+        <label className="label">Categorias Vinculadas ({categoryIds.length} selecionada{categoryIds.length !== 1 ? 's' : ''})<HelpCampo campo="envelope.categorias" /></label>
         <div className="max-h-52 overflow-y-auto border border-borda-forte rounded-lg divide-y divide-borda/50">
           {grouped.map(([group, cats]) => (
             <div key={group}>

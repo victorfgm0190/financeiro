@@ -5,6 +5,7 @@ import { prevMonthScheduleDate } from '../../lib/fatura'
 import { useCamadaModal } from '../../context/atalhosHooks'
 import { useApp } from '../../context/AppContext'
 import { faturaNoCicloAtual } from '../../lib/cicloFatura'
+import HelpCampo from '../shared/HelpCampo'
 
 // "Executar Gerenciais" (Agendamentos e Resumo da Importação): provisões das parcelas do Grupo G
 // ainda sem transferência gerencial. A execução é sempre do usuário (Confirmar) e usa o
@@ -137,7 +138,7 @@ export default function ExecutarGerenciaisModal({ provisoes: todasProvisoes, fat
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
-      <div ref={painelRef} data-modal-painel="" role="dialog" aria-modal="true" className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div ref={painelRef} data-modal-painel="" role="dialog" aria-modal="true" className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]" data-help-form="executarGerenciais">
         <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
           <div>
             <h3 className="font-semibold text-texto-1">Executar Provisões Gerenciais</h3>
@@ -149,8 +150,8 @@ export default function ExecutarGerenciaisModal({ provisoes: todasProvisoes, fat
         {/* Filtros (fatura + cartão) — aplicados em tempo real na lista */}
         <div className="px-5 py-3 border-b border-borda shrink-0 space-y-2.5">
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-texto-3 mb-1">Fatura</label>
+            <div data-help-id="executarGerenciais.fatura">
+              <label className="block text-xs text-texto-3 mb-1">Fatura<HelpCampo campo="executarGerenciais.fatura" /></label>
               <select
                 className="input text-sm py-1.5"
                 value={faturaFiltro}
@@ -162,8 +163,8 @@ export default function ExecutarGerenciaisModal({ provisoes: todasProvisoes, fat
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-xs text-texto-3 mb-1">Cartão</label>
+            <div data-help-id="executarGerenciais.cartao">
+              <label className="block text-xs text-texto-3 mb-1">Cartão<HelpCampo campo="executarGerenciais.cartao" /></label>
               <select
                 className="input text-sm py-1.5"
                 value={cartaoFiltro}
@@ -176,16 +177,16 @@ export default function ExecutarGerenciaisModal({ provisoes: todasProvisoes, fat
               </select>
             </div>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
+          <label className="flex items-center gap-2 cursor-pointer select-none" data-help-id="executarGerenciais.mostrarExecutadas">
             <input
               type="checkbox"
               checked={mostrarExecutadas}
               onChange={e => setMostrarExecutadas(e.target.checked)}
               className="w-4 h-4 rounded accent-primary cursor-pointer shrink-0"
             />
-            <span className="text-xs text-texto-2">Mostrar já executadas</span>
+            <span className="text-xs text-texto-2">Mostrar já executadas<HelpCampo campo="executarGerenciais.mostrarExecutadas" /></span>
           </label>
-          <label className={`flex items-center gap-2 select-none ${visibleProvisoes.length ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+          <label data-help-id="executarGerenciais.selecionar" className={`flex items-center gap-2 select-none ${visibleProvisoes.length ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
             <input
               ref={selecionarTodasRef}
               type="checkbox"
@@ -194,7 +195,7 @@ export default function ExecutarGerenciaisModal({ provisoes: todasProvisoes, fat
               onChange={toggleTodas}
               className="w-4 h-4 rounded accent-primary cursor-pointer shrink-0 disabled:cursor-not-allowed"
             />
-            <span className="text-xs text-texto-2">Selecionar todas</span>
+            <span className="text-xs text-texto-2">Selecionar todas<HelpCampo campo="executarGerenciais.selecionar" /></span>
           </label>
         </div>
 
@@ -202,7 +203,7 @@ export default function ExecutarGerenciaisModal({ provisoes: todasProvisoes, fat
           {visibleProvisoes.length === 0 ? (
             <p className="text-center text-xs text-texto-3 py-8">Nenhuma provisão para os filtros selecionados</p>
           ) : visibleProvisoes.map(p => (
-            <label key={p.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-borda hover:bg-surface-hover/30 cursor-pointer">
+            <label key={p.id} data-help-id="executarGerenciais.selecionar" className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-borda hover:bg-surface-hover/30 cursor-pointer">
               <input
                 type="checkbox"
                 checked={selected.has(p.id)}

@@ -135,7 +135,7 @@ function GroupManager({ groups }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-help-form="grupoConta">
       <div className="space-y-1">
         {active.map((g, i) => (
           <div key={g.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-surface-2">
@@ -143,6 +143,8 @@ function GroupManager({ groups }) {
               <>
                 <input
                   className="input flex-1 py-1.5 text-sm"
+                  data-help-id="grupoConta.nome"
+                  aria-label="Nome do grupo"
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
                   onKeyDown={e => {
@@ -207,9 +209,10 @@ function GroupManager({ groups }) {
       {!podeIncluir && !podeEditar && !podeExcluir && (
         <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>
       )}
+      {podeIncluir && <p data-testid="legenda-novo-grupo-conta" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3"><span>Tipo<HelpCampo campo="grupoConta.tipo" /></span><span>Nome<HelpCampo campo="grupoConta.nome" /></span></p>}
       {podeIncluir && (
       <div className="flex gap-2 pt-2 border-t border-borda-forte">
-        <select className="input w-36 text-sm" value={newType} onChange={e => setNewType(e.target.value)}>
+        <select className="input w-36 text-sm" data-help-id="grupoConta.tipo" aria-label="Tipo do novo grupo" value={newType} onChange={e => setNewType(e.target.value)}>
           <option value="financeiro">Financeiro</option>
           <option value="patrimonial">Patrimonial</option>
         </select>
@@ -218,6 +221,8 @@ function GroupManager({ groups }) {
           value={newName}
           onChange={e => setNewName(e.target.value)}
           placeholder="Digite o nome do grupo"
+          data-help-id="grupoConta.nome"
+          aria-label="Nome do novo grupo"
           onKeyDown={e => e.key === 'Enter' && handleAdd()}
         />
         <button className="btn-primary px-3" onClick={handleAdd}>

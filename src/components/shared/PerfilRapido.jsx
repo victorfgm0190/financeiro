@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Modal from './Modal'
 import { useApp } from '../../context/AppContext'
 import { CORES_PERFIL } from '../../lib/chartPalette'
+import HelpCampo from './HelpCampo'
 
 // Cadastro rápido de perfil (CPF/CNPJ) aberto POR CIMA de outro formulário (ex.: Nova Conta), sem
 // perder o que já foi digitado lá. Sem <form> de propósito: o Modal não usa portal, então ele fica
@@ -25,12 +26,12 @@ export default function PerfilRapido({ open, onClose, onCriado }) {
   const enter = (e) => { if (e.key === 'Enter') { e.preventDefault(); criar() } }
   return (
     <Modal open={open} onClose={onClose} title="Novo perfil (CPF/CNPJ)" size="sm">
-      <div className="space-y-3">
+      <div className="space-y-3" data-help-form="perfilRapido">
         <p className="text-xs text-texto-2">
           O perfil é a pessoa ou empresa dona das contas. Com ele, você vê os números de cada um separados — ou de todos juntos, no filtro "Tudo".
         </p>
-        <div>
-          <span className="label">Tipo</span>
+        <div data-help-id="perfilRapido.tipo">
+          <span className="label">Tipo<HelpCampo campo="perfilRapido.tipo" /></span>
           <div className="flex rounded-lg overflow-hidden border border-borda-forte">
             {[['pf', 'Pessoa Física'], ['pj', 'Pessoa Jurídica']].map(([v, l]) => (
               <button type="button" key={v} onClick={() => set('type', v)} aria-pressed={form.type === v}
@@ -40,13 +41,13 @@ export default function PerfilRapido({ open, onClose, onCriado }) {
             ))}
           </div>
         </div>
-        <label className="block">
-          <span className="label">{form.type === 'pf' ? 'Nome' : 'Razão social'} *</span>
+        <label className="block" data-help-id="perfilRapido.nome">
+          <span className="label">{form.type === 'pf' ? 'Nome' : 'Razão social'} *<HelpCampo campo="perfilRapido.nome" /></span>
           <input className="input" value={form.name} onChange={e => set('name', e.target.value)} onKeyDown={enter} autoFocus
             placeholder={form.type === 'pf' ? 'Nome da pessoa' : 'Nome da empresa'} />
         </label>
-        <label className="block">
-          <span className="label">{form.type === 'pf' ? 'CPF' : 'CNPJ'} (opcional)</span>
+        <label className="block" data-help-id="perfilRapido.documento">
+          <span className="label">{form.type === 'pf' ? 'CPF' : 'CNPJ'} (opcional)<HelpCampo campo="perfilRapido.documento" /></span>
           <input className="input" inputMode="numeric" value={form.document} onKeyDown={enter}
             onChange={e => set('document', e.target.value.replace(/\D/g, '').slice(0, form.type === 'pf' ? 11 : 14))}
             placeholder={form.type === 'pf' ? 'Só os números do CPF' : 'Só os números do CNPJ'} />

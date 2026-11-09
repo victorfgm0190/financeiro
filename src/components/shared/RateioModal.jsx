@@ -6,6 +6,7 @@ import { validarRateio, situacaoRateio, COR_SITUACAO_RATEIO } from '../../lib/ra
 import CategorySelect from './CategorySelect'
 import InputMoeda from './InputMoeda'
 import { MOBILE_MEDIA_QUERY } from '../../lib/breakpoints'
+import HelpCampo from './HelpCampo'
 
 let _k = 0
 const mkRow = (r = {}) => ({
@@ -98,6 +99,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
         role="dialog"
         aria-modal="true"
         aria-label="Dividir em categorias"
+        data-help-form="rateio"
         style={painelStyle}
         className="relative flex flex-col bg-surface md:border md:border-borda-forte md:rounded-2xl shadow-2xl w-full h-full md:h-auto md:max-w-3xl md:max-h-[90vh]"
       >
@@ -114,6 +116,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
         </div>
 
         <div ref={corpoRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 md:px-5 py-3 space-y-3 md:space-y-2">
+          <p data-testid="legenda-rateio" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3"><span>Categoria<HelpCampo campo="rateio.categoria" /></span><span>Valor<HelpCampo campo="rateio.valor" /></span><span>Descrição<HelpCampo campo="rateio.descricao" /></span></p>
           {rows.map((r, i) => {
             const resto = restanteDaLinha(r._k)
             const mostraUsar = naoAtribuido > 0.004 && resto > 0.004 && Math.abs(resto - parseV(r.valor)) > 0.004
@@ -131,6 +134,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
                       value={r.categoriaId}
                       onChange={e => setRow(r._k, { categoriaId: e.target.value })}
                       placeholder={`Categoria da parte ${i + 1}`}
+                      helpId="rateio.categoria"
                       searchable
                       quebrarRotulo
                     />
@@ -148,6 +152,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
                     onChange={e => setRow(r._k, { valor: e.target.value })}
                     onFocus={mostrarCartao}
                     aria-label={`Valor da parte ${i + 1}`}
+                    helpId="rateio.valor"
                     placeholder="Valor da parte"
                     className="input flex-1 min-w-0 md:flex-none md:w-32 min-h-[44px] md:min-h-0 text-base md:text-sm"
                   />
@@ -167,6 +172,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
                       onChange={e => setRow(r._k, { descricao: e.target.value })}
                       onFocus={mostrarCartao}
                       aria-label={`Descrição da parte ${i + 1}`}
+                      data-help-id="rateio.descricao"
                       placeholder="Descrição da parte (opcional)"
                       autoFocus={!r.descricao}
                       className="input w-full min-h-[44px] md:min-h-0 text-base md:text-sm"

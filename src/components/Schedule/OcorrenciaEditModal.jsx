@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import DateInput from '../shared/DateInput'
 import InputMoeda from '../shared/InputMoeda'
 import { mensagemConflitoPulo } from '../../lib/conflitoPeriodo'
+import HelpCampo from '../shared/HelpCampo'
 
 // Editar UMA ocorrência (ou parcela) pela prévia: pular, data e valor. Usado pelo Editar Agendamento e
 // pela Provisão de Despesa; quem chama decide o que fazer com { skip, date, amount }.
@@ -23,7 +24,7 @@ export default function OcorrenciaEditModal({ originalDate, override, isSkipped,
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
-      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-64 p-4">
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-64 p-4" data-help-form="ocorrencia">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-texto-1">{titulo || `Ocorrência de ${fmtD(originalDate)}`}</p>
           <button type="button" onClick={onClose} className="text-texto-3 hover:text-texto-2 p-0.5 rounded transition-colors">
@@ -31,14 +32,14 @@ export default function OcorrenciaEditModal({ originalDate, override, isSkipped,
           </button>
         </div>
 
-        <label className="flex items-center gap-2.5 mb-3.5 cursor-pointer select-none">
+        <label className="flex items-center gap-2.5 mb-3.5 cursor-pointer select-none" data-help-id="ocorrencia.pular">
           <input
             type="checkbox"
             checked={skip}
             onChange={e => alternarPulo(e.target.checked)}
             className="w-4 h-4 rounded accent-primary cursor-pointer"
           />
-          <span className="text-sm text-texto-2">Pular esta ocorrência</span>
+          <span className="text-sm text-texto-2">Pular esta ocorrência<HelpCampo campo="ocorrencia.pular" /></span>
         </label>
 
         {confirmandoPulo && (
@@ -53,8 +54,8 @@ export default function OcorrenciaEditModal({ originalDate, override, isSkipped,
 
         {!skip && (
           <div className="space-y-2.5">
-            <div>
-              <label className="label">Nova data</label>
+            <div data-help-id="ocorrencia.data">
+              <label className="label">Nova data<HelpCampo campo="ocorrencia.data" /></label>
               <DateInput
                 className="input"
                 value={date}
@@ -63,8 +64,8 @@ export default function OcorrenciaEditModal({ originalDate, override, isSkipped,
                 hoje
               />
             </div>
-            <div>
-              <label className="label">Valor (R$)</label>
+            <div data-help-id="ocorrencia.valor">
+              <label className="label">Valor (R$)<HelpCampo campo="ocorrencia.valor" /></label>
               <InputMoeda
                 min="0"
                 value={amount}

@@ -697,13 +697,14 @@ function ResumoTab({ functions, semVinculo, accounts, categories = [], accountBa
 
               {/* Saldo Real input on mobile (for linked accounts) */}
               {accountId && (
-                <div className="card py-2 px-3 flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-texto-3 shrink-0">Saldo real da conta:</span>
+                <div className="card py-2 px-3 flex items-center gap-2 flex-wrap" data-help-id="reservaResumo.saldoReal">
+                  <span className="text-xs text-texto-3 shrink-0">Saldo real da conta:<HelpCampo campo="reservaResumo.saldoReal" /></span>
                   {/* input + diferença ficam juntos: em telas estreitas quebram como bloco abaixo do label */}
                   <div className="flex items-center gap-2 flex-1 min-w-[8rem]">
                     <InputMoeda negativo
                       data-guia={fns === groups.find(g => g.accountId)?.fns ? 'reservas:resumo.saldo-real' : undefined}
                       className="input flex-1 min-w-0 text-xs py-1 text-right"
+                      aria-label="Saldo real da conta"
                       value={saldoReal ?? ''}
                       onChange={e => onSetAccountBalance(accountId, e.target.value)}
                     />
@@ -822,10 +823,12 @@ function ResumoTab({ functions, semVinculo, accounts, categories = [], accountBa
                       Σ saldos: <span className="text-texto-2 font-medium">{fmtSinal(totalSaldo)}</span>
                     </span>
                     <div className="flex items-center gap-2 ml-auto">
-                      <label className="text-xs text-texto-3 shrink-0">Saldo Real:</label>
+                      <label className="text-xs text-texto-3 shrink-0">Saldo Real:<HelpCampo campo="reservaResumo.saldoReal" /></label>
                       <InputMoeda negativo
                         data-guia={fns === groups.find(g => g.accountId)?.fns ? 'reservas:resumo.saldo-real' : undefined}
                         className="input w-32 text-xs py-1 text-right"
+                        helpId="reservaResumo.saldoReal"
+                        aria-label="Saldo real da conta"
                         value={saldoReal ?? ''}
                         onChange={e => onSetAccountBalance(accountId, e.target.value)}
                       />
@@ -850,7 +853,7 @@ function ResumoTab({ functions, semVinculo, accounts, categories = [], accountBa
                       <th className="text-right px-4 py-2 text-xs text-receita font-medium w-28">Entradas (+)</th>
                       <th className="text-right px-4 py-2 text-xs text-despesa font-medium w-28">Saídas (−)</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-24">Ajuste</th>
-                      <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28" title="Parte do saldo a distribuir que vai para a função (grava um ajuste)">Distribuir</th>
+                      <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28" title="Parte do saldo a distribuir que vai para a função (grava um ajuste)">Distribuir<HelpCampo campo="reservaResumo.distribuir" /></th>
                       <th className="text-right px-4 py-2 text-xs text-receita font-medium w-28" title="Parte da função nos rendimentos da conta (rateio automático pelo saldo)">Rendimentos</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Saldo</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Mov. Futuros</th>
@@ -912,6 +915,7 @@ function ResumoTab({ functions, semVinculo, accounts, categories = [], accountBa
                                 value={distrib[f.id] ?? ''}
                                 onChange={e => { const v = e.target.value; setDistrib(prev => ({ ...prev, [f.id]: v })); setDistErro(x => ({ ...x, [accountId]: null })) }}
                                 aria-label={`Distribuir para ${f.name}`}
+                                helpId="reservaResumo.distribuir"
                               />
                             ) : <span className="text-xs text-texto-3">—</span>}
                           </td>
@@ -1354,13 +1358,13 @@ function SaldoInicialCell({ f, todayStr, activePeriod, onAddPeriod, align = 'lef
         <Edit2 size={10} className="text-texto-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
       </button>
       {open && (
-        <div className={`absolute z-40 top-full mt-1 w-56 rounded-lg border border-borda-forte bg-surface p-3 shadow-xl text-left space-y-2.5 normal-case ${align === 'right' ? 'right-0' : 'left-0'}`}>
-          <div>
-            <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">📅 Data de referência</label>
-            <input type="date" value={data} onChange={e => setData(e.target.value)} className="input w-full text-xs py-1" />
+        <div data-help-form="reservaSaldoInicial" className={`absolute z-40 top-full mt-1 w-56 rounded-lg border border-borda-forte bg-surface p-3 shadow-xl text-left space-y-2.5 normal-case ${align === 'right' ? 'right-0' : 'left-0'}`}>
+          <div data-help-id="reservaSaldoInicial.data">
+            <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">📅 Data de referência<HelpCampo campo="reservaSaldoInicial.data" /></label>
+            <input type="date" aria-label="Data de referência" value={data} onChange={e => setData(e.target.value)} className="input w-full text-xs py-1" />
           </div>
-          <div>
-            <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">💰 Valor</label>
+          <div data-help-id="reservaSaldoInicial.valor">
+            <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">💰 Valor<HelpCampo campo="reservaSaldoInicial.valor" /></label>
             <InputMoeda negativo value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00 (aceita negativo)" className="input w-full text-xs py-1 text-right" />
           </div>
           <div className="flex gap-2 pt-0.5">
@@ -1422,7 +1426,7 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
 
   return (
     <Modal open onClose={onClose} title={`Ajustes — ${fn.name}`} size="lg">
-      <div className="space-y-4">
+      <div className="space-y-4" data-help-form="ajusteReserva">
         {activePeriod && (
           <p className="text-xs text-texto-3">
             Período ativo desde <span className="text-texto-2">{fmtDate(activePeriod.data_inicio)}</span> — o total considera os ajustes a partir desta data.
@@ -1434,8 +1438,8 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
             <thead>
               <tr className="border-b border-borda text-left">
                 <th className="px-3 py-2 text-xs text-texto-2 font-medium">Data</th>
-                <th className="px-3 py-2 text-xs text-texto-2 font-medium text-right">Valor</th>
-                <th className="px-3 py-2 text-xs text-texto-2 font-medium">Observação</th>
+                <th className="px-3 py-2 text-xs text-texto-2 font-medium text-right">Valor<HelpCampo campo="ajusteReserva.valor" /></th>
+                <th className="px-3 py-2 text-xs text-texto-2 font-medium">Observação<HelpCampo campo="ajusteReserva.observacao" /></th>
                 <th className="px-3 py-2 text-xs text-texto-2 font-medium text-right w-20">Ações</th>
               </tr>
             </thead>
@@ -1454,13 +1458,13 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {editing
-                        ? <InputMoeda negativo value={editValor} onChange={e => setEditValor(e.target.value)} className="input w-24 text-xs py-1 text-right" />
+                        ? <InputMoeda negativo helpId="ajusteReserva.valor" aria-label="Valor do ajuste" value={editValor} onChange={e => setEditValor(e.target.value)} className="input w-24 text-xs py-1 text-right" />
                         : <span className={`text-xs font-semibold ${valorColor(Number(a.valor))}`}>{fmtSigned(Number(a.valor) || 0)}</span>
                       }
                     </td>
                     <td className="px-3 py-2 text-xs text-texto-2">
                       {editing
-                        ? <input type="text" value={editObs} onChange={e => setEditObs(e.target.value)} placeholder="Digite uma observação (opcional)" className="input w-full text-xs py-1" />
+                        ? <input type="text" data-help-id="ajusteReserva.observacao" aria-label="Observação" value={editObs} onChange={e => setEditObs(e.target.value)} placeholder="Digite uma observação (opcional)" className="input w-full text-xs py-1" />
                         : <span className="truncate" title={a.observacao || ''}>{a.observacao || <span className="text-texto-3">—</span>}</span>
                       }
                     </td>
@@ -1505,16 +1509,16 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
         <div className="rounded-lg border border-borda-forte/60 p-3 space-y-2.5">
           <p className="text-xs font-semibold text-texto-2">+ Novo Ajuste</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <div>
-              <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">📅 Data</label>
-              <input type="date" value={newData} onChange={e => setNewData(e.target.value)} className="input w-full text-xs py-1" />
+            <div data-help-id="ajusteReserva.data">
+              <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">📅 Data<HelpCampo campo="ajusteReserva.data" /></label>
+              <input type="date" aria-label="Data do ajuste" value={newData} onChange={e => setNewData(e.target.value)} className="input w-full text-xs py-1" />
             </div>
-            <div>
-              <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">💰 Valor (±)</label>
+            <div data-help-id="ajusteReserva.valor">
+              <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">💰 Valor (±)<HelpCampo campo="ajusteReserva.valor" /></label>
               <InputMoeda negativo value={newValor} onChange={e => setNewValor(e.target.value)} placeholder="0,00" className="input w-full text-xs py-1 text-right" />
             </div>
-            <div>
-              <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">📝 Observação</label>
+            <div data-help-id="ajusteReserva.observacao">
+              <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">📝 Observação<HelpCampo campo="ajusteReserva.observacao" /></label>
               <input type="text" value={newObs} onChange={e => setNewObs(e.target.value)} placeholder="Digite uma observação (opcional)" className="input w-full text-xs py-1" />
             </div>
           </div>
@@ -2102,9 +2106,11 @@ function HistoricoTab({ snapshots, funcoes, semVinculo, contas, perfilAtivoId, s
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
-        <label className="text-xs text-texto-3 uppercase tracking-wide shrink-0">Período fechado:</label>
+        <label className="text-xs text-texto-3 uppercase tracking-wide shrink-0">Período fechado:<HelpCampo campo="reservaHistorico.periodo" /></label>
         <select
           data-guia="reservas:historico.periodo"
+          data-help-id="reservaHistorico.periodo"
+          aria-label="Período fechado"
           className="input py-1.5 text-xs max-w-[280px]"
           value={sel?.dataFim || ''}
           onChange={e => onSelFim(e.target.value)}

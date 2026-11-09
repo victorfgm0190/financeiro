@@ -69,11 +69,11 @@ export default function RenomearFavorecidoModal({
     if (lista.length === 0) return null
     const todos = lista.every(x => marcado(tabela, x.id))
     return (
-      <div className="space-y-1">
+      <div className="space-y-1" data-help-id="favorecidoRenomear.lancamentos">
         <label className="flex items-center gap-2 text-xs font-medium text-texto-2 min-h-[44px] cursor-pointer">
           <input type="checkbox" className="accent-primary w-4 h-4" checked={todos}
             onChange={e => alternarTodos(tabela, lista, e.target.checked)} />
-          {tituloGrupo} ({lista.filter(x => marcado(tabela, x.id)).length}/{lista.length})
+          {tituloGrupo} ({lista.filter(x => marcado(tabela, x.id)).length}/{lista.length})<HelpCampo campo="favorecidoRenomear.lancamentos" />
         </label>
         <div className="max-h-44 overflow-y-auto rounded-lg border border-borda divide-y divide-borda">
           {lista.map(x => (

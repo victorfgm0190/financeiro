@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { RefreshCw, BellOff } from 'lucide-react'
 import { fmt, fmtDate } from './utils'
 import { ehParcelado, frequenciaExibida, valorDeReferencia } from '../../lib/parcelasOcorrencia'
+import HelpCampo from './HelpCampo'
 
 const FREQ_LABELS = {
   once: 'Única', daily: 'Diária', weekly: 'Semanal', biweekly: 'Quinzenal',
@@ -26,7 +27,7 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay" />
-      <div data-modal-painel="" role="dialog" aria-modal="true" className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-md">
+      <div data-modal-painel="" role="dialog" aria-modal="true" className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-md" data-help-form="vinculoAgendamento">
 
         {/* Header */}
         <div className="flex items-start gap-3 p-5 border-b border-borda">
@@ -102,8 +103,8 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
             Será baixado por <span className="font-semibold">{fmt(tx.amount)}</span> (valor do cartão)
           </p>
           {diferencas.length > 0 && (
-            <div className="rounded-lg border border-borda p-3 space-y-2">
-              <p className="text-xs text-texto-2">Campos diferentes do agendamento:</p>
+            <div className="rounded-lg border border-borda p-3 space-y-2" data-help-id="vinculoAgendamento.campos">
+              <p className="text-xs text-texto-2">Campos diferentes do agendamento:<HelpCampo campo="vinculoAgendamento.campos" /></p>
               <ul className="text-xs space-y-0.5">
                 {diferencas.map(d => (
                   <li key={d.campo}><span className="text-texto-3">{d.rotulo}:</span> <span className="text-texto-2">{d.deLancamento}</span> <span className="text-texto-3">→ agendamento:</span> <span className="text-texto-1 font-medium">{d.doAgendamento}</span></li>
@@ -118,8 +119,8 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
                 Manter os deste lançamento
               </label>
               {!usarDoAgendamento && (
-                <div className="pl-5 space-y-1">
-                  <p className="text-xs text-texto-2">Atualizar também o agendamento?</p>
+                <div className="pl-5 space-y-1" data-help-id="vinculoAgendamento.atualizarAgendamento">
+                  <p className="text-xs text-texto-2">Atualizar também o agendamento?<HelpCampo campo="vinculoAgendamento.atualizarAgendamento" /></p>
                   <div className="flex gap-3">
                     <label className="flex items-center gap-1.5 text-xs text-texto-2 cursor-pointer">
                       <input type="radio" name="atualizar-agendamento" className="accent-primary" checked={atualizarAgendamento} onChange={() => setAtualizarAgendamento(true)} /> Sim
@@ -135,11 +136,11 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
           {diff > 0.01 && !ehParcelado(schedule) && (
             // Só a caixinha é clicável: o texto não é <label>, para um clique perto do botão não
             // marcar sem querer (a opção muda o valor base do agendamento).
-            <div className="flex items-start gap-2 text-xs text-texto-2">
+            <div className="flex items-start gap-2 text-xs text-texto-2" data-help-id="vinculoAgendamento.atualizarFuturas">
               <input type="checkbox" className="accent-primary mt-0.5 cursor-pointer shrink-0" checked={atualizarFuturas}
                 aria-label={`Atualizar também as próximas ocorrências para ${fmt(tx.amount)}`}
                 onChange={e => setAtualizarFuturas(e.target.checked)} />
-              <span className="select-none">Atualizar também as próximas ocorrências para {fmt(tx.amount)}</span>
+              <span className="select-none">Atualizar também as próximas ocorrências para {fmt(tx.amount)}</span><HelpCampo campo="vinculoAgendamento.atualizarFuturas" />
             </div>
           )}
         </div>

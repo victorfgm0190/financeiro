@@ -6,6 +6,7 @@ import { fmt, today } from '../shared/utils'
 import Modal from '../shared/Modal'
 import DateInput from '../shared/DateInput'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 
 // Saldo de referência de UMA conta: o SALDO FUTURO REAL — quanto a conta terá depois que todos
 // os lançamentos já efetivados com data > hoje entrarem. São os mesmos dois números que o card
@@ -77,7 +78,7 @@ export default function RendimentoModal({ account, onClose }) {
 
   return (
     <Modal open onClose={onClose} title={`Lançar Rendimento — ${account.name}`}>
-      <div className="space-y-4">
+      <div className="space-y-4" data-help-form="rendimento">
         {/* Saldo de referência (somente leitura) */}
         <div className="p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
           <p className="text-xs text-texto-3 mb-0.5">
@@ -92,8 +93,8 @@ export default function RendimentoModal({ account, onClose }) {
           )}
         </div>
 
-        <div>
-          <label className="label">Novo saldo (R$) *</label>
+        <div data-help-id="rendimento.novoSaldo">
+          <label className="label">Novo saldo (R$) *<HelpCampo campo="rendimento.novoSaldo" /></label>
           <InputMoeda
             negativo
             value={novoSaldo}
@@ -126,8 +127,8 @@ export default function RendimentoModal({ account, onClose }) {
           )
         )}
 
-        <div>
-          <label className="label">Data</label>
+        <div data-help-id="rendimento.data">
+          <label className="label">Data<HelpCampo campo="rendimento.data" /></label>
           <DateInput className="input" value={date} onChange={e => setDate(e.target.value)} hoje />
         </div>
 

@@ -3,6 +3,7 @@ import { CheckCircle, AlertCircle, TrendingDown } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 
 export default function DebtPaymentModal({ account, group, amount, date, sourceAccountId, onClose }) {
   const { payables, categories, payDebtInstallment } = useApp()
@@ -55,7 +56,7 @@ export default function DebtPaymentModal({ account, group, amount, date, sourceA
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-help-form="pagamentoDivida">
       {/* Header */}
       <div className="flex items-start gap-3 p-3 bg-primary/10 border border-primary/20 rounded-lg">
         <TrendingDown size={15} className="text-primary-fg shrink-0 mt-0.5" />
@@ -92,8 +93,8 @@ export default function DebtPaymentModal({ account, group, amount, date, sourceA
           <div className="input bg-surface text-texto-2 pointer-events-none">{fmt(amount)}</div>
         </div>
 
-        <div>
-          <label className="label">Principal (amortização)</label>
+        <div data-help-id="pagamentoDivida.principal">
+          <label className="label">Principal (amortização)<HelpCampo campo="pagamentoDivida.principal" /></label>
           <InputMoeda
             min="0"
             max={amount}

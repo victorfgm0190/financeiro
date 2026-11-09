@@ -23,6 +23,7 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import ProvisorioForm from './ProvisorioForm'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
+import HelpCampo from '../shared/HelpCampo'
 
 const round2 = n => Math.round(n * 100) / 100
 const todayStr = () => format(new Date(), 'yyyy-MM-dd')
@@ -916,7 +917,8 @@ export default function FluxoCaixaPorConta() {
             ) : aplicar.op.once ? (
               <p className="text-xs text-texto-2">Agendamento <span className="text-texto-1">Única</span>: a data dele passa a ser {fmtDate(aplicar.linha.date)}.</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2" data-help-form="aplicarData" data-help-id="mudarData.escopo" role="radiogroup" aria-label="Quais ocorrências">
+                <p className="label">Quais ocorrências<HelpCampo campo="mudarData.escopo" /></p>
                 <label className="flex items-start gap-2 cursor-pointer">
                   <input type="radio" className="mt-0.5 accent-primary" checked={aplicar.modo === 'ocorrencia'} onChange={() => setAplicar(a => ({ ...a, modo: 'ocorrencia' }))} />
                   <span className="text-sm text-texto-1">Só esta ocorrência

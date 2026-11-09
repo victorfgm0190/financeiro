@@ -3,6 +3,7 @@ import { Loader2, CheckCircle } from 'lucide-react'
 import { aceitarSaldoPendencia } from '../../lib/db'
 import Modal from '../shared/Modal'
 import { fmt } from '../shared/utils'
+import HelpCampo from '../shared/HelpCampo'
 
 // "Aceitar saldo atual como correto" (GER_SALDO_SUBCONTA). Grava um marco de saldo da subconta e
 // resolve a pendência (resolvida_por = 'marco'). NÃO cria lançamento e NÃO altera saldo: a diferença
@@ -69,8 +70,8 @@ export default function AceitarSaldoModal({ pendencia, onClose, onConcluido }) {
               </p>
             )}
           </div>
-          <label className="block">
-            <span className="text-xs text-texto-2">Motivo (obrigatório)</span>
+          <label className="block" data-help-form="aceitarSaldo" data-help-id="aceitarSaldo.motivo">
+            <span className="text-xs text-texto-2">Motivo (obrigatório)<HelpCampo campo="aceitarSaldo.motivo" /></span>
             <textarea className="input w-full mt-1 text-sm" rows={3} value={motivo}
               onChange={e => setMotivo(e.target.value)} placeholder="Digite o motivo" />
           </label>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Layers } from 'lucide-react'
 import { ESCOPO, ROTULO_CAMPO } from '../../lib/camposSerie'
+import HelpCampo from './HelpCampo'
 
 // Pergunta da regra única de séries, exibida no lugar do formulário (dentro do mesmo modal — um
 // modal fixo aninhado ficaria recortado). Campos da SÉRIE (favorecido, tipo) não entram na
@@ -29,7 +30,7 @@ export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie
   if (variante === 'parcelamento') {
     const confirmar = (esc) => onConfirm({ escopo: esc, motivo: motivo.trim() || null })
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" data-help-form="escopoSerie">
         <div className="flex items-start gap-2">
           <Layers size={16} className="text-primary-fg mt-0.5 shrink-0" />
           <div>
@@ -38,8 +39,8 @@ export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie
           </div>
         </div>
         <p className="text-[11px] text-texto-3">Só as parcelas pendentes são recalculadas: novo total menos o que já foi pago, dividido entre elas. Parcelas já pagas nunca mudam.</p>
-        <div>
-          <label className="label">Motivo da alteração (opcional)</label>
+        <div data-help-id="escopoSerie.motivo">
+          <label className="label">Motivo da alteração (opcional)<HelpCampo campo="escopoSerie.motivo" /></label>
           <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Digite o motivo (opcional)" />
         </div>
         <div className="flex gap-2 justify-end flex-wrap">
@@ -53,7 +54,7 @@ export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie
   if (variante === 'ocorrencia') {
     const confirmar = (esc) => onConfirm({ escopo: esc, motivo: motivo.trim() || null })
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" data-help-form="escopoSerie">
         <div className="flex items-start gap-2">
           <Layers size={16} className="text-primary-fg mt-0.5 shrink-0" />
           <div>
@@ -77,8 +78,8 @@ export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie
           </p>
         )}
         <p className="text-[11px] text-texto-3">Ocorrências já registradas/efetivadas nunca mudam.</p>
-        <div>
-          <label className="label">Motivo da alteração (opcional)</label>
+        <div data-help-id="escopoSerie.motivo">
+          <label className="label">Motivo da alteração (opcional)<HelpCampo campo="escopoSerie.motivo" /></label>
           <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Digite o motivo (opcional)" />
         </div>
         <div className="flex gap-2 justify-end flex-wrap">
@@ -90,7 +91,7 @@ export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie
     )
   }
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-help-form="escopoSerie">
       <div className="flex items-start gap-2">
         <Layers size={16} className="text-primary-fg mt-0.5 shrink-0" />
         <div>
@@ -100,7 +101,8 @@ export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie
           </p>
         </div>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2" data-help-id="escopoSerie.escopo" role="radiogroup" aria-label="Onde aplicar">
+        <p className="label">Onde aplicar<HelpCampo campo="escopoSerie.escopo" /></p>
         {opcao(ESCOPO.PARCELA, 'Só esta parcela', 'As outras parcelas continuam como estão.')}
         {opcao(ESCOPO.PROXIMAS, 'Esta e as próximas pendentes', `Aplica nesta e em ${nProximas} parcela${nProximas !== 1 ? 's' : ''} pendente${nProximas !== 1 ? 's' : ''} seguinte${nProximas !== 1 ? 's' : ''}. Data desloca as próximas pelo mesmo número de dias.`)}
       </div>
@@ -110,8 +112,8 @@ export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie
         </p>
       )}
       <p className="text-[11px] text-texto-3">Parcelas já pagas/efetivadas e lançamentos já gerados nunca mudam.</p>
-      <div>
-        <label className="label">Motivo da alteração (opcional)</label>
+      <div data-help-id="escopoSerie.motivo">
+        <label className="label">Motivo da alteração (opcional)<HelpCampo campo="escopoSerie.motivo" /></label>
         <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Digite o motivo (opcional)" />
       </div>
       <div className="flex gap-2 justify-end">

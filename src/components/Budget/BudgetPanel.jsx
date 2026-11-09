@@ -13,6 +13,7 @@ import { lancamentosNoModo, MODO_VALOR_PADRAO } from '../../lib/contratos/despes
 import InputMoeda from '../shared/InputMoeda'
 import { isoLocal } from '../../lib/hoje'
 import { criarRegraDemonstrativo, filtrarPerfilDemonstrativo, despesaPorCategoria } from '../../lib/regraDemonstrativo'
+import HelpCampo from '../shared/HelpCampo'
 
 export default function BudgetPanel() {
   const { budgets, categories, profileReportTransactions: transactions, profileAccounts, reserveFunctions, activeProfile, addBudget, updateBudget, deleteBudget, getFinancialPeriod, pode, abridorDeRepasse, contratos } = useApp()
@@ -170,9 +171,9 @@ export default function BudgetPanel() {
       )}
 
       <Modal open={showForm} onClose={() => { setShowForm(false); setEditBudget(null) }} title={editBudget ? 'Editar Orçamento' : 'Novo Orçamento'} size="sm">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div data-guia="orcamento-form.categoria">
-            <label className="label">Categoria *</label>
+        <form onSubmit={handleSubmit} className="space-y-4" data-help-form="orcamento">
+          <div data-guia="orcamento-form.categoria" data-help-id="orcamento.categoria">
+            <label className="label">Categoria *<HelpCampo campo="orcamento.categoria" /></label>
             <CategorySelect
               categories={availableCategories}
               type="expense"
@@ -182,8 +183,8 @@ export default function BudgetPanel() {
               required
             />
           </div>
-          <div data-guia="orcamento-form.valor">
-            <label className="label">Valor Orçado (R$) *</label>
+          <div data-guia="orcamento-form.valor" data-help-id="orcamento.valor">
+            <label className="label">Valor Orçado (R$) *<HelpCampo campo="orcamento.valor" /></label>
             <InputMoeda min="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required />
           </div>
           <div className="flex gap-3 pt-1">

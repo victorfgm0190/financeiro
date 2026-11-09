@@ -246,3 +246,46 @@ Agendamentos têm roteiro de Preenchimento Guiado (`formularios`); os demais tê
   - `src/components/Import/ajudaCampos.test.jsx`;
   - um caso novo em `AgendaCelularPanel.test.jsx`.
 
+### Bloco 5a — demais formulários que gravam
+
+- O conteúdo está em `src/help/operacoes.js` e `src/help/lancamentosModais.js`.
+- **Agendamentos:**
+  - `efetivarProvisao`;
+  - `registrarLote`: legenda com valor e data por item, mais o valor transferido de fato;
+  - seleção em lote e tipo de documento em massa (`agendamentoLote.*`);
+  - `ocorrencia`: pular, data e valor;
+  - `executarGerenciais`.
+- **Reservas:**
+  - saldo real e "Distribuir" no Resumo;
+  - `reservaSaldoInicial`: o popover do saldo inicial;
+  - `ajusteReserva`: novo e editar;
+  - período fechado do Histórico;
+  - `viradaDecisao`: a decisão da diferença na virada assistida.
+- **Envelopes** (`envelope`) e **Orçamento** (`orcamento`).
+- **Cartão de Crédito:** `pagamentoFatura` e a seleção de lançamentos (`lancamentoLote.selecionar`, também no extrato da conta).
+- **Contas:**
+  - Gerenciar grupos: `grupoConta`, com os mesmos ids de Cadastros;
+  - `rendimento`.
+- **Dívidas:** `planoDivida` e `pagamentoDivida`.
+- **Modais de lançamento:**
+  - `rateio`;
+  - `edicaoLote`;
+  - `reconciliarLote`;
+  - `vinculoAgendamento` (lançamento × agendamento);
+  - `escopoSerie`, nas três variantes;
+  - `vinculoLancamento`;
+  - valor em moeda estrangeira;
+  - `duplicar`;
+  - `resgate`.
+- **Cadastros soltos e avisos:**
+  - `perfilRapido`;
+  - "onde renomear" do favorecido;
+  - `aceitarSaldo`;
+  - `inicioMes`.
+- **Fluxo de Caixa:**
+  - `consultaFluxo`: consulta salva;
+  - `aplicarData` no Fluxo por Conta, que usa `mudarData.escopo`.
+- **Celular:** `inicioCards` (Personalizar cards do Início).
+- Teste: `src/components/Ajuda/camposBloco5a.test.jsx`.
+- Ficam para o bloco 5b: filtros e busca, prévias do Assistente e telas sem login.
+

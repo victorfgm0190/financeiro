@@ -8,6 +8,7 @@ import { useApp } from '../../context/AppContext'
 import { filtrarCategoriasPorPerfil } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { tipoVisual, ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
+import HelpCampo from './HelpCampo'
 
 // Paleta acessível (sem verde/vermelho): receita=azul, despesa=laranja, transferência=cinza.
 const TYPE_META = {
@@ -183,14 +184,14 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
       {/* ── STAGE: edit ── */}
       {stage === 'edit' && (
         <>
-          <div className="space-y-4 mb-4">
+          <div className="space-y-4 mb-4" data-help-form="edicaoLote">
             <p className="text-xs text-texto-3">Preencha apenas o que deseja alterar. Campos vazios são ignorados.</p>
-            <div>
-              <label className="label">Data</label>
+            <div data-help-id="edicaoLote.data">
+              <label className="label">Data<HelpCampo campo="edicaoLote.data" /></label>
               <DateInput className="input" value={date} onChange={e => setDate(e.target.value)} hoje />
             </div>
-            <div>
-              <label className="label">Categoria</label>
+            <div data-help-id="edicaoLote.categoria">
+              <label className="label">Categoria<HelpCampo campo="edicaoLote.categoria" /></label>
               <SearchableSelect
                 options={catOpts}
                 preserveGroupOrder
@@ -205,8 +206,8 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
                 </p>
               )}
             </div>
-            <div>
-              <label className="label">Motivo da alteração (opcional)</label>
+            <div data-help-id="edicaoLote.motivo">
+              <label className="label">Motivo da alteração (opcional)<HelpCampo campo="edicaoLote.motivo" /></label>
               <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Digite o motivo (opcional)" />
               <p className="text-[11px] text-texto-3 mt-1">Fica no histórico de alterações de cada lançamento.</p>
             </div>

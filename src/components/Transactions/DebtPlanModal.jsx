@@ -8,6 +8,7 @@ import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
 import InputMoeda from '../shared/InputMoeda'
+import HelpCampo from '../shared/HelpCampo'
 
 function fmtBR(iso) {
   if (!iso) return ''
@@ -119,7 +120,7 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-help-form="planoDivida">
       <div className="flex items-start gap-3 p-3 bg-surface-2 border border-borda-forte rounded-lg">
         <DollarSign size={15} className="text-texto-2 shrink-0 mt-0.5" />
         <div>
@@ -133,16 +134,16 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="label">Valor total</label>
+        <div data-help-id="planoDivida.valorTotal">
+          <label className="label">Valor total<HelpCampo campo="planoDivida.valorTotal" /></label>
           <InputMoeda
             negativo
             value={form.totalAmount}
             onChange={e => handleTotalChange(e.target.value)}
           />
         </div>
-        <div>
-          <label className="label flex items-center gap-1"><User size={11} /> Favorecido</label>
+        <div data-help-id="planoDivida.favorecido">
+          <label className="label flex items-center gap-1"><User size={11} /> Favorecido<HelpCampo campo="planoDivida.favorecido" /></label>
           <FavorecidoAutocomplete
             value={form.payee}
             onChange={v => set('payee', v)}
@@ -153,8 +154,8 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <div>
-          <label className="label">Parcelas</label>
+        <div data-help-id="planoDivida.parcelas">
+          <label className="label">Parcelas<HelpCampo campo="planoDivida.parcelas" /></label>
           <input
             className="input"
             type="number"
@@ -164,8 +165,8 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
             onChange={e => handleInstallmentsChange(e.target.value)}
           />
         </div>
-        <div>
-          <label className="label flex items-center gap-1"><Calendar size={11} /> Dia venc.</label>
+        <div data-help-id="planoDivida.diaVencimento">
+          <label className="label flex items-center gap-1"><Calendar size={11} /> Dia venc.<HelpCampo campo="planoDivida.diaVencimento" /></label>
           <input
             className="input"
             type="number"
@@ -175,8 +176,8 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
             onChange={e => handleDueDayChange(e.target.value)}
           />
         </div>
-        <div>
-          <label className="label">Vlr. parcela</label>
+        <div data-help-id="planoDivida.valorParcela">
+          <label className="label">Vlr. parcela<HelpCampo campo="planoDivida.valorParcela" /></label>
           <InputMoeda
             negativo
             value={form.installmentAmount}
@@ -185,8 +186,8 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
         </div>
       </div>
 
-      <div>
-        <label className="label">Primeira parcela em</label>
+      <div data-help-id="planoDivida.primeiraParcela">
+        <label className="label">Primeira parcela em<HelpCampo campo="planoDivida.primeiraParcela" /></label>
         <DateInput
           className="input"
           value={form.firstDueDate}
@@ -194,10 +195,10 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
         />
       </div>
 
-      <div>
+      <div data-help-id="planoDivida.conta">
         <label className="label flex items-center gap-1">
           <CreditCard size={11} />
-          {isEmprestimo ? 'Conta de recebimento' : 'Conta de débito para pagamentos'}
+          {isEmprestimo ? 'Conta de recebimento' : 'Conta de débito para pagamentos'}<HelpCampo campo="planoDivida.conta" />
         </label>
         <select
           className="input"
@@ -209,10 +210,10 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
         </select>
       </div>
 
-      <div>
+      <div data-help-id="planoDivida.categoriaJuros">
         <label className="label flex items-center gap-1">
           <Tag size={11} />
-          {isEmprestimo ? 'Categoria de rendimento (juros)' : 'Categoria de juros'}
+          {isEmprestimo ? 'Categoria de rendimento (juros)' : 'Categoria de juros'}<HelpCampo campo="planoDivida.categoriaJuros" />
         </label>
         <CategorySelect
           categories={categories}

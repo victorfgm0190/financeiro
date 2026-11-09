@@ -6,6 +6,7 @@ import Modal from './Modal'
 import ScheduleForm from '../Schedule/ScheduleForm'
 import { txToScheduleInitial } from '../../lib/herancaCampos'
 import { useApp } from '../../context/AppContext'
+import HelpCampo from './HelpCampo'
 
 // Lançamento → `initial` de um Agendamento NOVO: txToScheduleInitial (lib/herancaCampos.js) —
 // data/frequência ficam nos defaults do form; o tipo de documento é mantido.
@@ -99,6 +100,7 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
             ref={popRef}
             style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 9999 }}
             className="bg-surface border border-borda-forte rounded-lg shadow-2xl p-3 w-[248px] max-w-[calc(100vw-2rem)]"
+            data-help-form="duplicar"
             onClick={(e) => e.stopPropagation()}
           >
             {step === 'choice' ? (
@@ -125,9 +127,11 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
               </>
             ) : (
               <>
-                <label className="block text-xs text-texto-2 mb-1.5">Data da cópia</label>
+                <label className="block text-xs text-texto-2 mb-1.5">Data da cópia<HelpCampo campo="duplicar.data" /></label>
                 <input
                   type="date"
+                  data-help-id="duplicar.data"
+                  aria-label="Data da cópia"
                   className="input w-full text-sm"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}

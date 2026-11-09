@@ -229,7 +229,7 @@ export default function BemResumoTab({ bemId, onMudou }) {
                   </div>
                   {podeEditar && (
                     <div className="flex items-center gap-2">
-                      <select className="input text-xs py-1 w-auto" aria-label="O que é esta receita" value={papelDaClasse(l.classe)} onChange={e => trocarPapel(l.id, e.target.value)}>
+                      <select className="input text-xs py-1 w-auto" data-help-id="receitaBem.papel" aria-label="O que é esta receita" value={papelDaClasse(l.classe)} onChange={e => trocarPapel(l.id, e.target.value)}>
                         {PAPEIS.map(p => <option key={p.id} value={p.id}>{p.rotulo}</option>)}
                       </select>
                       {l.sugerida && (

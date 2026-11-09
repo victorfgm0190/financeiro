@@ -1195,6 +1195,8 @@ function ScheduleRow({
               <input
                 type="checkbox"
                 checked={isSelected}
+                data-help-id="agendamentoLote.selecionar"
+                aria-label={`Selecionar ${schedule.description}`}
                 onChange={() => onToggleSelect(schedule.id)}
                 onClick={e => e.stopPropagation()}
                 className="w-4 h-4 rounded accent-primary cursor-pointer"
@@ -1714,7 +1716,7 @@ export function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
+        <div className="px-5 py-4 space-y-4" data-help-form="efetivarProvisao">
           <div>
             <p className="text-xs text-texto-3">Provisão</p>
             <p className="text-sm text-texto-1 font-medium">{schedule.description}</p>
@@ -1726,24 +1728,24 @@ export function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Valor real (R$) *</label>
+            <div data-help-id="efetivarProvisao.valor">
+              <label className="label">Valor real (R$) *<HelpCampo campo="efetivarProvisao.valor" /></label>
               <InputMoeda
                 min="0.01"
                 value={amount} onChange={e => setAmount(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
               />
             </div>
-            <div>
-              <label className="label">Data real *</label>
+            <div data-help-id="efetivarProvisao.data">
+              <label className="label">Data real *<HelpCampo campo="efetivarProvisao.data" /></label>
               <DataPagamentoField value={date} onChange={e => setDate(e.target.value)} vencimento={vencimento} />
             </div>
           </div>
 
           {perguntar && (
-            <fieldset className="p-3 bg-surface-2/60 border border-borda rounded-lg space-y-2" data-testid="efetivar-aplicar-proximas">
+            <fieldset className="p-3 bg-surface-2/60 border border-borda rounded-lg space-y-2" data-testid="efetivar-aplicar-proximas" data-help-id="efetivarProvisao.aplicarProximas">
               <legend className="px-1 text-xs font-semibold text-texto-1">
-                A mudança de data vale para as próximas ocorrências?
+                A mudança de data vale para as próximas ocorrências?<HelpCampo campo="efetivarProvisao.aplicarProximas" />
               </legend>
               <label className="flex items-start gap-2 text-xs text-texto-2 cursor-pointer">
                 <input type="radio" name="aplicarProximas" className="mt-0.5" checked={!aplicarProximas} onChange={() => setAplicarProximas(false)} />
@@ -1911,10 +1913,10 @@ function ResumoLote({ resumo, deFato = null, onDeFato = null }) {
                 </p>
                 {onDeFato && (
                   <div className="flex items-center justify-between gap-3 pl-3">
-                    <label className="text-texto-2" htmlFor={`fato-${pk}`}>Valor transferido de fato</label>
+                    <label className="text-texto-2" htmlFor={`fato-${pk}`}>Valor transferido de fato<HelpCampo campo="registrarLote.deFato" /></label>
                     <div className="relative w-28 shrink-0">
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-texto-3 pointer-events-none">R$</span>
-                      <InputMoeda id={`fato-${pk}`} className="input !py-1 !pl-7 !pr-2 text-xs text-right font-bold"
+                      <InputMoeda id={`fato-${pk}`} helpId="registrarLote.deFato" className="input !py-1 !pl-7 !pr-2 text-xs text-right font-bold"
                         value={deFato[pk] ?? ''} onChange={e => onDeFato(pk, e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }} />
                     </div>
@@ -2010,7 +2012,7 @@ function BatchRegisterModal({ selectedRows, accounts, reservaFoco = null, onConf
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
-      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]" data-help-form="registrarLote">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
           <h3 className="font-semibold text-texto-1">
@@ -2024,13 +2026,14 @@ function BatchRegisterModal({ selectedRows, accounts, reservaFoco = null, onConf
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Date picker */}
-          <div>
-            <label className="label">Data de registro</label>
+          <div data-help-id="registrarLote.data">
+            <label className="label">Data de registro<HelpCampo campo="registrarLote.data" /></label>
             <DataPagamentoField value={date} onChange={e => onDataGeral(e.target.value)} vencimento={vencComum} />
             <p className="text-[11px] text-texto-3 mt-1">Cada item abre no próprio vencimento. A data geral é aplicada a todos os itens cuja data não foi alterada individualmente.</p>
           </div>
 
           {/* List of selected items */}
+          <p data-testid="legenda-registrar-lote" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3"><span>Valor<HelpCampo campo="registrarLote.valorItem" /></span><span>Data<HelpCampo campo="registrarLote.dataItem" /></span></p>
           <div className="rounded-lg border border-borda overflow-hidden">
             {selectedRows.map((r) => {
               const { schedule, nextDate } = r
@@ -2070,6 +2073,7 @@ function BatchRegisterModal({ selectedRows, accounts, reservaFoco = null, onConf
                         <InputMoeda
                           className={`input !py-1 !pl-7 !pr-2 text-xs text-right font-bold ${valueColor} ${ruim ? '!border-perigo' : ''}`}
                           placeholder=""
+                          helpId="registrarLote.valorItem"
                           value={it?.valor ?? ''}
                           onChange={e => setItem(schedule.id, { valor: e.target.value })}
                           onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
@@ -2084,6 +2088,8 @@ function BatchRegisterModal({ selectedRows, accounts, reservaFoco = null, onConf
                     </span>
                     <DataPagamentoField
                       compact
+                      data-help-id="registrarLote.dataItem"
+                      aria-label={`Data de ${schedule.description}`}
                       className="input !py-1 !px-2 text-xs"
                       value={it?.date || ''}
                       onChange={e => setItem(schedule.id, { date: e.target.value, dataEditada: true })}
@@ -2507,6 +2513,8 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
                 className="input py-1 text-xs w-44"
                 value={tipoMassa}
                 onChange={e => setTipoMassa(e.target.value)}
+                data-help-id="agendamentoLote.tipoDocumento"
+                aria-label="Definir tipo de documento"
                 title="Definir tipo de documento"
               >
                 <option value="">Definir tipo de documento…</option>
@@ -2515,6 +2523,7 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
                 ))}
                 <option value={SEM_TIPO}>Remover tipo</option>
               </select>
+              <HelpCampo campo="agendamentoLote.tipoDocumento" />
               {tipoMassa && (
                 <input
                   className="input py-1 text-xs w-40"
@@ -2522,6 +2531,8 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
                   maxLength={200}
                   onChange={e => setMotivoMassa(e.target.value)}
                   placeholder="Digite o motivo (opcional)"
+                  data-help-id="agendamentoLote.motivo"
+                  aria-label="Motivo da alteração"
                   title="Motivo da alteração (opcional) — vai para o histórico"
                 />
               )}
@@ -2566,9 +2577,11 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
                       type="checkbox"
                       checked={allSelected}
                       onChange={toggleSelectAll}
+                      data-help-id="agendamentoLote.selecionar"
+                      aria-label="Selecionar todos"
                       className="w-4 h-4 rounded accent-primary cursor-pointer"
                       title="Selecionar todos"
-                    />
+                    /><HelpCampo campo="agendamentoLote.selecionar" />
                   </th>
                 )}
                 <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap">Data</th>

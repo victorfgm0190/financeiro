@@ -37,6 +37,7 @@ import ExtratoGerencial from './ExtratoGerencial'
 import RelatorioFatura from './RelatorioFatura'
 import InputMoeda from '../shared/InputMoeda'
 import SeloCambio from '../shared/SeloCambio'
+import HelpCampo from '../shared/HelpCampo'
 
 // ─── Helpers (mirrors TransactionsPanel) ─────────────────────────────────────
 
@@ -1113,6 +1114,8 @@ export default function CreditCardPanel() {
                       <input
                         type="checkbox"
                         className="accent-primary shrink-0"
+                        data-help-id="lancamentoLote.selecionar"
+                        aria-label={`Selecionar ${tx.description || tx.payee || 'lançamento'}`}
                         checked={selectedIds.has(tx.id)}
                         onChange={() => toggleSelect(tx.id)}
                         onClick={e => e.stopPropagation()}
@@ -1141,8 +1144,10 @@ export default function CreditCardPanel() {
                           className="accent-primary"
                           checked={allVisibleSelected}
                           onChange={toggleSelectAllVisible}
+                          data-help-id="lancamentoLote.selecionar"
+                          aria-label="Selecionar todos os visíveis"
                           title="Selecionar todos os visíveis"
-                        />
+                        /><HelpCampo campo="lancamentoLote.selecionar" />
                       </th>
                     )}
                     <th className="text-left px-4 py-3 text-xs text-texto-2 font-medium">Data</th>
@@ -1197,6 +1202,8 @@ export default function CreditCardPanel() {
                             <input
                               type="checkbox"
                               className="accent-primary"
+                              data-help-id="lancamentoLote.selecionar"
+                              aria-label={`Selecionar ${tx.description || tx.payee || 'lançamento'}`}
                               checked={isSelected}
                               onChange={() => toggleSelect(tx.id)}
                               onClick={e => e.stopPropagation()}
@@ -1563,9 +1570,9 @@ export default function CreditCardPanel() {
       />
 
       <Modal open={showPayModal} onClose={() => setShowPayModal(false)} title="Pagar Fatura do Cartão" size="sm">
-        <div className="space-y-4">
-          <div>
-            <label className="label">Conta de Débito</label>
+        <div className="space-y-4" data-help-form="pagamentoFatura">
+          <div data-help-id="pagamentoFatura.conta">
+            <label className="label">Conta de Débito<HelpCampo campo="pagamentoFatura.conta" /></label>
             <select className="input" value={payFromAccount} onChange={e => setPayFromAccount(e.target.value)}>
               <option value="">Selecione a conta...</option>
               {bankAccounts.map(a => (
@@ -1573,12 +1580,12 @@ export default function CreditCardPanel() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="label">Valor do Pagamento</label>
+          <div data-help-id="pagamentoFatura.valor">
+            <label className="label">Valor do Pagamento<HelpCampo campo="pagamentoFatura.valor" /></label>
             <InputMoeda negativo value={payAmount} onChange={e => setPayAmount(e.target.value)} />
           </div>
-          <div>
-            <label className="label">Data do Pagamento</label>
+          <div data-help-id="pagamentoFatura.data">
+            <label className="label">Data do Pagamento<HelpCampo campo="pagamentoFatura.data" /></label>
             <DataPagamentoField value={payDate} onChange={e => setPayDate(e.target.value)} vencimento={vencimentoFatura} />
           </div>
           <div className="flex gap-3">

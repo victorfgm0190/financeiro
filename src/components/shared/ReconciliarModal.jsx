@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { X, CheckCircle } from 'lucide-react'
 import { fmt, fmtDate } from './utils'
+import HelpCampo from './HelpCampo'
 
 const visibleFor = (items, operation) =>
   items.filter(t => operation === 'reconciliar' ? !t.reconciled : !!t.reconciled)
@@ -46,7 +47,7 @@ export default function ReconciliarModal({ items, onApply, onClose, onAlterar })
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
-      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]" data-help-form="reconciliarLote">
         <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
           <h3 className="font-semibold text-texto-1 flex items-center gap-2">
             <CheckCircle size={16} className="text-primary-fg" /> Reconciliar Transações
@@ -72,9 +73,11 @@ export default function ReconciliarModal({ items, onApply, onClose, onAlterar })
                       type="checkbox"
                       checked={allSelected}
                       onChange={toggleAll}
+                      data-help-id="reconciliarLote.selecionar"
+                      aria-label="Selecionar todos"
                       className="w-4 h-4 rounded accent-primary cursor-pointer align-middle"
                       title="Selecionar todos"
-                    />
+                    /><HelpCampo campo="reconciliarLote.selecionar" />
                   </th>
                   <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap">Data</th>
                   <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Histórico</th>
@@ -93,6 +96,8 @@ export default function ReconciliarModal({ items, onApply, onClose, onAlterar })
                         type="checkbox"
                         checked={selected.has(t.id)}
                         onChange={() => toggle(t.id)}
+                        data-help-id="reconciliarLote.selecionar"
+                        aria-label={`Selecionar ${t.description || 'lançamento'}`}
                         onClick={e => e.stopPropagation()}
                         className="w-4 h-4 rounded accent-primary cursor-pointer align-middle"
                       />
@@ -114,7 +119,7 @@ export default function ReconciliarModal({ items, onApply, onClose, onAlterar })
         {items.length > 0 && (
           <div className="px-5 py-3 border-t border-borda space-y-3 shrink-0">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4" data-help-id="reconciliarLote.operacao" role="radiogroup" aria-label="Reconciliar ou não">
                 <label className="flex items-center gap-1.5 cursor-pointer text-sm text-texto-2">
                   <input
                     type="radio"
@@ -135,6 +140,7 @@ export default function ReconciliarModal({ items, onApply, onClose, onAlterar })
                   />
                   Não reconciliar
                 </label>
+                <HelpCampo campo="reconciliarLote.operacao" />
               </div>
               <span className="text-xs text-texto-3">
                 {selected.size} selecionado{selected.size !== 1 ? 's' : ''} · {fmt(total)}

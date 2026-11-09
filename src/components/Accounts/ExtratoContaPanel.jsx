@@ -32,6 +32,7 @@ import { criarSeloParcela } from '../../lib/numeroParcela'
 import { hojeSP } from '../../lib/hoje'
 import SeloCambio from '../shared/SeloCambio'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
+import HelpCampo from '../shared/HelpCampo'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -264,6 +265,8 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           <input
             type="checkbox"
             checked={!!selected}
+            data-help-id="lancamentoLote.selecionar"
+            aria-label={`Selecionar ${tx.description || 'lançamento'}`}
             onChange={() => onToggleSelect(tx.id)}
             onClick={e => e.stopPropagation()}
             className="w-4 h-4 rounded accent-primary cursor-pointer align-middle"
@@ -1189,9 +1192,11 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                       type="checkbox"
                       checked={allVisibleSelected}
                       onChange={toggleSelectAllVisible}
+                      data-help-id="lancamentoLote.selecionar"
+                      aria-label="Selecionar todos os visíveis"
                       className="w-4 h-4 rounded accent-primary cursor-pointer align-middle"
                       title="Selecionar todos os visíveis"
-                    />
+                    /><HelpCampo campo="lancamentoLote.selecionar" />
                   </th>
                 )}
                 <th className="text-left px-3 py-1 text-xs text-texto-2 font-medium whitespace-nowrap">Data</th>
@@ -1445,6 +1450,8 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 selectMode ? (
                   <input
                     type="checkbox"
+                    data-help-id="lancamentoLote.selecionar"
+                    aria-label={`Selecionar ${tx.description || 'lançamento'}`}
                     checked={isSelected}
                     onChange={() => toggleSelect(tx.id)}
                     onClick={e => e.stopPropagation()}

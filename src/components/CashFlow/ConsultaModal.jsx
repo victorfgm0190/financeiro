@@ -7,6 +7,7 @@ import { fmt, fmtDate, groupedAccountOptions } from '../shared/utils'
 import {
   MODOS, HORIZONTES, NOME_MAX, contasDaConsulta, validarConsulta, ultimoDiaDeSaldo, erroNome,
 } from '../../lib/fluxoConsultas'
+import HelpCampo from '../shared/HelpCampo'
 
 const OPCOES = [
   ['incluir_agendamentos', 'Agendamentos pendentes'],
@@ -99,9 +100,9 @@ export default function ConsultaModal({ initial, consultas, accounts, accountGro
   return (
     <>
     <Modal open={!confirmExcluir} onClose={onClose} title={editando ? 'Editar consulta' : 'Nova consulta'}>
-      <div className="space-y-4">
-        <div>
-          <label className="label">Nome da consulta *</label>
+      <div className="space-y-4" data-help-form="consultaFluxo">
+        <div data-help-id="consultaFluxo.nome">
+          <label className="label">Nome da consulta *<HelpCampo campo="consultaFluxo.nome" /></label>
           <input
             className={`input ${mostrarErroNome ? 'border-perigo' : ''}`}
             value={form.nome}
@@ -120,21 +121,22 @@ export default function ConsultaModal({ initial, consultas, accounts, accountGro
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-texto-2">Perfis</span>
+        <div className="flex items-center gap-2" data-help-id="consultaFluxo.perfis">
+          <span className="text-xs text-texto-2">Perfis<HelpCampo campo="consultaFluxo.perfis" /></span>
           <PerfisMultiSelect value={form.perfil_ids} onChange={v => set('perfil_ids', v)} profiles={profiles} />
         </div>
 
-        <div className="flex gap-1 bg-surface-2/60 rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-surface-2/60 rounded-lg p-1" data-help-id="consultaFluxo.modo">
           {MODOS.map(m => (
             <button key={m.id} type="button" onClick={() => set('modo', m.id)}
               className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${form.modo === m.id ? 'bg-primary text-white' : 'text-texto-2 hover:text-texto-1'}`}>
               {m.label}
             </button>
           ))}
+          <HelpCampo campo="consultaFluxo.modo" />
         </div>
 
-        <div className="border border-borda rounded-lg overflow-hidden">
+        <div className="border border-borda rounded-lg overflow-hidden" data-help-id="consultaFluxo.contas">
           <div className="max-h-64 overflow-y-auto overscroll-contain">
             {form.modo === 'conta' && (
               <>
@@ -176,12 +178,13 @@ export default function ConsultaModal({ initial, consultas, accounts, accountGro
             )}
           </div>
           <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-borda bg-surface-2/30 text-xs">
-            <span className="text-texto-2">Saldo inicial desta consulta · {contas.length} conta{contas.length !== 1 ? 's' : ''}</span>
+            <span className="text-texto-2">Saldo inicial desta consulta · {contas.length} conta{contas.length !== 1 ? 's' : ''}<HelpCampo campo="consultaFluxo.contas" /></span>
             <span className={`font-bold ${total >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmt(total)}</span>
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2" data-help-id="consultaFluxo.opcoes">
+          <p className="label">O que entra no fluxo<HelpCampo campo="consultaFluxo.opcoes" /></p>
           {OPCOES.map(([k, l]) => (
             <label key={k} className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" className="accent-primary w-3.5 h-3.5" checked={!!form[k]} onChange={e => set(k, e.target.checked)} />
@@ -191,7 +194,7 @@ export default function ConsultaModal({ initial, consultas, accounts, accountGro
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs text-texto-2">Horizonte padrão</span>
+          <span className="text-xs text-texto-2" data-help-id="consultaFluxo.horizonte">Horizonte padrão<HelpCampo campo="consultaFluxo.horizonte" /></span>
           <div className="flex flex-wrap gap-1 bg-surface-2/60 rounded-lg p-1">
             {HORIZONTES.map(h => (
               <button key={h} type="button" onClick={() => set('horizonte_padrao', h)}
@@ -200,9 +203,9 @@ export default function ConsultaModal({ initial, consultas, accounts, accountGro
               </button>
             ))}
           </div>
-          <label className="flex items-center gap-2 cursor-pointer sm:ml-auto">
+          <label className="flex items-center gap-2 cursor-pointer sm:ml-auto" data-help-id="consultaFluxo.padrao">
             <input type="checkbox" className="accent-primary w-3.5 h-3.5" checked={!!form.padrao} onChange={e => set('padrao', e.target.checked)} />
-            <span className="text-sm text-texto-2">Abrir esta consulta por padrão</span>
+            <span className="text-sm text-texto-2">Abrir esta consulta por padrão<HelpCampo campo="consultaFluxo.padrao" /></span>
           </label>
         </div>
 

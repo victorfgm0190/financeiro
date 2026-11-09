@@ -27,6 +27,7 @@ import { MASCARA, lerOcultar, gravarOcultar } from './ocultarValores'
 import TelaCheia from './TelaCheia'
 import SaldoPrincipalBreakdownModal from '../components/Dashboard/SaldoPrincipalBreakdownModal'
 import { saldoTotalContas } from '../lib/saldoTotal'
+import HelpCampo from '../components/shared/HelpCampo'
 
 
 // Primeiro nome do usuário logado (nome do cadastro na sessão), com a 1ª letra maiúscula.
@@ -303,7 +304,8 @@ function PersonalizarCards({ onClose, cards, onSalvar }) {
 
   return (
     <BottomSheet open onClose={onClose} title="Personalizar cards do Início">
-      <ul className="divide-y divide-borda rounded-xl border border-borda">
+      <p data-testid="legenda-cards-inicio" className="flex items-center text-xs text-texto-3 mb-2"><span>Mostrar o card e a ordem<HelpCampo campo="inicioCards.ativo" /></span></p>
+      <ul className="divide-y divide-borda rounded-xl border border-borda" data-help-form="inicioCards">
         {lista.map((c, i) => (
           <li key={c.modulo.id} className="flex items-center gap-2 px-3 min-h-[56px]">
             <span className="flex-1 text-sm text-texto-1">{c.modulo.cardTitle || c.modulo.label}</span>
@@ -316,6 +318,7 @@ function PersonalizarCards({ onClose, cards, onSalvar }) {
             <button
               type="button"
               role="switch"
+              data-help-id="inicioCards.ativo"
               aria-checked={c.on}
               aria-label={c.modulo.cardTitle || c.modulo.label}
               onClick={() => alternar(i)}
