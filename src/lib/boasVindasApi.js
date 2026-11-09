@@ -89,6 +89,16 @@ export const responderOfertaGuia = (form, resposta) => gravar('POST', { guiaOfer
     ...(resposta === 'nunca' ? { guiaOfertaDesligada: true } : {}),
   },
 }))
+// Configurações › Guias: oferecer o Preenchimento Guiado (liga/desliga) e "Reativar ofertas de guia".
+export const ofertaGuiaLigada = (e) => !e?.progresso?.guiaOfertaDesligada
+const semChaves = (obj, chaves) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => !chaves.includes(k)))
+export const definirOfertaGuiaLigada = (ligada) => gravar('POST', { guiaOfertaLigada: !!ligada }, (e) => {
+  const resto = semChaves(e.progresso, ['guiaOfertaDesligada'])
+  return { progresso: ligada ? resto : { ...resto, guiaOfertaDesligada: true } }
+})
+export const reativarOfertasGuia = () => gravar('POST', { guiaOfertasReativar: true }, (e) => ({
+  progresso: semChaves(e.progresso, ['guiaOfertas', 'guiaOfertaDesligada']),
+}))
 // Oferta já respondida neste formulário, ou desligada ("Não perguntar mais")?
 export const ofertaGuiaRespondida = (e, form) => !!(e?.progresso?.guiaOfertaDesligada || e?.progresso?.guiaOfertas?.[form])
 // Interruptor geral (Configurações › Geral › Guias das telas). Desligado: nada abre sozinho e o "?" some.

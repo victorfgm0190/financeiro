@@ -97,3 +97,11 @@ Camada de ajuda por **campo**, ao lado do help de tela (`src/lib/ajudaTelas.js`,
 - Oferta discreta na 1ª abertura de cada formulário novo: Sim / Não / Não perguntar mais.
   - A resposta é gravada por usuário: `progresso.guiaOfertas.<form>` e `progresso.guiaOfertaDesligada` (POST `guiaOferta`).
 - O guia NUNCA preenche nem salva nada.
+
+## Preferências (Etapa 5) — Configurações › Geral › Guias das telas
+
+- "Mostrar ícones de ajuda nos campos" (`ajuda_campos`): desligado, o ⓘ some, mas a F1 continua abrindo a ajuda do campo.
+- "Oferecer o preenchimento guiado": `progresso.guiaOfertaDesligada`, o mesmo do "Não perguntar mais" da oferta.
+  - O botão "Preencher com guia" fica sempre no formulário.
+- "Reativar ofertas de guia": apaga `progresso.guiaOfertas` e religa a oferta. Cada formulário volta a oferecer uma vez.
+- Tudo por usuário em `boas_vindas_usuario` via `/api/boas-vindas` (POST `guiaOfertaLigada` / `guiaOfertasReativar`). Sem migração: usa colunas que já existem.

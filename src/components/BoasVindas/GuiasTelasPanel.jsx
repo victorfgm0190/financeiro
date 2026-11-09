@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import { Eye, EyeOff, Compass, RotateCcw } from 'lucide-react'
 import { AJUDA_TELAS, TELAS_COM_GUIA } from '../../lib/ajudaTelas'
+import { definirOfertaGuiaLigada, ofertaGuiaLigada, reativarOfertasGuia } from '../../lib/boasVindasApi'
 import { carregarBoasVindas, definirAjudaCampos, definirGuiasLigados, definirJornadaLigada, refazerJornada, mostrarChecklist, ocultarGuia, ocultarTodosGuias, reativarGuia, reativarTodosGuias } from '../../lib/boasVindasApi'
 import { useEstadoBoasVindas } from './useGuiaTela'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -37,6 +38,7 @@ export default function GuiasTelasPanel() {
   const ligados = estado ? estado.guiasLigados !== false : true
   const ajudaCampos = estado ? estado.ajudaCampos !== false : true
   const jornada = estado ? estado.jornadaLigada !== false : true
+  const oferta = estado ? ofertaGuiaLigada(estado) : true
   const [confirmarRefazer, setConfirmarRefazer] = useState(false)
   const executar = async (fn, ok) => {
     setAviso(null)
@@ -108,9 +110,30 @@ export default function GuiasTelasPanel() {
         </span>
         <span className="text-sm text-texto-1">
           Mostrar ícones de ajuda nos campos
-          <span className="block text-xs text-texto-2">O ícone ⓘ ao lado do nome de um campo explica para que ele serve.</span>
+          <span className="block text-xs text-texto-2">O ícone ⓘ ao lado do nome de um campo explica para que ele serve. A tecla F1 continua abrindo a ajuda do campo mesmo com os ícones desligados.</span>
         </span>
       </label>
+
+      {/* Preenchimento Guiado (src/components/Ajuda/GuiaPreenchimento.jsx): oferta na 1ª abertura de cada formulário. */}
+      <div className="space-y-2 rounded-xl border border-borda p-3" data-guia="settings:guias.preenchimento">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <span className="relative shrink-0">
+            <input type="checkbox" role="switch" className="sr-only peer" checked={oferta} disabled={!estado}
+              aria-label="Oferecer o preenchimento guiado"
+              onChange={e => executar(() => definirOfertaGuiaLigada(e.target.checked), e.target.checked ? 'Oferta do preenchimento guiado ligada.' : 'Oferta desligada. O botão "Preencher com guia" continua nos formulários.')} />
+            <span className="block w-11 h-6 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
+            <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5" />
+          </span>
+          <span className="text-sm text-texto-1">
+            Oferecer o preenchimento guiado
+            <span className="block text-xs text-texto-2">Na primeira vez que você abre um formulário, o Finup pergunta se quer preenchê-lo com o guia. O botão "Preencher com guia" fica sempre no formulário.</span>
+          </span>
+        </label>
+        <button type="button" className="btn-secondary flex items-center gap-1.5 min-h-[44px]" disabled={!estado}
+          onClick={() => executar(reativarOfertasGuia, 'Pronto: cada formulário volta a oferecer o guia uma vez.')}>
+          <RotateCcw size={15} /> Reativar ofertas de guia
+        </button>
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <button type="button" data-guia="settings:guias.reativar" className="btn-secondary flex items-center gap-1.5 min-h-[44px]" disabled={!estado}
