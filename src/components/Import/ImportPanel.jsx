@@ -52,6 +52,7 @@ import Modal from '../shared/Modal'
 import TransactionForm from '../Transactions/TransactionForm'
 import TransactionHistoryModal from '../shared/TransactionHistoryModal'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
+import HelpCampo from '../shared/HelpCampo'
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -145,9 +146,9 @@ function EstornoConfigModal({ count, categories, updateSettings, onDecide, onClo
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
-          <div>
-            <label className="label">Categoria padrão para estornos</label>
+        <div className="space-y-4" data-help-form="estornoConfig">
+          <div data-help-id="estornoConfig.categoria">
+            <label className="label">Categoria padrão para estornos<HelpCampo campo="estornoConfig.categoria" /></label>
             <CategorySelect categories={categories} value={catId} onChange={e => setCatId(e.target.value)} placeholder="— Selecione a categoria —" searchable />
           </div>
           <div className="flex gap-3 justify-end">
@@ -191,7 +192,7 @@ function CrossBadge({ level }) {
   return <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${m.cls}`}>{m.label}</span>
 }
 
-function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = false }) {
+function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = false, helpId = null }) {
   const ref = useRef()
   const [dragging, setDragging] = useState(false)
   // Reutiliza o handleFile já existente (via onFile) tanto p/ clique, arrastar quanto colar.
@@ -205,7 +206,7 @@ function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = f
             ? 'border-primary bg-primary/5 animate-pulse cursor-copy'
             : 'border-borda-forte cursor-pointer hover:border-primary'
       }`}
-      onClick={() => !disabled && ref.current?.click()} data-guia="import.arquivo"
+      onClick={() => !disabled && ref.current?.click()} data-guia="import.arquivo" data-help-id={helpId || undefined}
       tabIndex={disabled ? undefined : 0}
       onDragEnter={(e) => { e.preventDefault(); if (!disabled) setDragging(true) }}
       onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragging(true) }}
@@ -214,7 +215,7 @@ function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = f
       onPaste={(e) => { if (e.clipboardData?.files?.length) { e.preventDefault(); takeFiles(e.clipboardData.files) } }}
     >
       <Upload size={28} className={`mx-auto mb-2 ${dragging ? 'text-primary-fg' : 'text-texto-3'}`} />
-      <p className="text-sm text-texto-2">{dragging ? 'Solte o arquivo aqui' : (label || 'Clique, arraste ou cole um arquivo')}</p>
+      <p className="text-sm text-texto-2">{dragging ? 'Solte o arquivo aqui' : (label || 'Clique, arraste ou cole um arquivo')}{helpId && <HelpCampo campo={helpId} />}</p>
       <p className="text-xs text-texto-3 mt-1">{subtitle || 'Formato Dindin exportação'}</p>
       <input ref={ref} type="file" accept={accept} disabled={disabled} className="hidden"
         onChange={e => { if (e.target.files[0]) onFile(e.target.files[0]) }} />
@@ -511,9 +512,10 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
 
   if (parsedRows.length === 0) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" data-help-form="contaCorrente">
         <DropZone
           onFile={handleFile}
+          helpId="contaCorrente.arquivo"
           label="Selecionar arquivo de Conta Corrente (XLS/XLSX/CSV/OFX)"
           subtitle="Dindin, OFX de qualquer banco ou planilha de outro banco (mapeamento salvo como modelo)"
           accept=".xlsx,.xls,.csv,.ofx"
@@ -536,11 +538,11 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-help-form="contaCorrente">
       {/* Account mapping */}
       {accountNames.length > 0 && (
         <div className="card">
-          <h3 className="text-xs font-semibold text-texto-2 uppercase tracking-wide mb-3">Mapeamento de Contas</h3>
+          <h3 className="text-xs font-semibold text-texto-2 uppercase tracking-wide mb-3">Mapeamento de Contas<HelpCampo campo="contaCorrente.mapeamento" /></h3>
           <div className="space-y-2">
             {accountNames.map(name => (
               <div key={name} className="flex items-center gap-3 flex-wrap">
@@ -548,6 +550,8 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
                 <ArrowRight size={12} className="text-texto-3 shrink-0" />
                 <select
                   className="input flex-1 text-xs py-1 min-w-40"
+                  data-help-id="contaCorrente.mapeamento"
+                  aria-label={`Conta do Finup para ${name}`}
                   value={accountMapping[name] || ''}
                   onChange={e => setAccountMapping(m => ({ ...m, [name]: e.target.value }))}
                 >
@@ -583,9 +587,9 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
             <thead>
               <tr className="border-b border-borda">
                 <th className="px-3 py-2.5 w-8">
-                  <input type="checkbox" className="accent-primary"
+                  <input type="checkbox" className="accent-primary" data-help-id="contaCorrente.selecionar" aria-label="Marcar todas"
                     checked={resolvedRows.filter(r => !r._isDuplicate).every(r => r.selected)}
-                    onChange={e => toggleAll(e.target.checked)} />
+                    onChange={e => toggleAll(e.target.checked)} /><HelpCampo campo="contaCorrente.selecionar" />
                 </th>
                 <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
@@ -603,7 +607,7 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
                 return (
                   <tr key={row._id} className={`border-b border-borda/50 transition-colors ${!row.selected ? 'opacity-40' : ''} ${row._isDuplicate ? 'bg-aviso/5' : ''}`}>
                     <td className="px-3 py-2">
-                      <input type="checkbox" className="accent-primary"
+                      <input type="checkbox" className="accent-primary" data-help-id="contaCorrente.selecionar" aria-label={`Importar ${row.description}`}
                         checked={row.selected}
                         disabled={row._isDuplicate}
                         onChange={() => toggleRow(row._id)} />
@@ -906,11 +910,11 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
-      <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
+      <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4" data-help-form="loteFatura">
         <h3 className="text-sm font-semibold text-texto-1">Preencher em Lote</h3>
         <div className="space-y-3">
-          <div>
-            <label className="label">Descrição contém</label>
+          <div data-help-id="loteFatura.contem">
+            <label className="label">Descrição contém<HelpCampo campo="loteFatura.contem" /></label>
             <input
               className="input"
               value={contains}
@@ -920,8 +924,8 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
               onKeyDown={e => { if (e.key === 'Enter' && contains.trim()) onApply(contains, categoryId, grupoGerencial, showFuncs ? reservaFuncaoId : '', apenasDespesas) }}
             />
           </div>
-          <div>
-            <label className="label">Categoria</label>
+          <div data-help-id="loteFatura.categoria">
+            <label className="label">Categoria<HelpCampo campo="loteFatura.categoria" /></label>
             <CategorySelect
               categories={categories}
               perfilId={perfilId}
@@ -931,15 +935,15 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
               searchable
             />
           </div>
-          <div>
-            <label className="label">Grupo Gerencial</label>
+          <div data-help-id="loteFatura.grupo">
+            <label className="label">Grupo Gerencial<HelpCampo campo="loteFatura.grupo" /></label>
             <select className="input" value={grupoGerencial} onChange={e => { setGrupoGerencial(e.target.value); setReservaFuncaoId('') }}>
               {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
             </select>
           </div>
           {showFuncs && (
-            <div>
-              <label className="label">Função de Reserva</label>
+            <div data-help-id="loteFatura.funcao">
+              <label className="label">Função de Reserva<HelpCampo campo="loteFatura.funcao" /></label>
               <select className="input" value={reservaFuncaoId} onChange={e => setReservaFuncaoId(e.target.value)}>
                 <option value="">— Selecionar —</option>
                 {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
@@ -947,14 +951,14 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
             </div>
           )}
         </div>
-        <label className="flex items-center gap-2 cursor-pointer text-xs text-texto-2 select-none">
+        <label data-help-id="loteFatura.apenasDespesas" className="flex items-center gap-2 cursor-pointer text-xs text-texto-2 select-none">
           <input
             type="checkbox"
             className="accent-primary w-4 h-4 shrink-0"
             checked={apenasDespesas}
             onChange={e => setApenasDespesas(e.target.checked)}
           />
-          Apenas despesas (ignorar estornos)
+          Apenas despesas (ignorar estornos)<HelpCampo campo="loteFatura.apenasDespesas" />
         </label>
         <div className="flex gap-3 justify-end">
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
@@ -997,7 +1001,7 @@ function CatGerModal({ rows, categories, sortedGrupos, onChangeGrupo, onClose })
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
-      <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
+      <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4" data-help-form="catGer">
         <h3 className="text-sm font-semibold text-texto-1">Categoria → Gerencial</h3>
         <p className="text-xs text-texto-3">Trocar o grupo de uma categoria aplica em todos os lançamentos dela nesta importação.</p>
         <div className="max-h-[60vh] overflow-y-auto">
@@ -1005,7 +1009,7 @@ function CatGerModal({ rows, categories, sortedGrupos, onChangeGrupo, onClose })
             <thead>
               <tr className="border-b border-borda text-xs text-texto-2">
                 <th className="text-left px-2 py-2 font-medium">Categoria</th>
-                <th className="text-left px-2 py-2 font-medium">Grupo Gerencial</th>
+                <th className="text-left px-2 py-2 font-medium">Grupo Gerencial<HelpCampo campo="catGer.grupo" /></th>
               </tr>
             </thead>
             <tbody>
@@ -1015,6 +1019,8 @@ function CatGerModal({ rows, categories, sortedGrupos, onChangeGrupo, onClose })
                   <td className="px-2 py-1.5">
                     <select
                       className="input text-xs py-1"
+                      data-help-id="catGer.grupo"
+                      aria-label={`Grupo gerencial de ${item.name}`}
                       value={item.grupo}
                       onChange={e => onChangeGrupo(item.catId, e.target.value)}
                     >
@@ -1114,7 +1120,7 @@ function InstallmentControl({ installment, description, onChange }) {
   const clear = () => { onChange(null); setOpen(false) }
 
   return (
-    <div className="relative shrink-0" ref={ref}>
+    <div className="relative shrink-0" ref={ref} data-help-id="revisaoFatura.parcelamento">
       <button
         type="button"
         onClick={() => (open ? setOpen(false) : openEditor())}
@@ -2903,7 +2909,7 @@ Importar mesmo assim no mês selecionado?`)) return
   }
 
   const celCheckbox = (row) => (
-    <input type="checkbox" className="accent-primary w-4 h-4" aria-label={`Importar ${row.description}`}
+    <input type="checkbox" className="accent-primary w-4 h-4" data-help-id="revisaoFatura.importar" aria-label={`Importar ${row.description}`}
       checked={row.selected} disabled={row._dupLevel === 'certeza' || !!row._collisionTx}
       onChange={() => { row._dupLevel === 'possivel' ? toggleForcedDup(row._id) : toggleRow(row._id) }} />
   )
@@ -2942,6 +2948,7 @@ Importar mesmo assim no mês selecionado?`)) return
           categories={categories}
           perfilId={perfilCategorias}
           className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-2 py-1 text-xs focus:outline-none w-[9.25rem]"
+          helpId="revisaoFatura.categoria"
           value={row.categoryId}
           onChange={e => {
             const newCat = e.target.value
@@ -2991,6 +2998,7 @@ Importar mesmo assim no mês selecionado?`)) return
       ) : (
         <select
           aria-label="Grupo gerencial"
+          data-help-id="revisaoFatura.grupo"
           className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-1 text-xs focus:outline-none w-full"
           value={row.grupoGerencial}
           onChange={e => {
@@ -3020,6 +3028,8 @@ Importar mesmo assim no mês selecionado?`)) return
           <>
             <select
               className={`mt-1 block bg-surface-2 border ${pendente ? 'border-aviso' : 'border-borda-campo'} text-texto-1 rounded px-1 py-1 text-xs focus:outline-none w-full`}
+              data-help-id="revisaoFatura.funcao"
+              aria-label="Função de reserva"
               value={row._reservaFuncaoId || ''}
               onChange={e => editarLinhaDoAgendamento(row, { _reservaFuncaoId: e.target.value || null, _suggestedReserva: false, _manualEdit: true, _gerEdit: true })}
               title="Função de reserva do resgate"
@@ -3074,7 +3084,7 @@ Importar mesmo assim no mês selecionado?`)) return
         const jaNoCartao = baixa.tipo === TIPO_BAIXA.JA_NO_CARTAO
         return (
           <div className="space-y-1">
-            <label className="flex items-center gap-1.5 cursor-pointer" title={jaNoCartao
+            <label className="flex items-center gap-1.5 cursor-pointer" data-help-id="revisaoFatura.baixa" title={jaNoCartao
               ? 'O lançamento já está no cartão: ao confirmar, a ocorrência do agendamento é baixada apontando para ele, sem criar nada.'
               : 'Ao confirmar, o lançamento quita esta ocorrência do agendamento (mesmo efeito do botão Pagar) e as parcelas futuras da série quitam as ocorrências das faturas delas. Desmarque para importar como lançamento avulso.'}>
               <input type="checkbox" className="accent-primary w-4 h-4 shrink-0"
@@ -3089,6 +3099,8 @@ Importar mesmo assim no mês selecionado?`)) return
             {baixa.candidatos.length > 1 && (
               <select
                 className="block bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-0.5 text-xs focus:outline-none max-w-[20rem]"
+                data-help-id="revisaoFatura.baixa"
+                aria-label="Agendamento a baixar"
                 value={c ? baixaKey(c) : ''}
                 onChange={e => updateRow(row._id, { _baixaEscolha: e.target.value, _baixaOff: false })}
               >
@@ -3197,7 +3209,7 @@ Importar mesmo assim no mês selecionado?`)) return
     const todas = marcaveis.length > 0 && marcaveis.every(r => r.selected)
     const cat = categories.find(c => c.id === item.rows[0].categoryId)
     return {
-      checkbox: <input type="checkbox" className="accent-primary w-4 h-4" checked={todas} disabled={!marcaveis.length}
+      checkbox: <input type="checkbox" className="accent-primary w-4 h-4" data-help-id="revisaoFatura.centavos" checked={todas} disabled={!marcaveis.length}
         aria-label={`Marcar os ${item.rows.length} estornos de centavos`} onChange={() => marcarGrupo(marcaveis, !todas)} />,
       titulo: (
         <button type="button" onClick={() => alternarGrupo(item.chave)} aria-expanded={gruposAbertos.has(item.chave)}
@@ -3729,7 +3741,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
       ? concSoSistema.filter(i => i.acao !== 'excluir' && isParcelaEmpurravel(i))
       : []
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" data-help-form="conciliacao">
         {/* Cabeçalho */}
         <div className="card flex flex-wrap items-center gap-3" data-guia="import:conciliacao.cabecalho">
           <div className="flex items-center gap-2 text-primary-fg">
@@ -3770,14 +3782,14 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         {/* Fatura aberta: nada é empurrado — as parcelas ausentes só não foram lançadas ainda. */}
         {hasParcelaSistema && !faturaAbertaArquivo && (
           <div className="card flex flex-col gap-2 py-3" data-guia="import:conciliacao.fatura-encerrada">
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label className="flex items-center gap-2 cursor-pointer" data-help-id="conciliacao.faturaEncerrada">
               <input
                 type="checkbox"
                 className="accent-primary"
                 checked={faturaEncerrada}
                 onChange={e => setFaturaEncerrada(e.target.checked)}
               />
-              <span className="text-sm font-medium text-texto-1">Fatura encerrada (o fechamento já passou)</span>
+              <span className="text-sm font-medium text-texto-1">Fatura encerrada (o fechamento já passou)<HelpCampo campo="conciliacao.faturaEncerrada" /></span>
             </label>
             {faturaEncerrada && (
               parcelasEmpurraveis.length > 0 ? (
@@ -3839,10 +3851,10 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                   <tr className="border-b border-borda">
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Data</th>
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Categoria</th>
-                    <th className={`text-left px-3 py-2.5 text-xs text-texto-2 font-medium ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>Ger.</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Categoria<HelpCampo campo="revisaoFatura.categoria" /></th>
+                    <th className={`text-left px-3 py-2.5 text-xs text-texto-2 font-medium ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>Ger.<HelpCampo campo="revisaoFatura.grupo" /></th>
                     <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-texto-2 font-medium">Ação</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-texto-2 font-medium">Ação<HelpCampo campo="conciliacao.soExtrato" /></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3887,6 +3899,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                           categories={categories}
                           perfilId={perfilCategorias}
                           className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-2 py-1 text-xs focus:outline-none w-36"
+                          helpId="revisaoFatura.categoria"
                           value={item.categoryId}
                           onChange={e => setItauField(item._id, { categoryId: e.target.value })}
                           searchable
@@ -3895,6 +3908,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                       <td className={`px-3 py-2 ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>
                         <select
                           className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-2 py-1 text-xs focus:outline-none w-24"
+                          data-help-id="revisaoFatura.grupo"
+                          aria-label="Grupo gerencial"
                           value={item.grupoGerencial}
                           onChange={e => setItauField(item._id, { grupoGerencial: e.target.value, _reservaFuncaoId: null })}
                         >
@@ -3910,6 +3925,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                             <>
                               <select
                                 className={`mt-1 block bg-surface-2 border ${pendente ? 'border-aviso' : 'border-borda-campo'} text-texto-2 rounded px-2 py-1 text-xs focus:outline-none w-24`}
+                                data-help-id="revisaoFatura.funcao"
+                                aria-label="Função de reserva"
                                 value={item._reservaFuncaoId || ''}
                                 onChange={e => setItauField(item._id, { _reservaFuncaoId: e.target.value || null })}
                                 title="Função de reserva do resgate"
@@ -3926,7 +3943,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                         {fmt(item.amount)}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center justify-center gap-3 text-xs" data-guia={item === concSoItau[0] ? 'import:conciliacao.importar-ignorar' : undefined}>
+                        <div className="flex items-center justify-center gap-3 text-xs" data-guia={item === concSoItau[0] ? 'import:conciliacao.importar-ignorar' : undefined} data-help-id="conciliacao.soExtrato">
                           <label className="flex items-center gap-1 cursor-pointer">
                             <input type="radio" className="accent-primary" name={`itau_${item._id}`}
                               checked={item.acao === 'importar'} onChange={() => setItauField(item._id, { acao: 'importar' })} />
@@ -3964,7 +3981,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Data</th>
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
                     <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-texto-2 font-medium">Ação</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-texto-2 font-medium">Ação<HelpCampo campo="conciliacao.soSistema" /></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3991,7 +4008,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                         {fmt(item.amount)}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center justify-center gap-3 text-xs" data-guia={item === concSoSistema[0] ? 'import:conciliacao.manter-excluir' : undefined}>
+                        <div className="flex items-center justify-center gap-3 text-xs" data-guia={item === concSoSistema[0] ? 'import:conciliacao.manter-excluir' : undefined} data-help-id="conciliacao.soSistema">
                           <label className="flex items-center gap-1 cursor-pointer">
                             <input type="radio" className="accent-primary" name={`sys_${item.id}`}
                               checked={item.acao === 'manter'} onChange={() => setSistemaAcao(item.id, 'manter')} />
@@ -4096,7 +4113,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-help-form="importarFatura">
       {showBatchFill && (
         <BatchFillModal
           categories={categories}
@@ -4251,14 +4268,14 @@ Conciliar mesmo assim com o mês selecionado?`)) return
               arquivo detecta automaticamente e sobrescreve). */}
           <div className="card grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="label">Cartão</label>
-              <select className="input" data-guia="import.cartao" value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}>
+              <label className="label">Cartão<HelpCampo campo="importarFatura.cartao" /></label>
+              <select className="input" data-guia="import.cartao" data-help-id="importarFatura.cartao" value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}>
                 <AccountOptions accounts={creditAccounts} accountGroups={accountGroups} placeholder="Selecione o cartão..." />
               </select>
             </div>
             <div>
-              <label className="label">Mês de Referência</label>
-              <select className="input" data-guia="import.mes" value={faturaMonthYear} onChange={e => setFaturaMonthYear(e.target.value)}>
+              <label className="label">Mês de Referência<HelpCampo campo="importarFatura.mes" /></label>
+              <select className="input" data-guia="import.mes" data-help-id="importarFatura.mes" value={faturaMonthYear} onChange={e => setFaturaMonthYear(e.target.value)}>
                 <option value="">Selecione...</option>
                 {monthOptionsCom(faturaMonthYear).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
@@ -4267,13 +4284,14 @@ Conciliar mesmo assim com o mês selecionado?`)) return
 
           <DropZone
             onFile={handleFile}
+            helpId="importarFatura.arquivo"
             label="Selecionar arquivo de Cartão de Crédito (XLS/XLSX/CSV/OFX)"
             subtitle="Itaú, Dindin, OFX de qualquer banco ou planilha de outro banco (mapeamento salvo como modelo)"
             accept=".xlsx,.xls,.csv,.ofx"
           />
 
           {/* Conciliar Fatura: compara o CSV do Itaú com a fatura já existente no sistema. */}
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap" data-help-id="importarFatura.conciliar">
             <input
               ref={concFileRef}
               type="file"
@@ -4291,7 +4309,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
               <ArrowLeftRight size={12} /> Conciliar Fatura
             </button>
             <span className="text-xs text-texto-3">
-              Compara o CSV ou XLS/XLSX do Itaú com os lançamentos já existentes na fatura selecionada.
+              Compara o CSV ou XLS/XLSX do Itaú com os lançamentos já existentes na fatura selecionada.<HelpCampo campo="importarFatura.conciliar" />
             </span>
           </div>
 
@@ -4315,14 +4333,14 @@ Conciliar mesmo assim com o mês selecionado?`)) return
             )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="label">Cartão de Destino</label>
-                <select className="input" data-guia="import.cartao" value={selectedAccount} disabled={!!editingImport} onChange={e => handleAccountChange(e.target.value)}>
+                <label className="label">Cartão de Destino<HelpCampo campo="importarFatura.cartao" /></label>
+                <select className="input" data-guia="import.cartao" data-help-id="importarFatura.cartao" value={selectedAccount} disabled={!!editingImport} onChange={e => handleAccountChange(e.target.value)}>
                   <AccountOptions accounts={creditAccounts} accountGroups={accountGroups} placeholder="Selecione o cartão..." />
                 </select>
               </div>
               <div>
-                <label className="label">Mês de Referência</label>
-                <select className="input" data-guia="import.mes" value={faturaMonthYear} onChange={e => handleFaturaMonthYearChange(e.target.value)}>
+                <label className="label">Mês de Referência<HelpCampo campo="importarFatura.mes" /></label>
+                <select className="input" data-guia="import.mes" data-help-id="importarFatura.mes" value={faturaMonthYear} onChange={e => handleFaturaMonthYearChange(e.target.value)}>
                   <option value="">Selecione...</option>
                   {monthOptionsCom(faturaMonthYear).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
@@ -4423,6 +4441,9 @@ Conciliar mesmo assim com o mês selecionado?`)) return
               </div>
             )}
 
+            {linhasVisiveis.length > 0 && (
+              <p data-testid="legenda-revisao-fatura" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3 px-3 py-1.5"><span>Importar<HelpCampo campo="revisaoFatura.importar" /></span><span>Data<HelpCampo campo="revisaoFatura.data" /></span><span>Fatura<HelpCampo campo="revisaoFatura.fatura" /></span><span>Descrição<HelpCampo campo="revisaoFatura.descricao" /></span><span>Parcelamento<HelpCampo campo="revisaoFatura.parcelamento" /></span><span>Categoria<HelpCampo campo="revisaoFatura.categoria" /></span>{gerencialLigado && <span>Grupo<HelpCampo campo="revisaoFatura.grupo" /></span>}{gerencialLigado && <span>Função<HelpCampo campo="revisaoFatura.funcao" /></span>}<span>Decidir<HelpCampo campo="revisaoFatura.decidir" /></span><span>Baixa<HelpCampo campo="revisaoFatura.baixa" /></span></p>
+            )}
             {/* ≥ 1024px: tabela sem rolagem horizontal (Status fixa à direita). */}
             {linhasVisiveis.length > 0 && (
               <div className="hidden lg:block">
@@ -4440,7 +4461,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                   <thead>
                     <tr className="border-b border-borda text-left">
                       <th className="px-2 py-2">
-                        <input type="checkbox" className="accent-primary" aria-label="Marcar todas"
+                        <input type="checkbox" className="accent-primary" data-help-id="revisaoFatura.importar" aria-label="Marcar todas"
                           checked={(() => { const sel = resolvedRows.filter(r => !r._dupLevel && !r._collisionTx); return sel.length > 0 && sel.every(r => r.selected) })()}
                           onChange={e => toggleAll(e.target.checked)} />
                       </th>
@@ -4474,7 +4495,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
             {linhasVisiveis.length > 0 && (
               <div className="lg:hidden">
                 <div className="flex items-center gap-2 px-3 py-2 border-b border-borda">
-                  <input type="checkbox" className="accent-primary w-4 h-4" aria-label="Marcar todas"
+                  <input type="checkbox" className="accent-primary w-4 h-4" data-help-id="revisaoFatura.importar" aria-label="Marcar todas"
                     checked={(() => { const sel = resolvedRows.filter(r => !r._dupLevel && !r._collisionTx); return sel.length > 0 && sel.every(r => r.selected) })()}
                     onChange={e => toggleAll(e.target.checked)} />
                   <span className="text-xs text-texto-2">Marcar todas</span>

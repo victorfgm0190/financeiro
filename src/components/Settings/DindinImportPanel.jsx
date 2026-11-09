@@ -10,6 +10,7 @@ import {
 } from '../../lib/db'
 import { parseFile, parseDindinCC, parseDindinCartao, fuzzyMatchAccount } from '../../lib/dindinParse'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import HelpCampo from '../shared/HelpCampo'
 
 const ORIGEM = 'DINDIN'
 const TIPO_FROM_CC = { income: 'receita', expense: 'despesa', transfer: 'transferencia' }
@@ -251,7 +252,7 @@ export default function DindinImportPanel() {
   ]
 
   return (
-    <div className="card space-y-4">
+    <div className="card space-y-4" data-help-form="dindin">
       <div className="flex items-center gap-2">
         <Upload size={15} className="text-primary-fg" />
         <h2 className="text-sm font-semibold text-texto-2">Importação Dindin</h2>
@@ -286,10 +287,10 @@ export default function DindinImportPanel() {
       </div>
 
       {/* Upload */}
-      <label data-guia="settings:importacao.arquivo" className={`block border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${busy === 'upload' ? 'border-borda opacity-50 pointer-events-none' : 'border-borda-forte hover:border-primary/60'}`}>
+      <label data-guia="settings:importacao.arquivo" data-help-id="dindin.arquivo" className={`block border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${busy === 'upload' ? 'border-borda opacity-50 pointer-events-none' : 'border-borda-forte hover:border-primary/60'}`}>
         <Upload size={20} className="text-texto-3 mx-auto mb-1" />
         <p className="text-xs text-texto-2">
-          {busy === 'upload' ? 'Processando…' : `Selecionar arquivo Dindin — ${tab === 'cc' ? 'Conta Corrente' : 'Cartões'} (XLS/XLSX)`}
+          {busy === 'upload' ? 'Processando…' : `Selecionar arquivo Dindin — ${tab === 'cc' ? 'Conta Corrente' : 'Cartões'} (XLS/XLSX)`}<HelpCampo campo="dindin.arquivo" />
         </p>
         <input
           type="file"
@@ -323,7 +324,7 @@ export default function DindinImportPanel() {
               <thead>
                 <tr className="border-b border-borda bg-surface-2/30 text-texto-2">
                   <th className="px-2 py-2 w-8 text-center">
-                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} />
+                    <input type="checkbox" data-help-id="dindin.selecionar" aria-label="Marcar todas" checked={allVisibleSelected} onChange={toggleAll} /><HelpCampo campo="dindin.selecionar" />
                   </th>
                   <th className="px-2 py-2 text-left w-24">Data</th>
                   <th className="px-2 py-2 text-left">Descrição</th>
@@ -336,7 +337,7 @@ export default function DindinImportPanel() {
                 {rows.map(r => (
                   <tr key={r.id} className={`border-b border-borda/50 ${r.ambiguo ? 'bg-aviso/5' : 'hover:bg-surface-hover/20'}`}>
                     <td className="px-2 py-1.5 text-center">
-                      <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} />
+                      <input type="checkbox" data-help-id="dindin.selecionar" aria-label={`Selecionar ${r.descricao}`} checked={selected.has(r.id)} onChange={() => toggle(r.id)} />
                     </td>
                     <td className="px-2 py-1.5 text-texto-2 whitespace-nowrap">{fmtDate(r.data)}</td>
                     <td className="px-2 py-1.5 text-texto-1">

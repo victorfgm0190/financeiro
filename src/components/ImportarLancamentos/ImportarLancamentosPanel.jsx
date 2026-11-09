@@ -9,6 +9,7 @@ import {
   listarImportacoes, contasDoOfx, registrarLote, concluirLote, marcarLoteDesfeito, listarDepara, salvarDepara, aguardarGravados,
 } from '../../lib/importacaoApi'
 import Modal from '../shared/Modal'
+import HelpCampo from '../shared/HelpCampo'
 
 // IMPORTAR LANÇAMENTOS (importação padrão, todos os ambientes): 1) conta de destino (sem cartão —
 // cartão continua no Importar Fatura); 2) gerar o Excel desta conta / enviar o arquivo (.xlsx gerado,
@@ -280,7 +281,7 @@ export default function ImportarLancamentosPanel() {
   const bloqueadoPorAviso = avisos.length > 0 && !avisosOk
 
   return (
-    <div className="space-y-4 max-w-5xl">
+    <div className="space-y-4 max-w-5xl" data-help-form="importarLanc">
       <Progresso progresso={progresso} />
       {resultado && (
         <div className={`card flex items-start gap-2 text-sm ${resultado.tipo === 'ok' ? 'text-receita' : resultado.tipo === 'aviso' ? 'text-aviso' : 'text-perigo'}`}>
@@ -291,10 +292,13 @@ export default function ImportarLancamentosPanel() {
       )}
 
       <Passo n={1} titulo="Conta de destino" desativado={ocupado}>
-        <select className="input max-w-md" data-guia="importar-lancamentos.conta" value={contaId} onChange={e => { setContaId(e.target.value); limpar() }}>
+        <div className="flex items-center gap-1" data-help-id="importarLanc.conta">
+        <select className="input max-w-md" data-guia="importar-lancamentos.conta" aria-label="Conta de destino" value={contaId} onChange={e => { setContaId(e.target.value); limpar() }}>
           <option value="">Escolha a conta…</option>
           {contas.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+        <HelpCampo campo="importarLanc.conta" />
+        </div>
         <p className="text-xs text-texto-3">Contas correntes, poupanças e dinheiro. Cartão de crédito continua no <strong>Importar Fatura</strong>.</p>
       </Passo>
 
@@ -305,9 +309,9 @@ export default function ImportarLancamentosPanel() {
           </button>
           <span className="text-xs text-texto-3">Excel desta conta, com listas de categorias e favorecidos.</span>
         </div>
-        <label data-guia="importar-lancamentos.arquivo" className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-borda rounded-xl p-6 cursor-pointer hover:border-primary/60 text-center">
+        <label data-guia="importar-lancamentos.arquivo" data-help-id="importarLanc.arquivo" className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-borda rounded-xl p-6 cursor-pointer hover:border-primary/60 text-center">
           <Upload size={20} className="text-texto-3" />
-          <span className="text-sm text-texto-1">Enviar o arquivo preenchido</span>
+          <span className="text-sm text-texto-1">Enviar o arquivo preenchido<HelpCampo campo="importarLanc.arquivo" /></span>
           <span className="text-xs text-texto-3">.xlsx (gerado pelo Finup), .csv (mesmas colunas) ou .ofx (extrato do banco)</span>
           <input ref={inputRef} type="file" accept=".xlsx,.csv,.ofx,.txt" className="hidden" onChange={e => lerArquivoEscolhido(e.target.files?.[0])} />
         </label>
@@ -344,12 +348,12 @@ export default function ImportarLancamentosPanel() {
 
             {previa.categoriasPendentes.length > 0 && (
               <div className="border border-borda rounded-lg p-3 space-y-2">
-                <p className="text-xs font-semibold text-texto-1">Categorias do arquivo que não existem no Finup</p>
+                <p className="text-xs font-semibold text-texto-1">Categorias do arquivo que não existem no Finup<HelpCampo campo="importarLanc.categoriaPendente" /></p>
                 <p className="text-[11px] text-texto-3">Escolha a correspondente ou crie uma nova — fica salvo para as próximas importações. Sem escolha = sem categoria (a classificar).</p>
                 {previa.categoriasPendentes.map(p => (
                   <div key={p.chave} className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="min-w-[10rem] text-texto-1">“{p.texto}” <span className="text-texto-3 text-xs">({p.linhas} linha{p.linhas === 1 ? '' : 's'})</span></span>
-                    <select className="input !py-1 max-w-xs" value={p.escolha || ''} onChange={e => setEscolhas(s => ({ ...s, [p.chave]: e.target.value || undefined }))}>
+                    <select className="input !py-1 max-w-xs" data-help-id="importarLanc.categoriaPendente" aria-label={`Categoria para ${p.texto}`} value={p.escolha || ''} onChange={e => setEscolhas(s => ({ ...s, [p.chave]: e.target.value || undefined }))}>
                       <option value="">— sem categoria (a classificar) —</option>
                       <option value={`${PREFIXO_NOVA}${p.texto}`}>+ Criar categoria “{p.texto}”</option>
                       {rotulos.map(r => <option key={r.id} value={r.id}>{r.rotulo}</option>)}
@@ -372,16 +376,16 @@ export default function ImportarLancamentosPanel() {
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-surface">
                   <tr className="text-left text-texto-3 border-b border-borda">
-                    <th className="px-2 py-2"><input type="checkbox" aria-label="Marcar todas" data-guia="importar-lancamentos.marcar-todas" checked={previa.validas.every(i => i.selecionado)}
+                    <th className="px-2 py-2"><input type="checkbox" aria-label="Marcar todas" data-help-id="importarLanc.selecionar" data-guia="importar-lancamentos.marcar-todas" checked={previa.validas.every(i => i.selecionado)}
                       onChange={e => setSelecao(Object.fromEntries(previa.validas.map(i => [i.linha, e.target.checked])))} /></th>
-                    <th className="px-2 py-2">Linha</th><th className="px-2 py-2">Data</th><th className="px-2 py-2">Descrição</th>
+                    <th className="px-2 py-2">Linha<HelpCampo campo="importarLanc.selecionar" /></th><th className="px-2 py-2">Data</th><th className="px-2 py-2">Descrição</th>
                     <th className="px-2 py-2">Categoria</th><th className="px-2 py-2">Favorecido</th><th className="px-2 py-2 text-right">Valor</th>
                   </tr>
                 </thead>
                 <tbody>
                   {previa.validas.map(i => (
                     <tr key={i.linha} className={`border-b border-borda/60 last:border-0 ${i.duplicado ? 'bg-aviso/5' : ''}`}>
-                      <td className="px-2 py-1.5"><input type="checkbox" checked={i.selecionado} onChange={e => alternar(i.linha, e.target.checked)} aria-label={`Importar linha ${i.linha}`} /></td>
+                      <td className="px-2 py-1.5"><input type="checkbox" data-help-id="importarLanc.selecionar" checked={i.selecionado} onChange={e => alternar(i.linha, e.target.checked)} aria-label={`Importar linha ${i.linha}`} /></td>
                       <td className="px-2 py-1.5 text-texto-3">{i.linha}</td>
                       <td className="px-2 py-1.5 whitespace-nowrap text-texto-2">{fmtDataBR(i.data)}</td>
                       <td className="px-2 py-1.5 text-texto-1">

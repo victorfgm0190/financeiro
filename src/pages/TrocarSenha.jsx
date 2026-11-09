@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { KeyRound, Check, LogOut } from 'lucide-react'
 import { AUTH_TOKEN_KEY, clearTokenAndRedirect, getSessao } from '../lib/api'
 import { trocarMinhaSenha } from '../lib/usuariosApi'
+import HelpCampo from '../components/shared/HelpCampo'
 
 const SENHA_MIN = 8
 
@@ -41,18 +42,18 @@ export default function TrocarSenha() {
             Olá{sessao?.nome ? `, ${sessao.nome}` : ''}. Por segurança, troque a senha antes de continuar.
           </p>
         </div>
-        <form onSubmit={salvar} className="bg-surface border border-borda rounded-xl p-6 space-y-3 shadow-2xl">
-          <div>
-            <label className="label" htmlFor="ts-atual">Senha atual</label>
+        <form onSubmit={salvar} className="bg-surface border border-borda rounded-xl p-6 space-y-3 shadow-2xl" data-help-form="trocarSenha">
+          <div data-help-id="trocarSenha.atual">
+            <label className="label" htmlFor="ts-atual">Senha atual<HelpCampo campo="trocarSenha.atual" /></label>
             <input id="ts-atual" type="password" autoComplete="current-password" className="input" value={f.atual} onChange={e => set('atual', e.target.value)} autoFocus />
           </div>
-          <div>
-            <label className="label" htmlFor="ts-nova">Nova senha</label>
+          <div data-help-id="trocarSenha.nova">
+            <label className="label" htmlFor="ts-nova">Nova senha<HelpCampo campo="trocarSenha.nova" /></label>
             <input id="ts-nova" type="password" autoComplete="new-password" className="input" value={f.nova} onChange={e => set('nova', e.target.value)} />
             <p className="text-[11px] text-texto-3 mt-1">Mínimo de {SENHA_MIN} caracteres, diferente da atual.</p>
           </div>
-          <div>
-            <label className="label" htmlFor="ts-repetir">Confirme a nova senha</label>
+          <div data-help-id="trocarSenha.repetir">
+            <label className="label" htmlFor="ts-repetir">Confirme a nova senha<HelpCampo campo="trocarSenha.repetir" /></label>
             <input id="ts-repetir" type="password" autoComplete="new-password" className="input" value={f.repetir} onChange={e => set('repetir', e.target.value)} />
           </div>
           {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}

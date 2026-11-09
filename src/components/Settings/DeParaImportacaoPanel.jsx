@@ -3,6 +3,7 @@ import { Plus, Trash2, RefreshCw } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { rotulosCategorias } from '../../lib/importacaoPadrao/comum'
 import { listarDepara, salvarDepara, editarDepara, excluirDepara } from '../../lib/importacaoApi'
+import HelpCampo from '../shared/HelpCampo'
 
 // Configurações › Cadastros › De-para de importação: texto de categoria que vem no arquivo
 // (.csv/OFX ou digitado fora da lista do Excel) → categoria do Finup. Criado também na prévia da
@@ -21,7 +22,7 @@ export default function DeParaImportacaoPanel() {
   const agir = async (fn) => { try { await fn(); await carregar() } catch (e) { setErro(e.message) } }
 
   return (
-    <div className="card space-y-3">
+    <div className="card space-y-3" data-help-form="depara">
       <div className="flex items-center gap-2">
         <h2 className="text-sm font-semibold text-texto-2">De-para de importação ({itens.length})</h2>
         <button type="button" data-guia="settings:depara-importacao.recarregar" onClick={carregar} className="p-1.5 rounded text-texto-3 hover:text-texto-1" aria-label="Recarregar"><RefreshCw size={12} /></button>
@@ -30,8 +31,8 @@ export default function DeParaImportacaoPanel() {
       {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}
       {podeEditar && (
         <form data-guia="settings:depara-importacao.novo" className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); agir(async () => { await salvarDepara(novo.origem, novo.categoria); setNovo({ origem: '', categoria: '' }) }) }}>
-          <input className="input !py-1.5 max-w-xs" placeholder="Digite o texto como vem no arquivo" value={novo.origem} onChange={e => setNovo(n => ({ ...n, origem: e.target.value }))} />
-          <select className="input !py-1.5 max-w-xs" value={novo.categoria} onChange={e => setNovo(n => ({ ...n, categoria: e.target.value }))}>
+          <input className="input !py-1.5 max-w-xs" data-help-id="depara.origem" aria-label="Texto no arquivo" placeholder="Digite o texto como vem no arquivo" value={novo.origem} onChange={e => setNovo(n => ({ ...n, origem: e.target.value }))} />
+          <select className="input !py-1.5 max-w-xs" data-help-id="depara.categoria" aria-label="Categoria do Finup" value={novo.categoria} onChange={e => setNovo(n => ({ ...n, categoria: e.target.value }))}>
             <option value="">Categoria…</option>
             {rotulos.map(r => <option key={r.id} value={r.id}>{r.rotulo}</option>)}
           </select>
@@ -40,13 +41,13 @@ export default function DeParaImportacaoPanel() {
       )}
       <div className="overflow-x-auto rounded-lg border border-borda">
         <table className="w-full text-xs">
-          <thead><tr className="text-left text-texto-3 border-b border-borda"><th className="px-3 py-2 font-medium">Texto no arquivo</th><th className="px-3 py-2 font-medium">Categoria do Finup</th><th /></tr></thead>
+          <thead><tr className="text-left text-texto-3 border-b border-borda"><th className="px-3 py-2 font-medium">Texto no arquivo<HelpCampo campo="depara.origem" /></th><th className="px-3 py-2 font-medium">Categoria do Finup<HelpCampo campo="depara.categoria" /></th><th /></tr></thead>
           <tbody>
             {itens.map(d => (
               <tr key={d.id} className="border-b border-borda/60 last:border-0">
                 <td className="px-3 py-1.5 text-texto-1">{d.nome_exibicao || d.nome_origem}</td>
                 <td className="px-3 py-1.5">
-                  <select data-guia={d === itens[0] ? 'settings:depara-importacao.categoria' : undefined} className="input !py-1 max-w-xs" value={d.categoria_id} disabled={!podeEditar} onChange={e => agir(() => editarDepara(d.id, e.target.value))}>
+                  <select data-guia={d === itens[0] ? 'settings:depara-importacao.categoria' : undefined} data-help-id="depara.categoria" aria-label="Categoria do Finup" className="input !py-1 max-w-xs" value={d.categoria_id} disabled={!podeEditar} onChange={e => agir(() => editarDepara(d.id, e.target.value))}>
                     {!nome.has(d.categoria_id) && <option value={d.categoria_id}>(categoria apagada)</option>}
                     {rotulos.map(r => <option key={r.id} value={r.id}>{r.rotulo}</option>)}
                   </select>

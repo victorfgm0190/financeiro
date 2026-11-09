@@ -80,3 +80,18 @@ describe('AgendaCelularPanel — "Gerando…" vira "Atualizada em…" sem reabri
     await waitFor(() => expect(cantos()).toEqual(['atualizada', 'gerando']))
   })
 })
+
+describe('AgendaCelularPanel — ajuda de campo', () => {
+  it('"Mostrar na agenda" e "Mostrar valores" têm ⓘ e passo na base', async () => {
+    const { helpDoCampo } = await import('../../help/index.js')
+    const { controlesSemPasso } = await import('../../help/guiaPreenchimento.js')
+    render(<AgendaCelularPanel />)
+    await screen.findByTestId('agenda-link-irrecuperavel')
+    const raiz = document.querySelector('[data-help-form="agendaCelular"]')
+    expect(controlesSemPasso(raiz)).toEqual([])
+    for (const id of ['agendaCelular.tipos', 'agendaCelular.valores']) {
+      expect(raiz.querySelector(`[data-help-id="${id}"] [data-testid="help-campo"]`), id).toBeTruthy()
+      expect(helpDoCampo(id), id).toBeTruthy()
+    }
+  })
+})

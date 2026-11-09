@@ -7,6 +7,7 @@ import Modal from '../shared/Modal'
 import { useApp } from '../../context/AppContext'
 import { fetchTipoDoKit } from '../../lib/db'
 import { categoriasFaltantes } from '../../lib/kitCategorias'
+import HelpCampo from '../shared/HelpCampo'
 
 export default function AdicionarCategoriasKit() {
   const { categories, addCategory, pode } = useApp()
@@ -61,11 +62,11 @@ export default function AdicionarCategoriasKit() {
           {faltantes.length > 0 && (
             <>
               <div className="flex items-center gap-3 text-xs text-texto-2">
-                <span className="flex-1">Kit {tipo === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'}: marque as que quer incluir.</span>
+                <span className="flex-1">Kit {tipo === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'}: marque as que quer incluir.<HelpCampo campo="kitCategorias.selecionar" /></span>
                 <button type="button" className="underline hover:text-texto-1" onClick={() => setMarcadas(new Set(faltantes.map(c => c.id)))}>Marcar todas</button>
                 <button type="button" className="underline hover:text-texto-1" onClick={() => setMarcadas(new Set())}>Limpar</button>
               </div>
-              <div className="max-h-[50vh] overflow-y-auto space-y-3">
+              <div className="max-h-[50vh] overflow-y-auto space-y-3" data-help-form="kitCategorias" data-help-id="kitCategorias.selecionar">
                 {grupos.map(([grupo, itens]) => (
                   <fieldset key={grupo}>
                     <legend className="text-xs font-semibold text-texto-2 uppercase tracking-wide mb-1">{grupo}</legend>

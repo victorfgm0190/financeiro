@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { feriadosDoAno } from '../../lib/feriados'
+import HelpCampo from '../shared/HelpCampo'
 
 const SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
 const ddmm = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
@@ -35,7 +36,7 @@ export default function FeriadosPanel() {
   })
 
   return (
-    <div className="card space-y-4" data-guia="settings:feriados.lista">
+    <div className="card space-y-4" data-guia="settings:feriados.lista" data-help-form="feriados">
       <div>
         <h2 className="text-sm font-semibold text-texto-2">Feriados</h2>
         <p className="text-xs text-texto-3 mt-0.5">
@@ -51,6 +52,7 @@ export default function FeriadosPanel() {
       </div>
 
       {!feriadosCarregados && <p className="text-xs text-texto-3">Carregando o cadastro…</p>}
+      <p data-testid="legenda-feriados" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3"><span>Ligado/desligado<HelpCampo campo="feriado.ligado" /></span></p>
       <ul className="divide-y divide-borda/60 border border-borda rounded-lg">
         {lista.map(f => (
           <li key={`${f.chave || f.id}`} className={`flex items-center gap-3 px-3 py-2.5 ${f.ativo ? '' : 'opacity-60'}`}>
@@ -61,7 +63,7 @@ export default function FeriadosPanel() {
               <p className="text-sm text-texto-1 truncate">{f.nome}</p>
               <p className="text-[11px] text-texto-3">{ROTULO[f.abrangencia] || f.abrangencia}{f.automatico ? ' · automático' : f.todoAno ? ' · todo ano' : ''}</p>
             </div>
-            <label className="flex items-center gap-1.5 text-xs text-texto-2 cursor-pointer shrink-0 min-h-[40px]">
+            <label data-help-id="feriado.ligado" className="flex items-center gap-1.5 text-xs text-texto-2 cursor-pointer shrink-0 min-h-[40px]">
               <input type="checkbox" className="accent-primary" checked={f.ativo} disabled={salvando} onChange={() => alternar(f)} aria-label={`${f.ativo ? 'Desligar' : 'Ligar'} ${f.nome}`} />
               {f.ativo ? 'Ligado' : 'Desligado'}
             </label>
@@ -77,18 +79,19 @@ export default function FeriadosPanel() {
 
       <div className="space-y-2 border-t border-borda pt-3">
         <p className="text-xs font-semibold text-texto-2">Novo feriado estadual ou municipal</p>
+        <p data-testid="legenda-novo-feriado" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3"><span>Nome<HelpCampo campo="feriado.nome" /></span><span>Abrangência<HelpCampo campo="feriado.abrangencia" /></span><span>Data<HelpCampo campo="feriado.data" /></span></p>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_160px] gap-2">
-          <input className="input" value={nome} onChange={e => setNome(e.target.value)} maxLength={120} placeholder="Nome do feriado (ex.: aniversário da cidade)" />
-          <select className="input" value={abrangencia} onChange={e => setAbrangencia(e.target.value)} aria-label="Abrangência">
+          <input className="input" data-help-id="feriado.nome" aria-label="Nome do feriado" value={nome} onChange={e => setNome(e.target.value)} maxLength={120} placeholder="Nome do feriado" />
+          <select className="input" data-help-id="feriado.abrangencia" value={abrangencia} onChange={e => setAbrangencia(e.target.value)} aria-label="Abrangência">
             <option value="municipal">Municipal</option>
             <option value="estadual">Estadual</option>
           </select>
-          <input className="input" type="date" value={data} onChange={e => setData(e.target.value)} aria-label="Data do feriado" />
+          <input className="input" type="date" data-help-id="feriado.data" value={data} onChange={e => setData(e.target.value)} aria-label="Data do feriado" />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <label className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer">
+          <label data-help-id="feriado.todoAno" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer">
             <input type="checkbox" className="accent-primary" checked={todoAno} onChange={e => setTodoAno(e.target.checked)} />
-            Repete todo ano (mesmo dia e mês)
+            Repete todo ano (mesmo dia e mês)<HelpCampo campo="feriado.todoAno" />
           </label>
           <button type="button" className="btn-primary text-sm inline-flex items-center gap-1.5" disabled={salvando || !nome.trim() || !data} onClick={adicionar}>
             <Plus size={14} /> Adicionar feriado

@@ -13,6 +13,7 @@ import { useEstadoBoasVindas } from './useGuiaTela'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import { ETAPAS_REFAZER_JORNADA } from '../../lib/onboardingSteps'
 import { navegarPara } from '../../lib/abrirTela'
+import HelpCampo from '../shared/HelpCampo'
 
 // "Abrir jornada": liga (se estava desligada), volta a mostrar o painel e leva ao Painel.
 async function abrirJornada(estado) {
@@ -45,7 +46,7 @@ export default function GuiasTelasPanel() {
     setAviso((await fn()) ? ok : 'Não foi possível gravar agora. Verifique a conexão e tente de novo.')
   }
   return (
-    <div className="card space-y-4">
+    <div className="card space-y-4" data-help-form="guias">
       <div>
         <h2 className="text-sm font-semibold text-texto-1">Guias das telas</h2>
         <p className="text-xs text-texto-2 mt-1">
@@ -53,7 +54,7 @@ export default function GuiasTelasPanel() {
         </p>
       </div>
 
-      <label className="flex items-center gap-3 cursor-pointer" data-guia="settings:guias.interruptor">
+      <label className="flex items-center gap-3 cursor-pointer" data-guia="settings:guias.interruptor" data-help-id="guias.ligados">
         <span className="relative shrink-0">
           <input type="checkbox" role="switch" className="sr-only peer" checked={ligados} disabled={!estado}
             aria-label="Guias do sistema"
@@ -61,7 +62,7 @@ export default function GuiasTelasPanel() {
           <span className="block w-11 h-6 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
           <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5" />
         </span>
-        <span className="text-sm text-texto-1">Guias do sistema: <strong>{ligados ? 'Ligados' : 'Desligados'}</strong></span>
+        <span className="text-sm text-texto-1">Guias do sistema: <strong>{ligados ? 'Ligados' : 'Desligados'}</strong><HelpCampo campo="guias.ligados" /></span>
       </label>
       {!ligados && (
         <p className="text-xs text-texto-2">Desligados: nenhum tour abre sozinho e o "?" não aparece nas telas. As escolhas de cada tela ficam guardadas para quando religar.</p>
@@ -69,7 +70,7 @@ export default function GuiasTelasPanel() {
 
       {/* Jornada guiada (src/lib/onboardingSteps.js): boas-vindas + painel de progresso, por usuário. */}
       <div className="space-y-2 rounded-xl border border-borda p-3" data-guia="settings:guias.jornada">
-        <label className="flex items-center gap-3 cursor-pointer">
+        <label className="flex items-center gap-3 cursor-pointer" data-help-id="guias.jornada">
           <span className="relative shrink-0">
             <input type="checkbox" role="switch" className="sr-only peer" checked={jornada} disabled={!estado}
               aria-label="Jornada guiada"
@@ -78,7 +79,7 @@ export default function GuiasTelasPanel() {
             <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5" />
           </span>
           <span className="text-sm text-texto-1">
-            Jornada guiada: <strong>{jornada ? 'Ligada' : 'Desligada'}</strong>
+            Jornada guiada: <strong>{jornada ? 'Ligada' : 'Desligada'}</strong><HelpCampo campo="guias.jornada" />
             <span className="block text-xs text-texto-2">Passo a passo para conhecer o Finup, com o progresso no Painel. Desligada, não aparecem as boas-vindas nem o painel.</span>
           </span>
         </label>
@@ -100,7 +101,7 @@ export default function GuiasTelasPanel() {
       />
 
       {/* Help de campo (src/components/shared/HelpCampo.jsx): preferência do usuário, no banco. */}
-      <label className="flex items-center gap-3 cursor-pointer" data-guia="settings:guias.ajuda-campos">
+      <label className="flex items-center gap-3 cursor-pointer" data-guia="settings:guias.ajuda-campos" data-help-id="guias.ajudaCampos">
         <span className="relative shrink-0">
           <input type="checkbox" role="switch" className="sr-only peer" checked={ajudaCampos} disabled={!estado}
             aria-label="Mostrar ícones de ajuda nos campos"
@@ -109,14 +110,14 @@ export default function GuiasTelasPanel() {
           <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5" />
         </span>
         <span className="text-sm text-texto-1">
-          Mostrar ícones de ajuda nos campos
+          Mostrar ícones de ajuda nos campos<HelpCampo campo="guias.ajudaCampos" />
           <span className="block text-xs text-texto-2">O ícone ⓘ ao lado do nome de um campo explica para que ele serve. A tecla F1 continua abrindo a ajuda do campo mesmo com os ícones desligados.</span>
         </span>
       </label>
 
       {/* Preenchimento Guiado (src/components/Ajuda/GuiaPreenchimento.jsx): oferta na 1ª abertura de cada formulário. */}
       <div className="space-y-2 rounded-xl border border-borda p-3" data-guia="settings:guias.preenchimento">
-        <label className="flex items-center gap-3 cursor-pointer">
+        <label className="flex items-center gap-3 cursor-pointer" data-help-id="guias.oferta">
           <span className="relative shrink-0">
             <input type="checkbox" role="switch" className="sr-only peer" checked={oferta} disabled={!estado}
               aria-label="Oferecer o preenchimento guiado"
@@ -125,7 +126,7 @@ export default function GuiasTelasPanel() {
             <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5" />
           </span>
           <span className="text-sm text-texto-1">
-            Oferecer o preenchimento guiado
+            Oferecer o preenchimento guiado<HelpCampo campo="guias.oferta" />
             <span className="block text-xs text-texto-2">Na primeira vez que você abre um formulário, o Finup pergunta se quer preenchê-lo com o guia. O botão "Preencher com guia" fica sempre no formulário.</span>
           </span>
         </label>

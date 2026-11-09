@@ -721,11 +721,12 @@ export default function SettingsPanel() {
       )}
       {/* Período Financeiro */}
       {secao === 'periodo' && (
-      <div className="card">
+      <div className="card" data-help-form="periodo">
         <h2 className="text-sm font-semibold text-texto-2 mb-1">Período Financeiro</h2>
         <p className="text-xs text-texto-3 mb-4">Como receitas e despesas são agrupadas no Dashboard e relatórios.</p>
 
-        <div data-guia="settings:periodo.modo" className="space-y-2.5 mb-4">
+        <div data-guia="settings:periodo.modo" data-help-id="periodo.modo" role="radiogroup" aria-label="Tipo de mês financeiro" className="space-y-2.5 mb-4">
+          <p className="label">Tipo de mês financeiro<HelpCampo campo="periodo.modo" /></p>
           <label className="flex items-start gap-2.5 cursor-pointer">
             <input
               type="radio"
@@ -755,8 +756,8 @@ export default function SettingsPanel() {
         </div>
 
         <div className="flex items-end gap-4">
-          <div className="flex-1">
-            <label className="label">Dia de Início do Mês Financeiro</label>
+          <div className="flex-1" data-help-id="periodo.diaInicio">
+            <label className="label">Dia de Início do Mês Financeiro<HelpCampo campo="periodo.diaInicio" /></label>
             <input
               data-guia="settings:periodo.dia-inicio"
               className={`input ${monthMode === 'calendar' ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -779,7 +780,7 @@ export default function SettingsPanel() {
         </div>
 
         {/* Reservas: a virada de saldo fecha o mês financeiro acima. Ligada por padrão (null). */}
-        <label data-guia="settings:periodo.perguntar-virada" className="flex items-center gap-2.5 cursor-pointer mt-4 pt-4 border-t border-borda">
+        <label data-guia="settings:periodo.perguntar-virada" data-help-id="periodo.perguntarVirada" className="flex items-center gap-2.5 cursor-pointer mt-4 pt-4 border-t border-borda">
           <div className="relative shrink-0">
             <input
               type="checkbox"
@@ -793,11 +794,11 @@ export default function SettingsPanel() {
             <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
           </div>
           <span className="text-sm text-texto-2 select-none">
-            Perguntar sobre a virada ao entrar em Reservas
+            Perguntar sobre a virada ao entrar em Reservas<HelpCampo campo="periodo.perguntarVirada" />
             <span className="block text-xs text-texto-3">Quando um mês financeiro termina sem virada de saldo, a tela de Reservas pergunta se você quer fazê-la. Desligada, a pergunta não aparece, mas o botão "Virar Saldo" continua disponível.</span>
           </span>
         </label>
-        <label className="flex items-center gap-2.5 mt-4 text-sm text-texto-2">
+        <label data-help-id="periodo.diasCaixa" className="flex items-center gap-2.5 mt-4 text-sm text-texto-2">
           <input
             type="number" min="1" max="730" step="1"
             className="input py-1 w-20"
@@ -807,7 +808,7 @@ export default function SettingsPanel() {
             onChange={e => { const n = Number(e.target.value); if (Number.isInteger(n) && n > 0) updateSettings({ reservaDiasCaixa: n }) }}
           />
           <span>
-            Dias à frente do aviso de caixa da reserva
+            Dias à frente do aviso de caixa da reserva<HelpCampo campo="periodo.diasCaixa" />
             <span className="block text-xs text-texto-3">O aviso compara o saldo da conta de reserva com o que está previsto para sair nesse prazo.</span>
           </span>
         </label>
@@ -818,13 +819,13 @@ export default function SettingsPanel() {
 
       {/* Estornos de Cartão */}
       {secao === 'estornos' && (
-      <div className="card">
+      <div className="card" data-help-form="estornos">
         <h2 className="text-sm font-semibold text-texto-2 mb-1">Estornos de Cartão</h2>
         <p className="text-xs text-texto-3 mb-4">
           Estornos detectados na importação/conciliação de fatura (receitas que não são pagamento
           nem anuidade) podem receber uma categoria padrão automaticamente, no grupo D · Despesa.
         </p>
-        <label data-guia="settings:estornos.estorno" className="flex items-center gap-2.5 cursor-pointer mb-3">
+        <label data-guia="settings:estornos.estorno" data-help-id="estorno.ligado" className="flex items-center gap-2.5 cursor-pointer mb-3">
           <div className="relative shrink-0">
             <input
               type="checkbox"
@@ -835,11 +836,11 @@ export default function SettingsPanel() {
             <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
             <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
           </div>
-          <span className="text-sm text-texto-2 select-none">Aplicar categoria padrão para estornos de cartão</span>
+          <span className="text-sm text-texto-2 select-none">Aplicar categoria padrão para estornos de cartão<HelpCampo campo="estorno.ligado" /></span>
         </label>
         {settings.estornoCartaoEnabled && (
-          <div data-guia="settings:estornos.estorno-categoria">
-            <label className="label">Categoria</label>
+          <div data-guia="settings:estornos.estorno-categoria" data-help-id="estorno.categoria">
+            <label className="label">Categoria<HelpCampo campo="estorno.categoria" /></label>
             <CategorySelect
               categories={categories}
               value={settings.estornoCartaoCategoryId || ''}
@@ -853,15 +854,15 @@ export default function SettingsPanel() {
 
       {/* Compra internacional no cartão (src/lib/cambio.js): alíquota do IOF do ambiente */}
       {secao === 'estornos' && (
-      <div className="card">
+      <div className="card" data-help-form="iof">
         <h2 className="text-sm font-semibold text-texto-2 mb-1">Compras internacionais (IOF)</h2>
         <p className="text-xs text-texto-3 mb-3">
           Compra em dólar lançada pelo Assistente (SMS/foto): o valor em R$ é estimado pela PTAX do dia e
           o IOF é calculado com esta alíquota. Na importação da fatura, compra e IOF recebem o valor real.
           Spread e "IOF em linha separada" ficam em cada cartão (Editar Conta).
         </p>
-        <label className="label" htmlFor="iof-aliquota">Alíquota do IOF (%)</label>
-        <input id="iof-aliquota" data-guia="settings:estornos.iof" className="input w-32" type="number" min="0" max="20" step="0.01"
+        <label className="label" htmlFor="iof-aliquota">Alíquota do IOF (%)<HelpCampo campo="estorno.iof" /></label>
+        <input id="iof-aliquota" data-help-id="estorno.iof" data-guia="settings:estornos.iof" className="input w-32" type="number" min="0" max="20" step="0.01"
           defaultValue={((aliquotaIof(settings)) * 100).toFixed(2)}
           onBlur={e => {
             const v = Number(String(e.target.value).replace(',', '.'))
@@ -1204,12 +1205,14 @@ export default function SettingsPanel() {
             )
           })}
         </div>
-        <form onSubmit={handleAddRule} data-guia="settings:classificacao.nova" className="grid grid-cols-3 gap-2">
-          <input className="input" placeholder="Contém" value={newRule.contains} onChange={e => setNewRule(f => ({ ...f, contains: e.target.value }))} />
+        <p data-testid="legenda-classificacao" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3 mb-1"><span>Contém<HelpCampo campo="classificacao.contem" /></span><span>Categoria<HelpCampo campo="classificacao.categoria" /></span></p>
+        <form onSubmit={handleAddRule} data-guia="settings:classificacao.nova" data-help-form="classificacao" className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <input className="input" data-help-id="classificacao.contem" aria-label="Contém" placeholder="Texto que a descrição contém" value={newRule.contains} onChange={e => setNewRule(f => ({ ...f, contains: e.target.value }))} />
           <CategorySelect
             categories={categories}
             value={newRule.categoryId}
             onChange={e => setNewRule(f => ({ ...f, categoryId: e.target.value }))}
+            helpId="classificacao.categoria"
             placeholder="Categoria..."
           />
           <button type="submit" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
@@ -1276,17 +1279,23 @@ export default function SettingsPanel() {
           }}
           className="space-y-2"
           data-guia="settings:grupo-gerencial.nova"
+          data-help-form="regraGerencial"
         >
+          <p data-testid="legenda-regra-gerencial" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3"><span>Palavra-chave<HelpCampo campo="regraGerencial.contem" /></span><span>Parcelado<HelpCampo campo="regraGerencial.parcelado" /></span><span>Valor mín.<HelpCampo campo="regraGerencial.valorMin" /></span><span>Valor máx.<HelpCampo campo="regraGerencial.valorMax" /></span><span>Grupo<HelpCampo campo="regraGerencial.grupo" /></span></p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <input
               className="input text-sm"
               placeholder="Digite a palavra-chave"
+              data-help-id="regraGerencial.contem"
+              aria-label="Palavra-chave"
               value={newGRule.contains}
               onChange={e => setNewGRule(f => ({ ...f, contains: e.target.value }))}
               required
             />
             <select
               className="input text-sm"
+              data-help-id="regraGerencial.parcelado"
+              aria-label="Parcelado ou à vista"
               value={newGRule.isParcelado}
               onChange={e => setNewGRule(f => ({ ...f, isParcelado: e.target.value }))}
             >
@@ -1298,6 +1307,8 @@ export default function SettingsPanel() {
               className="input text-sm"
               min="0"
               placeholder="Valor mín (R$)"
+              helpId="regraGerencial.valorMin"
+              aria-label="Valor mínimo"
               value={newGRule.minAmount}
               onChange={e => setNewGRule(f => ({ ...f, minAmount: e.target.value }))}
             />
@@ -1305,6 +1316,8 @@ export default function SettingsPanel() {
               className="input text-sm"
               min="0"
               placeholder="Valor máx (R$)"
+              helpId="regraGerencial.valorMax"
+              aria-label="Valor máximo"
               value={newGRule.maxAmount}
               onChange={e => setNewGRule(f => ({ ...f, maxAmount: e.target.value }))}
             />
@@ -1312,6 +1325,8 @@ export default function SettingsPanel() {
           <div className="flex gap-2">
             <select
               className="input text-sm flex-1"
+              data-help-id="regraGerencial.grupo"
+              aria-label="Grupo gerencial"
               value={newGRule.grupoGerencialId}
               onChange={e => setNewGRule(f => ({ ...f, grupoGerencialId: e.target.value }))}
               required
@@ -1604,13 +1619,13 @@ export default function SettingsPanel() {
 
         {/* Formulário inline de criação/edição */}
         {showGroupForm && (
-          <form onSubmit={handleGroupSubmit} className="mb-4 p-4 bg-surface-2 rounded-xl border border-borda-forte space-y-3">
+          <form onSubmit={handleGroupSubmit} data-help-form="grupoGerencial" className="mb-4 p-4 bg-surface-2 rounded-xl border border-borda-forte space-y-3">
             <p className="text-xs font-semibold text-texto-2 uppercase tracking-wide">
               {editingGroup ? `Editar Grupo ${editingGroup.number}` : `Novo Grupo ${nextGroupNumber}`}
             </p>
             <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2">
-                <label className="label">Nome do Grupo *</label>
+              <div className="col-span-2" data-help-id="grupoGerencial.nome">
+                <label className="label">Nome do Grupo *<HelpCampo campo="grupoGerencial.nome" /></label>
                 <input
                   className="input"
                   value={groupForm.name}
@@ -1619,8 +1634,8 @@ export default function SettingsPanel() {
                   required
                 />
               </div>
-              <div>
-                <label className="label">Apelido *</label>
+              <div data-help-id="grupoGerencial.apelido">
+                <label className="label">Apelido *<HelpCampo campo="grupoGerencial.apelido" /></label>
                 <input
                   className="input"
                   value={groupForm.alias}
@@ -1631,8 +1646,8 @@ export default function SettingsPanel() {
                 />
               </div>
             </div>
-            <div>
-              <label className="label">Conta de Resgate Padrão</label>
+            <div data-help-id="grupoGerencial.contaResgate">
+              <label className="label">Conta de Resgate Padrão<HelpCampo campo="grupoGerencial.contaResgate" /></label>
               <select
                 className="input"
                 value={groupForm.defaultAccountId}
@@ -1753,7 +1768,7 @@ export default function SettingsPanel() {
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3" data-help-form="backup">
           <button
             data-guia="settings:backup.exportar"
             className="btn-primary flex items-center justify-center gap-2 flex-1 disabled:opacity-60"
@@ -1762,8 +1777,8 @@ export default function SettingsPanel() {
           >
             <Download size={14} /> {exporting ? 'Exportando…' : 'Exportar backup completo'}
           </button>
-          <label data-guia="settings:backup.importar" className={`btn-secondary flex items-center justify-center gap-2 flex-1 cursor-pointer ${importing ? 'opacity-60 pointer-events-none' : ''}`}>
-            <Upload size={14} /> Importar backup
+          <label data-guia="settings:backup.importar" data-help-id="backup.importar" className={`btn-secondary flex items-center justify-center gap-2 flex-1 cursor-pointer ${importing ? 'opacity-60 pointer-events-none' : ''}`}>
+            <Upload size={14} /> Importar backup<HelpCampo campo="backup.importar" />
             <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFileChange} disabled={importing} />
           </label>
         </div>
@@ -1911,9 +1926,9 @@ export default function SettingsPanel() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-2">
-              <div>
-                <label className="label">Grupo de contas</label>
+            <div className="grid grid-cols-1 gap-2" data-help-form="ajusteSaldo">
+              <div data-help-id="ajusteSaldo.grupo">
+                <label className="label">Grupo de contas<HelpCampo campo="ajusteSaldo.grupo" /></label>
                 <select
                   data-guia="settings:manutencao.ajuste-grupo"
                   className="input text-sm"
@@ -1941,16 +1956,16 @@ export default function SettingsPanel() {
               {ajusteGrupoId && (accountGroups || []).find(g => g.id === ajusteGrupoId)?.anchorAccountId && (
                 <>
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="label">Data de referência</label>
+                    <div data-help-id="ajusteSaldo.data">
+                      <label className="label">Data de referência<HelpCampo campo="ajusteSaldo.data" /></label>
                       <DateInput
                         className="input text-sm"
                         value={ajusteData}
                         onChange={e => { setAjusteData(e.target.value); setAjusteResult(null); setAjusteDone(false) }}
                       />
                     </div>
-                    <div>
-                      <label className="label">Saldo esperado (R$)</label>
+                    <div data-help-id="ajusteSaldo.esperado">
+                      <label className="label">Saldo esperado (R$)<HelpCampo campo="ajusteSaldo.esperado" /></label>
                       <InputMoeda
                         negativo
                         className="input text-sm"

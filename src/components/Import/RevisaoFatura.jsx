@@ -7,6 +7,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import DateInput from '../shared/DateInput'
 import { ABAS_REVISAO, lerConferenciaAberta, lembrarConferenciaAberta, rotuloFatura, separarSufixo } from '../../lib/contagemRevisaoFatura'
 import { configHash } from '../../lib/configRota'
+import HelpCampo from '../shared/HelpCampo'
 
 const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`
 
@@ -144,11 +145,11 @@ export function DataCelula({ row, onChange }) {
   if (editando) {
     return (
       <div className="space-y-1" onKeyDown={e => { if (e.key === 'Escape' || e.key === 'Enter') setEditando(false) }}>
-        <label className="block text-[10px] text-texto-2">Cartão
+        <label className="block text-[10px] text-texto-2" data-help-id="revisaoFatura.data">Cartão
           <DateInput className="block bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-0.5 text-xs w-[7.5rem]"
             value={row._dateCartao || ''} onChange={e => onChange({ _dateCartao: e.target.value || null })} />
         </label>
-        <label className="block text-[10px] text-texto-2">Sistema
+        <label className="block text-[10px] text-texto-2" data-help-id="revisaoFatura.data">Sistema
           <DateInput className="block bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-0.5 text-xs w-[7.5rem]"
             value={row.date || ''} onChange={e => onChange({ date: e.target.value })} />
         </label>
@@ -157,7 +158,7 @@ export function DataCelula({ row, onChange }) {
     )
   }
   return (
-    <button type="button" onClick={() => setEditando(true)} className="text-xs text-texto-1 whitespace-nowrap hover:underline text-left"
+    <button type="button" data-help-id="revisaoFatura.data" onClick={() => setEditando(true)} className="text-xs text-texto-1 whitespace-nowrap hover:underline text-left"
       title={difere ? `Data no cartão ${fmtDate(row._dateCartao)} · data no sistema ${fmtDate(row.date)} — clique para editar` : 'Clique para editar as datas'}>
       {cartao ? fmtDate(cartao) : '—'}
       {difere && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-aviso align-middle" aria-label="data do sistema diferente" />}
@@ -171,7 +172,7 @@ export function FaturaCelula({ row, referencia, opcoes, onChange }) {
   const difere = !!row.faturaMonthYear && !!referencia && row.faturaMonthYear !== referencia
   if (editando) {
     return (
-      <select autoFocus onBlur={() => setEditando(false)}
+      <select autoFocus data-help-id="revisaoFatura.fatura" aria-label="Fatura" onBlur={() => setEditando(false)}
         className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-0.5 text-xs focus:outline-none"
         value={row.faturaMonthYear || ''}
         onChange={e => { onChange({ faturaMonthYear: e.target.value }); setEditando(false) }}>
@@ -181,7 +182,7 @@ export function FaturaCelula({ row, referencia, opcoes, onChange }) {
     )
   }
   return (
-    <button type="button" onClick={() => setEditando(true)}
+    <button type="button" data-help-id="revisaoFatura.fatura" onClick={() => setEditando(true)}
       className={`text-xs whitespace-nowrap hover:underline ${difere ? 'text-aviso font-semibold' : 'text-texto-1'}`}
       title={difere ? `Fatura diferente do mês de referência (${rotuloFatura(referencia)}) — clique para trocar` : 'Clique para trocar a fatura'}>
       {difere && '⚠ '}{rotuloFatura(row.faturaMonthYear)}
@@ -198,11 +199,11 @@ export function DescricaoCelula({ row, onChange, selos }) {
     <div className="min-w-0">
       <div className="flex items-start gap-1.5 flex-wrap">
         {editando ? (
-          <input autoFocus className="input !py-0.5 !text-xs min-w-0 flex-1" value={row.description}
+          <input autoFocus data-help-id="revisaoFatura.descricao" aria-label="Descrição" className="input !py-0.5 !text-xs min-w-0 flex-1" value={row.description}
             onChange={e => onChange({ description: e.target.value })}
             onBlur={() => setEditando(false)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditando(false) }} />
         ) : (
-          <button type="button" onClick={() => setEditando(true)} title="Clique para editar a descrição"
+          <button type="button" data-help-id="revisaoFatura.descricao" onClick={() => setEditando(true)} title="Clique para editar a descrição"
             className="text-xs text-texto-1 font-medium text-left break-words min-w-0 hover:underline">
             {principal || '—'}
           </button>
@@ -233,7 +234,7 @@ export function Selo({ tom = 'neutro', title, children }) {
 export function DecisaoSelect({ row, onEscolherCandidato, onPossivel }) {
   if (row._jaLancadoOpcoes) {
     return (
-      <select aria-label="Decidir" className="w-full max-w-[11rem] bg-surface-2 border border-aviso text-texto-1 rounded px-1 py-0.5 text-xs"
+      <select aria-label="Decidir" data-help-id="revisaoFatura.decidir" className="w-full max-w-[11rem] bg-surface-2 border border-aviso text-texto-1 rounded px-1 py-0.5 text-xs"
         value={row._jaLancadoEscolha || ''} onChange={e => onEscolherCandidato(e.target.value)}>
         <option value="">⚠ {row._parecido ? 'Parecido — é este?' : 'Escolher…'}</option>
         {row._jaLancadoOpcoes.map(tx => (
@@ -246,7 +247,7 @@ export function DecisaoSelect({ row, onEscolherCandidato, onPossivel }) {
   const tx = row._dupTx || row._collisionTx
   const valor = row._mesmoConfirmado ? 'mesmo' : row.selected ? 'importar' : ''
   return (
-    <select aria-label="Decidir" className={`w-full max-w-[11rem] bg-surface-2 border ${valor ? 'border-borda-campo' : 'border-aviso'} text-texto-1 rounded px-1 py-0.5 text-xs`}
+    <select aria-label="Decidir" data-help-id="revisaoFatura.decidir" className={`w-full max-w-[11rem] bg-surface-2 border ${valor ? 'border-borda-campo' : 'border-aviso'} text-texto-1 rounded px-1 py-0.5 text-xs`}
       title={tx ? `Possível duplicata de: ${tx.description} · ${fmtDate(tx.date)} · ${fmt(tx.amount)}` : undefined}
       value={valor} onChange={e => onPossivel(e.target.value)}>
       <option value="">⚠ Possível duplicata…</option>
@@ -292,7 +293,7 @@ export function ParcelasJaNoBanco({ linhas, identicas, aplicar, onToggle }) {
       <table className="w-full text-xs table-fixed">
         <thead>
           <tr className="border-b border-borda text-left text-texto-2">
-            <th className="w-8 px-2 py-2" />
+            <th className="w-8 px-2 py-2"><HelpCampo campo="revisaoFatura.atualizarParcela" /></th>
             <th className="px-2 py-2 font-medium">Descrição</th>
             <th className="px-2 py-2 font-medium w-20">Parcela</th>
             <th className="px-2 py-2 font-medium w-24">Data</th>
@@ -305,7 +306,7 @@ export function ParcelasJaNoBanco({ linhas, identicas, aplicar, onToggle }) {
         <tbody>
           {linhas.map((l, i) => (
             <tr key={l.id} className={`border-b border-borda/50 align-top ${i % 2 ? 'bg-surface-2' : ''}`}>
-              <td className="px-2 py-1.5"><input type="checkbox" className="accent-primary" checked={l.aplicar} onChange={() => onToggle(l.id)} aria-label={`Atualizar ${l.descricao}`} /></td>
+              <td className="px-2 py-1.5"><input type="checkbox" className="accent-primary" data-help-id="revisaoFatura.atualizarParcela" checked={l.aplicar} onChange={() => onToggle(l.id)} aria-label={`Atualizar ${l.descricao}`} /></td>
               <td className="px-2 py-1.5"><Campo c={l.campos.descricao} />{l.csv && <span className="ml-1 text-[10px] px-1 rounded bg-surface-2 text-texto-2 border border-borda" title="O extrato traz um valor diferente em centavos (dentro da tolerância de R$ 0,50). O valor do banco é mantido.">CSV {l.csv}</span>}</td>
               <td className="px-2 py-1.5"><Campo c={l.campos.parcela} /></td>
               <td className="px-2 py-1.5"><Campo c={l.campos.data} /></td>

@@ -55,7 +55,7 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
         {!pre && (
           <div className="text-[10px] text-texto-3 space-y-0.5">
             <span>Favorecido:</span>
-            <select className="ml-1 bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-0.5 text-[10px] max-w-[12rem]"
+            <select data-help-id="revisaoFatura.favorecido" aria-label="Favorecido" className="ml-1 bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-0.5 text-[10px] max-w-[12rem]"
               value={modo} onChange={e => updateRow(row._id, { _favModo: e.target.value })}>
               <option value="manter">Manter: {tx.payee || '(sem favorecido)'}</option>
               <option value="sugerido">Sugerido{j.sugerido.aprendido ? ' (aprendido)' : ''}: {j.sugerido.nome || '—'}</option>
@@ -63,7 +63,7 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
             </select>
             {modo === 'outro' && (
               <>
-                <input list="ja-lancado-favorecidos" className="input !py-0.5 !text-[11px] mt-0.5" placeholder="Digite o favorecido"
+                <input list="ja-lancado-favorecidos" data-help-id="revisaoFatura.favorecido" aria-label="Outro favorecido" className="input !py-0.5 !text-[11px] mt-0.5" placeholder="Digite o favorecido"
                   value={row._favOutro || ''} onChange={e => updateRow(row._id, { _favOutro: e.target.value })} />
                 <datalist id="ja-lancado-favorecidos">{payees.slice(0, 500).map(p => <option key={p} value={p} />)}</datalist>
               </>
@@ -92,13 +92,13 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
           {pendente ? (row._parecido ? '⚠ Parecido — é este?' : '⚠ Para escolher') : 'Novo (escolhido)'}
         </span>
         {row._jaLancadoOpcoes.map(tx => (
-          <label key={tx.id} className="flex items-start gap-1 text-[10px] text-texto-2 cursor-pointer">
+          <label key={tx.id} data-help-id="revisaoFatura.decidir" className="flex items-start gap-1 text-[10px] text-texto-2 cursor-pointer">
             <input type="radio" className="accent-primary mt-0.5" name={`ja-${row._id}`} checked={row._jaLancadoEscolha === tx.id}
               onChange={() => updateRow(row._id, { _jaLancadoEscolha: tx.id })} />
             <span className="break-words">É {tx._pre ? 'o pré-lançamento' : 'este'}: {tx.description || '—'} · {fmtDate(tx.date)} · {fmt(tx.amount)}</span>
           </label>
         ))}
-        <label className="flex items-center gap-1 text-[10px] text-texto-2 cursor-pointer">
+        <label data-help-id="revisaoFatura.decidir" className="flex items-center gap-1 text-[10px] text-texto-2 cursor-pointer">
           <input type="radio" className="accent-primary" name={`ja-${row._id}`} checked={row._jaLancadoEscolha === 'novo'}
             onChange={() => updateRow(row._id, { _jaLancadoEscolha: 'novo', selected: true })} />
           <span>É novo — importar</span>
@@ -126,7 +126,7 @@ function SeletorFavorecido({ row, j, modo, payees, updateRow }) {
   return (
     <div className="text-[10px] text-texto-3 space-y-0.5">
       <span>Favorecido:</span>
-      <select className="ml-1 bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-0.5 text-[10px] max-w-[12rem]"
+      <select data-help-id="revisaoFatura.favorecido" aria-label="Favorecido" className="ml-1 bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-0.5 text-[10px] max-w-[12rem]"
         value={modo} onChange={e => updateRow(row._id, { _favModo: e.target.value })}>
         <option value="manter">Manter: {tx.payee || '(sem favorecido)'}</option>
         <option value="sugerido">Da fatura{j.sugerido.aprendido ? ' (aprendido)' : ''}: {j.sugerido.nome || '—'}</option>
@@ -134,7 +134,7 @@ function SeletorFavorecido({ row, j, modo, payees, updateRow }) {
       </select>
       {modo === 'outro' && (
         <>
-          <input list="ja-lancado-favorecidos" className="input !py-0.5 !text-[11px] mt-0.5" placeholder="Digite o favorecido"
+          <input list="ja-lancado-favorecidos" data-help-id="revisaoFatura.favorecido" aria-label="Outro favorecido" className="input !py-0.5 !text-[11px] mt-0.5" placeholder="Digite o favorecido"
             value={row._favOutro || ''} onChange={e => updateRow(row._id, { _favOutro: e.target.value })} />
           <datalist id="ja-lancado-favorecidos">{payees.slice(0, 500).map(p => <option key={p} value={p} />)}</datalist>
         </>

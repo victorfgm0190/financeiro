@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { navegarPara, ABRIR_EXTRATO_KEY } from '../../lib/abrirTela'
 import { controleGerencialAtivo, impedimentosDesligar, subcontasGerenciais } from '../../lib/controleGerencial'
+import HelpCampo from '../shared/HelpCampo'
 
 // Chave "Usar controle gerencial" do AMBIENTE (configuracoes.controle_gerencial).
 // Desligar só com TODAS as subcontas gerenciais em saldo zero (saldo do card da conta:
@@ -34,10 +35,10 @@ export default function ControleGerencialChave({ podeEditar }) {
   }
 
   return (
-    <div className="mb-4 rounded-xl border border-borda-forte bg-surface-2/40 p-3.5 space-y-2">
-      <label data-guia="settings:controle-gerencial.chave" className={`flex items-center gap-3 ${podeEditar ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}>
+    <div className="mb-4 rounded-xl border border-borda-forte bg-surface-2/40 p-3.5 space-y-2" data-help-form="controleGerencial">
+      <label data-guia="settings:controle-gerencial.chave" data-help-id="controleGerencial.ligar" className={`flex items-center gap-3 ${podeEditar ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-texto-1">Usar controle gerencial</p>
+          <p className="text-sm font-medium text-texto-1">Usar controle gerencial<HelpCampo campo="controleGerencial.ligar" /></p>
           <p className="text-xs text-texto-3">
             Vale para o ambiente todo. Desligado, a classificação gerencial some dos lançamentos, agendamentos e
             importação de fatura, e nenhuma subconta, etapa A, devolução ou provisão gerencial é gerada.

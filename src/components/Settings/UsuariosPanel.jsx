@@ -5,6 +5,7 @@ import Modal from '../shared/Modal'
 import { getSessao } from '../../lib/api'
 import { listarUsuarios, criarUsuario, editarUsuario, enviarLinkSenha } from '../../lib/usuariosApi'
 import { MODULOS, NIVEIS, ACOES, rotuloNivel, normalizarPermissao, permissoesDoNivel } from '../../lib/permissoes'
+import HelpCampo from '../shared/HelpCampo'
 
 const SENHA_MIN = 8
 const bloqueado = (u) => !!u.bloqueado_ate && new Date(u.bloqueado_ate) > new Date()
@@ -95,48 +96,53 @@ function UsuarioModal({ inicial, perfis, onSalvar, onFechar }) {
 
   return (
     <Modal open onClose={onFechar} title={novo ? 'Novo usuário' : `Editar usuário — ${inicial.username}`} size="lg">
-      <form onSubmit={salvar} className="space-y-4">
+      <form onSubmit={salvar} className="space-y-4" data-help-form="usuario">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="label" htmlFor="u-nome">Nome *</label>
+          <div data-help-id="usuario.nome">
+            <label className="label" htmlFor="u-nome">Nome *<HelpCampo campo="usuario.nome" /></label>
             <input id="u-nome" autoFocus className="input" value={f.nome || ''} maxLength={100} onChange={e => set('nome', e.target.value)} />
           </div>
-          <div>
-            <label className="label" htmlFor="u-username">Usuário *</label>
+          <div data-help-id="usuario.username">
+            <label className="label" htmlFor="u-username">Usuário *<HelpCampo campo="usuario.username" /></label>
             <input id="u-username" disabled={!novo} autoComplete="off" autoCapitalize="none" spellCheck={false} className="input disabled:opacity-60"
               value={f.username} maxLength={40} onChange={e => set('username', e.target.value.toLowerCase())} placeholder="Digite o nome de usuário" />
             {!novo && <p className="text-[11px] text-texto-3 mt-1">O usuário de acesso não muda.</p>}
           </div>
-          <div className="sm:col-span-2">
-            <label className="label" htmlFor="u-email">E-mail *</label>
+          <div className="sm:col-span-2" data-help-id="usuario.email">
+            <label className="label" htmlFor="u-email">E-mail *<HelpCampo campo="usuario.email" /></label>
             <input id="u-email" type="email" className="input" value={f.email || ''} maxLength={200} onChange={e => set('email', e.target.value)} />
             <p className="text-[11px] text-texto-3 mt-1">Também serve para entrar (usuário OU e-mail).</p>
           </div>
-          <div>
-            <label className="label" htmlFor="u-senha">{novo ? 'Senha *' : 'Nova senha'}</label>
+          <div data-help-id="usuario.senha">
+            <label className="label" htmlFor="u-senha">{novo ? 'Senha *' : 'Nova senha'}<HelpCampo campo="usuario.senha" /></label>
             <input id="u-senha" type="password" autoComplete="new-password" className="input" value={f.senha} onChange={e => set('senha', e.target.value)} placeholder={novo ? '' : 'Deixe em branco para manter'} />
           </div>
-          <div>
-            <label className="label" htmlFor="u-confirmar">Confirmar senha{novo ? ' *' : ''}</label>
+          <div data-help-id="usuario.confirmar">
+            <label className="label" htmlFor="u-confirmar">Confirmar senha{novo ? ' *' : ''}<HelpCampo campo="usuario.confirmar" /></label>
             <input id="u-confirmar" type="password" autoComplete="new-password" className="input" value={f.confirmar} onChange={e => set('confirmar', e.target.value)} />
           </div>
           <p className="sm:col-span-2 -mt-1 text-[11px] text-texto-3">Mínimo de {SENHA_MIN} caracteres.</p>
         </div>
 
-        <div>
-          <label className="label" htmlFor="u-nivel">Nível de acesso</label>
+        <div data-help-id="usuario.nivel">
+          <label className="label" htmlFor="u-nivel">Nível de acesso<HelpCampo campo="usuario.nivel" /></label>
           <select id="u-nivel" className="input" value={f.nivel} onChange={e => set('nivel', e.target.value)} disabled={ehVoce && f.nivel === 'admin'}>
             {NIVEIS.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
           </select>
           <p className="text-[11px] text-texto-3 mt-1">{AJUDA_NIVEL[f.nivel]}</p>
         </div>
-        {f.nivel === 'personalizado' && <GradePermissoes valor={f.permissoes} onChange={v => set('permissoes', v)} />}
+        {f.nivel === 'personalizado' && (
+          <div data-help-id="usuario.permissoes">
+            <p className="label">Permissões por módulo<HelpCampo campo="usuario.permissoes" /></p>
+            <GradePermissoes valor={f.permissoes} onChange={v => set('permissoes', v)} />
+          </div>
+        )}
 
-        <fieldset>
-          <legend className="label">Perfis permitidos</legend>
-          <label className="flex items-center gap-2 text-sm text-texto-1 mb-1.5">
+        <fieldset data-help-id="usuario.perfis">
+          <legend className="label">Perfis permitidos<HelpCampo campo="usuario.perfis" /></legend>
+          <label data-help-id="usuario.perfisTodos" className="flex items-center gap-2 text-sm text-texto-1 mb-1.5">
             <input type="checkbox" className="w-4 h-4 accent-primary" checked={f.perfisTodos} onChange={e => set('perfisTodos', e.target.checked)} />
-            Todos os perfis
+            Todos os perfis<HelpCampo campo="usuario.perfisTodos" />
           </label>
           {!f.perfisTodos && (
             <div className="flex flex-wrap gap-2 pl-6">
@@ -156,13 +162,13 @@ function UsuarioModal({ inicial, perfis, onSalvar, onFechar }) {
         </fieldset>
 
         <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-2 text-sm text-texto-1">
+          <label data-help-id="usuario.ativo" className="flex items-center gap-2 text-sm text-texto-1">
             <input type="checkbox" className="w-4 h-4 accent-primary" checked={f.ativo} disabled={ehVoce} onChange={e => set('ativo', e.target.checked)} />
-            Ativo {ehVoce && <span className="text-[11px] text-texto-3">(você não pode desativar o próprio usuário)</span>}
+            Ativo<HelpCampo campo="usuario.ativo" /> {ehVoce && <span className="text-[11px] text-texto-3">(você não pode desativar o próprio usuário)</span>}
           </label>
-          <label className="flex items-center gap-2 text-sm text-texto-1">
+          <label data-help-id="usuario.trocarSenha" className="flex items-center gap-2 text-sm text-texto-1">
             <input type="checkbox" className="w-4 h-4 accent-primary" checked={!!f.trocar_senha} onChange={e => set('trocar_senha', e.target.checked)} />
-            Trocar senha no próximo login
+            Trocar senha no próximo login<HelpCampo campo="usuario.trocarSenha" />
           </label>
         </div>
 
@@ -190,18 +196,18 @@ function RedefinirSenhaModal({ usuario, onSalvar, onFechar }) {
   }
   return (
     <Modal open onClose={onFechar} title={`Redefinir senha — ${usuario.username}`} size="sm">
-      <form onSubmit={salvar} className="space-y-3">
-        <div>
-          <label className="label" htmlFor="rs-nova">Nova senha</label>
+      <form onSubmit={salvar} className="space-y-3" data-help-form="redefinirSenha">
+        <div data-help-id="redefinirSenha.nova">
+          <label className="label" htmlFor="rs-nova">Nova senha<HelpCampo campo="redefinirSenha.nova" /></label>
           <input id="rs-nova" type="password" autoComplete="new-password" autoFocus className="input" value={senha} onChange={e => { setErro(''); setSenha(e.target.value) }} />
         </div>
-        <div>
-          <label className="label" htmlFor="rs-conf">Confirmar</label>
+        <div data-help-id="redefinirSenha.confirmar">
+          <label className="label" htmlFor="rs-conf">Confirmar<HelpCampo campo="redefinirSenha.confirmar" /></label>
           <input id="rs-conf" type="password" autoComplete="new-password" className="input" value={confirmar} onChange={e => { setErro(''); setConfirmar(e.target.value) }} />
         </div>
-        <label className="flex items-center gap-2 text-sm text-texto-1">
+        <label data-help-id="redefinirSenha.trocar" className="flex items-center gap-2 text-sm text-texto-1">
           <input type="checkbox" className="w-4 h-4 accent-primary" checked={trocar} onChange={e => setTrocar(e.target.checked)} />
-          Pedir para trocar no próximo login
+          Pedir para trocar no próximo login<HelpCampo campo="redefinirSenha.trocar" />
         </label>
         {erro && <p className="text-xs text-perigo">{erro}</p>}
         <div className="flex justify-end gap-2">

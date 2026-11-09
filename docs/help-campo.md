@@ -204,3 +204,45 @@ Agendamentos têm roteiro de Preenchimento Guiado (`formularios`); os demais tê
 - Placeholders com exemplo passaram a descrever a função. São eles: os textos para colar do boleto, do recibo e do teste de regras, o motivo do crédito e a descrição do encargo.
 - Teste: `src/components/Contratos/ajudaCampos.test.jsx`.
 
+### Bloco 4 — Configurações e Importar
+
+- O conteúdo está em `src/help/configuracoes.js` e `src/help/importar.js`.
+- **Configurações** (`data-help-form`):
+  - `periodo`: tipo de mês, dia de início, pergunta da virada e dias do aviso de caixa;
+  - `estornos` e `iof`;
+  - `classificacao` e `regraGerencial`: as duas têm legenda com ⓘ;
+  - `controleGerencial` (a chave) e `grupoGerencial` (novo e editar);
+  - `backup`: importar o arquivo;
+  - `ajusteSaldo`: Manutenção › Ajuste de saldo por grupo;
+  - `identidade`;
+  - `tipoDocumento`: novo e editar;
+  - `usuario` e `redefinirSenha`: inclui a grade de permissões e os perfis permitidos;
+  - `trocarSenha`: a janela e a tela de primeiro acesso;
+  - `feriados`, `apelidos` e `depara`: listas com ⓘ no cabeçalho ou numa legenda;
+  - `kitCategorias`;
+  - `guias`;
+  - `agendaCelular`;
+  - `dindin`: só no ambiente principal.
+- **Importar** (`data-help-form`):
+  - `importarLanc`: Importar lançamentos;
+  - `importarFatura`:
+    - passo inicial: cartão, mês, arquivo e conciliar;
+    - revisão: as células têm `data-help-id`, e a legenda acima da tabela traz o ⓘ de cada coluna. A legenda vale para desktop e celular, onde a tabela vira cartões;
+  - `loteFatura`: Preencher em lote;
+  - `catGer`: Categoria → Gerencial;
+  - `estornoConfig`: Estornos detectados;
+  - `conciliacao`: fatura encerrada, importar ou ignorar, manter ou excluir;
+  - `mapeador`: Mapear arquivo do banco;
+  - `contaCorrente`: aba Dindin, só no ambiente principal.
+- Componentes que ganharam `helpId`:
+  - `DropZone` (ImportPanel);
+  - `colSelect` (mapeador);
+  - `SelectCategoria` (ParametrizarBem, bloco 1).
+- O ⓘ dentro de área clicável (zona do arquivo, rótulo de checkbox) não aciona o controle: o `HelpCampo` para a propagação do clique.
+- Placeholders com exemplo passaram a descrever a função. São eles: a sigla do tipo de documento, o nome do feriado, o nome do modelo de importação e o "Contém" da classificação.
+- Atalhos não entrou: a tela só tem botões de gravar a combinação, sem campo de digitação.
+- Testes:
+  - `src/components/Settings/ajudaCampos.test.jsx`;
+  - `src/components/Import/ajudaCampos.test.jsx`;
+  - um caso novo em `AgendaCelularPanel.test.jsx`.
+

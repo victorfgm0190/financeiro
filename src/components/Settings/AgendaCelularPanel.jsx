@@ -6,6 +6,7 @@ import {
   obterAgendaFeed, criarAgendaFeed, alterarAgendaFeed, linksDoFeed, avisarFeedMudou, EVENTO_AGENDA_PUBLICADO,
 } from '../../lib/agendaFeedApi'
 import { NOMES_CALENDARIO, TIPOS_FEED } from '../../lib/agendaIcs'
+import HelpCampo from '../shared/HelpCampo'
 
 // AGENDA NO CELULAR — o feed .ics do usuário logado para assinar no iPhone / Google Agenda.
 // Configurações › Geral e "Agenda no celular" do menu do usuário (janela). O .ics é gerado no app
@@ -95,7 +96,7 @@ export default function AgendaCelularPanel({ emJanela = false }) {
   const origem = typeof window !== 'undefined' ? window.location.origin : ''
 
   return (
-    <div className={emJanela ? 'space-y-4' : 'card space-y-4'}>
+    <div className={emJanela ? 'space-y-4' : 'card space-y-4'} data-help-form="agendaCelular">
       <div>
         {!emJanela && <h2 className="text-sm font-semibold text-texto-2 mb-1 flex items-center gap-2"><CalendarDays size={15} /> Agenda no celular</h2>}
         <p className="text-xs text-texto-3">
@@ -120,16 +121,16 @@ export default function AgendaCelularPanel({ emJanela = false }) {
       ) : (
         <>
           <div className="space-y-3">
-            <div>
-              <p className="label">Mostrar na agenda</p>
+            <div data-help-id="agendaCelular.tipos">
+              <p className="label">Mostrar na agenda<HelpCampo campo="agendaCelular.tipos" /></p>
               <div role="radiogroup" data-guia="settings:agenda-celular.mostrar" aria-label="Mostrar na agenda" className="flex flex-wrap gap-2">
                 <Escolha ativo={tipos.length === 1 && tipos[0] === 'despesa'} disabled={salvando} onClick={() => mudarOpcoes(['despesa'], mostrarValores)}>Despesas</Escolha>
                 <Escolha ativo={tipos.length === 1 && tipos[0] === 'receita'} disabled={salvando} onClick={() => mudarOpcoes(['receita'], mostrarValores)}>Receitas</Escolha>
                 <Escolha ativo={tipos.length === 2} disabled={salvando} onClick={() => mudarOpcoes(TIPOS_FEED, mostrarValores)}>Ambos</Escolha>
               </div>
             </div>
-            <div>
-              <p className="label">Mostrar valores</p>
+            <div data-help-id="agendaCelular.valores">
+              <p className="label">Mostrar valores<HelpCampo campo="agendaCelular.valores" /></p>
               <div role="radiogroup" data-guia="settings:agenda-celular.valores" aria-label="Mostrar valores" className="flex flex-wrap gap-2">
                 <Escolha ativo={mostrarValores} disabled={salvando} onClick={() => mudarOpcoes(tipos, true)}>Sim</Escolha>
                 <Escolha ativo={!mostrarValores} disabled={salvando} onClick={() => mudarOpcoes(tipos, false)}>Não</Escolha>

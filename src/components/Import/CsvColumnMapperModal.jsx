@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import Modal from '../shared/Modal'
 import { fmt, fmtDate } from '../shared/utils'
 import { palpiteDeModelo, aplicarModelo, cabecalhoDe, assinaturaCabecalho, modeloValido } from '../../lib/importers/index.js'
+import HelpCampo from '../shared/HelpCampo'
 
 // Mapeamento de planilha de banco não reconhecida (CSV / XLS / XLSX, cartão ou conta): prévia das
 // primeiras linhas, escolha das colunas (data, descrição, valor — ou débito e crédito —, favorecido),
@@ -25,9 +26,9 @@ export default function CsvColumnMapperModal({ tabela, tipo = 'cartao', modeloIn
   const resultado = useMemo(() => (valido ? aplicarModelo(tabela, modelo) : { registros: [], ignoradas: 0 }), [tabela, modelo, valido])
   const preview = tabela.linhas.slice((m.linhaCabecalho ?? 0) + 1, (m.linhaCabecalho ?? 0) + 6)
 
-  const colSelect = (rotulo, campo, opcional = false) => (
-    <div>
-      <label className="label">{rotulo}</label>
+  const colSelect = (rotulo, campo, opcional = false, helpId = null) => (
+    <div data-help-id={helpId || undefined}>
+      <label className="label">{rotulo}{helpId && <HelpCampo campo={helpId} />}</label>
       <select className="input" value={m[campo] ?? ''} onChange={e => set(campo, e.target.value === '' ? null : Number(e.target.value))}>
         <option value="">{opcional ? '— Nenhuma —' : '— Selecione a coluna —'}</option>
         {colunas.map(c => <option key={c.i} value={c.i}>{c.rotulo}</option>)}
@@ -50,23 +51,23 @@ export default function CsvColumnMapperModal({ tabela, tipo = 'cartao', modeloIn
 
   return (
     <Modal open onClose={onClose} title={`Mapear arquivo do banco — ${tipo === 'cartao' ? 'cartão' : 'conta corrente'}`} size="xl">
-      <div className="space-y-4">
+      <div className="space-y-4" data-help-form="mapeador">
         <p className="text-xs text-texto-2">
           Este arquivo não foi reconhecido. Diga onde está cada informação. Salvando o modelo, o próximo arquivo com o mesmo
           cabeçalho é reconhecido sozinho.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="label">Linha do cabeçalho</label>
+          <div data-help-id="mapeador.cabecalho">
+            <label className="label">Linha do cabeçalho<HelpCampo campo="mapeador.cabecalho" /></label>
             <select className="input" value={m.linhaCabecalho ?? 0} onChange={e => set('linhaCabecalho', Number(e.target.value))}>
               {tabela.linhas.slice(0, 15).map((l, i) => (
                 <option key={i} value={i}>{`${i + 1}: ${l.map(c => String(c ?? '')).filter(Boolean).join(' · ').slice(0, 60)}`}</option>
               ))}
             </select>
           </div>
-          {colSelect('Data', 'colData')}
-          {colSelect('Descrição', 'colDescricao')}
+          {colSelect('Data', 'colData', false, 'mapeador.data')}
+          {colSelect('Descrição', 'colDescricao', false, 'mapeador.descricao')}
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-borda">
@@ -87,44 +88,45 @@ export default function CsvColumnMapperModal({ tabela, tipo = 'cartao', modeloIn
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-3 flex flex-wrap items-center gap-4 text-sm text-texto-2">
+          <div className="sm:col-span-3 flex flex-wrap items-center gap-4 text-sm text-texto-2" data-help-id="mapeador.modoValor" role="radiogroup" aria-label="Como vem o valor">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" className="accent-primary" checked={!usarDebCred} onChange={() => setUsarDebCred(false)} /> Uma coluna de valor
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" className="accent-primary" checked={usarDebCred} onChange={() => setUsarDebCred(true)} /> Débito e crédito separados
             </label>
+            <HelpCampo campo="mapeador.modoValor" />
           </div>
           {usarDebCred
-            ? <>{colSelect('Débito (saídas)', 'colDebito')}{colSelect('Crédito (entradas)', 'colCredito')}</>
-            : colSelect('Valor', 'colValor')}
-          {colSelect('Favorecido (opcional)', 'colFavorecido', true)}
-          <div>
-            <label className="label">Formato da data</label>
+            ? <>{colSelect('Débito (saídas)', 'colDebito', false, 'mapeador.debito')}{colSelect('Crédito (entradas)', 'colCredito', false, 'mapeador.credito')}</>
+            : colSelect('Valor', 'colValor', false, 'mapeador.valor')}
+          {colSelect('Favorecido (opcional)', 'colFavorecido', true, 'mapeador.favorecido')}
+          <div data-help-id="mapeador.formatoData">
+            <label className="label">Formato da data<HelpCampo campo="mapeador.formatoData" /></label>
             <select className="input" value={m.formatoData} onChange={e => set('formatoData', e.target.value)}>
               <option value="dmy">dia/mês/ano (31/12/2026)</option>
               <option value="ymd">ano-mês-dia (2026-12-31)</option>
               <option value="mdy">mês/dia/ano (12/31/2026)</option>
             </select>
           </div>
-          <div>
-            <label className="label">Separador decimal</label>
+          <div data-help-id="mapeador.decimal">
+            <label className="label">Separador decimal<HelpCampo campo="mapeador.decimal" /></label>
             <select className="input" value={m.decimal} onChange={e => set('decimal', e.target.value)}>
               <option value=",">vírgula (1.234,56)</option>
               <option value=".">ponto (1,234.56)</option>
             </select>
           </div>
           {!usarDebCred && (
-            <div>
-              <label className="label">Despesas aparecem como</label>
+            <div data-help-id="mapeador.sinal">
+              <label className="label">Despesas aparecem como<HelpCampo campo="mapeador.sinal" /></label>
               <select className="input" value={m.sinalDespesa} onChange={e => set('sinalDespesa', e.target.value)}>
                 <option value="negativo">valor negativo</option>
                 <option value="positivo">valor positivo</option>
               </select>
             </div>
           )}
-          <div className="sm:col-span-3">
-            <label className="label">Ignorar linhas que contenham (separe por vírgula)</label>
+          <div className="sm:col-span-3" data-help-id="mapeador.ignorar">
+            <label className="label">Ignorar linhas que contenham (separe por vírgula)<HelpCampo campo="mapeador.ignorar" /></label>
             <input className="input" value={(m.ignorar || []).join(', ')} onChange={e => set('ignorar', e.target.value.split(',').map(s => s.trim()).filter(Boolean))} placeholder="Digite os textos, separados por vírgula" />
           </div>
         </div>
@@ -143,12 +145,12 @@ export default function CsvColumnMapperModal({ tabela, tipo = 'cartao', modeloIn
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="label">Nome do modelo</label>
-            <input className="input" value={nome} onChange={e => setNome(e.target.value)} placeholder='Ex.: "Bradesco cartão"' />
+          <div data-help-id="mapeador.nome">
+            <label className="label">Nome do modelo<HelpCampo campo="mapeador.nome" /></label>
+            <input className="input" value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome para reconhecer o modelo" />
           </div>
-          <div>
-            <label className="label">Banco (opcional)</label>
+          <div data-help-id="mapeador.banco">
+            <label className="label">Banco (opcional)<HelpCampo campo="mapeador.banco" /></label>
             <input className="input" value={banco} onChange={e => setBanco(e.target.value)} placeholder="Digite o nome do banco (opcional)" />
           </div>
         </div>

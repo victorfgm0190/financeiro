@@ -3,6 +3,7 @@ import { Check } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { trocarMinhaSenha } from '../../lib/usuariosApi'
 import { AUTH_TOKEN_KEY } from '../../lib/api'
+import HelpCampo from '../shared/HelpCampo'
 
 const SENHA_MIN = 8
 
@@ -34,18 +35,18 @@ export default function TrocarSenhaModal({ open, onClose, onTrocada }) {
 
   return (
     <Modal open={open} onClose={fechar} title="Trocar minha senha" size="sm">
-      <form onSubmit={salvar} className="p-5 space-y-3">
-        <div>
-          <label className="label" htmlFor="senha-atual">Senha atual</label>
+      <form onSubmit={salvar} className="p-5 space-y-3" data-help-form="trocarSenha">
+        <div data-help-id="trocarSenha.atual">
+          <label className="label" htmlFor="senha-atual">Senha atual<HelpCampo campo="trocarSenha.atual" /></label>
           <input id="senha-atual" type="password" autoComplete="current-password" className="input" value={f.atual} onChange={e => set('atual', e.target.value)} autoFocus />
         </div>
-        <div>
-          <label className="label" htmlFor="senha-nova">Nova senha</label>
+        <div data-help-id="trocarSenha.nova">
+          <label className="label" htmlFor="senha-nova">Nova senha<HelpCampo campo="trocarSenha.nova" /></label>
           <input id="senha-nova" type="password" autoComplete="new-password" className="input" value={f.nova} onChange={e => set('nova', e.target.value)} />
           <p className="text-[11px] text-texto-3 mt-1">Mínimo de {SENHA_MIN} caracteres.</p>
         </div>
-        <div>
-          <label className="label" htmlFor="senha-repetir">Repita a nova senha</label>
+        <div data-help-id="trocarSenha.repetir">
+          <label className="label" htmlFor="senha-repetir">Repita a nova senha<HelpCampo campo="trocarSenha.repetir" /></label>
           <input id="senha-repetir" type="password" autoComplete="new-password" className="input" value={f.repetir} onChange={e => set('repetir', e.target.value)} />
         </div>
         {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}

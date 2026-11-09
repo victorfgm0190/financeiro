@@ -6,6 +6,7 @@ import Toast from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import { NATUREZAS, SIGLA_MAX, normalizarSigla, moverTipo, soltarTipo } from '../../lib/tiposDocumento'
 import { CORES_TIPO_DOCUMENTO } from '../../lib/chartPalette'
+import HelpCampo from '../shared/HelpCampo'
 
 const CORES = CORES_TIPO_DOCUMENTO
 const rotuloNatureza = (n) => NATUREZAS.find(x => x.id === n)?.label || n
@@ -23,28 +24,28 @@ function TipoForm({ inicial, onSalvar, onCancelar, salvando }) {
     try { await onSalvar({ ...f, nome: f.nome.trim(), sigla: normalizarSigla(f.sigla) }) } catch (err) { setErro(err?.message || 'Falha ao salvar.') }
   }
   return (
-    <form onSubmit={salvar} className="grid grid-cols-2 sm:grid-cols-[1fr_90px_130px] gap-2 items-end p-3 rounded-lg bg-surface-2/60 border border-borda-forte">
-      <div className="col-span-2 sm:col-span-1">
-        <label className="label text-xs">Nome</label>
+    <form onSubmit={salvar} data-help-form="tipoDocumento" className="grid grid-cols-2 sm:grid-cols-[1fr_90px_130px] gap-2 items-end p-3 rounded-lg bg-surface-2/60 border border-borda-forte">
+      <div className="col-span-2 sm:col-span-1" data-help-id="tipoDocumento.nome">
+        <label className="label text-xs">Nome<HelpCampo campo="tipoDocumento.nome" /></label>
         <input autoFocus className="input py-1.5 text-sm" value={f.nome} maxLength={60} onChange={e => set('nome', e.target.value)} placeholder="Nome do tipo de documento" />
       </div>
-      <div>
-        <label className="label text-xs">Sigla (até {SIGLA_MAX})</label>
-        <input className="input py-1.5 text-sm uppercase" value={f.sigla} maxLength={SIGLA_MAX} onChange={e => set('sigla', normalizarSigla(e.target.value))} placeholder="BOL" />
+      <div data-help-id="tipoDocumento.sigla">
+        <label className="label text-xs">Sigla (até {SIGLA_MAX})<HelpCampo campo="tipoDocumento.sigla" /></label>
+        <input className="input py-1.5 text-sm uppercase" value={f.sigla} maxLength={SIGLA_MAX} onChange={e => set('sigla', normalizarSigla(e.target.value))} placeholder="Sigla curta" />
       </div>
-      <div>
-        <label className="label text-xs">Natureza</label>
+      <div data-help-id="tipoDocumento.natureza">
+        <label className="label text-xs">Natureza<HelpCampo campo="tipoDocumento.natureza" /></label>
         <select className="input py-1.5 text-sm" value={f.natureza} onChange={e => set('natureza', e.target.value)}>
           {NATUREZAS.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
         </select>
       </div>
-      <div className="col-span-2 sm:col-span-3 flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-texto-2 mr-1">Cor</span>
+      <div className="col-span-2 sm:col-span-3 flex flex-wrap items-center gap-1.5" data-help-id="tipoDocumento.cor">
+        <span className="text-xs text-texto-2 mr-1">Cor<HelpCampo campo="tipoDocumento.cor" /></span>
         {CORES.map(c => (
           <button key={c} type="button" onClick={() => set('cor', c)} title={c}
             className={`w-6 h-6 rounded-full border-2 ${f.cor === c ? 'border-texto-1' : 'border-transparent'}`} style={{ background: c }} />
         ))}
-        <input type="color" value={f.cor || '#9ca3af'} onChange={e => set('cor', e.target.value)} className="w-7 h-7 bg-transparent cursor-pointer" title="Outra cor" />
+        <input type="color" aria-label="Outra cor" value={f.cor || '#9ca3af'} onChange={e => set('cor', e.target.value)} className="w-7 h-7 bg-transparent cursor-pointer" title="Outra cor" />
         <span className="ml-2"><TipoDocumentoBadge tipo={{ sigla: normalizarSigla(f.sigla) || '—', nome: f.nome, cor: f.cor }} /></span>
         <div className="ml-auto flex gap-2">
           <button type="button" onClick={onCancelar} className="btn-secondary text-xs py-1.5 flex items-center gap-1"><X size={12} /> Cancelar</button>

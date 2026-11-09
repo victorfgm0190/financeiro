@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Save } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import HelpCampo from '../shared/HelpCampo'
 
 // Configurações › Geral › Identidade do ambiente: de quem é o sistema e a frase dos relatórios.
 // Gravado em configuracoes.rodape_titulo / rodape_frase (sync de configurações, como as demais).
@@ -22,23 +23,23 @@ export default function IdentidadeAmbiente({ somenteLeitura = false }) {
   }
 
   return (
-    <form className="card space-y-4" onSubmit={salvar}>
+    <form className="card space-y-4" onSubmit={salvar} data-help-form="identidade">
       <div>
         <h2 className="text-sm font-semibold text-texto-2 mb-1">Identidade do ambiente</h2>
         <p className="text-xs text-texto-3">
           Aparece no rodapé da barra lateral e no cabeçalho dos relatórios exportados para Excel.
         </p>
       </div>
-      <div>
-        <label className="label" htmlFor="ident-nome">Nome do ambiente</label>
+      <div data-help-id="identidade.nome">
+        <label className="label" htmlFor="ident-nome">Nome do ambiente<HelpCampo campo="identidade.nome" /></label>
         <input id="ident-nome" data-guia="settings:identidade.nome" className="input" maxLength={120} value={nome} onChange={e => setNome(e.target.value)}
           placeholder="De quem é o sistema" disabled={somenteLeitura} />
         <p className="text-xs text-texto-3 mt-1">
           Vazio: os relatórios usam o nome do usuário logado{usuario?.nome ? ` (${usuario.nome})` : ''}.
         </p>
       </div>
-      <div>
-        <label className="label" htmlFor="ident-frase">Frase do ambiente (opcional)</label>
+      <div data-help-id="identidade.frase">
+        <label className="label" htmlFor="ident-frase">Frase do ambiente (opcional)<HelpCampo campo="identidade.frase" /></label>
         <input id="ident-frase" data-guia="settings:identidade.frase" className="input" maxLength={160} value={frase} onChange={e => setFrase(e.target.value)}
           placeholder="Frase exibida nos relatórios" disabled={somenteLeitura} />
         <p className="text-xs text-texto-3 mt-1">Vazia: a linha da frase não aparece.</p>
