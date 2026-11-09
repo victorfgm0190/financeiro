@@ -33,6 +33,16 @@ Invariantes que valem para qualquer mudança:
 - SELECT de preview antes de qualquer DELETE/UPDATE no banco; ajustes de saldo atômicos.
 - Acesso ao Neon sempre via `/api` (o navegador nunca fala com o banco).
 
+## Branches e deploy (teste1 antes de produção — vale para código)
+
+- **Todo push vai para a branch `homologacao`**, que é servida em `teste1.finup.app.br`.
+- **O `main` é produção** (vm, cv, ggsm: um deploy só). Ele só recebe merge da `homologacao`
+  com o OK explícito do usuário "libera no vm". Nunca fazer commit ou push direto no `main`.
+- **Migração:** aplicar no vm antes do merge, sempre aditiva (o código antigo continua funcionando).
+  cv e ggsm só com o OK deles.
+- **Correção urgente:** branch a partir do `main` → merge no `main` (com OK) → merge no
+  `homologacao`, para os dois não divergirem.
+
 ## Pendências aguardando autorização
 
 - **Item 6 — grupo gerencial por linha do rateio (parado desde 31/10/2026).** A base está no ar

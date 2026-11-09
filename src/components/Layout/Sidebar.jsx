@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from './RodapeIdentidade'
+import VersaoAmbiente from './VersaoAmbiente'
 import ThemeToggle from '../ThemeToggle'
 import SessaoUsuario from './SessaoUsuario'
 import IndicadorSync from '../Offline/IndicadorSync'
@@ -109,7 +110,7 @@ export default function Sidebar({ active, setActive, alertCount, plataforma }) {
         {/* Identidade */}
         <div className="border-t border-borda/60 pt-2">
           <RodapeIdentidade classeTitulo="text-xs text-texto-3 font-medium leading-tight" classeFrase="text-xs text-texto-3 leading-tight mt-0.5 italic" />
-          <p className="text-[10px] text-texto-3 leading-tight mt-1 font-mono" title="Versão (commit) em execução">v {import.meta.env.VITE_APP_COMMIT || 'dev'}</p>
+          <VersaoAmbiente className="mt-1" />
         </div>
       </div>
     </aside>

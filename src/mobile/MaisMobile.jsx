@@ -2,6 +2,7 @@ import { ChevronRight } from 'lucide-react'
 import { secoesMais } from './navegacao'
 import ThemeToggle from '../components/ThemeToggle'
 import SessaoUsuario from '../components/Layout/SessaoUsuario'
+import VersaoAmbiente from '../components/Layout/VersaoAmbiente'
 import AjudaTela from '../components/BoasVindas/AjudaTela'
 
 // Tela "Mais": gerada 100% de modules.js (secoesMais) — aqui só o layout de cada tipo de seção.
@@ -57,6 +58,7 @@ export default function MaisMobile({ modules, irPara }) {
       <section className="rounded-xl border border-borda px-4 py-3" data-guia="mais.sessao">
         <SessaoUsuario comSair />
       </section>
+      <VersaoAmbiente className="text-center" />
     </div>
   )
 }

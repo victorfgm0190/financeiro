@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator, ChevronRight, Smartphone } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from '../Layout/RodapeIdentidade'
+import VersaoAmbiente from '../Layout/VersaoAmbiente'
 import IdentidadeAmbiente from './IdentidadeAmbiente'
 import VarreduraRateio from './VarreduraRateio'
 import { noAmbientePrincipal } from '../../lib/api'
@@ -2108,6 +2109,10 @@ export default function SettingsPanel() {
       {/* Identidade — visível apenas no mobile (sidebar já mostra no desktop) */}
       <div className="md:hidden border-t border-borda pt-4 text-center space-y-0.5">
         <RodapeIdentidade classeTitulo="text-xs text-texto-3 font-medium" classeFrase="text-xs text-texto-3 italic" />
+      </div>
+      {/* Ambiente e versão no ar (desktop e celular). */}
+      <div className="border-t border-borda pt-3 text-center md:text-left">
+        <VersaoAmbiente />
       </div>
     </div>
   )
