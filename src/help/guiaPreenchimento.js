@@ -242,3 +242,139 @@ export function ladoDoBalaoCelular({ alvo = null, salvar = null, vh, alturaBalao
   const [t, b] = faixas.entre
   return b - t < alturaBalao ? { lado, top: Math.round(t), altura: Math.floor(b - t) } : { lado, top: Math.round(t) }
 }
+
+// Computador: o balão NUNCA cobre um controle do formulário (campo, aba, botão). Primeiro FORA da
+// janela do formulário (direita, esquerda, abaixo, acima — na altura do campo aceso); sem espaço lá,
+// o lugar perto do campo que cobre menos controles. O campo aceso nunca é coberto.
+// Caixas: { top, left, right, bottom } na tela. alvo: campo aceso (null = fase sem campo); janela:
+// painel do formulário (modal) ou o próprio formulário; controles: caixas dos controles visíveis.
+// Fora da janela, ao lado, o balão pode afinar até `larguraMin` (a altura cresce na mesma proporção).
+// → { top, left, largura, lado } (lado: 'fora-direita' | … | 'perto' | 'canto' | 'sobra').
+// alturaDe(w): altura do balão com a largura w (a medida de verdade, quando já se mediu; senão a
+// estimativa proporcional) — sem isso o balão alternaria entre duas larguras.
+export function posicaoBalaoComputador({ alvo = null, janela = null, controles = [], largura, altura: estimada, vw, vh, gap = 18, borda = 8, folgaAlvo = 6, larguraMin = 260, alturaDe = null }) {
+  const altura = (alturaDe && alturaDe(largura)) || estimada
+  const hDe = (w) => (alturaDe && alturaDe(w)) || (w === largura ? altura : Math.ceil(altura * largura / w))
+  const ref = alvo || janela
+  if (!ref) return { top: Math.max(16, (vh - altura) / 2), left: Math.max(borda, (vw - largura) / 2), largura, lado: 'meio' }
+  const limX = (v) => Math.min(Math.max(borda, v), Math.max(borda, vw - largura - borda))
+  const limY = (v) => Math.min(Math.max(borda, v), Math.max(borda, vh - altura - borda))
+  const cy = limY((ref.top + ref.bottom) / 2 - altura / 2)
+  const cx = limX((ref.left + ref.right) / 2 - largura / 2)
+  const cands = []
+  const add = (lado, top, left, w = largura, h = altura) => cands.push({ lado, top, left, w, h })
+  if (janela) {
+    add('fora-direita', cy, janela.right + gap)
+    add('fora-esquerda', cy, janela.left - gap - largura)
+    // Sem espaço para a largura inteira ao lado: mais estreito (até larguraMin), mais alto.
+    for (const [lado, livre] of [['fora-direita', vw - borda - janela.right - gap], ['fora-esquerda', janela.left - gap - borda]]) {
+      const w = Math.floor(livre)
+      if (w >= larguraMin && w < largura) {
+        const h = hDe(w)
+        const top = Math.min(Math.max(borda, (ref.top + ref.bottom) / 2 - h / 2), Math.max(borda, vh - h - borda))
+        add(lado, top, lado === 'fora-direita' ? janela.right + gap : janela.left - gap - w, w, h)
+      }
+    }
+    add('fora-abaixo', janela.bottom + gap, cx)
+    add('fora-acima', janela.top - gap - altura, cx)
+  }
+  if (alvo) {
+    for (const left of [cx, limX(alvo.left), limX(alvo.right - largura)]) {
+      add('perto', alvo.bottom + gap, left)
+      add('perto', alvo.top - gap - altura, left)
+    }
+    for (const top of [cy, limY(alvo.top), limY(alvo.bottom - altura)]) {
+      add('perto', top, alvo.right + gap)
+      add('perto', top, alvo.left - gap - largura)
+    }
+  }
+  for (const top of [borda, vh - altura - borda]) for (const left of [borda, vw - largura - borda]) add('canto', top, left)
+  const cabe = (p) => p.top >= borda - 0.5 && p.left >= borda - 0.5 && p.top + p.h <= vh - borda + 0.5 && p.left + p.w <= vw - borda + 0.5
+  const area = (p, r) => Math.max(0, Math.min(p.left + p.w, r.right) - Math.max(p.left, r.left)) * Math.max(0, Math.min(p.top + p.h, r.bottom) - Math.max(p.top, r.top))
+  const zona = alvo ? { top: alvo.top - folgaAlvo, left: alvo.left - folgaAlvo, right: alvo.right + folgaAlvo, bottom: alvo.bottom + folgaAlvo } : null
+  let melhor = null
+  for (const p of cands) {
+    if (!cabe(p) || (zona && area(p, zona) > 0)) continue
+    const custo = controles.reduce((s, r) => s + area(p, r), 0)
+    if (!melhor || custo < melhor.custo) melhor = { ...p, custo }
+    if (custo === 0) break // a ordem já é a preferência: o primeiro sem cobrir nada
+  }
+  // Nenhum lugar livre na lista acima: procura um vão livre na tela inteira (grade fina, também mais
+  // estreito), o mais perto do campo; sem vão, o lugar que cobre menos.
+  if (!melhor || melhor.custo > 0) {
+    const cx0 = (ref.left + ref.right) / 2
+    const cy0 = (ref.top + ref.bottom) / 2
+    const passo = 16
+    for (const w of [...new Set([largura, Math.max(larguraMin, Math.round(largura * 0.88)), larguraMin])]) {
+      const h = hDe(w)
+      for (let top = borda; top + h <= vh - borda; top += passo) {
+        for (let left = borda; left + w <= vw - borda; left += passo) {
+          const p = { lado: 'vao', top, left, w, h }
+          if (zona && area(p, zona) > 0) continue
+          const custo = controles.reduce((s, r) => s + area(p, r), 0)
+          const dist = Math.hypot(left + w / 2 - cx0, top + h / 2 - cy0)
+          if (!melhor || custo < melhor.custo || (custo === melhor.custo && melhor.lado === 'vao' && dist < melhor.dist)) melhor = { ...p, custo, dist }
+        }
+      }
+    }
+  }
+  if (melhor) return { top: melhor.top, left: melhor.left, largura: melhor.w, lado: melhor.lado }
+  // Não cabe em lugar nenhum sem cobrir o campo: o canto oposto a ele.
+  return {
+    top: (ref.top + ref.bottom) / 2 > vh / 2 ? borda : Math.max(borda, vh - altura - borda),
+    left: (ref.left + ref.right) / 2 > vw / 2 ? borda : Math.max(borda, vw - largura - borda),
+    largura,
+    lado: 'sobra',
+  }
+}
+
+// Caixas dos controles visíveis da janela do formulário (cortadas pela parte visível da janela).
+const SEL_CONTROLES = 'input:not([type=hidden]), select, textarea, button, a[href], [role="tab"], [role="switch"], [role="combobox"], [aria-haspopup], [contenteditable="true"]'
+export function caixasDosControles(janela) {
+  if (!janela) return []
+  const out = []
+  // Corte de cada contêiner que rola (corpo do modal): o que rolou para fora dele não aparece.
+  const cortes = new Map()
+  const corte = (el) => {
+    if (cortes.has(el)) return cortes.get(el)
+    let r
+    if (el === janela) r = el.getBoundingClientRect()
+    else {
+      const pai = el.parentElement ? corte(el.parentElement) : null
+      const ov = typeof window !== 'undefined' && window.getComputedStyle ? window.getComputedStyle(el).overflow : 'visible'
+      const prop = /(auto|scroll|hidden|clip)/.test(ov || '') ? el.getBoundingClientRect() : null
+      r = pai && prop ? { top: Math.max(pai.top, prop.top), left: Math.max(pai.left, prop.left), right: Math.min(pai.right, prop.right), bottom: Math.min(pai.bottom, prop.bottom) } : pai || prop
+    }
+    cortes.set(el, r)
+    return r
+  }
+  for (const c of janela.querySelectorAll(SEL_CONTROLES)) {
+    const r = c.getBoundingClientRect()
+    if (!r.width || !r.height) continue
+    const j = c.parentElement ? corte(c.parentElement) : null
+    if (!j) continue
+    const top = Math.max(r.top, j.top); const bottom = Math.min(r.bottom, j.bottom)
+    const left = Math.max(r.left, j.left); const right = Math.min(r.right, j.right)
+    if (bottom > top && right > left) out.push({ top, left, right, bottom })
+  }
+  return out
+}
+// Janela do formulário: o painel do modal em volta (role=dialog) ou o próprio formulário.
+export const janelaDoForm = (raiz) => (raiz ? raiz.closest('[role="dialog"]') || raiz : null)
+
+// Esc é de quem está aberto por cima do formulário: lista (SearchableSelect), menu ou janela. O
+// guia só fecha num Esc com tudo isso fechado. `balao`: o próprio balão do guia (não conta).
+export function algoAbertoNoForm(raiz, { balao = null, foco = typeof document !== 'undefined' ? document.activeElement : null } = {}) {
+  if (!raiz || typeof document === 'undefined') return false
+  const janela = janelaDoForm(raiz)
+  const fora = (el) => !balao || !balao.contains(el)
+  // Lista/menu do formulário aberta (o gatilho marca aria-expanded).
+  if ([...janela.querySelectorAll('[aria-expanded="true"]')].some(el => (el.hasAttribute('aria-haspopup') || el.getAttribute('role') === 'combobox') && visivel(el))) return true
+  // Lista/menu aberto em portal (fora da janela).
+  if ([...document.querySelectorAll('[role="listbox"], [role="menu"]')].some(el => fora(el) && visivel(el))) return true
+  // O foco está em algo aberto por cima — outra janela ou um painel em portal (fora do app) —, fora do
+  // formulário e do balão. Foco em outro lugar da própria página (menu lateral) não conta.
+  if (!foco || foco === document.body || !foco.isConnected || janela.contains(foco) || !fora(foco)) return false
+  const app = document.getElementById('root')
+  return !!(foco.closest('[role="dialog"], [data-modal-painel], [aria-modal="true"]') || (app && !app.contains(foco)))
+}

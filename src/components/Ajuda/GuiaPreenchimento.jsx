@@ -5,18 +5,21 @@
 // "Obrigatório" e o bloqueio do Próximo vêm da validação do próprio formulário (provedor), não de
 // lista manual. Avançar/Salvar barrado pela validação: o guia volta ao primeiro campo com erro.
 // Não bloqueia nada: a pessoa digita no próprio campo. Enter avança (lista aberta e texto longo são
-// deles), Esc sai (com o help de campo aberto, o Esc é dele). O guia NUNCA preenche nem salva.
+// deles; lista fechada: Enter avança, abre com clique, digitação ou Alt+↓), Esc sai (com o help de
+// campo, uma lista, menu ou janela aberta, o Esc é deles). O guia NUNCA preenche nem salva.
+// Computador: o balão não cobre nenhum controle do formulário (fora da janela, se couber).
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { Wand2, X, CheckCircle2, Circle } from 'lucide-react'
 import { helpDoCampo, helpDoFormulario } from '../../help/index.js'
 import {
   lerPreenchimento, assinarPreenchimento, encerrarPreenchimento, provedorGuia, raizDoForm, elementoDoCampo,
-  controleDo, campoVazio, botaoDoForm, faseDepoisDosCampos, definirRetornoGuia, visivel, ABRIR_FORMULARIO, armarPreenchimento,
+  controleDo, botaoDoForm, faseDepoisDosCampos, definirRetornoGuia, visivel, ABRIR_FORMULARIO, armarPreenchimento,
   camposNaTela, caixaDe, obrigatorioNoForm, erroDoCampo, faltandoNaTela, campoComErroNaTela, errosDoForm, ladoDoBalaoCelular,
+  posicaoBalaoComputador, caixasDosControles, janelaDoForm, algoAbertoNoForm,
 } from '../../help/guiaPreenchimento.js'
 import { lerHelpCampo } from '../../help/helpCampoEstado.js'
-import { MARGEM, LARGURA_BALAO, posicaoBalao } from '../BoasVindas/tourPassos'
+import { MARGEM, LARGURA_BALAO } from '../BoasVindas/tourPassos'
 import { iniciarTarefa } from '../BoasVindas/tourEstado'
 import { useContextoAjuda } from '../BoasVindas/contextoAjuda'
 import { tarefaDisponivel, tarefaPorId } from '../../lib/tarefasGuiadas'
@@ -25,6 +28,11 @@ import { navegarPara } from '../../lib/abrirTela'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 const VIGIA_MS = 250
+// Computador: espaço que a janela do formulário abre à direita para o balão (largura + folgas). Só
+// quando o balão (mesmo estreito) não cabe ao lado e o formulário continua com largura confortável.
+const ESPACO_BALAO = 366
+const LIVRE_MINIMO = 286
+const FORM_MINIMO = 600
 
 export default function GuiaPreenchimento() {
   const { ativo } = useSyncExternalStore(assinarPreenchimento, lerPreenchimento, lerPreenchimento)
@@ -50,6 +58,10 @@ function Guia({ ativo }) {
   const [tamBalao, setTamBalao] = useState({ largura: LARGURA_BALAO, altura: 200 })
   const [teclado, setTeclado] = useState(0)
   const balao = useRef(null)
+  // Altura medida do balão em cada largura (computador: ele afina ao lado da janela), do conteúdo
+  // atual (passo, aviso): { chave, mapa }. A chave vale até o conteúdo mudar.
+  const [alturas, setAlturas] = useState({ chave: '', mapa: {} })
+  const chaveConteudo = useRef('')
   const clicouSalvar = useRef(false)
   // Pausa: o formulário saiu da tela, mas a janela dele continua aberta (pergunta intermediária do
   // próprio formulário — "É parcela?", "Parecidos", Histórico…). O balão some e volta com o formulário.
@@ -233,6 +245,29 @@ function Guia({ ativo }) {
     return () => cancelAnimationFrame(raf)
   }, [alvo, form])
 
+  // Computador: janela do formulário (modal) larga demais para o balão caber ao lado → ela abre espaço
+  // à direita enquanto o guia roda (data-guia-espaco, CSS em index.css). Marca uma vez por janela —
+  // sem desfazer no meio do guia (não fica indo e voltando); sai ao encerrar.
+  useEffect(() => {
+    if (isMobile) return
+    let marcada = null
+    const conferir = () => {
+      const j = janelaDoForm(raizDoForm(form))
+      if (!j || !j.hasAttribute('data-modal-painel') || j === marcada) return
+      marcada?.removeAttribute('data-guia-espaco')
+      marcada = null
+      const r = j.getBoundingClientRect()
+      const vw = window.innerWidth
+      if (Math.min(r.left, vw - r.right) < LIVRE_MINIMO && vw - 32 - ESPACO_BALAO >= FORM_MINIMO) {
+        j.setAttribute('data-guia-espaco', '')
+        marcada = j
+      }
+    }
+    conferir()
+    const t = setInterval(conferir, VIGIA_MS)
+    return () => { clearInterval(t); marcada?.removeAttribute('data-guia-espaco') }
+  }, [form, isMobile])
+
   // Celular: o balão fica acima do teclado (visualViewport).
   useEffect(() => {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null
@@ -251,11 +286,18 @@ function Guia({ ativo }) {
       // Altura do CONTEÚDO (scrollHeight): no celular o balão pode estar encolhido (rola por dentro).
       const r = e.target.getBoundingClientRect()
       const altura = Math.max(r.height, e.target.scrollHeight || 0)
+      const w = Math.round(r.width)
+      const h = Math.ceil(altura)
+      const chave = chaveConteudo.current
+      setAlturas(a => (a.chave === chave ? (a.mapa[w] === h ? a : { chave, mapa: { ...a.mapa, [w]: h } }) : { chave, mapa: { [w]: h } }))
       setTamBalao(x => (Math.abs(r.width - x.largura) > 1 || Math.abs(altura - x.altura) > 1 ? { largura: r.width, altura } : x))
     })
     ro.observe(b)
     return () => ro.disconnect()
   }, [])
+
+  const chaveAtual = `${fase}|${id || ''}|${aviso}`
+  useEffect(() => { chaveConteudo.current = chaveAtual }, [chaveAtual])
 
   // Teclas: Esc sai (o help de campo aberto tem prioridade); Enter avança.
   useEffect(() => {
@@ -263,6 +305,8 @@ function Guia({ ativo }) {
       if (e.isComposing || pausadoRef.current) return
       if (e.key === 'Escape') {
         if (lerHelpCampo().aberto || e.defaultPrevented) return
+        // Lista, menu ou janela aberta no formulário: este Esc fecha só ela; o guia fica.
+        if (algoAbertoNoForm(raizDoForm(form), { balao: balao.current })) return
         e.preventDefault(); e.stopPropagation()
         encerrarPreenchimento()
         return
@@ -280,12 +324,13 @@ function Guia({ ativo }) {
       if (t.tagName === 'TEXTAREA' || t.closest?.('[aria-expanded="true"]') || t.getAttribute?.('aria-expanded') === 'true') return
       const botao = t.closest?.('button')
       if (botao) {
-        // Seletor próprio FECHADO: com valor, Enter = Próximo; vazio, Enter abre a lista (dele).
-        if (botao.getAttribute('aria-haspopup')) { if (campoVazio(el)) return }
+        // Seletor próprio FECHADO (a lista aberta já saiu acima): Enter = Próximo. A lista abre com
+        // clique, digitação ou Alt+↓ (é do seletor); vazio e obrigatório, o Próximo avisa.
+        const seletor = !!botao.getAttribute('aria-haspopup')
         // Botões de escolha (Despesa/Receita…): Enter no já escolhido = Próximo; no outro, escolhe.
-        else if (botao.hasAttribute('aria-pressed')) { if (botao.getAttribute('aria-pressed') !== 'true') return }
-        // Liga/desliga: Enter = Próximo (Espaço liga/desliga).
-        else if (botao.getAttribute('role') !== 'switch') return
+        if (!seletor && botao.hasAttribute('aria-pressed')) { if (botao.getAttribute('aria-pressed') !== 'true') return }
+        // Liga/desliga: Enter = Próximo (Espaço liga/desliga). Outro botão (ação): é dele.
+        else if (!seletor && botao.getAttribute('role') !== 'switch') return
       }
       e.preventDefault(); e.stopPropagation()
       proximo()
@@ -312,7 +357,15 @@ function Guia({ ativo }) {
   const comAlvo = !!(elAlvo && rect && ['campo', 'avancar', 'salvar', 'faltando'].includes(fase))
   const vw = window.innerWidth
   const vh = window.innerHeight
-  const pos2 = posicaoBalao(rect, tamBalao, { vw, vh }, { ordem: ['direita', 'esquerda', 'abaixo', 'acima'] })
+  // Computador: fora da janela do formulário ou onde não cubra nenhum controle (nem o campo aceso).
+  const elJanela = isMobile ? null : janelaDoForm(raizDoForm(form))
+  const rJanela = elJanela && visivel(elJanela) ? elJanela.getBoundingClientRect() : null
+  const pos2 = isMobile ? null : posicaoBalaoComputador({
+    alvo: comAlvo ? rect : null, janela: rJanela, controles: caixasDosControles(elJanela),
+    // Base: a largura padrão e a altura dela (medida estreita → convertida de volta), sem vaivém.
+    largura: LARGURA_BALAO, altura: Math.round(tamBalao.altura * (tamBalao.largura || LARGURA_BALAO) / LARGURA_BALAO), vw, vh,
+    alturaDe: (w) => (alturas.chave === chaveAtual ? alturas.mapa[Math.round(w)] : undefined),
+  })
   const rotuloSalvar = (botaoDoForm(form, 'salvar')?.textContent || 'Salvar').trim()
   const rotuloAvancar = (botaoDoForm(form, 'avancar')?.textContent || 'Avançar').trim()
   const prov = provedorGuia(form)
@@ -413,7 +466,7 @@ function Guia({ ativo }) {
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[105] pointer-events-none" data-testid="guia-preenchimento" data-fase={fase} data-campo={id || ''} data-lado={isMobile ? ladoCelular : undefined}>
+    <div className="fixed inset-0 z-[105] pointer-events-none" data-testid="guia-preenchimento" data-fase={fase} data-campo={id || ''} data-lado={isMobile ? ladoCelular : pos2.lado}>
       {comAlvo && (
         <div aria-hidden="true" className={`guia-spotlight absolute rounded-lg ${fase === 'avancar' || fase === 'salvar' ? 'guia-clique' : ''}`}
           style={{ top: rect.top - MARGEM, left: rect.left - MARGEM, width: rect.width + MARGEM * 2, height: rect.height + MARGEM * 2 }} />
@@ -422,7 +475,7 @@ function Guia({ ativo }) {
         className={`pointer-events-auto outline-none bg-surface border border-borda-forte shadow-2xl p-4 ${isMobile
           ? `fixed max-h-[45vh] overflow-y-auto ${ladoCelular === 'entre' ? 'inset-x-2 rounded-2xl' : `inset-x-0 border-x-0 ${ladoCelular === 'cima' ? 'rounded-b-2xl border-t-0' : 'rounded-t-2xl border-b-0'}`}`
           : 'absolute rounded-2xl'}`}
-        style={isMobile ? estiloCelular : { top: pos2.top, left: pos2.left, width: LARGURA_BALAO }}>
+        style={isMobile ? estiloCelular : { top: pos2.top, left: pos2.left, width: pos2.largura }}>
         <div className="flex items-start gap-2">
           {fase === 'pronto' ? <CheckCircle2 size={18} className="text-primary-fg shrink-0 mt-0.5" aria-hidden="true" /> : <Wand2 size={18} className="text-primary-fg shrink-0 mt-0.5" aria-hidden="true" />}
           <div className="min-w-0 flex-1">

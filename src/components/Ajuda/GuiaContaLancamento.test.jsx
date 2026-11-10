@@ -31,6 +31,8 @@ const { helpDoFormulario } = await import('../../help/index.js')
 const LENTO = { timeout: 90_000 }
 
 beforeEach(() => {
+  // jsdom não tem scrollIntoView (a lista do SearchableSelect rola até o item ativo).
+  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {}
   _reiniciarPreenchimento()
   tela.celular = false
   for (const k of Object.keys(app)) delete app[k]
@@ -208,6 +210,46 @@ describe('Preencher com guia — Novo lançamento', () => {
     expect(document.activeElement.textContent).not.toContain('Dividir')
     fireEvent.click(screen.getByRole('button', { name: 'Próximo' }))
     expect(screen.queryByTestId('legenda-rateio')).toBeNull()
+  })
+
+  it('Categoria: lista fechada, Enter avança (não abre a lista); Alt+↓ abre; com a lista aberta, Enter escolhe e NÃO avança', LENTO, () => {
+    novo()
+    comecar()
+    while (campo() !== 'lancamento.categoria') fireEvent.click(screen.getByRole('button', { name: 'Pular' }))
+    const gatilho = document.activeElement
+    expect(gatilho.getAttribute('aria-haspopup')).toBe('listbox')
+    // Alt+↓ abre a lista (é do seletor); o guia fica na Categoria.
+    fireEvent.keyDown(gatilho, { key: 'ArrowDown', altKey: true })
+    expect(gatilho.getAttribute('aria-expanded')).toBe('true')
+    const busca = screen.getByPlaceholderText('Buscar...')
+    fireEvent.change(busca, { target: { value: 'Mor' } })
+    fireEvent.keyDown(busca, { key: 'Enter' })
+    expect(gatilho.getAttribute('aria-expanded')).toBe('false')
+    expect(gatilho.textContent).toContain('Moradia')
+    expect(campo()).toBe('lancamento.categoria') // escolheu, não avançou no mesmo toque
+    // Lista fechada: Enter = Próximo (a lista não abre).
+    const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    act(() => { gatilho.dispatchEvent(ev) })
+    expect(ev.defaultPrevented).toBe(true)
+    expect(gatilho.getAttribute('aria-expanded')).toBe('false')
+    expect(campo()).not.toBe('lancamento.categoria')
+  })
+
+  it('Esc com a lista da Categoria aberta fecha só a lista; o guia fecha no Esc seguinte', LENTO, () => {
+    novo()
+    comecar()
+    while (campo() !== 'lancamento.categoria') fireEvent.click(screen.getByRole('button', { name: 'Pular' }))
+    const gatilho = document.activeElement
+    fireEvent.click(gatilho)
+    expect(gatilho.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.keyDown(screen.getByPlaceholderText('Buscar...'), { key: 'Escape' })
+    expect(gatilho.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByTestId('guia-preenchimento')).toBeTruthy()
+    expect(campo()).toBe('lancamento.categoria')
+    fireEvent.keyDown(gatilho, { key: 'Escape' })
+    expect(screen.queryByTestId('guia-preenchimento')).toBeNull()
+    // O formulário continua aberto.
+    expect(screen.getByRole('button', { name: 'Registrar' })).toBeTruthy()
   })
 
   it('trocar de aba durante o guia refaz a ordem sem travar (Despesa → Transferência → Receita)', LENTO, async () => {

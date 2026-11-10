@@ -238,7 +238,7 @@ describe('Preencher com guia — correções da Etapa 4', () => {
     )
   }
 
-  it('Enter: toggle já escolhido avança; seletor fechado vazio abre, com valor avança; linha do botão some ao guiar', () => {
+  it('Enter: toggle já escolhido avança; seletor fechado é do guia (vazio e obrigatório avisa, com valor avança); linha do botão some ao guiar', () => {
     render(<><Form /><GuiaPreenchimento /></>)
     fireEvent.click(screen.getByTestId('botao-preencher-guia'))
     expect(screen.queryByTestId('botao-preencher-guia')).toBeNull() // sem espaço em branco no topo
@@ -250,12 +250,15 @@ describe('Preencher com guia — correções da Etapa 4', () => {
     expect(balao().dataset.campo).toBe('agendamento.account')
     const conta = screen.getByRole('button', { name: 'Conta' })
     act(() => conta.focus())
-    // Vazio: o guia não segura o Enter (a lista abre); obrigatório pela validação do formulário.
+    // Vazio: o Enter é do guia (a lista NÃO abre — abre com clique, digitação ou Alt+↓); obrigatório
+    // pela validação do formulário, o Próximo segura e avisa.
     expect(balao().textContent).toContain('Obrigatório')
     const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
     act(() => { conta.dispatchEvent(ev) })
-    expect(ev.defaultPrevented).toBe(false)
+    expect(ev.defaultPrevented).toBe(true)
+    expect(conta.getAttribute('aria-expanded')).toBe('false')
     expect(balao().dataset.campo).toBe('agendamento.account')
+    expect(screen.getByRole('alert').textContent).toContain('Escolha a conta.')
     fireEvent.click(screen.getByRole('button', { name: 'escolher conta' }))
     enter(screen.getByRole('button', { name: 'Conta' })) // fechado e com valor: Próximo
     expect(balao().dataset.campo).toBe('contrato.fim')
@@ -409,5 +412,99 @@ describe('celular: lado do balão', () => {
     expect(ladoDoBalaoCelular({ ...base, alturaBalao: 300, alvo: { top: 400, bottom: 460 }, salvar: { top: 620, bottom: 656 } }).lado).not.toBe('entre')
     // Teclado aberto: a faixa de baixo sobe com ele.
     expect(ladoDoBalaoCelular({ ...base, teclado: 300, alvo: { top: 250, bottom: 290 } })).toEqual({ lado: 'cima' })
+  })
+})
+
+describe('computador: posição do balão (não cobre nenhum controle do formulário)', () => {
+  // Tela 1440×800; janela do formulário (modal) no meio: 420..1020 × 80..720. Balão 340×200.
+  const tela = { vw: 1440, vh: 800, largura: 340, altura: 200 }
+  const janela = { top: 80, left: 420, right: 1020, bottom: 720 }
+  const cruza = (p, r, w = 340, h = 200) => Math.min(p.left + w, r.right) > Math.max(p.left, r.left) && Math.min(p.top + h, r.bottom) > Math.max(p.top, r.top)
+
+  it('prefere FORA da janela: campo da coluna da esquerda (Conta) não leva o balão para cima de Valor nem das abas', async () => {
+    const { posicaoBalaoComputador } = await import('../../help/guiaPreenchimento.js')
+    // Abas (Despesa/Receita/Transferência), Conta (esquerda), Valor (direita), Categoria embaixo.
+    const abas = [{ top: 140, left: 440, right: 620, bottom: 180 }, { top: 140, left: 620, right: 800, bottom: 180 }, { top: 140, left: 800, right: 1000, bottom: 180 }]
+    const conta = { top: 220, left: 440, right: 710, bottom: 260 }
+    const valor = { top: 220, left: 730, right: 1000, bottom: 260 }
+    const categoria = { top: 300, left: 440, right: 1000, bottom: 340 }
+    const controles = [...abas, conta, valor, categoria]
+    const p = posicaoBalaoComputador({ ...tela, alvo: conta, janela, controles })
+    expect(p.lado).toBe('fora-direita')
+    expect(p.left).toBeGreaterThanOrEqual(janela.right)
+    for (const r of controles) expect(cruza(p, r)).toBe(false)
+  })
+
+  it('sem espaço fora (janela larga): um lugar que não cobre campo nem aba', async () => {
+    const { posicaoBalaoComputador } = await import('../../help/guiaPreenchimento.js')
+    const larga = { top: 20, left: 20, right: 1420, bottom: 780 }
+    const abas = [{ top: 60, left: 40, right: 400, bottom: 100 }]
+    const conta = { top: 120, left: 40, right: 400, bottom: 160 }
+    const valor = { top: 120, left: 420, right: 780, bottom: 160 }
+    const controles = [...abas, conta, valor, { top: 180, left: 40, right: 780, bottom: 220 }]
+    const p = posicaoBalaoComputador({ ...tela, alvo: conta, janela: larga, controles })
+    expect(p.lado).not.toMatch(/^fora/)
+    expect(p.top + 200).toBeLessThanOrEqual(800 - 8)
+    for (const r of controles) expect(cruza(p, r)).toBe(false)
+  })
+
+  it('tela 1280×720 com janela de 672px: ao lado não cabe 340px → o balão afina (até 260px) e fica fora', async () => {
+    const { posicaoBalaoComputador } = await import('../../help/guiaPreenchimento.js')
+    const j = { top: 36, left: 304, right: 976, bottom: 684 }
+    const controles = [{ top: 100, left: 324, right: 956, bottom: 660 }] // o formulário inteiro
+    const p = posicaoBalaoComputador({ vw: 1280, vh: 720, largura: 340, altura: 200, alvo: { top: 300, left: 324, right: 640, bottom: 340 }, janela: j, controles })
+    expect(p.lado).toBe('fora-direita')
+    expect(p.largura).toBeGreaterThanOrEqual(260)
+    expect(p.largura).toBeLessThan(340)
+    expect(p.left).toBeGreaterThanOrEqual(j.right)
+    expect(p.left + p.largura).toBeLessThanOrEqual(1280 - 8)
+    // Espaço menor que o mínimo: não afina além dele (vai para outro lugar).
+    const apertada = posicaoBalaoComputador({ vw: 1100, vh: 720, largura: 340, altura: 200, alvo: { top: 300, left: 324, right: 640, bottom: 340 }, janela: { ...j, left: 214, right: 886 }, controles })
+    expect(apertada.lado).not.toMatch(/^fora-(direita|esquerda)$/)
+  })
+
+  it('nunca cobre o campo aceso; se tudo cobre algum controle, escolhe o que cobre menos', async () => {
+    const { posicaoBalaoComputador } = await import('../../help/guiaPreenchimento.js')
+    const larga = { top: 0, left: 0, right: 1280, bottom: 800 }
+    const alvo = { top: 380, left: 470, right: 810, bottom: 420 }
+    // Grade de controles cobrindo quase tudo; um vão livre embaixo à esquerda.
+    const controles = []
+    for (let y = 0; y < 800; y += 100) for (let x = 0; x < 1280; x += 160) if (!(y >= 560 && x < 400)) controles.push({ top: y + 10, left: x + 10, right: x + 150, bottom: y + 90 })
+    const p = posicaoBalaoComputador({ ...tela, alvo, janela: larga, controles })
+    expect(cruza(p, alvo)).toBe(false)
+    const custo = (q) => controles.reduce((s, r) => s + (cruza(q, r) ? 1 : 0), 0)
+    expect(custo(p)).toBeLessThanOrEqual(custo({ top: alvo.bottom + 18, left: 470 }))
+  })
+
+  it('fase sem campo (objetivo, resumo): ao lado da janela, sem cobrir o formulário', async () => {
+    const { posicaoBalaoComputador } = await import('../../help/guiaPreenchimento.js')
+    const p = posicaoBalaoComputador({ ...tela, alvo: null, janela, controles: [{ top: 140, left: 440, right: 1000, bottom: 700 }] })
+    expect(p.lado).toBe('fora-direita')
+  })
+})
+
+describe('Esc com lista, menu ou janela aberta no formulário', () => {
+  it('algoAbertoNoForm: gatilho com aria-expanded, lista em portal, foco em outra janela', async () => {
+    const { algoAbertoNoForm } = await import('../../help/guiaPreenchimento.js')
+    render(
+      <div data-help-form="x">
+        <button type="button" aria-haspopup="listbox" aria-expanded="false">Categoria</button>
+        <button type="button" aria-expanded="true">Mais opções</button>
+        <input aria-label="campo" />
+      </div>,
+    )
+    const raiz = document.querySelector('[data-help-form="x"]')
+    // Seção expandida (Mais opções) não é lista aberta.
+    expect(algoAbertoNoForm(raiz, { foco: screen.getByLabelText('campo') })).toBe(false)
+    screen.getByRole('button', { name: 'Categoria' }).setAttribute('aria-expanded', 'true')
+    expect(algoAbertoNoForm(raiz)).toBe(true)
+    screen.getByRole('button', { name: 'Categoria' }).setAttribute('aria-expanded', 'false')
+    // Outra janela aberta por cima, com o foco nela.
+    const outra = document.createElement('div')
+    outra.setAttribute('role', 'dialog')
+    outra.innerHTML = '<input aria-label="na outra" />'
+    document.body.appendChild(outra)
+    expect(algoAbertoNoForm(raiz, { foco: outra.querySelector('input') })).toBe(true)
+    outra.remove()
   })
 })

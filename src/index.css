@@ -307,6 +307,13 @@
    rótulo (textContent) e o nome acessível não mudam. */
 .help-campo-cola::before { content: '\2060'; }
 
+/* Preencher com guia (computador): a janela do formulário larga demais para o balão caber ao lado
+   abre 366px à direita enquanto o guia roda (o atributo é posto e tirado pelo GuiaPreenchimento).
+   Desloca para a esquerda e, se preciso, estreita um pouco; nada muda no celular. */
+@media (min-width: 768px) {
+  [data-modal-painel][data-guia-espaco] { width: calc(100% - 366px); margin-right: 366px; }
+}
+
 /* Ícone ⓘ do help de campo (HelpCampo): no toque, área de 44px sem mudar o layout. */
 @media (pointer: coarse) {
   .help-campo-alvo { position: relative; }

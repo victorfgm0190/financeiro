@@ -383,3 +383,34 @@ de mensagem e os anexos do Assistente.
   de aba, Enter, obrigatório, Salvar no meio, "Dividir" e "Mais opções", rápido do celular) e os casos
   novos em `GuiaPreenchimento.test.jsx` (pausa, foco, lado do balão) e `HelpCampo.test.jsx` (hover
   só com movimento real).
+
+### Etapa 5 — ajustes depois do teste no teste1 (10/11/2026)
+
+- **Posição do balão no computador** (`posicaoBalaoComputador`, `caixasDosControles`): o balão não cobre
+  nenhum controle do formulário (campo, aba, botão) nem o campo aceso.
+  - Prefere fora da janela do formulário: direita, esquerda, abaixo, acima, na altura do campo. Ao lado,
+    pode afinar até 260 px. Sem lugar fora: o lado perto do campo que não cobre nada e, por último, um
+    vão livre na tela (grade fina); sem vão, o lugar que cobre menos.
+  - Janela larga demais para o balão caber ao lado (Contrato, `size="xl"`, em 1280 e 1366): enquanto o
+    guia roda, o painel do modal ganha `data-guia-espaco` e abre 366 px à direita (CSS em `index.css`,
+    só a partir de 768 px; desloca e, se preciso, estreita pouco: 896 → 882 px em 1280). Marca uma vez
+    por janela e sai ao encerrar o guia.
+  - A altura do balão em cada largura é a medida (não a estimada): sem isso ele alternava entre duas
+    larguras.
+  - Conferido no Chrome em 1280×720, 1366×768 e 1920×1080: Nova conta (corrente e cartão), Lançamento
+    (Despesa, Transferência, Receita), Agendamento e Contrato, todos os passos (420): nenhum controle
+    coberto. Celular sem mudança (mesma conferência da Etapa 5: nenhum problema).
+- **Esc com lista, menu ou janela aberta** (`algoAbertoNoForm`): o primeiro Esc fecha só a lista (gatilho
+  com `aria-haspopup` e `aria-expanded="true"`, `listbox`/`menu` em portal, ou o foco numa janela por
+  cima); o guia só fecha num Esc seguinte, com tudo fechado. Seção expandida ("Mais opções") não conta.
+- **Enter no seletor próprio** (SearchableSelect: Categoria, Conta…): com a lista fechada, Enter avança
+  (vazio e obrigatório, o Próximo segura e avisa); a lista abre com clique, digitação ou Alt+↓. Com a
+  lista aberta, o Enter escolhe o item e não avança no mesmo toque (é do campo de busca da lista).
+- **Transferência sem conta destino:** NÃO mudado. Há fluxos que gravam transferência sem destino:
+  confirmação de importação pendente (`api/importacoes-pendentes.js`: aceita só a origem), Importar
+  Fatura (`ImportPanel`: destino não mapeado vira `toAccountId: null`) e a baixa de agendamento de
+  transferência (`SchedulePanel`: confirma com o destino vazio). Aguarda decisão antes de bloquear o
+  Salvar do formulário (editar uma dessas transferências passaria a exigir o destino).
+- Testes: `GuiaPreenchimento.test.jsx` (posição no computador: fora da janela, afinar, vão, nunca o
+  campo; `algoAbertoNoForm`; Enter no seletor fechado) e `GuiaContaLancamento.test.jsx` (Categoria de
+  verdade: Alt+↓, Enter na lista não avança, Enter fechado avança; Esc fecha a lista e só depois o guia).
