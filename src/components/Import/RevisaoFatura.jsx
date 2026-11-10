@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronRight, AlertCircle, Settings2 } from 'lucide-react'
 import { fmt, fmtDate } from '../shared/utils'
 import DateInput from '../shared/DateInput'
-import { ABAS_REVISAO, lerConferenciaAberta, lembrarConferenciaAberta, rotuloFatura, separarSufixo } from '../../lib/contagemRevisaoFatura'
+import { ABAS_REVISAO, lerConferenciaAberta, lembrarConferenciaAberta, rotuloFatura, separarSufixo, textoSemDecisao } from '../../lib/contagemRevisaoFatura'
 import { configHash } from '../../lib/configRota'
 import HelpCampo from '../shared/HelpCampo'
 
@@ -62,7 +62,8 @@ export function ConferenciaFatura({ conferencia, sessao, onIrParaLinha }) {
   }, [alerta])
   if (!conferencia || conferencia.semDiferenca) return null
   const alternar = () => setAberta(v => { lembrarConferenciaAberta(sessao, !v); return !v })
-  const { diferenca, semExplicacao, qtdItens, grupos } = conferencia
+  const { diferenca, semExplicacao, qtdItens, grupos, semDecisao } = conferencia
+  const pendentes = semDecisao?.qtd || 0
   return (
     <section data-testid="conferencia-fatura" className={`rounded-xl border ${alerta ? 'border-aviso/50 bg-aviso/10' : 'border-borda bg-surface'}`}>
       <button type="button" onClick={alternar} aria-expanded={aberta} data-guia="import.conferencia"
@@ -72,9 +73,11 @@ export function ConferenciaFatura({ conferencia, sessao, onIrParaLinha }) {
           : <Check size={16} className="text-primary-fg shrink-0" />}
         <span className="text-sm font-semibold text-texto-1">Conferência da fatura</span>
         <span className={`text-sm ${alerta ? 'text-aviso font-medium' : 'text-primary-fg'}`}>
-          {alerta
-            ? `⚠ ${fmt(Math.abs(semExplicacao))} sem explicação`
-            : `Diferença de ${fmt(Math.abs(diferenca))} totalmente explicada (${plural(qtdItens, 'item', 'itens')})`}
+          {pendentes > 0
+            ? `⚠ ${textoSemDecisao(pendentes, semDecisao.valor, fmt)}${Math.abs(semExplicacao) > 0.01 ? ` · ${fmt(Math.abs(semExplicacao))} sem explicação` : ''}`
+            : alerta
+              ? `⚠ ${fmt(Math.abs(semExplicacao))} sem explicação`
+              : `Diferença de ${fmt(Math.abs(diferenca))} totalmente explicada (${plural(qtdItens, 'item', 'itens')})`}
         </span>
         <span className="ml-auto text-texto-2 shrink-0">{aberta ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
       </button>
@@ -108,7 +111,8 @@ export function ConferenciaFatura({ conferencia, sessao, onIrParaLinha }) {
           ))}
           <p className="text-xs text-texto-2">
             Cada valor é o efeito na diferença (arquivo − Finup). Soma: {fmt(conferencia.explicada)}
-            {alerta && <> · sem explicação: <span className="text-aviso font-medium">{fmt(semExplicacao)}</span></>}
+            {pendentes > 0 && <> · sem decisão (fora da soma): <span className="text-aviso font-medium">{fmt(semDecisao.valor)}</span></>}
+            {Math.abs(semExplicacao) > 0.01 && <> · sem explicação: <span className="text-aviso font-medium">{fmt(semExplicacao)}</span></>}
           </p>
         </div>
       )}
@@ -356,7 +360,7 @@ export function BarraAcoesRevisao({ contagem, acoes, confirmar }) {
       <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
         <span className="text-xs text-texto-2 text-right">
           <span className="text-texto-1 font-medium">{plural(contagem.importar.qtd, 'lançamento', 'lançamentos')} · {fmt(contagem.importar.valor)}</span>
-          {decisao > 0 && <span className="block text-aviso">⚠ {plural(decisao, 'item sem decisão ficará de fora', 'itens sem decisão ficarão de fora')}</span>}
+          {decisao > 0 && <span className="block text-aviso">⚠ {textoSemDecisao(decisao, contagem.decisao.valor, fmt)}</span>}
         </span>
         {confirmar}
       </div>

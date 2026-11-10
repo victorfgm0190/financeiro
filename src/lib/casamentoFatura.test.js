@@ -42,11 +42,19 @@ describe('casamento "Já lançado"', () => {
     expect(r.get('L').status).toBe('escolher')
     expect(r.get('L').candidatos.map(t => t.id)).toEqual(['x1', 'x2'])
   })
-  it('duas linhas disputando o mesmo lançamento → as duas para escolher', () => {
+  it('duas linhas iguais e um lançamento (1:1): o mais próximo casa, a outra é nova — nunca as duas no mesmo', () => {
     const r = casarJaLancados(
-      [linha({ _id: 'A', amount: 30, date: '2026-10-20' }), linha({ _id: 'B', amount: 30, date: '2026-10-21' })],
+      [linha({ _id: 'A', amount: 30, date: '2026-10-21' }), linha({ _id: 'B', amount: 30, date: '2026-10-20' })],
       candidatosJaLancado({ transactions: [tx({ id: 'x1', amount: 30, date: '2026-10-20' })], accountId: CARD }))
-    expect(contarJaLancados(r)).toEqual({ casada: 0, escolher: 2, nova: 0 })
+    expect(contarJaLancados(r)).toEqual({ casada: 1, escolher: 0, nova: 1 })
+    expect(r.get('B')).toMatchObject({ status: 'casada' })
+  })
+  it('duas compras iguais no mesmo dia × dois lançamentos iguais: pares 1:1, sem perguntar', () => {
+    const r = casarJaLancados(
+      [linha({ _id: 'A', amount: 30, date: '2026-10-20' }), linha({ _id: 'B', amount: 30, date: '2026-10-20' })],
+      candidatosJaLancado({ transactions: [tx({ id: 'x1', amount: 30, date: '2026-10-20' }), tx({ id: 'x2', amount: 30, date: '2026-10-20' })], accountId: CARD }))
+    expect(contarJaLancados(r)).toEqual({ casada: 2, escolher: 0, nova: 0 })
+    expect(new Set([r.get('A').tx.id, r.get('B').tx.id])).toEqual(new Set(['x1', 'x2']))
   })
   it('parcelado casa por PARCELA (valor da parcela, número/total e fatura), não pelo total', () => {
     const parcelas = [
@@ -60,9 +68,18 @@ describe('casamento "Já lançado"', () => {
       linha({ _id: 'P5', description: 'MAGAZINE LUIZA 05/10', amount: 100, date: '2026-08-02', _installment: { num: 5, total: 10 } }),
       linha({ _id: 'TOT', description: 'MAGAZINE LUIZA', amount: 1000, date: '2026-10-15' }),
     ], cand)
-    expect(r.get('P3')).toMatchObject({ status: 'casada', tx: parcelas[0] })
+    // Parcela N > 1 sem a série conhecida: mesmo n/total, valor e fatura → PERGUNTA (não casa sozinha).
+    expect(r.get('P3')).toMatchObject({ status: 'escolher', candidatos: [parcelas[0]] })
     expect(r.get('P5').status).toBe('nova')
     expect(r.get('TOT')).toMatchObject({ status: 'casada', tx: parcelas[2] })
+    // Da MESMA série (serie_id conhecido): casa sozinha; de OUTRA série: nem é candidata.
+    const comSerie = candidatosJaLancado({ transactions: [{ ...parcelas[0], serieId: 'serie_nb' }], accountId: CARD })
+    const p3 = (serie) => linha({ _id: 'P3', description: 'MAGAZINE LUIZA 03/10', amount: 100, date: '2026-08-02', _installment: { num: 3, total: 10 }, _serieExistente: serie })
+    expect(casarJaLancados([p3('serie_nb')], comSerie).get('P3')).toMatchObject({ status: 'casada' })
+    expect(casarJaLancados([p3('serie_outra')], comSerie).get('P3').status).toBe('nova')
+    // Centavos de diferença na mesma parcela (até ±0,50): pergunta; além disso, nova.
+    expect(casarJaLancados([{ ...p3('serie_nb'), amount: 100.3 }], comSerie).get('P3').status).toBe('escolher')
+    expect(casarJaLancados([{ ...p3('serie_nb'), amount: 100.6 }], comSerie).get('P3').status).toBe('nova')
   })
   it('pré-lançamento pendente do Assistente é candidato; efetivado/descartado não', () => {
     const pre = (status) => ({ id: `pre-${status}`, tipo: 'lancamento', status, payload: { tipo: 'despesa', valor: 57.07, data: '2026-10-28', conta_id: CARD, descricao: 'iFood', categoria_id: 'cat_laz' } })
@@ -211,10 +228,15 @@ describe('importação: compra em dólar estimada e IOF estimado', () => {
     linha({ _id: 'C', description: 'VERCEL INC', amount: 108.2, date: '2026-10-24', _dateCartao: '2026-10-24' }),
     linha({ _id: 'I', description: 'IOF COMPRA INTERNACIONAL', amount: 3.79, date: '2026-10-24', _dateCartao: '2026-10-24' }),
   ]
-  const out = importar(rows, [COMPRA, IOF])
+  // Estimado: a regra de casamento é a mesma de antes, mas PERGUNTA (Etapa 6a); a escolha casa.
+  const sugestao = importar(rows, [COMPRA, IOF])
+  const out = importar(rows.map(r => ({ ...r, _jaLancadoEscolha: r._id === 'C' ? 'vercel' : 'iof' })), [COMPRA, IOF])
   const por = Object.fromEntries(out.map(r => [r._id, r]))
 
-  it('compra com valor diferente (±15%) casa pelo estabelecimento; IOF (±20%) casa com o IOF', () => {
+  it('compra com valor diferente (±15%) é candidata pelo estabelecimento; IOF (±20%) com o IOF — pergunta, e a escolha casa', () => {
+    expect(sugestao.map(r => r._jaLancado)).toEqual([undefined, undefined])
+    expect(sugestao.map(r => r._jaLancadoOpcoes.map(t => t.id))).toEqual([['vercel'], ['iof']])
+    expect(linhasAImportar(sugestao)).toEqual([])
     expect(por.C._jaLancado).toMatchObject({ tx: COMPRA })
     expect(por.I._jaLancado).toMatchObject({ tx: IOF })
     expect(linhasAImportar(out)).toEqual([])
@@ -229,7 +251,7 @@ describe('importação: compra em dólar estimada e IOF estimado', () => {
     expect(i.changes).not.toHaveProperty('spread')
   })
   it('fora da janela: valor além de 15%, outro estabelecimento ou data a mais de 5 dias → nova', () => {
-    const casa = (o) => importar([linha({ _id: 'X', description: 'VERCEL INC', amount: 108.2, date: '2026-10-24', _dateCartao: '2026-10-24', ...o })], [COMPRA])[0]._jaLancado
+    const casa = (o) => importar([linha({ _id: 'X', description: 'VERCEL INC', amount: 108.2, date: '2026-10-24', _dateCartao: '2026-10-24', ...o })], [COMPRA])[0]._jaLancadoOpcoes
     expect(casa({ amount: 125 })).toBeUndefined()
     expect(casa({ description: 'NETFLIX.COM' })).toBeUndefined()
     expect(casa({ date: '2026-10-29', _dateCartao: '2026-10-29' })).toBeUndefined()

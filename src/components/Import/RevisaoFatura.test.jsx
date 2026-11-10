@@ -73,6 +73,16 @@ describe('2. Conferência da fatura', () => {
     expect(botao.textContent).toMatch(/R\$\s*5,00 sem explicação/)
     expect(botao.getAttribute('aria-expanded')).toBe('true')
   })
+  it('itens sem decisão: não contam como explicados — "N itens ainda sem decisão — R$ X não serão importados"', () => {
+    const pend = { tipo: 'sem_decisao', titulo: 'Ainda sem decisão — não serão importadas', qtd: 2, subtotal: 80, naoExplica: true,
+      itens: [{ tipo: 'sem_decisao', valor: 50, linha: { _id: 'p1', description: 'Loja P', date: '2026-11-01' } }, { tipo: 'sem_decisao', valor: 30, linha: { _id: 'p2', description: 'Loja Q', date: '2026-11-02' } }] }
+    render(<ConferenciaFatura conferencia={conf({ grupos: [pend, ...conf().grupos], semDecisao: { qtd: 2, valor: 80 }, totalmenteExplicada: false })} sessao={SESSAO} />)
+    const botao = screen.getByRole('button', { name: /Conferência da fatura/ })
+    expect(botao.textContent).toMatch(/2 itens ainda sem decisão — R\$\s*80,00 não serão importados/)
+    expect(botao.textContent).not.toMatch(/totalmente explicada/)
+    expect(botao.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText('Loja P')).toBeTruthy()
+  })
   it('linha do arquivo citada leva até ela', () => {
     const ir = vi.fn()
     const c = conf({ grupos: [{ tipo: 'linha_fora', titulo: 'Linhas desmarcadas, não serão importadas', qtd: 1, subtotal: 7, itens: [{ tipo: 'linha_fora', valor: 7, linha: { _id: 'l1', description: 'Loja Desmarcada', date: '2026-11-01' } }] }] })
@@ -166,7 +176,7 @@ describe('5. Barra de ações', () => {
     render(<BarraAcoesRevisao contagem={contagem} acoes={<button>Classificar Auto</button>} confirmar={<button>Confirmar (2)</button>} />)
     const barra = screen.getByTestId('barra-acoes-revisao')
     expect(barra.textContent).toMatch(/2 lançamentos · R\$\s*30,00/)
-    expect(barra.textContent).toMatch(/1 item sem decisão ficará de fora/)
+    expect(barra.textContent).toMatch(/1 item ainda sem decisão — R\$\s*\d+,\d{2} não será importado/)
     expect(barra.className).toMatch(/sticky/)
   })
 })

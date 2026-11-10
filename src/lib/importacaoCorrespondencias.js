@@ -1,26 +1,85 @@
-// Importar Fatura — correspondência com o que já está no cartão por lib/matchLancamento (nome
-// normalizado + apelidos, nº da parcela, valor igual ou ±5%, faturas vizinhas abertas). Roda DEPOIS
-// de resolverLinhasRevisao e aplicarJaLancados, só nas linhas que eles deixaram como novas: o que a
-// lógica antiga já decidiu (FITID, colisão de parcela, "Já existe", possível duplicata, "Já lançado",
-// pré-lançamento) fica como está.
+// Importar Fatura — o que sobra DEPOIS de resolverLinhasRevisao e aplicarJaLancados (Etapa 6a). Só
+// nas linhas que eles deixaram como novas; o que a lógica anterior decidiu (FITID, colisão de parcela,
+// "Já existe", possível duplicata, "Já lançado", pré-lançamento) fica como está.
 //
-// Estados da linha (gravação pelo caminho "Já lançado" — lib/casamentoFatura gravarJaLancados):
-//   Já existe                → forte e mesmo valor: não importa; o existente é conciliado.
-//   Já existe — valor dif.   → forte com valor ou data divergente: o existente é atualizado (só esta
-//                              parcela; historico_alteracoes) e conciliado.
-//   Parecido                 → só o nome parecido: nada marcado; o usuário vincula ou importa.
-//   Novo                     → importa.
-// Nos dois "Já existe", favorecido/descrição do existente passam a ser os da fatura (o original fica
-// no histórico). Nunca exclui nada. PURO.
-import { buscarCorrespondencias } from './matchLancamento.js'
+// Candidatos: lançamentos NÃO conciliados do MESMO cartão e do mesmo tipo, na fatura da linha ou nas
+// vizinhas (anterior e seguinte), todas abertas; um lançamento só casa com uma linha.
+// PERGUNTA ("Para escolher" — nada é marcado sozinho):
+//   • nome forte (lib/matchLancamento.similaridade ≥ 0,6, sem cidade e sem palavras genéricas, ou o
+//     apelido aprendido), mesma parcela (as duas à vista, ou mesmo n/total), valor até ±5% e compra
+//     até 5 dias (parcela N > 1 não compara a data);
+//   • à vista com o mesmo valor (±0,01) e a compra entre 4 e 7 dias, ou até 7 dias em outra fatura.
+// NOVO DIRETO: o resto. "Parecido" só pelo nome deixou de existir.
+// AVISO no novo (não muda o que é gravado): lançamento não conciliado da mesma loja (nome forte), valor
+// até ±5%, na mesma fatura ou vizinha → r._avisoParecido = { tx, fatura }.
+// Escolher um candidato grava pelo caminho "Já lançado" (lib/casamentoFatura gravarJaLancados): o
+// existente recebe valor/data/descrição/fatura da fatura e é conciliado. Nunca exclui nada. PURO.
+import { simNomes, apelidoLeva, somarMes, SIMILARIDADE_MINIMA } from './matchLancamento.js'
 import { favorecidoSugerido } from './casamentoFatura.js'
 import { faturaDoLancamento } from './scheduleBaixa.js'
+import { faturaEstaFechada } from './faturasFechadas.js'
+import { numeroParcelaDoTx, totalParcelasDoTx } from './revisaoImportacao.js'
+
+export const TOL_NOME_FORTE = 0.05
+export const JANELA_DIAS_NOME_FORTE = 5
+export const JANELA_DIAS_MESMO_VALOR = 7
+export const MAX_OPCOES = 3
 
 const livre = (r) => !r._generated && !r._isDuplicate && !r._collisionTx && !r._dupLevel && !r._jaLancado && !r._preId
-  && !(r._jaLancadoOpcoes && !r._parecido)
+  && !r._jaLancadoOpcoes
 
-// Dois fortes praticamente empatados (ex.: duas compras iguais pendentes): o usuário escolhe.
-const EMPATE = 2
+const centavos = (v) => Math.round(Math.abs(Number(v) || 0) * 100)
+const diasEntre = (a, b) => Math.abs(Math.round((new Date(`${String(a).slice(0, 10)}T12:00:00Z`) - new Date(`${String(b).slice(0, 10)}T12:00:00Z`)) / 86_400_000))
+const parcelaDaLinha = (r) => (Number(r._installment?.total) > 1 ? { num: Number(r._installment.num), total: Number(r._installment.total) } : null)
+const parcelaDoTx = (t) => {
+  const total = totalParcelasDoTx(t)
+  return total > 1 ? { num: numeroParcelaDoTx(t), total } : null
+}
+const mesmaParcela = (a, b) => (!a && !b) || !!(a && b && a.num === b.num && a.total === b.total)
+
+// Métricas de um candidato `t` para a linha `r` (sem decidir nada).
+function medir(r, t, { nomes, apelidos, closingDay }) {
+  const simNome = apelidoLeva(nomes, t, apelidos) ? 1 : simNomes(nomes, t)
+  const vr = centavos(r.amount), vt = centavos(t.amount)
+  const diff = Math.abs(vr - vt)
+  const dataLinha = r._dateCartao || r.date || null
+  const dataTx = t.dateCartao ? String(t.dateCartao).slice(0, 10) : t.date || null
+  const dias = dataLinha && dataTx ? diasEntre(dataLinha, dataTx) : null
+  const pr = parcelaDaLinha(r), pt = parcelaDoTx(t)
+  return {
+    tx: t, simNome, nomeForte: simNome >= SIMILARIDADE_MINIMA, diff, dias, pr, pt,
+    valorIgual: diff <= 1, valor5: diff <= Math.round(vt * TOL_NOME_FORTE),
+    mesmaParcela: mesmaParcela(pr, pt), fatura: faturaDoLancamento(t, closingDay),
+    dataDiverge: !!(dataLinha && dataTx && dataLinha !== dataTx && !((pr?.num || 0) > 1)),
+  }
+}
+
+// → { perguntar: [m], aviso: m|null } para uma linha livre.
+export function classificarLinhaLivre(r, { transactions = [], cartao, apelidos = [], faturasFechadas = null, usados = new Set() }) {
+  const closingDay = cartao.closingDay || 14
+  const ref = r.faturaMonthYear || faturaDoLancamento({ date: r._dateCartao || r.date }, closingDay)
+  const faturas = new Set([somarMes(ref, -1), ref, somarMes(ref, 1)].filter(f => !faturaEstaFechada(faturasFechadas, cartao.id, f)))
+  const nomes = [r.payee && r.payee !== r.description ? r.payee : '', r.description].filter(Boolean)
+  const tipo = r.type || 'expense'
+  const ms = []
+  for (const t of transactions) {
+    if (t.accountId !== cartao.id || (t.type || 'expense') !== tipo || t.isEspelho || t.reservaAuto || t.reconciled) continue
+    if (usados.has(t.id)) continue
+    const m = medir(r, t, { nomes, apelidos, closingDay })
+    if (!faturas.has(m.fatura)) continue
+    ms.push(m)
+  }
+  const aVistaOuP1 = (m) => !m.pr || m.pr.num === 1
+  const perguntaNome = (m) => m.nomeForte && m.mesmaParcela && m.valor5
+    && ((m.pr?.num || 0) > 1 || m.dias == null || m.dias <= JANELA_DIAS_NOME_FORTE)
+  const perguntaValor = (m) => m.valorIgual && m.mesmaParcela && aVistaOuP1(m) && m.dias != null
+    && m.dias <= JANELA_DIAS_MESMO_VALOR && (m.dias >= 4 || m.fatura !== ref)
+  const score = (m) => (m.valorIgual ? 40 : 0) + m.simNome * 20 + (m.fatura === ref ? 5 : 0) - (m.dias ?? 0) * 0.5 - m.diff / 100
+  const perguntar = ms.filter(m => perguntaNome(m) || perguntaValor(m)).sort((a, b) => score(b) - score(a)).slice(0, MAX_OPCOES)
+  const aviso = perguntar.length ? null
+    : ms.filter(m => m.nomeForte && m.valor5).sort((a, b) => a.diff - b.diff || score(b) - score(a))[0] || null
+  return { perguntar, aviso }
+}
 
 export function aplicarCorrespondencias(rows, { transactions = [], accounts = [], accountId, apelidos = [], faturasFechadas = null }) {
   const out = rows.map(r => ({ ...r }))
@@ -56,31 +115,20 @@ export function aplicarCorrespondencias(rows, { transactions = [], accounts = []
 
   for (const r of out) {
     if (!livre(r)) continue
-    const novo = {
-      accountId, type: r.type || 'expense', amount: Number(r.amount), date: r._dateCartao || r.date,
-      payee: r.payee && r.payee !== r.description ? r.payee : '', description: r.description,
-      faturaMonthYear: r.faturaMonthYear,
-      parcela: r._installment?.num ? { num: Number(r._installment.num), total: r._installment.total ? Number(r._installment.total) : null } : null,
-    }
-    const { fortes, fracos } = buscarCorrespondencias(novo, { transactions, accounts, apelidos, faturasFechadas }, {
-      excluirIds: usados, conciliadosSoNaFatura: true, fracosSoPendentes: true,
-    })
-    const todos = [...fortes, ...fracos]
-    if (!todos.length) continue
+    const { perguntar, aviso } = classificarLinhaLivre(r, { transactions, cartao, apelidos, faturasFechadas, usados })
     const escolha = r._jaLancadoEscolha
     if (escolha === 'novo') {
-      Object.assign(r, { _jaLancadoOpcoes: todos.map(m => m.tx), _parecido: !fortes.length })
+      if (perguntar.length) r._jaLancadoOpcoes = perguntar.map(m => m.tx)
+      if (aviso) r._avisoParecido = { tx: aviso.tx, fatura: aviso.fatura }
       continue
     }
-    const escolhido = escolha ? todos.find(m => m.tx.id === escolha) : null
+    const escolhido = escolha ? perguntar.find(m => m.tx.id === escolha) : null
     if (escolhido) { vincular(r, escolhido); continue }
-    if (fortes.length) {
-      const empate = fortes.length > 1 && fortes[0].score - fortes[1].score < EMPATE
-      if (!empate) { vincular(r, fortes[0]); continue }
-      Object.assign(r, { _jaLancadoOpcoes: fortes.map(m => m.tx), _parecido: false, selected: false })
+    if (perguntar.length) {
+      Object.assign(r, { _jaLancadoOpcoes: perguntar.map(m => m.tx), _parecido: false, selected: false })
       continue
     }
-    Object.assign(r, { _jaLancadoOpcoes: fracos.map(m => m.tx), _parecido: true, selected: false })
+    if (aviso) r._avisoParecido = { tx: aviso.tx, fatura: aviso.fatura }
   }
   return out
 }

@@ -13,7 +13,7 @@
 //   total = importar + conciliados + decisão + desmarcados.
 // NADA aqui decide o casamento nem o que é gravado: `importar` é exatamente linhasAImportar (o que
 // a confirmação insere — o teste confere). PURO.
-import { valorComSinal } from './revisaoImportacao.js'
+import { valorComSinal, precisaDecisao } from './revisaoImportacao.js'
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 
@@ -24,13 +24,9 @@ export const SITUACAO = {
   DESMARCADO: 'desmarcado', // desmarcada, sem correspondência no Finup: não será importada
 }
 
-// Pede escolha do usuário e, sem ela, NÃO é gravada:
-//   • "Para escolher" / "Parecido — é este?" (candidatos do cartão, sem escolha);
-//   • possível duplicata ainda desmarcada (nem "importar mesmo assim", nem "é o mesmo").
-export function precisaDecisao(r) {
-  if (r._jaLancadoOpcoes && !r._jaLancadoEscolha) return true
-  return r._dupLevel === 'possivel' && !r.selected && !r._mesmoConfirmado && !r._collisionTx
-}
+// Pede escolha do usuário e, sem ela, NÃO é gravada (regra em lib/revisaoImportacao — a conferência
+// da fatura usa a mesma).
+export { precisaDecisao }
 
 export function situacaoLinha(r) {
   if (r.selected && !r._isDuplicate && !r._collisionTx) return SITUACAO.IMPORTAR
@@ -122,6 +118,12 @@ const MOTIVOS = [
   { tipo: 'outra_fatura', titulo: 'Linhas que vão para outra fatura' },
 ]
 
+// Texto das linhas sem decisão: "N itens ainda sem decisão — R$ X não serão importados".
+export function textoSemDecisao(qtd, valor, fmt = (v) => `R$ ${Math.abs(v).toFixed(2).replace('.', ',')}`) {
+  if (!qtd) return ''
+  return `${qtd} ${qtd === 1 ? 'item ainda sem decisão' : 'itens ainda sem decisão'} — ${fmt(Math.abs(valor))} não ${qtd === 1 ? 'será importado' : 'serão importados'}`
+}
+
 export function conferenciaDaFatura(projecao, tolerancia = 0.01) {
   if (!projecao) return null
   const itens = projecao.itens || []
@@ -133,15 +135,20 @@ export function conferenciaDaFatura(projecao, tolerancia = 0.01) {
     const titulo = m.tituloValor && lista.some(i => Math.abs(i.valor) >= 1) ? m.tituloValor : m.titulo
     grupos.push({ tipo: m.tipo, titulo, itens: lista, qtd: lista.length, subtotal: r2(lista.reduce((s, i) => s + i.valor, 0)) })
   }
-  const outros = itens.filter(i => !MOTIVOS.some(m => m.tipo === i.tipo))
+  // Sem decisão: listado, mas NÃO conta como explicado — essas linhas não serão importadas.
+  const pendentes = itens.filter(i => i.tipo === 'sem_decisao')
+  const semDecisao = { qtd: pendentes.length, valor: r2(pendentes.reduce((s, i) => s + i.valor, 0)) }
+  if (pendentes.length) grupos.unshift({ tipo: 'sem_decisao', titulo: 'Ainda sem decisão — não serão importadas', itens: pendentes, qtd: pendentes.length, subtotal: semDecisao.valor, naoExplica: true })
+  const outros = itens.filter(i => i.tipo !== 'sem_decisao' && !MOTIVOS.some(m => m.tipo === i.tipo))
   if (outros.length) grupos.push({ tipo: 'outros', titulo: 'Outros', itens: outros, qtd: outros.length, subtotal: r2(outros.reduce((s, i) => s + i.valor, 0)) })
   const diferenca = r2(projecao.arquivo - projecao.projetado)
-  const explicada = r2(grupos.reduce((s, g) => s + g.subtotal, 0))
-  const semExplicacao = r2(diferenca - explicada)
+  const explicada = r2(grupos.filter(g => !g.naoExplica).reduce((s, g) => s + g.subtotal, 0))
+  // O que sobra além das linhas sem decisão (essas têm aviso próprio).
+  const semExplicacao = r2(diferenca - explicada - semDecisao.valor)
   return {
-    diferenca, explicada, semExplicacao, grupos,
-    qtdItens: itens.length,
-    totalmenteExplicada: Math.abs(semExplicacao) <= tolerancia,
+    diferenca, explicada, semExplicacao, grupos, semDecisao,
+    qtdItens: itens.length - semDecisao.qtd,
+    totalmenteExplicada: Math.abs(semExplicacao) <= tolerancia && semDecisao.qtd === 0,
     semDiferenca: Math.abs(diferenca) <= tolerancia && itens.length === 0,
   }
 }
@@ -159,14 +166,8 @@ export function lembrarConferenciaAberta(sessao, aberta, storage = globalThis.lo
 }
 
 // ── Descrição ────────────────────────────────────────────────────────────────────────────────────
-// Extratos de cartão costumam trazer o estabelecimento e, depois de vários espaços, a cidade/sufixo
-// ("PADARIA X        SAO PAULO"). Só separa nesse caso (2+ espaços seguidos); o resto fica inteiro.
-export function separarSufixo(descricao) {
-  const s = String(descricao || '')
-  const m = s.match(/^(.*?\S)\s{2,}(\S.*)$/)
-  if (!m) return { principal: s.trim(), sufixo: '' }
-  return { principal: m[1].trim(), sufixo: m[2].replace(/\s{2,}/g, ' ').trim() }
-}
+// Estabelecimento × cidade/sufixo: regra única em lib/nomeEstabelecimento (também usada no casamento).
+export { separarSufixo } from './nomeEstabelecimento.js'
 
 // "AAAA-MM" → "MM/AAAA"
 export const rotuloFatura = (my) => (my ? my.split('-').reverse().join('/') : '—')

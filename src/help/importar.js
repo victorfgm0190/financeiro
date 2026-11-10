@@ -194,7 +194,7 @@ export const campos = {
   'revisaoFatura.decidir': {
     titulo: 'Decidir',
     paraQueServe: 'Diz o que fazer com uma linha que parece já estar no Finup.',
-    relacaoComTela: 'Escolher o lançamento existente vincula e atualiza ele; "É novo" ou "É outra compra" importa a linha; "É a mesma" atualiza o existente.',
+    relacaoComTela: 'Escolher o lançamento existente vincula e atualiza ele; "É novo" ou "É outra compra" importa a linha; "É a mesma" atualiza o existente. Sem decisão, a linha não é importada.',
     obrigatorio: true,
   },
   'revisaoFatura.favorecido': {

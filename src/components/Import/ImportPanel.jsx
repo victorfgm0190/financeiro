@@ -2,7 +2,7 @@ import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
 import { Fragment, useState, useRef, useMemo, useEffect } from 'react'
 import {
   Upload, Check, AlertCircle, Wand2, Save,
-  Link, X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, RotateCcw, Pencil, Info,
+  X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, RotateCcw, Pencil, Info,
   ChevronDown, ChevronRight, Split, CreditCard,
 } from 'lucide-react'
 import { parseFile, fuzzyMatchAccount, parseDindinCC, parseDindinCartao } from '../../lib/dindinParse'
@@ -23,7 +23,7 @@ import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao, idsConciliacaoConferidos } from '../../lib/conciliacaoMatch'
 import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
-import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
+import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, irmaDaParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
 import { valorDeReferencia } from '../../lib/parcelasOcorrencia'
 import { competenciasImplausiveis, mensagemCompetenciaImplausivel, divergenciaMesArquivo } from '../../lib/competenciaFatura'
@@ -1314,7 +1314,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [selectedAccount, setSelectedAccount] = useState('')
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
-  const [matchQueue, setMatchQueue] = useState([])
   const [scheduleMatchQueue, setScheduleMatchQueue] = useState([])
   // Agendamentos baixados pela última importação (resumo final).
   const [baixasResult, setBaixasResult] = useState(0)
@@ -1493,7 +1492,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setError('')
     setDecisoesRecorrentes(new Map())
     setResult(null)
-    setMatchQueue([])
     setEditingImport(null)
     setFilename(file.name)
     setClosingDayWarnDismissed(false)
@@ -1588,7 +1586,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         }
       }
       const processed = []
-      const pendingMatches = []
       let idCtr = 0
 
       parsed.forEach(row => {
@@ -1607,9 +1604,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           : (parcDet.total || anchor) ? { num: parcDet.num, total: parcDet.total || serieInferida.total, base: parcDet.base, matchStr: null, _porExtenso: true }
           : null
         const isParcelado = !!installInfo
+        // Parcela N > 1 sem série inferida: categoria e favorecido sugeridos pela irmã do MESMO cartão
+        // (antes vinham da janela "Parcela correspondente encontrada", que procurava em todas as contas).
+        const irma = (!anchor && installInfo && installInfo.num > 1 && resolvedAccountId)
+          ? irmaDaParcela({ base: installInfo.base, total: installInfo.total, amount: row.amount, accountId: resolvedAccountId }, transactions)
+          : null
         const classified = classifyByRules(row.description, { dayOfMonth: rowDay, amountApprox: row.amount })
         const movCat = categories.find(c => c.name.toLowerCase() === row.movimentacao.toLowerCase())
-        const categoryId = anchor?.categoryId || classified?.categoryId || movCat?.id || ''
+        const categoryId = anchor?.categoryId || irma?.categoryId || classified?.categoryId || movCat?.id || ''
         const faturaParc1 = calcFatura(row.date, resolvedClosingDay)
         // Para parcelados X/N com X > 1: fatura = fatura da parcela 1 + (X-1) meses. Série
         // inferida: a fatura sai da irmã gravada — a data do "ParcN" é a da cobrança, não a da compra.
@@ -1635,7 +1637,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         // Favorecido (lib/favorecidos): regra de classificação > alias de importação > série já
         // gravada > favorecido do arquivo (Dindin) > descrição base, sem o sufixo de parcela —
         // "Yelumseg Parc7" entra como "Yelumseg", não como um favorecido novo a cada mês.
-        const payeeSerie = anchor?.payee || serieInfo?.payee || null
+        const payeeSerie = anchor?.payee || serieInfo?.payee || irma?.payee || null
         const payee = favorecidoDaImportacao({
           descricao: row.description, regra: classified?.payee, aliases: favorecidoAliases,
           serie: payeeSerie, arquivo: row.payee,
@@ -1665,6 +1667,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           ...row, _id: idCtr++, categoryId, payee,
           grupoGerencial: grupoFinal, _installment: installInfo, _generated: false,
           _reservaFuncaoId: reservaFuncaoFromRule, _serieId: serieIdRow,
+          // Série JÁ gravada no cartão (âncora ou mesma chave): base da regra "mesma série" da revisão.
+          _serieExistente: (isParcelado && (anchor?.serieId || serieInfo?.serieId)) || null,
           // Irmã gravada da série inferida — resolvedRows procura nela a parcela já existente.
           _serieAnchor: anchor,
           _payeePadrao: payeePadrao,
@@ -1676,18 +1680,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           _itau: isItau,
         }
         processed.push(baseRow)
-        // As parcelas futuras (num+1 … total) não entram na lista principal — são
-        // exibidas na seção "Parcelas de faturas futuras" (derivada) e criadas na
-        // confirmação. Aqui só detectamos correspondência com lançamento existente.
-        // Série inferida já herdou a classificação da irmã — não há o que vincular.
-        if (installInfo && installInfo.num > 1 && !anchor) {
-          const key = installInfo.base.toLowerCase().slice(0, 14)
-          const match = transactions.find(t =>
-            Math.abs(t.amount - baseRow.amount) < 0.5 &&
-            (t.description || '').toLowerCase().includes(key)
-          )
-          if (match) pendingMatches.push({ row: baseRow, existingTx: match, installInfo })
-        }
+        // As parcelas futuras (num+1 … total) não entram na lista principal — são exibidas na
+        // seção "Parcelas de faturas futuras" (derivada) e criadas na confirmação. O vínculo com a
+        // parcela já gravada é decidido na revisão pela regra da série (lib/revisaoImportacao).
       })
 
       // ITEM 5/7 — sugestões por histórico do MESMO fornecedor (keyword normalizada +
@@ -1781,7 +1776,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         setConferencia(null)
         setRows(finalRows)
         setCardInfo({ cardName, faturaStr })
-        setMatchQueue(pendingMatches)
         if (reference || isItau) setFaturaMonthYear(reference)
       }
 
@@ -1920,10 +1914,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const closingDay = selectedAcc?.closingDay || 14
     const base = resolverLinhasRevisao(rows, {
       accountId: selectedAccount, transactions, closingDay,
-      forcedDupSelect, parcelasPorChave: existingParcelaByKey,
+      forcedDupSelect, parcelasPorChave: existingParcelaByKey, faturasFechadas: settings?.faturasFechadas,
     })
     // "Já lançado": lançamento do cartão feito antes (manual/Assistente) ou pré-lançamento pendente.
-    const ja = aplicarJaLancados(base, { transactions, preLancamentos: preLancamentosIa, accountId: selectedAccount, closingDay, apelidos: apelidosIa })
+    const ja = aplicarJaLancados(base, { transactions, preLancamentos: preLancamentosIa, accountId: selectedAccount, closingDay, apelidos: apelidosIa, faturasFechadas: settings?.faturasFechadas })
     // Lançado à mão/Assistente com outro nome, parcela projetada com outra data, valor diferente ou
     // em fatura vizinha (lib/importacaoCorrespondencias): só nas linhas que ainda são novas.
     return aplicarCorrespondencias(ja, { transactions, accounts, accountId: selectedAccount, apelidos: apelidosIa, faturasFechadas: settings?.faturasFechadas })
@@ -2666,25 +2660,6 @@ Importar mesmo assim no mês selecionado?`)) return
     setShowImportPreview(true)
   }
 
-  const resolveMatch = (linked, catId, payee) => {
-    if (linked) {
-      const rowId = matchQueue[0].row._id
-      setRows(prev => prev.map(r => r._id === rowId ? { ...r, categoryId: catId || r.categoryId, payee: payee || r.payee } : r))
-    }
-    setMatchQueue(q => q.slice(1))
-  }
-
-  // Vincular TODAS as correspondências pendentes de uma vez (sem passar modal a modal). Igual ao
-  // Vincular individual: herda categoria/favorecido do lançamento existente, NUNCA a fatura_ref.
-  const resolveAllMatches = () => {
-    const byId = new Map(matchQueue.map(m => [m.row._id, m.existingTx]))
-    setRows(prev => prev.map(r => {
-      const ex = byId.get(r._id)
-      return ex ? { ...r, categoryId: ex.categoryId || r.categoryId, payee: ex.payee || r.payee } : r
-    }))
-    setMatchQueue([])
-  }
-
   const resolveScheduleMatch = (action, { atualizarFuturas = false } = {}) => {
     const cur = scheduleMatchQueue[0]
     // Meta liga a baixa ao lançamento importado sendo conciliado. Tipo "importado" + import_id (e
@@ -3049,7 +3024,7 @@ Importar mesmo assim no mês selecionado?`)) return
 
   // Detalhes da linha (abrem sob ela): o que antes empilhava na coluna Status.
   const temDetalhes = (row) => !!(row._jaLancado || (row._jaLancadoOpcoes && row._jaLancadoEscolha) || row._dupLevel === 'possivel'
-    || row._mesmoConfirmado || row._tambemEm?.length || baixasPorLinha.get(row._id))
+    || row._mesmoConfirmado || row._tambemEm?.length || row._avisoParecido || baixasPorLinha.get(row._id))
   const detalhesLinha = (row) => (
     <div className="space-y-1.5 text-xs text-texto-1">
       {(row._jaLancado || (row._jaLancadoOpcoes && row._jaLancadoEscolha)) && (
@@ -3069,6 +3044,15 @@ Importar mesmo assim no mês selecionado?`)) return
               ? <button type="button" className="text-primary-fg hover:underline" onClick={() => updateRow(row._id, { _mesmoQueId: null })}>Desfazer "é o mesmo"</button>
               : <button type="button" className="text-primary-fg hover:underline text-left" onClick={() => decidirPossivel(row, 'mesmo')}>É o mesmo — atualizar nome/parcela do existente</button>}
           </div>
+        )
+      })()}
+      {row._avisoParecido && (() => {
+        const { tx, fatura } = row._avisoParecido
+        const n = numeroParcelaDoTx(tx), t = totalParcelasDoTx(tx)
+        return (
+          <p className="text-aviso break-words" title="Só um aviso: a linha entra como nova. Se for a mesma compra, confira o lançamento do Finup depois.">
+            ⚠ há uma compra parecida no Finup: {tx.description || '—'} · {n ? `parcela ${n}${t ? `/${t}` : ''}` : 'à vista'} · {fmt(tx.amount)} · fatura {fmtFatura(fatura)}
+          </p>
         )
       })()}
       {row._tambemEm?.length > 0 && (
@@ -3144,14 +3128,14 @@ Importar mesmo assim no mês selecionado?`)) return
       principal = <Selo tom="novo">Novo</Selo>
     }
     const baixa = baixasPorLinha.get(row._id)
-    const aviso = row._tambemEm?.length > 0
+    const aviso = row._tambemEm?.length > 0 || !!row._avisoParecido
     return (
       <div className="flex items-center gap-1 min-w-0">
         <div className="min-w-0 flex-1">{principal}</div>
         {baixa?.ativa && <Selo title="Ao confirmar, baixa a ocorrência do agendamento — ver detalhes">↧ baixa</Selo>}
         {temDetalhes(row) && (
           <button type="button" onClick={() => alternarLinha(row._id)} aria-expanded={linhasAbertas.has(row._id)}
-            aria-label="Detalhes da linha" title={aviso ? 'Atenção: o mesmo lançamento aparece em outra fatura — ver detalhes' : 'Detalhes'}
+            aria-label="Detalhes da linha" title={aviso ? (row._avisoParecido ? 'Atenção: há uma compra parecida no Finup — ver detalhes' : 'Atenção: o mesmo lançamento aparece em outra fatura — ver detalhes') : 'Detalhes'}
             className={`shrink-0 p-0.5 rounded ${aviso ? 'text-aviso' : 'text-texto-2 hover:text-texto-1'}`}>
             {aviso ? <AlertCircle size={14} /> : linhasAbertas.has(row._id) ? <ChevronDown size={14} /> : <Info size={14} />}
           </button>
@@ -4197,28 +4181,6 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                 <button className="btn-primary text-sm" disabled={corrigirChangedCount === 0} onClick={handleCorrigirDatas}>Confirmar</button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {matchQueue.length > 0 && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-overlay" />
-          <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-texto-1">Parcela correspondente encontrada</h3>
-            <p className="text-xs text-texto-2">Parcela {matchQueue[0].installInfo.num}/{matchQueue[0].installInfo.total} de "{matchQueue[0].installInfo.base}"</p>
-            {matchQueue.length > 1 && <p className="text-[11px] text-texto-3">{matchQueue.length} correspondências pendentes</p>}
-            <div className="flex gap-3">
-              <button className="btn-secondary flex-1" onClick={() => resolveMatch(false)}>Ignorar</button>
-              <button className="btn-primary flex-1" onClick={() => resolveMatch(true, matchQueue[0].existingTx.categoryId, matchQueue[0].existingTx.payee)}>
-                <Link size={13} className="mr-1.5 inline" /> Vincular
-              </button>
-            </div>
-            {matchQueue.length > 1 && (
-              <button className="btn-secondary w-full text-xs" onClick={resolveAllMatches}>
-                <Link size={13} className="mr-1.5 inline" /> Vincular Todos ({matchQueue.length})
-              </button>
-            )}
           </div>
         </div>
       )}

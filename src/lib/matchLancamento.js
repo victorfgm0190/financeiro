@@ -5,7 +5,8 @@
 // na fatura de referência e nas vizinhas (anterior e seguinte), só faturas abertas.
 // Critérios:
 //   nome   — favorecido/descrição normalizados (sem acento, sem "*", sem intermediador "MP *", "PTY*"
-//            pelo formato, sem números/parcela) por similaridade; apelido aprendido (ia_apelidos) casa direto.
+//            pelo formato, sem números/parcela, sem a cidade/país do fim e sem palavras genéricas —
+//            lib/nomeEstabelecimento) por similaridade; apelido aprendido (ia_apelidos) casa direto.
 //   parcela— "Parc8", "Parc 8", "8/12", "08/12", "P8", "parcela 8"; parcela igual reforça muito,
 //            parcela diferente derruba o match forte.
 //   valor  — igual (±R$ 0,01) ou próximo (±5%: sugere ajuste).
@@ -18,6 +19,7 @@ import { faturaDoLancamento } from './scheduleBaixa.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
 import { normalizarTermo } from './assistente/texto.js'
 import { semIntermediador, prefixoParecido } from './assistente/nomeParecido.js'
+import { nomeSemSufixo, semPalavrasGenericas } from './nomeEstabelecimento.js'
 
 export const TOL_VALOR_IGUAL = 0.01
 export const TOL_VALOR_PROXIMO = 0.05
@@ -51,7 +53,7 @@ const parcelaDoExistente = (t) => {
 
 // ─── Nome ────────────────────────────────────────────────────────────────────────────────────────
 export function normalizarNome(s) {
-  return normalizarTermo(semIntermediador(String(s || '').replace(/^\s*[a-z]{2,4}\s?\*\s*/i, '')))
+  const n = normalizarTermo(semIntermediador(nomeSemSufixo(String(s || '')).replace(/^\s*[a-z]{2,4}\s?\*\s*/i, '')))
     .replace(/\*/g, ' ')
     .replace(/\bparc(?:ela)?\.?\s*\d{1,2}(?:\s*(?:de|\/)\s*\d{1,2})?/g, ' ')
     .replace(/(?<!\d)\d{1,2}\/\d{1,2}(?!\d)/g, ' ')
@@ -59,6 +61,7 @@ export function normalizarNome(s) {
     .replace(/[^a-z ]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+  return semPalavrasGenericas(n)
 }
 
 const bigramas = (s) => {
@@ -82,21 +85,21 @@ export function similaridade(a, b) {
     if (i >= 0) { comuns++; resto.splice(i, 1) }
   }
   const dice = (2 * comuns) / (ba.length + bb.length)
-  // Uma palavra forte (4+ letras) igual nos dois lados também conta ("vercel inc" × "vercel pro").
-  const pa = x.split(' ').filter(w => w.length >= 4)
-  const pb = y.split(' ').filter(w => w.length >= 4)
-  const palavra = pa.some(w => pb.some(v => v === w || v.startsWith(w) || w.startsWith(v))) ? 0.7 : 0
-  return Math.max(dice, palavra)
+  // Uma palavra solta em comum (cidade, "shop", "compra") não basta — só a PRIMEIRA palavra do
+  // estabelecimento (4+ letras, já sem cidade e sem palavras genéricas): "Havan Londrina" × "Havan".
+  const pa = x.split(' ')[0], pb = y.split(' ')[0]
+  const mesmaLoja = pa.length >= 4 && pb.length >= 4 && (pa.startsWith(pb) || pb.startsWith(pa))
+  return Math.max(dice, mesmaLoja ? 0.7 : 0)
 }
 
 // Apelido aprendido (ia_apelidos: { tipo, termo, ref_id }) que leva o nome ao favorecido do existente.
-const apelidoLeva = (nomes, t, apelidos) => {
+export const apelidoLeva = (nomes, t, apelidos) => {
   if (!apelidos?.length || !t.payee) return false
   const termos = new Set(nomes.flatMap(n => [normalizarTermo(n), normalizarNome(n)]).filter(Boolean))
   return apelidos.some(a => (a.tipo === 'favorecido' || a.tipo === 'descricao_fatura') && termos.has(a.termo) && a.ref_id === t.payee)
 }
 
-const simNomes = (nomes, t) => {
+export const simNomes = (nomes, t) => {
   const deles = [t.payee, t.description].filter(Boolean)
   let best = 0
   for (const a of nomes) for (const b of deles) best = Math.max(best, similaridade(a, b))

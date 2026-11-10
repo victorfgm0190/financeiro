@@ -226,6 +226,17 @@ export function assignInstallmentOccurrences(rows, accountId, faturaMY) {
   })
 }
 
+// Irmã gravada de uma parcela N > 1 no MESMO cartão (mesmo total, valor ±R$ 0,50, descrição com a
+// base): só para SUGERIR categoria e favorecido na importação — não vincula nem evita a inserção.
+export function irmaDaParcela({ base, total = null, amount, accountId }, transactions) {
+  const key = String(base || '').toLowerCase().slice(0, 14).trim()
+  if (!key || !accountId) return null
+  return (transactions || []).find(t => t.accountId === accountId && (t.type || 'expense') === 'expense'
+    && (!total || !t.installmentTotal || Number(t.installmentTotal) === Number(total))
+    && Math.abs((Number(t.amount) || 0) - (Number(amount) || 0)) < 0.5
+    && (t.description || '').toLowerCase().includes(key)) || null
+}
+
 // Série já gravada no cartão de uma parcela que chegou SEM o total ("Yelumseg Parc7"): mesma
 // conta, despesa com installment_total preenchido, valor ±R$ 0,05 e base da descrição igual ou
 // parecida (≥ 0,7, sem o sufixo de parcela de nenhum dos lados). `total`, quando a linha traz,

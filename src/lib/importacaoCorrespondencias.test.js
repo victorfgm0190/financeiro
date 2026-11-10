@@ -49,7 +49,10 @@ const confirmar = (out, transactions) => {
 
 describe('Importar Fatura × lançamentos que já existem', () => {
   const base = [PROJECAO, ASSISTENTE, FARMACIA, VIZINHA, CONCILIADO_OUTRO_MES]
-  const out = revisar(rows, base)
+  // Etapa 6a: valor diferente (±5%) e fatura vizinha PERGUNTAM; `out` = depois das escolhas.
+  const sugerido = Object.fromEntries(revisar(rows, base).map(r => [r._id, r]))
+  const escolhas = { c: 'farm', e: 'viz' }
+  const out = revisar(rows.map(r => ({ ...r, _jaLancadoEscolha: escolhas[r._id] })), base)
   const por = Object.fromEntries(out.map(r => [r._id, r]))
 
   it('a) parcela já projetada (mesmo valor, data diferente) → Já existe pelo nº da parcela', () => {
@@ -65,7 +68,10 @@ describe('Importar Fatura × lançamentos que já existem', () => {
     expect(mudancas).toContainEqual({ campo: 'payee', de: 'Padaria do Zé', para: 'PADARIA DO ZE LTDA' })
   })
 
-  it('c) R$ 2,00 de diferença → "valor diferente": atualiza o existente de R$ 50,00 para R$ 52,00', () => {
+  it('c) R$ 2,00 de diferença (mesma loja, ±5%) → pergunta; escolhido, atualiza o existente de R$ 50,00 para R$ 52,00', () => {
+    expect(sugerido.c).toMatchObject({ _parecido: false, selected: false })
+    expect(sugerido.c._jaLancado).toBeUndefined()
+    expect(sugerido.c._jaLancadoOpcoes.map(t => t.id)).toEqual(['farm'])
     expect(por.c._jaLancado).toMatchObject({ origem: 'match', tx: FARMACIA, divergente: { valor: { de: 50, para: 52 } } })
     expect(por.c.selected).toBe(false)
     const [{ changes, mudancas }] = patchesJaLancado(por.c, { saveDate: por.c.date, payee: favorecidoDaLinha(por.c) })
@@ -81,7 +87,8 @@ describe('Importar Fatura × lançamentos que já existem', () => {
     expect(linhasAImportar(out).map(r => r._id).sort()).toEqual(['d', 'f'])
   })
 
-  it('lançado em fatura vizinha (data antes do fechamento) → casa e vai para a fatura do arquivo', () => {
+  it('lançado em fatura vizinha (data antes do fechamento) → pergunta; escolhido, vai para a fatura do arquivo', () => {
+    expect(sugerido.e._jaLancadoOpcoes.map(t => t.id)).toEqual(['viz'])
     expect(por.e._jaLancado).toMatchObject({ origem: 'match', tx: VIZINHA, fatura: { de: '2026-10', para: '2026-11' } })
   })
 
@@ -90,19 +97,23 @@ describe('Importar Fatura × lançamentos que já existem', () => {
     expect(idsNoBancoConferidos(out).sort()).toEqual(['assist', 'farm', 'proj8', 'viz'])
   })
 
-  it('só o nome parecido → "Parecido", nada marcado; escolher vincula, "novo" importa', () => {
+  it('só o nome parecido (valor longe) → novo direto, sem "Parecido" e sem aviso', () => {
     const r1 = revisar([linha({ _id: 'p', description: 'FARMACIA PAGUE MENOS', amount: 140, date: '2026-10-21', _dateCartao: '2026-10-21' })], [FARMACIA])
-    expect(r1[0]).toMatchObject({ _parecido: true, selected: false })
-    expect(r1[0]._jaLancadoOpcoes.map(t => t.id)).toEqual(['farm'])
-    expect(resumoRevisao(r1).parecidos).toBe(1)
-    const vinc = revisar([{ ...r1[0], _jaLancadoEscolha: 'farm' }].map(l => { const r = { ...l }; delete r._parecido; delete r._jaLancadoOpcoes; return r }), [FARMACIA])
-    expect(vinc[0]).toMatchObject({ _isDuplicate: true, _dbTx: FARMACIA })
-    const novo = revisar([linha({ _id: 'p', description: 'FARMACIA PAGUE MENOS', amount: 140, date: '2026-10-21', _jaLancadoEscolha: 'novo' })], [FARMACIA])
+    expect(r1[0]).toMatchObject({ selected: true })
+    expect(r1[0]._jaLancadoOpcoes).toBeUndefined()
+    expect(r1[0]._avisoParecido).toBeUndefined()
+    expect(resumoRevisao(r1).parecidos).toBe(0)
+    expect(linhasAImportar(r1).map(r => r._id)).toEqual(['p'])
+  })
+
+  it('"É novo" numa pergunta importa', () => {
+    const novo = revisar([linha({ _id: 'p', description: 'FARMACIA PAGUE MENOS', amount: 51, date: '2026-10-21', _dateCartao: '2026-10-21', _jaLancadoEscolha: 'novo' })], [FARMACIA])
     expect(linhasAImportar(novo).map(r => r._id)).toEqual(['p'])
   })
 
   it('importar a mesma fatura duas vezes não cria nada na segunda', () => {
     const depois = confirmar(out, base)
+    // Reimportação: a linha nova não traz as escolhas — os conciliados são reconhecidos em silêncio.
     const segunda = revisar(rows.map(r => ({ ...r })), depois)
     expect(linhasAImportar(segunda)).toEqual([])
     expect(segunda.every(r => r._isDuplicate || r._collisionTx)).toBe(true)

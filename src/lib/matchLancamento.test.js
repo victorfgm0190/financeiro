@@ -38,8 +38,8 @@ describe('parcela no texto', () => {
 
 describe('nome', () => {
   it('normaliza intermediador, *, acento e parcela', () => {
-    expect(normalizarNome('MP *Açaí do João Parc3')).toBe('acai do joao')
-    expect(normalizarNome('PTY*LOJA LEGAL 08/12')).toBe('loja legal')
+    expect(normalizarNome('MP *Açaí do João Parc3')).toBe('acai joao')
+    expect(normalizarNome('PTY*LOJA LEGAL 08/12')).toBe('legal')
   })
   it('similaridade', () => {
     expect(similaridade('SeguradoraAlfa', 'Seguradora Alfa')).toBeGreaterThanOrEqual(0.9)

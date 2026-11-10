@@ -6,10 +6,15 @@
 // que continuam valendo para a reimportação da mesma fatura) e só sobre as linhas que eles não
 // resolveram. Candidatos: lançamentos NÃO conciliados do MESMO cartão (account_id do cartão — a
 // maioria tem card_id NULL) e da MESMA fatura + pré-lançamentos pendentes desse cartão.
-// Critério: mesmo tipo, valor ±R$ 0,01 e data da compra ±3 dias. Parcela: por PARCELA — valor da
-// parcela, número/total e fatura (a data de uma parcela N > 1 é a do dia financeiro, não da compra).
-// Resultado por linha: 1 candidato (que não é o único de outra linha) → 'casada'; mais de um, ou
-// disputado por duas linhas → 'escolher' (nunca casa sozinho); nenhum → 'nova'.
+// Critério (Etapa 6a — avaliarJaLancado): mesmo tipo, mesma fatura (aberta), e
+//   • à vista ou parcela 1 (mesmo n/total): valor ±R$ 0,01 e data da compra até 3 dias → AUTOMÁTICO;
+//   • parcela (mesmo n e mesmo total) com valor até ±R$ 0,50, ou parcela N > 1 que não é da série já
+//     conhecida da linha → PERGUNTA (a data de uma parcela N > 1 é a do dia financeiro, não da compra);
+//   • parcela de OUTRA série conhecida, n/total diferente ou parcela × à vista → não é candidato;
+//   • estimado (dólar/IOF) pelas regras de casaEstimado → PERGUNTA.
+// Resultado por linha: 1 candidato automático (sem disputa) → 'casada'; compras gêmeas (k linhas com o
+// mesmo conjunto de m candidatos automáticos, k ≥ m) → pares 1:1, as que sobram são novas; o resto com
+// candidato → 'escolher' (nunca casa sozinho); nenhum → 'nova'.
 // PURO: sem React, sem I/O (usado pela tela e pelo preview somente leitura). Imports com .js.
 // ESTIMADOS (compra em moeda estrangeira e o IOF dela — src/lib/cambio.js): o valor em R$ só fecha
 // na fatura, então o critério é outro — compra: estabelecimento parecido, data ±5 dias e valor ±15%
@@ -17,17 +22,22 @@
 // SOMA dos IOFs estimados da fatura quando o banco agrupa numa linha só. Ao casar, o lançamento
 // recebe o valor real e deixa de ser estimado (a compra grava o spread real do cartão).
 import { faturaDoLancamento } from './scheduleBaixa.js'
-import { numeroParcelaDoTx, totalParcelasDoTx } from './revisaoImportacao.js'
+import { numeroParcelaDoTx, totalParcelasDoTx, paresUmPraUm, mesmaSerie, outraSerie } from './revisaoImportacao.js'
 import { ehIof, ajusteDaCompraEstimada } from './cambio.js'
 import { normalizarTermo } from './assistente/texto.js'
+import { faturaEstaFechada } from './faturasFechadas.js'
+import { nomeSemSufixo, PALAVRAS_GENERICAS } from './nomeEstabelecimento.js'
 
 export const TOL_VALOR_JA_LANCADO = 0.01
+// Parcela com o mesmo n/total e centavos de diferença (arredondamento entre extratos): pergunta.
+export const TOL_PARCELA_PERGUNTA = 0.50
 export const JANELA_DIAS_JA_LANCADO = 3
 export const JANELA_DIAS_ESTIMADO = 5
 export const TOL_COMPRA_ESTIMADA = 0.15
 export const TOL_IOF_ESTIMADO = 0.20
 
 const tipoDe = (x) => x.type || 'expense'
+export { paresUmPraUm as resolverPares, serieDaLinha, mesmaSerie, outraSerie } from './revisaoImportacao.js'
 const centavos = (v) => Math.round((Number(v) || 0) * 100)
 const diasEntre = (a, b) => Math.abs(Math.round((new Date(`${String(a).slice(0, 10)}T12:00:00Z`) - new Date(`${String(b).slice(0, 10)}T12:00:00Z`)) / 86_400_000))
 
@@ -62,11 +72,13 @@ export function candidatoDoPre(pre, closingDay = 14) {
   return t
 }
 
-// Candidatos de um cartão numa fatura: não conciliados, despesa/receita do cartão, sem espelho.
-export function candidatosJaLancado({ transactions, preLancamentos = [], accountId, closingDay = 14, usados = new Set() }) {
+// Candidatos de um cartão numa fatura: não conciliados, despesa/receita do cartão, sem espelho, de
+// fatura aberta.
+export function candidatosJaLancado({ transactions, preLancamentos = [], accountId, closingDay = 14, usados = new Set(), faturasFechadas = null }) {
   const doCartao = (transactions || []).filter(t =>
     t.accountId === accountId && (t.type === 'expense' || t.type === 'income')
-    && !t.reconciled && !t.isEspelho && !usados.has(t.id))
+    && !t.reconciled && !t.isEspelho && !usados.has(t.id)
+    && !faturaEstaFechada(faturasFechadas, accountId, faturaDoLancamento(t, closingDay)))
   const pres = (preLancamentos || [])
     .filter(p => p.status === 'pendente')
     .map(p => candidatoDoPre(p, closingDay))
@@ -74,9 +86,11 @@ export function candidatosJaLancado({ transactions, preLancamentos = [], account
   return [...doCartao, ...pres]
 }
 
-// Estabelecimento parecido: alguma palavra (4+ letras) de um lado aparece no outro
-// ("VERCEL INC." × "Vercel *Pro"; o banco corta e junta nomes, então basta uma palavra forte).
-const palavrasFortes = (s) => normalizarTermo(s).replace(/[^a-z0-9 ]/g, ' ').split(' ').filter(w => w.length >= 4)
+// Estabelecimento parecido (só para ESTIMADOS — dólar/IOF): alguma palavra (4+ letras) de um lado
+// aparece no outro ("VERCEL INC." × "Vercel *Pro"; o banco corta e junta nomes). Sem a cidade colada
+// e sem palavras genéricas (lib/nomeEstabelecimento): "compra", "shop" ou a cidade não bastam.
+const palavrasFortes = (s) => normalizarTermo(nomeSemSufixo(s)).replace(/[^a-z0-9 ]/g, ' ').split(' ')
+  .filter(w => w.length >= 4 && !PALAVRAS_GENERICAS.has(w))
 export function estabelecimentoParecido(descricaoLinha, t) {
   const daLinha = palavrasFortes(descricaoLinha)
   const doTx = palavrasFortes(`${t.payee || ''} ${t.description || ''}`)
@@ -97,42 +111,37 @@ export function casaEstimado(r, t) {
   return dentroDe(r.amount, t.amount, TOL_COMPRA_ESTIMADA)
 }
 
-// O lançamento `t` pode ser a linha `r`?
-export function casaComLinha(r, t, closingDay = 14) {
-  if (t.estimado) return casaEstimado(r, t)
-  if (tipoDe(r) !== tipoDe(t)) return false
-  if (Math.abs(centavos(r.amount) - centavos(t.amount)) > TOL_VALOR_JA_LANCADO * 100) return false
-  if (faturaDoLancamento(t, closingDay) !== r.faturaMonthYear) return false
+// O lançamento `t` pode ser a linha `r`? → 'auto' (mesmo lançamento, sem perguntar) | 'perguntar' | null.
+export function avaliarJaLancado(r, t, closingDay = 14) {
+  if (t.estimado) return casaEstimado(r, t) ? 'perguntar' : null
+  if (tipoDe(r) !== tipoDe(t)) return null
+  if (faturaDoLancamento(t, closingDay) !== r.faturaMonthYear) return null
+  const diff = Math.abs(centavos(r.amount) - centavos(t.amount))
+  const exato = diff <= TOL_VALOR_JA_LANCADO * 100
   const pr = parcelaDaLinha(r)
   const pt = parcelaDoTx(t)
   if (pr || pt) {
-    if (!pr || !pt || pr.num !== pt.num || pr.total !== pt.total) return false
-    // Parcela N > 1: data é a do dia financeiro — casa por número/valor/fatura.
-    if (pr.num > 1) return true
-  }
-  return diasEntre(dataCompraDaLinha(r), dataCompraDoTx(t)) <= JANELA_DIAS_JA_LANCADO
+    if (!pr || !pt || pr.num !== pt.num || pr.total !== pt.total) return null
+    if (outraSerie(r, t)) return null
+    if (diff > TOL_PARCELA_PERGUNTA * 100) return null
+    if (!exato) return 'perguntar'
+    // Parcela N > 1: a data é a do dia financeiro — sem data comparável, só a série dá certeza.
+    if (pr.num > 1) return mesmaSerie(r, t) ? 'auto' : 'perguntar'
+  } else if (!exato) return null
+  return diasEntre(dataCompraDaLinha(r), dataCompraDoTx(t)) <= JANELA_DIAS_JA_LANCADO ? 'auto' : null
 }
+export const casaComLinha = (r, t, closingDay = 14) => avaliarJaLancado(r, t, closingDay) != null
 
 // linhas: as ainda não resolvidas (cada uma com _id, type, amount, faturaMonthYear, date/_dateCartao,
 // _installment). → Map(_id → { status: 'casada'|'escolher'|'nova', candidatos: [tx] , tx? }).
 export function casarJaLancados(linhas, candidatos, { closingDay = 14 } = {}) {
   const porLinha = new Map()
   for (const r of linhas) {
-    const lista = candidatos.filter(t => casaComLinha(r, t, closingDay))
-      .sort((a, b) => diasEntre(dataCompraDaLinha(r), dataCompraDoTx(a)) - diasEntre(dataCompraDaLinha(r), dataCompraDoTx(b)))
+    const lista = candidatos.map(t => ({ t, n: avaliarJaLancado(r, t, closingDay) })).filter(x => x.n)
+      .sort((a, b) => diasEntre(dataCompraDaLinha(r), dataCompraDoTx(a.t)) - diasEntre(dataCompraDaLinha(r), dataCompraDoTx(b.t)))
     porLinha.set(r._id, lista)
   }
-  // Um candidato disputado por duas linhas (ex.: duas compras iguais no mesmo dia) nunca é
-  // atribuído sozinho: as duas linhas vão para "escolher".
-  const disputa = new Map()
-  for (const lista of porLinha.values()) for (const t of lista) disputa.set(t.id, (disputa.get(t.id) || 0) + 1)
-  const out = new Map()
-  for (const [id, lista] of porLinha) {
-    if (!lista.length) out.set(id, { status: 'nova', candidatos: [] })
-    else if (lista.length === 1 && disputa.get(lista[0].id) === 1) out.set(id, { status: 'casada', candidatos: lista, tx: lista[0] })
-    else out.set(id, { status: 'escolher', candidatos: lista })
-  }
-  return out
+  return paresUmPraUm(linhas, porLinha, (r, t) => diasEntre(dataCompraDaLinha(r), dataCompraDoTx(t)))
 }
 
 export function contarJaLancados(resultado) {
@@ -213,7 +222,7 @@ export function favorecidoDaLinha(r) {
 //     é importada pelo fluxo normal com a classificação do pré (_preId); 'escolher' → fica de fora até
 //     o usuário escolher (_jaLancadoEscolha = id do lançamento | 'novo').
 // Nunca muda o que a lógica atual já decidiu como FITID, colisão de parcela ou possível duplicata.
-export function aplicarJaLancados(rows, { transactions, preLancamentos = [], accountId, closingDay = 14, apelidos = [] }) {
+export function aplicarJaLancados(rows, { transactions, preLancamentos = [], accountId, closingDay = 14, apelidos = [], faturasFechadas = null }) {
   const usados = new Set()
   for (const r of rows) for (const t of [r._dbTx, r._collisionTx, r._dupTx]) if (t?.id) usados.add(t.id)
   const marcar = (r, tx, origem) => {
@@ -229,7 +238,7 @@ export function aplicarJaLancados(rows, { transactions, preLancamentos = [], acc
   }
   const livres = out.filter(r => !r._generated && !r._isDuplicate && !r._collisionTx && !r._dupLevel)
   if (!livres.length) return out
-  const cands = candidatosJaLancado({ transactions, preLancamentos, accountId, closingDay, usados })
+  const cands = candidatosJaLancado({ transactions, preLancamentos, accountId, closingDay, usados, faturasFechadas })
   const res = casarJaLancados(livres, cands, { closingDay })
   for (const r of livres) {
     const v = res.get(r._id)

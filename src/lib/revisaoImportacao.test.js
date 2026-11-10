@@ -154,12 +154,16 @@ describe('projetarTotalFatura', () => {
     const resolved = resolver(rows, banco)
     const p = projetarTotalFatura(resolved, opts(banco))
     expect(p.arquivo).toBe(194.95)
-    // Aramis 4/4 já gravada representa a possível duplicata; Padaria e o estorno entram; a
-    // Farmácia desmarcada fica de fora.
+    // Padaria e o estorno entram; a Farmácia desmarcada fica de fora. A Aramis 3/4 é possível
+    // duplicata AINDA SEM DECISÃO: não é representada pela 4/4 gravada (que fica "só no Finup") —
+    // vira item 'sem_decisao', que a conferência não conta como explicado.
     expect(p.projetado).toBe(164.95)
     expect(p.diferenca).toBe(30)
-    expect(p.itens).toHaveLength(1)
-    expect(p.itens[0]).toMatchObject({ tipo: 'linha_fora', valor: 30 })
+    expect(p.itens.map(i => [i.tipo, i.valor])).toEqual([['sem_decisao', 149.95], ['linha_fora', 30], ['so_no_banco', -149.95]])
+    expect(p.itens.reduce((s, i) => s + i.valor, 0)).toBeCloseTo(p.diferenca, 2)
+    // Decidida ("é a mesma"), a 4/4 representa a linha e sobra só a Farmácia.
+    const decidida = projetarTotalFatura(resolver([{ ...rows[0], _mesmoQueId: 'a4' }, ...rows.slice(1)], banco), opts(banco))
+    expect(decidida.itens.map(i => i.tipo)).toEqual(['linha_fora'])
   })
 
   it('lançamento gravado sem linha no arquivo entra na lista', () => {

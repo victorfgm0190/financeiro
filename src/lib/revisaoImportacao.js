@@ -15,6 +15,7 @@ import { installmentKey, detectInstallment, detectParcela } from './installments
 import { assignInstallmentOccurrences, findParcelaDaSerie } from './parcelas.js'
 import { descSimilarity, stripParcelaSuffix } from './conciliacaoMatch.js'
 import { faturaDoLancamento } from './scheduleBaixa.js'
+import { faturaEstaFechada } from './faturasFechadas.js'
 
 export const TOL_MESMO_VALOR = 0.01
 // Arredondamento de parcela entre extratos (R$ 100,00 em 3× vira 33,34/33,33/33,33 no banco e o
@@ -132,6 +133,78 @@ export function numeroParcelaDaLinha(r) {
 
 export const similaridadeBase = (a, b) => descSimilarity(stripParcelaSuffix(a), stripParcelaSuffix(b))
 
+// Série da linha já conhecida no cartão (ImportPanel: âncora da série inferida ou serie_id da série
+// gravada com a mesma chave). Linha de série NOVA não tem — o serie_id dela ainda não existe no banco.
+export const serieDaLinha = (r) => r._serieExistente || r._serieAnchor?.serieId || null
+export const mesmaSerie = (r, t) => !!serieDaLinha(r) && t.serieId === serieDaLinha(r)
+export const outraSerie = (r, t) => !!serieDaLinha(r) && !!t.serieId && t.serieId !== serieDaLinha(r)
+
+// Parcela (num/total, total > 1) da linha e do lançamento; null = à vista. Iguais = as duas à vista,
+// ou mesmo número E mesmo total.
+const parcelaLinha = (r) => {
+  const total = Number(r._installment?.total) || null
+  return total > 1 ? { num: Number(r._installment.num), total } : null
+}
+const parcelaTx = (t) => {
+  const total = totalParcelasDoTx(t)
+  return total > 1 ? { num: numeroParcelaDoTx(t), total } : null
+}
+export function parcelaIgual(r, t) {
+  const a = parcelaLinha(r), b = parcelaTx(t)
+  if (!a && !b) return true
+  return !!(a && b && a.num === b.num && a.total === b.total)
+}
+// Base da descrição na chave da parcela (sem número, total, centavos nem fatura).
+const baseDaChave = (k) => (k ? k.split('|')[1] : null)
+
+const diasEntre = (a, b) => Math.abs(Math.round((new Date(`${String(a).slice(0, 10)}T12:00:00Z`) - new Date(`${String(b).slice(0, 10)}T12:00:00Z`)) / 86_400_000))
+// Data da compra: a do cartão; sem ela, a do lançamento. Sem data de um dos lados, não desqualifica.
+const dataCompraLinha = (r) => r._dateCartao || r.date || null
+const dataCompraTx = (t) => (t.dateCartao ? String(t.dateCartao).slice(0, 10) : t.date || null)
+const ateDias = (r, t, n) => {
+  const a = dataCompraLinha(r), b = dataCompraTx(t)
+  return !a || !b || diasEntre(a, b) <= n
+}
+export const JANELA_DIAS_MESMO = 3
+
+// Decisão 1:1 a partir das listas { t, n: 'auto'|'perguntar' } de cada linha. Só há casamento
+// automático quando TODAS as linhas que disputam um lançamento têm exatamente o mesmo conjunto de
+// candidatos automáticos (compras gêmeas): k linhas × m lançamentos, k ≥ m → pares pelo mais próximo,
+// as k − m que sobram são novas (o arquivo tem mais compras iguais que o Finup). k < m (mais de um
+// candidato igual para a mesma linha), listas que se cruzam ou candidato 'perguntar' → 'escolher'.
+export function paresUmPraUm(linhas, porLinha, distancia = () => 0) {
+  const disputa = new Map()
+  for (const lista of porLinha.values()) for (const { t } of lista) disputa.set(t.id, (disputa.get(t.id) || 0) + 1)
+  const chave = (lista) => lista.map(x => x.t.id).sort().join('|')
+  const soAuto = (lista) => lista.length > 0 && lista.every(x => x.n === 'auto')
+  const out = new Map()
+  for (const r of linhas) {
+    if (out.has(r._id)) continue
+    const lista = porLinha.get(r._id) || []
+    const candidatos = lista.map(x => x.t)
+    if (!lista.length) { out.set(r._id, { status: 'nova', candidatos: [] }); continue }
+    const k = chave(lista)
+    const grupo = soAuto(lista) ? linhas.filter(o => soAuto(porLinha.get(o._id) || []) && chave(porLinha.get(o._id)) === k) : []
+    const fechado = grupo.length > 0 && candidatos.every(t => disputa.get(t.id) === grupo.length)
+    if (!fechado || grupo.length < candidatos.length) { out.set(r._id, { status: 'escolher', candidatos }); continue }
+    // Pares pelo mais próximo (menor distância); empate pela ordem do arquivo.
+    const livresTx = [...candidatos]
+    const livresLinhas = [...grupo]
+    while (livresTx.length) {
+      let melhor = null
+      for (const l of livresLinhas) for (const t of livresTx) {
+        const d = distancia(l, t)
+        if (!melhor || d < melhor.d) melhor = { l, t, d }
+      }
+      out.set(melhor.l._id, { status: 'casada', candidatos: [melhor.t], tx: melhor.t })
+      livresTx.splice(livresTx.indexOf(melhor.t), 1)
+      livresLinhas.splice(livresLinhas.indexOf(melhor.l), 1)
+    }
+    for (const l of livresLinhas) out.set(l._id, { status: 'nova', candidatos: [] })
+  }
+  return out
+}
+
 const dataCartaoDoTx = (t) => t.dateCartao || null
 const dataCartaoDaLinha = (r) => r._dateCartao || null
 // As duas datas do cartão conhecidas e diferentes: são duas compras distintas.
@@ -153,7 +226,7 @@ export function compararNaFatura(r, t) {
   return null
 }
 
-// Casa as linhas do arquivo com o que já está gravado no cartão. Devolve cópias anotadas:
+// Casa as linhas do arquivo com o que já está gravado no cartão (Etapa 6a). Devolve cópias anotadas:
 //   _collisionTx  lançamento que a confirmação ATUALIZA ("No banco ↻"): parcela de mesma chave ou
 //                 da série inferida, na mesma fatura e com o mesmo valor — ou a escolha "É o
 //                 mesmo" do usuário (_mesmoQueId) sobre uma possível duplicata.
@@ -162,7 +235,16 @@ export function compararNaFatura(r, t) {
 //   _dupTx        o candidato da possível duplicata, exibido ao lado da linha.
 //   _tambemEm     [{ fatura, tx }] — o mesmo lançamento gravado em OUTRA fatura: só aviso.
 // Casamento 1:1: um lançamento do banco representa no máximo uma linha.
-export function resolverLinhasRevisao(rows, { accountId, transactions, closingDay = 14, forcedDupSelect = new Set(), parcelasPorChave = null }) {
+// Regras (ver docs/importar-fatura-casamento.md):
+//   • em SILÊNCIO (o mesmo exato, conciliado ou não): FITID; parcela de mesma chave/série com mesmo
+//     n/total, mesma fatura e valor ±0,01; conciliado da mesma fatura com mesmo valor, mesma parcela e
+//     mesma data do cartão (reimportação); não conciliado com descrição-base parecida, mesma parcela,
+//     valor ±0,01 e compra até 3 dias, sem outro candidato igual;
+//   • PERGUNTA ("Possível duplicata"), só contra NÃO conciliado de fatura aberta: parcela de mesma
+//     chave/série com centavos (até ±0,50); mesma série e mesmo valor com outro número de parcela
+//     ("Aramis 4/4" no Finup × 3/4 no extrato — "É a mesma" corrige o número).
+//   O resto fica para lib/casamentoFatura e lib/importacaoCorrespondencias.
+export function resolverLinhasRevisao(rows, { accountId, transactions, closingDay = 14, forcedDupSelect = new Set(), parcelasPorChave = null, faturasFechadas = null }) {
   const comOcorrencia = assignInstallmentOccurrences(rows, accountId)
   const doCartao = (transactions || []).filter(t =>
     t.accountId === accountId && (t.type === 'expense' || t.type === 'income') && !t.isEspelho)
@@ -213,45 +295,91 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
     Object.assign(r, { _isDuplicate: true, _dupLevel: 'certeza', _dbTx: tx, selected: false })
   }
 
-  // 1. Colisão de parcela (mesma chave ou série inferida), restrita à fatura da linha.
-  const pendentesPossivel = new Map() // linha → candidato de arredondamento (chave igual, valor ≠)
+  // Pode virar PERGUNTA: só não conciliado e de fatura aberta. Conciliado nunca é candidato a escolha.
+  const podePerguntar = (t) => !t.reconciled && !faturaEstaFechada(faturasFechadas, accountId, faturaDe(t))
+  const naFaturaDe = (r) => (t) => t && faturaDe(t) === r.faturaMonthYear
+
+  // 1. Colisão de parcela, restrita à fatura da linha: mesma chave, série inferida (âncora) ou o
+  //    serie_id da série já gravada — sempre com o mesmo n/total. ±0,01 → "No banco ↻" em silêncio
+  //    (conciliado ou não: é a reimportação); até ±0,50 → possível duplicata (só não conciliado).
+  const pendentesPossivel = new Map() // linha → candidato de arredondamento (mesma parcela, valor ≠)
   for (const r of out) {
     if (resolvida.has(r._id) || tipoDe(r) !== 'expense' || !r._installment) continue
-    const naFatura = (t) => t && faturaDe(t) === r.faturaMonthYear
+    const naFatura = naFaturaDe(r)
     let tx = matchParcelaExistente(indice, r, accountId, usados)
     if (!naFatura(tx)) tx = null
     if (!tx && r._serieAnchor?.accountId === accountId) {
       const daSerie = findParcelaDaSerie(r._serieAnchor, r._installment.num, r.amount, transactions, usados)
       if (naFatura(daSerie)) tx = daSerie
     }
+    if (!tx && serieDaLinha(r)) {
+      tx = doCartao
+        .filter(t => !usados.has(t.id) && tipoDe(t) === 'expense' && mesmaSerie(r, t) && naFatura(t)
+          && parcelaIgual(r, t) && diffValor(t, r) <= TOL_ARREDONDAMENTO)
+        .sort((a, b) => diffValor(a, r) - diffValor(b, r))[0] || null
+    }
     if (!tx) continue
     if (diffValor(tx, r) <= TOL_MESMO_VALOR) marcarColisao(r, tx)
-    else pendentesPossivel.set(r._id, tx)
+    else if (podePerguntar(tx)) pendentesPossivel.set(r._id, tx)
   }
 
-  // 2. Já existe: mesma fatura, valor e base, mesmo nº de parcela. Primeiro os pares com a mesma
-  // data de compra, depois os demais — assim duas compras iguais em dias diferentes não trocam de par.
+  // 2. Já existe, em silêncio. Primeiro os CONCILIADOS (reimportação da mesma fatura): mesmo tipo,
+  //    valor ±0,01, mesma parcela e mesma data do cartão — 1:1 na ordem do arquivo. Depois os NÃO
+  //    conciliados com descrição-base parecida, mesma parcela, valor ±0,01 e compra até 3 dias (parcela
+  //    N > 1 casa pela série/base, sem data); havendo mais de um candidato igual, não decide aqui
+  //    (lib/casamentoFatura pergunta).
   const candidatos = (r) => (porFatura.get(r.faturaMonthYear) || []).filter(t => !usados.has(t.id))
-  for (const exigeData of [true, false]) {
-    for (const r of out) {
-      if (resolvida.has(r._id) || r._generated) continue
-      const tx = candidatos(r).find(t => (!exigeData || mesmaData(r, t)) && compararNaFatura(r, t) === 'existe')
-      if (!tx) continue
-      usados.add(tx.id)
-      resolvida.add(r._id)
-      Object.assign(r, { _isDuplicate: true, _dupLevel: 'certeza', _dbTx: tx, selected: false })
-    }
+  const resolverExiste = (r, tx) => {
+    usados.add(tx.id)
+    resolvida.add(r._id)
+    Object.assign(r, { _isDuplicate: true, _dupLevel: 'certeza', _dbTx: tx, selected: false })
+  }
+  const linhasLivres = () => out.filter(r => !resolvida.has(r._id) && !r._generated)
+  // Data do conciliado: a do cartão; sem ela (gravado antes de existir a coluna), a do lançamento.
+  // Parcela (total > 1) não precisa de data: a projeção conciliada pelo "Já existe" fica sem data
+  // do cartão, e mesmo n/total + valor + fatura já é o mesmo exato.
+  const mesmaDataConciliado = (r, t) => mesmaData(r, t) || (!dataCartaoDoTx(t) && !!dataCompraLinha(r) && dataCompraLinha(r) === String(t.date || '').slice(0, 10))
+  for (const r of linhasLivres()) {
+    const exatos = candidatos(r).filter(t => t.reconciled && tipoDe(t) === tipoDe(r) && diffValor(r, t) <= TOL_MESMO_VALOR && parcelaIgual(r, t))
+    const tx = exatos.find(t => mesmaDataConciliado(r, t)) || (parcelaLinha(r) ? exatos[0] : null)
+    if (tx) resolverExiste(r, tx)
+  }
+  const livres2 = linhasLivres()
+  const listas = new Map()
+  for (const r of livres2) {
+    const pr = parcelaLinha(r)
+    listas.set(r._id, candidatos(r).filter(t => !t.reconciled && tipoDe(t) === tipoDe(r) && diffValor(r, t) <= TOL_MESMO_VALOR
+      && parcelaIgual(r, t) && !outraSerie(r, t) && similaridadeBase(r.description, t.description) >= SIM_MESMA_BASE
+      && (pr && pr.num > 1 ? true : ateDias(r, t, JANELA_DIAS_MESMO)))
+      .map(t => ({ t, n: 'auto' })))
+  }
+  const distancia = (r, t) => {
+    const a = dataCompraLinha(r), b = dataCompraTx(t)
+    return a && b ? diasEntre(a, b) : 0
+  }
+  for (const [id, v] of paresUmPraUm(livres2, listas, distancia)) {
+    if (v.status !== 'casada') continue
+    resolverExiste(out.find(r => r._id === id), v.tx)
   }
 
-  // 3. Possível duplicata: mesma fatura e valor, descrição/parcela/data diferente (ou a parcela de
-  // mesma chave com centavos de diferença). Desmarcada por padrão; o usuário força ou confirma.
+  // 3. Possível duplicata (pergunta), só contra NÃO conciliado de fatura aberta, na fatura da linha:
+  //    a parcela com centavos do passo 1, ou a MESMA SÉRIE com o mesmo valor e outro número de parcela.
   for (const r of out) {
     if (resolvida.has(r._id) || r._generated) continue
     const arred = pendentesPossivel.get(r._id)
-    const tx = (arred && !usados.has(arred.id)) ? arred
-      : candidatos(r)
-        .filter(t => compararNaFatura(r, t) === 'possivel')
-        .sort((a, b) => similaridadeBase(r.description, b.description) - similaridadeBase(r.description, a.description))[0]
+    let tx = (arred && !usados.has(arred.id)) ? arred : null
+    const pr = parcelaLinha(r)
+    if (!tx && pr) {
+      const baseLinha = baseDaChave(keyOfImportRow(r, accountId))
+      tx = candidatos(r)
+        .filter(t => podePerguntar(t) && tipoDe(t) === 'expense' && tipoDe(r) === 'expense' && diffValor(r, t) <= TOL_MESMO_VALOR)
+        .filter(t => {
+          const pt = parcelaTx(t)
+          if (!pt || pt.total !== pr.total || pt.num === pr.num) return false
+          return mesmaSerie(r, t) || (!outraSerie(r, t) && !!baseLinha && baseDaChave(keyOfExistingTx(t)) === baseLinha)
+        })
+        .sort((a, b) => Math.abs(parcelaTx(a).num - pr.num) - Math.abs(parcelaTx(b).num - pr.num))[0] || null
+    }
     if (!tx) continue
     usados.add(tx.id)
     resolvida.add(r._id)
@@ -345,19 +473,26 @@ export function linhasAImportar(rows) {
   return (rows || []).filter(r => r.selected && !r._isDuplicate && !r._collisionTx)
 }
 
-// Lançamento do banco que representa a linha na fatura: o da colisão / já existe, ou o candidato
-// da possível duplicata enquanto ela não for importada como nova.
+// Pede escolha do usuário e, sem ela, NÃO é gravada (nem importa, nem concilia):
+//   • "Para escolher" (candidatos do cartão, sem escolha);
+//   • possível duplicata ainda desmarcada (nem "importar mesmo assim", nem "é o mesmo").
+export function precisaDecisao(r) {
+  if (r._jaLancadoOpcoes && !r._jaLancadoEscolha) return true
+  return r._dupLevel === 'possivel' && !r.selected && !r._mesmoConfirmado && !r._collisionTx
+}
+
+// Lançamento do banco que representa a linha na fatura: o da colisão / já existe. Linha sem decisão
+// não é representada por ninguém — ela não será gravada e o candidato fica como está.
 function representanteNoBanco(r) {
-  if (r._dbTx) return r._dbTx
-  if (r._dupTx && !r.selected) return r._dupTx
-  return null
+  return r._dbTx || null
 }
 
 // Total do ARQUIVO × total PROJETADO da fatura `fatura` depois da confirmação.
 //   arquivo   = soma de todas as linhas (estornos negativos).
 //   projetado = o que já está gravado na fatura + as linhas que serão inseridas nela.
 // A diferença é explicada item a item (soma exata): linha do arquivo que não entra, lançamento
-// gravado sem linha no arquivo e par linha × banco com valores diferentes.
+// gravado sem linha no arquivo e par linha × banco com valores diferentes. Linha ainda SEM DECISÃO
+// vira item 'sem_decisao' — não conta como explicada (lib/contagemRevisaoFatura).
 // `aberta` (fatura aberta, valor parcial): parcela de série sem linha no arquivo vira
 // 'aguardando_banco' (informativo) e sai da divergência — arquivo + aguardando = projetado.
 export function projetarTotalFatura(resolvedRows, { fatura, accountId, transactions, closingDay = 14, aberta = false }) {
@@ -375,6 +510,10 @@ export function projetarTotalFatura(resolvedRows, { fatura, accountId, transacti
     if (novas.has(r._id)) {
       if (r.faturaMonthYear === fatura) { projetado += v; continue }
       itens.push({ tipo: 'outra_fatura', linha: r, valor: r2(v), motivo: `vai para a fatura ${fmtFatura(r.faturaMonthYear)}` })
+      continue
+    }
+    if (precisaDecisao(r)) {
+      itens.push({ tipo: 'sem_decisao', linha: r, valor: r2(v), motivo: 'ainda sem decisão — não será importada' })
       continue
     }
     const tx = representanteNoBanco(r)

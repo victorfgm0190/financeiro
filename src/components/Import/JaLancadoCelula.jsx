@@ -88,7 +88,7 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
         <span className={`text-xs px-1.5 py-0.5 rounded ${pendente ? 'bg-aviso/15 text-aviso' : 'bg-primary/15 text-primary-fg'}`}
           title={row._parecido
             ? 'Só o nome é parecido com um lançamento do cartão: diga se é ele (vincula e atualiza) ou se é novo'
-            : 'Mais de um lançamento do cartão com o mesmo valor e data próxima: escolha qual é (ou se é novo)'}>
+            : 'Pode já estar no cartão (mesmo valor ou mesma loja, data próxima, parcela com centavos ou compra em dólar estimada): escolha qual é, ou se é novo. Sem escolha, a linha não é importada.'}>
           {pendente ? (row._parecido ? '⚠ Parecido — é este?' : '⚠ Para escolher') : 'Novo (escolhido)'}
         </span>
         {row._jaLancadoOpcoes.map(tx => (
