@@ -32,6 +32,7 @@ describe('ⓘ e foco inicial do modal', () => {
     act(() => icone.focus())
     expect(screen.queryByRole('tooltip')).toBeNull()
     fireEvent.mouseEnter(icone)
+    fireEvent.mouseMove(icone, { clientX: 4, clientY: 4 })
     expect(screen.getByRole('tooltip').textContent).toBe('Texto do campo')
     fireEvent.mouseLeave(icone)
     act(() => icone.blur())

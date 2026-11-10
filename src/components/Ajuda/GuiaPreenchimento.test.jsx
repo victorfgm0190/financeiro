@@ -315,3 +315,99 @@ describe('Preencher com guia — correções da Etapa 4', () => {
     expect(onSalvar).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('Preencher com guia — Etapa 5 (conta e lançamento)', () => {
+  // Formulário dentro de uma janela (role=dialog) que, ao salvar, troca para uma pergunta própria
+  // ("É parcela?", "Parecidos") antes de gravar — como o TransactionForm.
+  function ComPergunta() {
+    const [aberto, setAberto] = useState(true)
+    const [etapa, setEtapa] = useState('form')
+    if (!aberto) return null
+    return (
+      <div role="dialog">
+        {etapa === 'form' ? (
+          <div data-help-form="agendamento">
+            <BotaoPreencherGuia form="agendamento" oferecer={false} />
+            <div data-help-id="agendamento.description"><input aria-label="Descrição" defaultValue="Conta de luz" /></div>
+            <button type="button" data-help-salvar="agendamento" onClick={() => setEtapa('pergunta')}>Salvar</button>
+          </div>
+        ) : (
+          <div>
+            <p>É parcela?</p>
+            <button type="button" onClick={() => setEtapa('form')}>Voltar ao formulário</button>
+            <button type="button" onClick={() => setAberto(false)}>Lançar assim</button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  it('pergunta intermediária do formulário: o guia pausa (não diz "Pronto"), volta com o formulário e conclui ao gravar', async () => {
+    render(<><ComPergunta /><GuiaPreenchimento /></>)
+    fireEvent.click(screen.getByTestId('botao-preencher-guia'))
+    fireEvent.click(screen.getByRole('button', { name: 'Começar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(screen.queryByTestId('guia-preenchimento')).toBeNull())
+    expect(preenchimentoAtivo()).toBeTruthy()
+    // Esc na pausa é da janela, não do guia.
+    const ev = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    act(() => { document.body.dispatchEvent(ev) })
+    expect(ev.defaultPrevented).toBe(false)
+    expect(preenchimentoAtivo()).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar ao formulário' }))
+    await waitFor(() => expect(balao().dataset.campo).toBe('agendamento.description'))
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(screen.queryByTestId('guia-preenchimento')).toBeNull())
+    // Salvou de novo e gravou (a janela fechou): agora sim, Pronto.
+    fireEvent.click(screen.getByRole('button', { name: 'Lançar assim' }))
+    await waitFor(() => expect(balao().dataset.fase).toBe('pronto'))
+  })
+
+  it('foco: rádio já marcado, botão de escolha já escolhido; só botão de ação → foco no Próximo do balão', () => {
+    function Opcoes() {
+      return (
+        <div data-help-form="agendamento">
+          <BotaoPreencherGuia form="agendamento" oferecer={false} />
+          <div data-help-id="agendamento.transactionType">
+            <label><input type="radio" name="t" value="a" readOnly /> A</label>
+            <label><input type="radio" name="t" value="b" defaultChecked /> B</label>
+          </div>
+          <div data-help-id="agendamento.frequency">
+            <button type="button" aria-pressed="false">Mensal</button>
+            <button type="button" aria-pressed="true">Anual</button>
+          </div>
+          <div data-help-id="agendamento.category"><button type="button">Dividir em categorias</button></div>
+        </div>
+      )
+    }
+    render(<><Opcoes /><GuiaPreenchimento /></>)
+    fireEvent.click(screen.getByTestId('botao-preencher-guia'))
+    fireEvent.click(screen.getByRole('button', { name: 'Começar' }))
+    expect(document.activeElement.value).toBe('b')
+    enter(document.activeElement)
+    expect(document.activeElement.textContent).toBe('Anual')
+    enter(document.activeElement)
+    expect(balao().dataset.campo).toBe('agendamento.category')
+    expect(document.activeElement.textContent).toBe('Próximo')
+  })
+})
+
+describe('celular: lado do balão', () => {
+  it('não cobre o campo aceso; se der, nem o Salvar (em cima, embaixo ou entre os dois)', async () => {
+    const { ladoDoBalaoCelular } = await import('../../help/guiaPreenchimento.js')
+    const base = { vh: 700, alturaBalao: 200 }
+    // Campo no alto, sem Salvar à vista: balão embaixo.
+    expect(ladoDoBalaoCelular({ ...base, alvo: { top: 100, bottom: 150 } })).toEqual({ lado: 'baixo' })
+    // Campo embaixo: balão em cima.
+    expect(ladoDoBalaoCelular({ ...base, alvo: { top: 600, bottom: 650 } })).toEqual({ lado: 'cima' })
+    // Campo no meio e Salvar embaixo: em cima (não cobre nenhum dos dois).
+    expect(ladoDoBalaoCelular({ ...base, alvo: { top: 330, bottom: 380 }, salvar: { top: 620, bottom: 668 } })).toEqual({ lado: 'cima' })
+    // Campo no alto e Salvar embaixo (folha do "+"): entre os dois, logo abaixo do campo.
+    expect(ladoDoBalaoCelular({ ...base, alvo: { top: 180, bottom: 240 }, salvar: { top: 620, bottom: 656 } })).toEqual({ lado: 'entre', top: 248 })
+    // Não cabe inteiro entre os dois: encolhe (rola por dentro), mas não abaixo do mínimo.
+    expect(ladoDoBalaoCelular({ ...base, alturaBalao: 300, alvo: { top: 260, bottom: 320 }, salvar: { top: 620, bottom: 656 } })).toEqual({ lado: 'entre', top: 328, altura: 288 })
+    expect(ladoDoBalaoCelular({ ...base, alturaBalao: 300, alvo: { top: 400, bottom: 460 }, salvar: { top: 620, bottom: 656 } }).lado).not.toBe('entre')
+    // Teclado aberto: a faixa de baixo sobe com ele.
+    expect(ladoDoBalaoCelular({ ...base, teclado: 300, alvo: { top: 250, bottom: 290 } })).toEqual({ lado: 'cima' })
+  })
+})

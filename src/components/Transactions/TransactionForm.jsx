@@ -4,6 +4,8 @@ import ComposicaoCard from '../Contratos/ComposicaoCard'
 import { PiggyBank, Repeat, Pencil, Check, X, History, Link2 } from 'lucide-react'
 import HelpCampo from '../shared/HelpCampo'
 import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
+import BotaoPreencherGuia from '../Ajuda/BotaoPreencherGuia'
+import { raizDoForm, elementoDoCampo, camposNaTela } from '../../help/guiaPreenchimento.js'
 import VinculoPainel from '../shared/VinculoPainel'
 import SeloVinculo from '../shared/SeloVinculo'
 import DesfazerMesclagem from '../shared/DesfazerMesclagem'
@@ -66,6 +68,14 @@ const TYPE_OPTIONS = [
   { value: 'expense', label: 'Despesa', atalho: 'lancamento.tipoDespesa' },
   { value: 'transfer', label: 'Transferência', atalho: 'lancamento.tipoTransf' },
 ]
+
+// Preencher com guia: campo do help → chave do formulário (para saber se ele barraria vazio).
+const CHAVE_DO_HELP = {
+  'lancamento.valor': 'amount', 'lancamento.conta': 'accountId', 'lancamento.contaDestino': 'toAccountId',
+  'lancamento.tipoDocumento': 'tipoDocumentoId', 'lancamento.categoriaReserva': 'reservaExpenseCategoryId', 'lancamento.funcaoReserva': 'reservaFuncaoId',
+}
+// Campo na tela com "obrigatório" do navegador (required) — o navegador barra o Salvar se vazio.
+const controleObrigatorio = (el) => [...(el?.querySelectorAll('input[required], select[required], textarea[required]') || [])].find(c => !c.disabled)
 
 // As 10 frequências do sistema (mesmos values do ScheduleForm/agendamentos).
 const REPEAT_FREQUENCIES = [
@@ -574,6 +584,54 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     registrarEdicao({ lancamentos: finais, historico, loteId, motivo })
       .then(() => onToast?.(plano.length > 1 ? mensagemAplicada(plano.length) : 'Alteração salva. Histórico registrado.'))
       .catch(err => onToast?.(`Alteração salva, mas o histórico não foi registrado: ${err.message}`))
+  }
+
+  // ── Preencher com guia ─────────────────────────────────────────────────────────────────────────
+  // Fora da prévia do Assistente (que tem o próprio Confirmar). O guia só lê o formulário.
+  const guiaNoForm = podeGravarForm && !destaques && !onSalvo && !repeticaoExterna
+  // O que barra o Salvar agora, com as MESMAS regras do handleSubmit (e o "obrigatório" do navegador).
+  const errosDoLancamento = (f) => {
+    const erros = []
+    if (!f.amount) erros.push({ id: 'lancamento.valor', msg: 'Informe o valor.' })
+    if (!f.accountId) erros.push({ id: 'lancamento.conta', msg: 'Escolha a conta.' })
+    if (f.type === 'transfer' && !f.toAccountId) erros.push({ id: 'lancamento.contaDestino', msg: 'Escolha a conta destino.' })
+    if (tipoDocObrigatorio && !f.tipoDocumentoId) erros.push({ id: 'lancamento.tipoDocumento', msg: 'Selecione o tipo de documento.' })
+    if (f.type !== 'transfer' && rateioRows.length > 0) {
+      const v = validarRateio(rateioRows, Number(f.amount) || 0)
+      if (!v.ok) erros.push({ id: 'lancamento.categoria', msg: `Restante a distribuir: ${fmt(v.restante)}. ${v.motivo}` })
+    }
+    if (f.type === 'transfer' && needsReservaCategorySelect && !reservaFuncaoUnica && !f.reservaFuncaoId && !f.reservaExpenseCategoryId) {
+      erros.push({ id: 'lancamento.categoriaReserva', msg: 'Escolha a categoria (obrigatória para reserva livre).' })
+    }
+    if (reservaFuncaoMode && reservaGroupFuncs.length > 1 && !f.reservaFuncaoId) {
+      erros.push({ id: 'lancamento.funcaoReserva', msg: 'Selecione a função de reserva para este grupo.' })
+    }
+    const raiz = raizDoForm('lancamento')
+    for (const id of camposNaTela(raiz)) {
+      if (erros.some(x => x.id === id)) continue
+      const c = controleObrigatorio(elementoDoCampo(raiz, id))
+      if (c && c.validity?.valueMissing) erros.push({ id, msg: 'Este campo é obrigatório.' })
+    }
+    return erros
+  }
+  const validacaoGuia = {
+    erros: () => errosDoLancamento(form),
+    obrigatorio: (id) => (!!CHAVE_DO_HELP[id] && errosDoLancamento({ ...form, [CHAVE_DO_HELP[id]]: '' }).some(x => x.id === id))
+      || !!controleObrigatorio(elementoDoCampo(raizDoForm('lancamento'), id)),
+  }
+  const resumoGuia = () => {
+    const nomeConta = (id) => { const a = accounts.find(x => x.id === id); return a ? `"${a.name}"` : 'a conta escolhida' }
+    const valor = fmt(Number(form.amount) || 0)
+    const linhas = []
+    if (form.type === 'transfer') linhas.push(`Transferência de ${valor} de ${nomeConta(form.accountId)} para ${nomeConta(form.toAccountId)}, em ${fmtDate(form.date)}.`)
+    else linhas.push(`${form.type === 'income' ? 'Receita' : 'Despesa'} de ${valor} em ${nomeConta(form.accountId)}, em ${fmtDate(form.date)}.`)
+    if (form.type !== 'transfer') {
+      if (rateioRows.length > 0) linhas.push(`Dividida em ${rateioRows.length} categorias.`)
+      else { const c = categories.find(x => x.id === form.categoryId); linhas.push(c ? `Categoria: ${c.name}.` : 'Sem categoria.') }
+    }
+    if (!initial?.id && isCredit && form.type === 'expense' && form.installments > 1) linhas.push(`Em ${form.installments} parcelas, cada uma na fatura do seu mês.`)
+    if (form.repeat && !repeticaoExterna) linhas.push('Cria também um agendamento com estes dados.')
+    return linhas
   }
 
   const handleSubmit = (e, installmentDecision, decisao = null) => {
@@ -1435,6 +1493,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     const saida = form.type !== 'income'
     return (
       <form onSubmit={handleSubmit} className="space-y-4" data-help-form="lancamento">
+        {guiaNoForm && (
+          <BotaoPreencherGuia form="lancamento" funcao={initial?.id ? null : 'lancamento'} resumo={resumoGuia} validacao={validacaoGuia}
+            oferecer={!initial?.id} onFechar={onClose} className="-mb-2" />
+        )}
         <div className="flex rounded-xl overflow-hidden border border-borda-forte" role="group" aria-label="Tipo" data-help-id="lancamento.tipo">
           {[{ v: 'expense', l: 'Saída' }, { v: 'income', l: 'Entrada' }].map(t => (
             <button
@@ -1516,7 +1578,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         </button>
 
         {podeGravarForm
-          ? <button type="submit" className="btn-primary w-full min-h-[48px] text-base">Salvar</button>
+          ? <button type="submit" data-help-salvar="lancamento" className="btn-primary w-full min-h-[48px] text-base">Salvar</button>
           : <p className="text-xs text-texto-3 text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
       </form>
     )
@@ -1526,6 +1588,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     <>
     {!initial?.id && <AvisoPrerequisitos funcao="lancamento" onIr={onClose} />}
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-4" data-help-form="lancamento">
+      {guiaNoForm && (
+        <BotaoPreencherGuia form="lancamento" funcao={initial?.id ? null : 'lancamento'} resumo={resumoGuia} validacao={validacaoGuia}
+          oferecer={!initial?.id} onFechar={onClose} className="-mb-2" />
+      )}
       {initial?.id && (
         <div className="flex items-center justify-end gap-2 -mb-2">
           {seloParcela && (
@@ -1581,6 +1647,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               type="button"
               key={t.value}
               onClick={() => set('type', t.value)}
+              aria-pressed={form.type === t.value}
               className={`flex-1 py-2 text-sm font-medium transition-colors ${
                 form.type === t.value
                   ? t.value === 'income' ? 'bg-receita text-page'
@@ -2340,7 +2407,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       <div className="flex gap-3 pt-1">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
         {podeGravarForm ? (
-          <button type="submit" data-guia="lancamento-form.salvar" className="btn-primary flex-1" title={tituloGravar}>
+          <button type="submit" data-guia="lancamento-form.salvar" data-help-salvar="lancamento" className="btn-primary flex-1" title={tituloGravar}>
             {rotuloGravar || (initial ? 'Salvar' : 'Registrar')}
             <ShortcutHint actionId="lancamento.gravar" habilitado={atalhosForm} className="ml-2" />
           </button>

@@ -207,4 +207,23 @@ export const campos = {
   },
 }
 
-export const formularios = {}
+// Preencher com guia (Etapa 5 do pacote pós-help). O guia percorre os campos na ordem da tela e só os
+// visíveis: o tipo escolhido muda os seguintes (cartão: limite, dias, finais, câmbio e conta pagadora;
+// bem e dívida: valor atual e aquisição; poupança e bem: investimento; conta corrente: Conta central).
+export const formularios = {
+  conta: {
+    objetivo: 'Cadastrar (ou ajustar) uma conta, um cartão, um bem ou uma dívida. O tipo escolhido no começo define os campos seguintes; o guia acompanha a troca.',
+    preRequisitos: [
+      { id: 'perfil', texto: 'Um perfil (CPF ou CNPJ) para vincular a conta (recomendado; dá para criar no próprio formulário).' },
+    ],
+    ordemCampos: [
+      'conta.tipo', 'conta.nome', 'conta.apelido', 'conta.banco', 'conta.grupo', 'conta.vinculo',
+      'conta.saldoInicial', 'conta.valorAtual', 'conta.valorAquisicao', 'conta.dataAquisicao',
+      'cartao.limite', 'cartao.fechamento', 'cartao.vencimento', 'cartao.finais', 'cartao.spread', 'cartao.iofSeparado', 'cartao.contaPagadora',
+      'conta.destacar', 'conta.favorita', 'conta.esconderCelular', 'conta.somarSaldoPrincipal', 'conta.compensarResgate', 'conta.central',
+      'conta.finalidade', 'conta.tipoReserva', 'conta.categoriaReserva', 'conta.categoriaPatrimonio',
+      'conta.investimento', 'conta.categoriaInvestimento', 'conta.categoriaRendimento', 'conta.rendimentoPor',
+    ],
+    resumoAoSalvar: 'A conta passa a aparecer nas listas e nos seletores de conta. O saldo de conta corrente e poupança vem do saldo inicial mais os lançamentos; cartão começa sem fatura.',
+  },
+}

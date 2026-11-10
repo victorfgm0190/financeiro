@@ -13,7 +13,7 @@ import { helpDoCampo, helpDoFormulario } from '../../help/index.js'
 import {
   lerPreenchimento, assinarPreenchimento, encerrarPreenchimento, provedorGuia, raizDoForm, elementoDoCampo,
   controleDo, campoVazio, botaoDoForm, faseDepoisDosCampos, definirRetornoGuia, visivel, ABRIR_FORMULARIO, armarPreenchimento,
-  camposNaTela, caixaDe, obrigatorioNoForm, erroDoCampo, faltandoNaTela, campoComErroNaTela,
+  camposNaTela, caixaDe, obrigatorioNoForm, erroDoCampo, faltandoNaTela, campoComErroNaTela, errosDoForm, ladoDoBalaoCelular,
 } from '../../help/guiaPreenchimento.js'
 import { lerHelpCampo } from '../../help/helpCampoEstado.js'
 import { MARGEM, LARGURA_BALAO, posicaoBalao } from '../BoasVindas/tourPassos'
@@ -51,11 +51,22 @@ function Guia({ ativo }) {
   const [teclado, setTeclado] = useState(0)
   const balao = useRef(null)
   const clicouSalvar = useRef(false)
+  // Pausa: o formulário saiu da tela, mas a janela dele continua aberta (pergunta intermediária do
+  // próprio formulário — "É parcela?", "Parecidos", Histórico…). O balão some e volta com o formulário.
+  const [pausado, setPausado] = useState(false)
+  const pausadoRef = useRef(false)
+  useEffect(() => { pausadoRef.current = pausado }, [pausado])
+  const janela = useRef(null)
+  const lembrarJanela = useCallback(() => {
+    const r = raizDoForm(form)
+    if (r) janela.current = r.closest('[role="dialog"]')
+  }, [form])
+  useEffect(() => { lembrarJanela() }, [lembrarJanela])
   const id = fase === 'campo' ? trilha[pos] : null
   const campo = id ? helpDoCampo(id) : null
 
-  const irPara = useCallback((novoId) => {
-    setAviso('')
+  const irPara = useCallback((novoId, msg = '') => {
+    setAviso(msg)
     setTrilha(t => {
       const i = t.indexOf(novoId)
       if (i >= 0) { setPos(i); return t }
@@ -132,12 +143,17 @@ function Guia({ ativo }) {
       const raiz = raizDoForm(form)
       if (!raiz) {
         if (fase === 'pronto') return
+        if (janela.current?.isConnected) { sumiuDesde.current = 0; setPausado(true); return }
+        setPausado(false)
         if (clicouSalvar.current) { if (tarefaId) marcarTarefaConcluida(tarefaId); setFase('pronto'); return }
         if (!sumiuDesde.current) sumiuDesde.current = Date.now()
         else if (Date.now() - sumiuDesde.current > 600) encerrarPreenchimento()
         return
       }
       sumiuDesde.current = 0
+      lembrarJanela()
+      // Voltou da pausa: o formulário continua aberto, então não foi salvo.
+      if (pausadoRef.current) { clicouSalvar.current = false; setPausado(false) }
       if (fase === 'campo' && !elementoDoCampo(raiz, id)) seguir(id)
       else if (fase === 'avancar') {
         const r = faseDepoisDosCampos({ raiz, form, visitados: new Set(trilha) })
@@ -149,15 +165,18 @@ function Guia({ ativo }) {
       }
     }, VIGIA_MS)
     return () => clearInterval(t)
-  }, [form, fase, id, trilha, tarefaId, seguir, irPara])
+  }, [form, fase, id, trilha, tarefaId, seguir, irPara, lembrarJanela])
 
   // Campo novo: rola até ele e põe o foco no controle (a pessoa já digita). Outras fases: foco no balão.
   useEffect(() => {
     const el = alvo()
     if (el) el.scrollIntoView?.({ block: 'center', inline: 'nearest' })
-    if (fase === 'campo' && el) {
-      const c = controleDo(el)
-      if (c && document.activeElement !== c && !el.contains(document.activeElement)) c.focus?.({ preventScroll: true })
+    const c = fase === 'campo' && el ? controleDo(el) : null
+    if (c) {
+      if (document.activeElement !== c && !el.contains(document.activeElement)) c.focus?.({ preventScroll: true })
+    } else if (fase === 'campo') {
+      // Campo sem controle para focar (só botões de ação): o foco vai ao Próximo — o Enter avança.
+      if (!el?.contains(document.activeElement)) balao.current?.querySelector('[data-principal]')?.focus?.({ preventScroll: true })
     } else if (fase !== 'salvar' && fase !== 'avancar') {
       balao.current?.querySelector('[data-principal]')?.focus?.({ preventScroll: true })
     }
@@ -173,6 +192,7 @@ function Guia({ ativo }) {
       const tipo = ['salvar', 'avancar'].find(t => botaoDoForm(form, t)?.contains(e.target))
       if (!tipo) return
       clearTimeout(timer)
+      lembrarJanela()
       if (tipo === 'salvar') clicouSalvar.current = true
       const raiz = raizDoForm(form)
       const antes = camposNaTela(raiz).join('|')
@@ -183,14 +203,20 @@ function Guia({ ativo }) {
         const mudou = camposNaTela(r).join('|') !== antes
         if (tipo === 'avancar' && mudou) return // etapa nova: a vigia segue
         const alvoErro = faltandoNaTela(form, r)[0] || campoComErroNaTela(r)
-        if (alvoErro) { clicouSalvar.current = false; irPara(alvoErro); return }
+        if (alvoErro) {
+          clicouSalvar.current = false
+          // O aviso do campo que barrou (a mesma mensagem da validação do formulário).
+          const msg = (errosDoForm(form) || []).find(x => x.id === alvoErro)?.msg
+          irPara(alvoErro, msg ? `${msg} Preencha para salvar.` : '')
+          return
+        }
         if (Date.now() - inicio < 1200) timer = setTimeout(conferir, 150)
       }
       timer = setTimeout(conferir, 200)
     }
     document.addEventListener('click', clique, true)
     return () => { clearTimeout(timer); document.removeEventListener('click', clique, true) }
-  }, [fase, form, irPara])
+  }, [fase, form, irPara, lembrarJanela])
 
   // Posição do elemento aceso (ou do formulário, para o balão ficar ao lado).
   useEffect(() => {
@@ -222,8 +248,10 @@ function Guia({ ativo }) {
     const b = balao.current
     if (!b || typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver(([e]) => {
+      // Altura do CONTEÚDO (scrollHeight): no celular o balão pode estar encolhido (rola por dentro).
       const r = e.target.getBoundingClientRect()
-      setTamBalao(x => (Math.abs(r.width - x.largura) > 1 || Math.abs(r.height - x.altura) > 1 ? { largura: r.width, altura: r.height } : x))
+      const altura = Math.max(r.height, e.target.scrollHeight || 0)
+      setTamBalao(x => (Math.abs(r.width - x.largura) > 1 || Math.abs(altura - x.altura) > 1 ? { largura: r.width, altura } : x))
     })
     ro.observe(b)
     return () => ro.disconnect()
@@ -232,7 +260,7 @@ function Guia({ ativo }) {
   // Teclas: Esc sai (o help de campo aberto tem prioridade); Enter avança.
   useEffect(() => {
     const tecla = (e) => {
-      if (e.isComposing) return
+      if (e.isComposing || pausadoRef.current) return
       if (e.key === 'Escape') {
         if (lerHelpCampo().aberto || e.defaultPrevented) return
         e.preventDefault(); e.stopPropagation()
@@ -279,7 +307,7 @@ function Guia({ ativo }) {
     else navegarPara(passo.tela, passo.hash ? { hash: passo.hash } : {})
   }
 
-  if (!roteiro) return null
+  if (!roteiro || pausado) return null
   const elAlvo = alvo()
   const comAlvo = !!(elAlvo && rect && ['campo', 'avancar', 'salvar', 'faltando'].includes(fase))
   const vw = window.innerWidth
@@ -289,10 +317,17 @@ function Guia({ ativo }) {
   const rotuloAvancar = (botaoDoForm(form, 'avancar')?.textContent || 'Avançar').trim()
   const prov = provedorGuia(form)
   const nCampo = pos + 1
-  // Celular: em baixo, acima do teclado; no Avançar/Salvar (barra presa ao pé), em cima.
-  const estiloCelular = fase === 'avancar' || fase === 'salvar'
-    ? { top: 'calc(8px + env(safe-area-inset-top))' }
-    : { bottom: teclado ? teclado : 'env(safe-area-inset-bottom)' }
+  // Celular: em cima ou embaixo (acima do teclado) — o lado que não cobre o campo aceso nem, se der,
+  // o botão de salvar (folha do "+", formulário em tela cheia).
+  const elSalvar = isMobile && fase !== 'salvar' && fase !== 'avancar' ? botaoDoForm(form, 'salvar') : null
+  const rSalvar = elSalvar ? elSalvar.getBoundingClientRect() : null
+  const posCelular = isMobile
+    ? ladoDoBalaoCelular({ alvo: comAlvo ? rect : null, salvar: rSalvar?.height ? rSalvar : null, vh, alturaBalao: tamBalao.altura, teclado })
+    : { lado: 'baixo' }
+  const ladoCelular = posCelular.lado
+  const estiloCelular = ladoCelular === 'cima' ? { top: 'calc(8px + env(safe-area-inset-top))' }
+    : ladoCelular === 'entre' ? { top: posCelular.top, ...(posCelular.altura ? { maxHeight: posCelular.altura } : {}) }
+      : { bottom: teclado ? teclado : 'env(safe-area-inset-bottom)' }
 
   let titulo = 'Preencher com guia'
   let corpo
@@ -378,14 +413,14 @@ function Guia({ ativo }) {
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[105] pointer-events-none" data-testid="guia-preenchimento" data-fase={fase} data-campo={id || ''}>
+    <div className="fixed inset-0 z-[105] pointer-events-none" data-testid="guia-preenchimento" data-fase={fase} data-campo={id || ''} data-lado={isMobile ? ladoCelular : undefined}>
       {comAlvo && (
         <div aria-hidden="true" className={`guia-spotlight absolute rounded-lg ${fase === 'avancar' || fase === 'salvar' ? 'guia-clique' : ''}`}
           style={{ top: rect.top - MARGEM, left: rect.left - MARGEM, width: rect.width + MARGEM * 2, height: rect.height + MARGEM * 2 }} />
       )}
       <div ref={balao} role="dialog" aria-modal="false" aria-label={`Preencher com guia: ${titulo}`} tabIndex={-1} data-testid="balao-guia"
         className={`pointer-events-auto outline-none bg-surface border border-borda-forte shadow-2xl p-4 ${isMobile
-          ? 'fixed inset-x-0 max-h-[45vh] overflow-y-auto rounded-t-2xl border-x-0 border-b-0'
+          ? `fixed max-h-[45vh] overflow-y-auto ${ladoCelular === 'entre' ? 'inset-x-2 rounded-2xl' : `inset-x-0 border-x-0 ${ladoCelular === 'cima' ? 'rounded-b-2xl border-t-0' : 'rounded-t-2xl border-b-0'}`}`
           : 'absolute rounded-2xl'}`}
         style={isMobile ? estiloCelular : { top: pos2.top, left: pos2.left, width: LARGURA_BALAO }}>
         <div className="flex items-start gap-2">

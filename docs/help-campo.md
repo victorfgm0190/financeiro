@@ -335,3 +335,51 @@ de mensagem e os anexos do Assistente.
   gerado por CSS em `src/index.css`): nunca fica sozinho na linha de baixo. O texto do rótulo não muda.
   Revisão feita no Chrome em 375 e 414 px (app com dados fictícios e `/api` simulada), sem rolagem
   lateral, ⓘ sobre campo ou botão de salvar fora da tela.
+
+## Etapa 5 do pacote pós-help — "Preencher com guia" em Conta e Lançamento (10/11/2026)
+
+- **Formulários:** Nova/Editar conta (`AccountForm`, `data-help-form="conta"`) e Novo/Editar lançamento
+  (`TransactionForm`, `data-help-form="lancamento"` — Receita, Despesa e Transferência, no completo e no
+  rápido do "+" do celular). Mesmo `BotaoPreencherGuia` e mesmo `GuiaPreenchimento` dos outros guias.
+  - Roteiros na base: `formularios.conta` (`src/help/contas.js`) e `formularios.lancamento`
+    (`src/help/lancamentos.js`), com objetivo, pré-requisitos, `ordemCampos` (na ordem da tela) e resumo.
+  - Só os campos visíveis entram. Na conta, o tipo escolhido decide os seguintes (cartão: limite, dias,
+    finais, câmbio, conta pagadora; bem/dívida: valor atual e aquisição; poupança e bem: investimento;
+    conta corrente: Conta central). No lançamento, a aba decide (transferência: conta destino, fatura paga,
+    reserva; cartão: fatura e parcelado; rateio; Repetir). Trocar o tipo ou a aba no meio do guia:
+    se o campo atual some, o guia segue para o próximo campo ainda não visto da tela nova.
+  - Validação do guia = a do Salvar: `errosDaConta` (nome; cartão: dias e finais; Patrimônio e
+    investimento: categoria) e `errosDoLancamento` (valor, conta, conta destino, tipo de documento
+    exigido, rateio que não fecha, categoria da reserva livre, função de reserva do grupo, e os campos
+    com `required` do navegador, como a conta da classificação gerencial). Salvar barrado no meio do
+    guia: ele vai ao primeiro campo que falta e mostra o aviso da validação.
+  - Resumo com os dados reais (tipo, valor, contas, data, categoria/rateio, parcelas, agendamento).
+  - Botão e oferta: só para quem pode gravar; a oferta só no formulário novo. Na prévia do Assistente
+    (`destaques`/`onSalvo`) o botão não aparece: ela tem o próprio Confirmar.
+  - Pré-requisito do lançamento: uma conta (`prerequisitos.js`). "Cadastrar agora" volta ao Novo
+    lançamento de Lançamentos (`ABRIR_FORMULARIO.lancamento`).
+  - "Dividir em categorias" e "Mais opções" nunca abrem sozinhos: o objetivo e o help da categoria dizem
+    que existem. Tocar em "Mais opções" durante o guia abre o formulário completo e o guia continua nele.
+- **Ajustes no guia (valem para todos os formulários):**
+  - Foco: num grupo de opções vai para a opção já escolhida (rádio marcado, `aria-pressed="true"`). Assim
+    o Enter avança em vez de trocar a escolha. As abas do lançamento ganharam `aria-pressed`. Campo só com
+    botão de ação ("Dividir em categorias"): o foco fica no Próximo do balão.
+  - Pausa: se o formulário sai da tela mas a janela dele continua aberta (pergunta do próprio formulário,
+    como "É parcela?", "Parecidos", Histórico ou o resgate da reserva), o balão some, o Esc é da
+    janela, e o guia volta com o formulário. "Pronto" só quando a janela fecha depois do Salvar.
+  - Celular: o balão fica em cima, embaixo (acima do teclado) ou logo abaixo do campo aceso, entre ele
+    e o Salvar. Escolhe a posição que não cobre o campo e, se der, nem o Salvar (`ladoDoBalaoCelular`).
+    Entre os dois, ele pode encolher até 180 px e rolar por dentro.
+- **ⓘ:** o balão do hover só abre com movimento real do mouse, num aparelho com mouse. Quando a tela muda
+  debaixo de um ponteiro parado (o guia trocou de passo), o navegador repetia o último ponto tocado e o
+  balão abria sozinho. O clique/toque no ⓘ e o Tab continuam iguais.
+- **Revisão no celular:** Chrome em 375×667 e 414×896, com dados fictícios e `/api` simulada. Percorridos
+  o "+" Lançamento, Transferência, Agendamento, Lançamento › Mais opções e Contas › Nova conta (cartão).
+  Em nenhum passo o balão cobriu o campo aceso ou o Salvar, nenhum balão do ⓘ abriu, e não houve rolagem
+  lateral.
+- **help:check:** confere campos e ids, não os roteiros. Os roteiros são conferidos por `src/help/help.test.js`
+  (os ids de `ordemCampos` existem na base).
+- Testes: `src/components/Ajuda/GuiaContaLancamento.test.jsx` (formulários de verdade: troca de tipo e
+  de aba, Enter, obrigatório, Salvar no meio, "Dividir" e "Mais opções", rápido do celular) e os casos
+  novos em `GuiaPreenchimento.test.jsx` (pausa, foco, lado do balão) e `HelpCampo.test.jsx` (hover
+  só com movimento real).

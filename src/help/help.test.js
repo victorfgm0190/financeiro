@@ -34,7 +34,7 @@ describe('base do help de campo', () => {
   })
 
   it('formulários: objetivo, pré-requisitos, ordem de campos existentes e resumo ao salvar', () => {
-    for (const f of ['contrato', 'contratoTaxa', 'repasseComposicao', 'conferenciaExtrato', 'agendamento', 'registrarAgendamento']) {
+    for (const f of ['contrato', 'contratoTaxa', 'repasseComposicao', 'conferenciaExtrato', 'agendamento', 'registrarAgendamento', 'conta', 'lancamento']) {
       const h = helpDoFormulario(f)
       expect(h, f).toBeTruthy()
       expect(texto(h.objetivo) && texto(h.resumoAoSalvar), f).toBe(true)
@@ -44,7 +44,7 @@ describe('base do help de campo', () => {
       for (const id of h.ordemCampos) expect(CAMPOS[id], `${f} → ${id}`).toBeTruthy()
       expect(new Set(h.ordemCampos).size, f).toBe(h.ordemCampos.length)
     }
-    expect(Object.keys(FORMULARIOS).length).toBeGreaterThanOrEqual(6)
+    expect(Object.keys(FORMULARIOS).length).toBeGreaterThanOrEqual(8)
   })
 
   it('texto do ⓘ vem da base: textoCurtoDoCampo devolve o paraQueServe', () => {

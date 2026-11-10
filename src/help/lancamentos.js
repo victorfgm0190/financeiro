@@ -195,4 +195,26 @@ export const campos = {
   },
 }
 
-export const formularios = {}
+// Preencher com guia (Etapa 5 do pacote pós-help). Vale para Receita, Despesa e Transferência e para o
+// formulário rápido do "+" no celular. Só os campos visíveis entram (cartão: fatura e parcelado;
+// transferência: conta destino, fatura paga, reserva; rateio; agendamento vinculado — Repetir).
+// "Dividir em categorias" e "Mais opções" nunca abrem sozinhos: o guia só explica que existem.
+export const formularios = {
+  lancamento: {
+    objetivo: 'Registrar uma receita, uma despesa ou uma transferência entre contas; o saldo da conta muda ao salvar. Trocar a aba (Receita, Despesa, Transferência) refaz a ordem dos campos. "Dividir em categorias" e, no celular, "Mais opções" só abrem se você tocar neles.',
+    preRequisitos: [
+      { id: 'conta', texto: 'Uma conta ou um cartão cadastrado.' },
+      { id: 'categoria', texto: 'Categorias de receita e despesa (recomendado).' },
+    ],
+    ordemCampos: [
+      'lancamento.tipo', 'lancamento.conta', 'lancamento.contaDestino', 'lancamento.valor', 'lancamento.faturaPagamento',
+      'lancamento.categoriaReserva', 'lancamento.funcaoReserva', 'lancamento.categoriaAplicacao', 'lancamento.categoria',
+      'lancamento.favorecido', 'lancamento.categoriasPerfis', 'lancamento.tipoDocumento', 'lancamento.data', 'lancamento.dataBanco',
+      'lancamento.centroCusto', 'lancamento.descricao', 'lancamento.faturaReferencia', 'lancamento.parcelaSerie', 'lancamento.observacoes',
+      'lancamento.numeroContrato', 'lancamento.usarReserva', 'lancamento.contaReserva', 'lancamento.parcelado', 'lancamento.parcelas',
+      'lancamento.classificacaoGerencial', 'lancamento.gerencialContaDestino',
+      'lancamento.repetir', 'lancamento.repetirFrequencia', 'lancamento.repetirAte', 'lancamento.repetirLembrete',
+    ],
+    resumoAoSalvar: 'O lançamento entra no extrato e o saldo da conta é recalculado. No cartão, a compra vai para a fatura indicada; com "Repetir", o agendamento aparece em Agendamentos.',
+  },
+}

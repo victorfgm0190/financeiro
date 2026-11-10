@@ -60,6 +60,7 @@ export const limparRetornoGuia = () => { retorno = null }
 export const ABRIR_FORMULARIO = {
   agendamento: { tela: 'schedule', novo: 'schedule.novo', titulo: 'Novo agendamento' },
   contrato: { tela: 'contratos', novo: 'contratos.novo', titulo: 'Novo contrato' },
+  lancamento: { tela: 'transactions', novo: 'transactions.novo', titulo: 'Novo lançamento' },
 }
 
 export function _reiniciarPreenchimento() { estado = { ativo: null }; pendente = null; retorno = null; provedores.clear() }
@@ -125,10 +126,16 @@ export function proximoCampo(raiz, visitados) {
 }
 // O que dá para preencher dentro do contêiner (para focar e conferir se está vazio).
 const CONTROLES = 'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
+// Grupo de opções (rádios ou botões Receita/Despesa…): o foco vai para a opção JÁ escolhida — assim o
+// Enter avança em vez de trocar a escolha.
 export function controleDo(el) {
   if (!el) return null
   if (el.matches?.(CONTROLES)) return el
-  return [...el.querySelectorAll(CONTROLES)].find(visivel) || el.querySelector('button:not([disabled])') || null
+  const ctrls = [...el.querySelectorAll(CONTROLES)].filter(visivel)
+  if (ctrls.length && ctrls.every(c => c.type === 'radio')) return ctrls.find(c => c.checked) || ctrls[0]
+  // Sem campo: a opção escolhida, um seletor próprio ou um liga/desliga. Botão de ação ("Dividir em
+  // categorias", "+ Adicionar") não recebe o foco — o Enter o abriria; o foco fica no balão.
+  return ctrls[0] || el.querySelector('button[aria-pressed="true"]:not([disabled]), button[aria-haspopup]:not([disabled]), [role="switch"]:not([disabled])') || null
 }
 // Vazio: texto/número/data/seletor sem valor; grupo de opções sem nenhuma marcada; seletor próprio
 // (SearchableSelect) com data-preenchido="nao". Sem nada disso (botões) → não acusa.
@@ -211,4 +218,27 @@ export function controlesSemPasso(raiz) {
     const ct = c.closest('[data-help-id]')
     return !(ct && raiz.contains(ct) && helpDoCampo(ct.getAttribute('data-help-id')))
   })
+}
+
+// Celular: o balão fica preso em cima ou embaixo da tela — ou, quando cabe, logo abaixo do campo aceso
+// (entre ele e o Salvar). Escolhe o que não cobre o campo e, se der, nem o botão de salvar (o campo
+// pesa mais). Caixas: { top, bottom } na tela; null = não há. alturaBalao: a do balão; teclado: altura
+// do teclado aberto (o balão de baixo fica acima dele). Entre os dois, o balão pode encolher até
+// `minimo` (rola por dentro). → { lado: 'cima' | 'baixo' | 'entre', top?, altura? }.
+export function ladoDoBalaoCelular({ alvo = null, salvar = null, vh, alturaBalao, teclado = 0, topo = 8, folga = 8, minimo = 180 }) {
+  const piso = vh - teclado
+  const faixas = { cima: [topo, topo + alturaBalao], baixo: [piso - alturaBalao, piso] }
+  if (alvo) {
+    const t = alvo.bottom + folga
+    const limite = Math.min(piso, salvar && salvar.top > alvo.bottom ? salvar.top - folga / 2 : piso)
+    const cabe = Math.min(alturaBalao, limite - t)
+    if (cabe >= Math.min(alturaBalao, minimo)) faixas.entre = [t, t + cabe]
+  }
+  const cobre = (f, r) => (r ? Math.max(0, Math.min(f[1], r.bottom) - Math.max(f[0], r.top)) : 0)
+  const custo = (lado) => 10 * cobre(faixas[lado], alvo) + cobre(faixas[lado], salvar)
+  // Preferência no empate: embaixo (perto do polegar), depois em cima, depois entre.
+  const lado = Object.keys(faixas).sort((a, b) => custo(a) - custo(b) || ['baixo', 'cima', 'entre'].indexOf(a) - ['baixo', 'cima', 'entre'].indexOf(b))[0]
+  if (lado !== 'entre') return { lado }
+  const [t, b] = faixas.entre
+  return b - t < alturaBalao ? { lado, top: Math.round(t), altura: Math.floor(b - t) } : { lado, top: Math.round(t) }
 }

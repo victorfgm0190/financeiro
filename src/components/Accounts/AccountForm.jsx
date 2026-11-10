@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import HelpCampo from '../shared/HelpCampo'
+import BotaoPreencherGuia from '../Ajuda/BotaoPreencherGuia'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import CategorySelect from '../shared/CategorySelect'
@@ -8,7 +9,7 @@ import DateInput from '../shared/DateInput'
 import InputMoeda from '../shared/InputMoeda'
 import { ehContaDeFinanciamento } from '../../lib/financiamento'
 import { lerFinais, finaisDoCartao, chaveSubconta, subcontaDoCartao, ehSubcontaGerencialApp } from '../../lib/cartaoFinais'
-import { erroDiasCartao, cartaoSemDias } from '../../lib/cartaoDias'
+import { erroDiasCartao, cartaoSemDias, diaValido } from '../../lib/cartaoDias'
 import { FECHAMENTO_PADRAO } from '../../lib/fatura'
 import { AVISO_SEM_VINCULO, SEM_PERFIL_CADASTRADO, BOTAO_CRIAR_PERFIL, avisoContaForaDoFiltro, perfilPadraoDaContaNova } from '../../lib/textosVinculo'
 import PerfilRapido from '../shared/PerfilRapido'
@@ -22,6 +23,33 @@ const TYPES = [
   { value: 'asset', label: 'Bem / Ativo' },
   { value: 'liability', label: 'Dívida / Passivo' },
 ]
+
+// Preencher com guia: o que barra o Salvar agora, campo a campo, com as MESMAS regras do handleSubmit
+// (nome; cartão: dias e finais; Patrimônio e investimento: categoria). [{ id do help, msg }].
+function errosDaConta(form) {
+  const isCredit = form.type === 'credit'
+  const isPatrimonial = form.type === 'asset' || form.type === 'liability'
+  const erros = []
+  if (!String(form.name || '').trim()) erros.push({ id: 'conta.nome', msg: 'Informe o nome da conta.' })
+  if (isCredit) {
+    if (!diaValido(form.closingDay)) erros.push({ id: 'cartao.fechamento', msg: 'Informe o dia de fechamento (1 a 31).' })
+    if (!diaValido(form.dueDay)) erros.push({ id: 'cartao.vencimento', msg: 'Informe o dia de vencimento (1 a 31).' })
+    const { invalidos } = lerFinais(form.cartaoFinais)
+    if (invalidos.length) erros.push({ id: 'cartao.finais', msg: `Use 4 dígitos por final (inválido: ${invalidos.join(', ')}).` })
+  }
+  if (!isCredit && !isPatrimonial && form.vinculoTipo === 'patrimonio' && !form.patrimonioCategoryId) {
+    erros.push({ id: 'conta.categoriaPatrimonio', msg: 'Selecione a categoria do patrimônio.' })
+  }
+  if ((form.type === 'savings' || form.type === 'asset') && form.isInvestimento && !form.investmentCategoryId) {
+    erros.push({ id: 'conta.categoriaInvestimento', msg: 'Selecione a categoria do investimento.' })
+  }
+  return erros
+}
+// Campo do help → chave do formulário (para saber se ele barraria vazio).
+const CHAVE_DO_HELP = {
+  'conta.nome': 'name', 'cartao.fechamento': 'closingDay', 'cartao.vencimento': 'dueDay',
+  'conta.categoriaPatrimonio': 'patrimonioCategoryId', 'conta.categoriaInvestimento': 'investmentCategoryId',
+}
 
 // Ícone ⓘ do campo: componente único do app (src/components/shared/HelpCampo.jsx).
 const Tooltip = ({ text }) => <HelpCampo texto={text} />
@@ -181,6 +209,28 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
     set('contaCorrentePrincipal', ligar)
   }
 
+  // Preencher com guia: validação (a mesma do Salvar) e o resumo com os dados reais.
+  const validacaoGuia = {
+    erros: () => errosDaConta(form),
+    obrigatorio: (id) => !!CHAVE_DO_HELP[id] && errosDaConta({ ...form, [CHAVE_DO_HELP[id]]: '' }).some(x => x.id === id),
+  }
+  const resumoGuia = () => {
+    const nome = form.name.trim() || 'sem nome'
+    const tipo = TYPES.find(t => t.value === form.type)?.label || form.type
+    const linhas = [`${initial ? 'Atualiza' : 'Cria'} a conta "${nome}" (${tipo}).`]
+    linhas.push(perfilForm ? `Fica no perfil ${nomeDoPerfil(perfilForm)}.` : 'Sem vínculo: a conta só aparece no filtro "Tudo".')
+    if (!isCredit && !isPatrimonial && !initial) linhas.push(`Saldo inicial: ${fmt(Number(form.balance) || 0)}.`)
+    if (isPatrimonial && !saldoDoFinanciamento) linhas.push(`${form.type === 'asset' ? 'Valor atual' : 'Saldo devedor'}: ${fmt(Number(form.balance) || 0)}.`)
+    if (isCredit && diaValido(form.closingDay) && diaValido(form.dueDay)) {
+      const pagadora = accounts.find(a => a.id === form.paymentAccountId)?.name || 'a conta principal padrão'
+      linhas.push(`A fatura fecha no dia ${Number(form.closingDay)} e vence no dia ${Number(form.dueDay)}; o pagamento sai de ${pagadora}.`)
+    }
+    if (!isCredit && !isPatrimonial && form.vinculoTipo === 'reserva') linhas.push('A conta aparece em Reservas.')
+    if (conflictAccount) linhas.push(`"${conflictAccount.name}" deixa de ser a Conta central de ${nomeDoPerfil(perfilForm)}.`)
+    if (conflictFavorita) linhas.push(`"${conflictFavorita.name}" deixa de ser a favorita.`)
+    return linhas
+  }
+
   const handleSubmit = (e, vinculoConfirmado = false) => {
     e?.preventDefault?.()
     if (!form.name.trim() || !podeSalvar) return
@@ -292,6 +342,9 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" data-help-form="conta">
+      {podeSalvar && (
+        <BotaoPreencherGuia form="conta" resumo={resumoGuia} validacao={validacaoGuia} oferecer={!initial} onFechar={onClose} className="-mb-2" />
+      )}
       <div data-guia="conta-form.tipo" data-help-id="conta.tipo">
         <label className="label">Tipo de Conta<HelpCampo campo="conta.tipo" /></label>
         <div className="grid grid-cols-2 gap-2">
@@ -872,7 +925,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
           </div>
         )}
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        {podeSalvar && <button type="submit" data-guia="conta-form.salvar" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar Conta'}</button>}
+        {podeSalvar && <button type="submit" data-guia="conta-form.salvar" data-help-salvar="conta" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar Conta'}</button>}
       </div>
       {!podeSalvar && <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
     </form>

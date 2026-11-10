@@ -8,7 +8,8 @@ import { assinarBoasVindas, estadoBoasVindas } from '../../lib/boasVindasApi'
 // ── Help de campo: ícone ⓘ discreto ao lado do rótulo ───────────────────────────────────────────
 //   <HelpCampo campo="cartao.fechamento" />   (texto em src/help/<tela>.js)
 //   <HelpCampo texto="..." />                 (texto direto, quando não há chave)
-// Desktop: abre ao passar o mouse (e ao chegar nele pelo Tab — nunca por foco programático). Mobile: abre ao tocar e fecha ao tocar
+// Desktop: abre ao passar o mouse (movimento real — nunca porque a tela mudou debaixo do ponteiro) e ao
+// chegar nele pelo Tab (nunca por foco programático). Mobile: abre ao tocar e fecha ao tocar
 // fora ou em Esc. O balão vai num portal com posição fixa — não é cortado por modal com rolagem.
 // Some quando o usuário desliga "Mostrar ícones de ajuda nos campos" (Configurações › Guias,
 // preferência no banco). Clique no ícone não aciona o campo/checkbox do rótulo.
@@ -21,6 +22,16 @@ if (typeof window !== 'undefined') {
   window.addEventListener('mousedown', () => { ultimaFoiTab = false }, true)
 }
 const focoPorTeclado = () => ultimaFoiTab
+// Hover de verdade: o mouse SE MEXEU sobre o ⓘ, num aparelho com mouse. Quando a tela muda debaixo de
+// um ponteiro parado (o guia trocou de passo, a folha rolou), o navegador repete o último ponto — do
+// mouse ou do último toque — e isso não pode abrir o balão sozinho (Etapa 5). O ouvinte da janela
+// roda DEPOIS do ⓘ (fase de bolha): o ⓘ compara com o ponto anterior.
+let ultimoPonto = { x: NaN, y: NaN }
+if (typeof window !== 'undefined') {
+  window.addEventListener('mousemove', (e) => { ultimoPonto = { x: e.clientX, y: e.clientY } })
+}
+const mexeuDeVerdade = (e) => e.clientX !== ultimoPonto.x || e.clientY !== ultimoPonto.y
+const temMouse = () => typeof window === 'undefined' || !window.matchMedia || window.matchMedia('(hover: hover)').matches
 
 function useAjudaCamposLigada() {
   const [e, setE] = useState(estadoBoasVindas)
@@ -94,7 +105,7 @@ export default function HelpCampo({ campo, texto }) {
         aria-haspopup={completo ? 'dialog' : undefined}
         data-testid="help-campo"
         className="help-campo-alvo help-campo-cola ml-1 whitespace-nowrap rounded-full text-texto-3 hover:text-texto-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-help p-1 -m-1"
-        onMouseEnter={abrir}
+        onMouseMove={(ev) => { if (!aberto && mexeuDeVerdade(ev) && temMouse()) abrir() }}
         onMouseLeave={() => { if (!fixoRef.current) setAberto(false) }}
         onFocus={() => { if (focoPorTeclado()) abrir() }}
         onBlur={() => { if (!fixoRef.current) setAberto(false) }}

@@ -22,9 +22,24 @@ describe('HelpCampo', () => {
     const icone = screen.getByTestId('help-campo')
     expect(balao()).toBeNull()
     fireEvent.mouseEnter(icone)
+    fireEvent.mouseMove(icone, { clientX: 10, clientY: 10 })
     expect(balao().textContent).toBe(CAMPOS['cartao.fechamento'].paraQueServe)
     fireEvent.mouseLeave(icone)
     expect(balao()).toBeNull()
+  })
+
+  it('a tela mudou debaixo do ponteiro parado (guia trocou de passo): o balão NÃO abre sozinho', () => {
+    render(<div><p>outro lugar</p><label>Dia de Fechamento <HelpCampo campo="cartao.fechamento" /></label></div>)
+    const icone = screen.getByTestId('help-campo')
+    // Último ponto do mouse/toque: (50, 60), em outro elemento.
+    fireEvent.mouseMove(screen.getByText('outro lugar'), { clientX: 50, clientY: 60 })
+    // O layout mudou e o navegador repete o mesmo ponto sobre o ⓘ: não abre.
+    fireEvent.mouseEnter(icone)
+    fireEvent.mouseMove(icone, { clientX: 50, clientY: 60 })
+    expect(balao()).toBeNull()
+    // O mouse se mexeu de verdade sobre o ⓘ: abre.
+    fireEvent.mouseMove(icone, { clientX: 52, clientY: 61 })
+    expect(balao()).toBeTruthy()
   })
 
   it('clique/toque abre o painel do help de campo (não o balão); o clique não aciona o campo do rótulo', () => {
