@@ -9,6 +9,7 @@ import { isoLocal } from '../../lib/hoje'
 import { specRelatorioFavorecido } from '../../lib/relatorioFavorecidoExcel'
 import { exportarExcel } from '../../lib/exportExcel'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
+import HelpCampo from '../shared/HelpCampo'
 
 // ─── Shared helpers (same pattern as DemonstrativoFinanceiro) ────────────────
 
@@ -190,14 +191,14 @@ export default function RelatorioPorFavorecido() {
   return (
     <div className="space-y-4">
       {/* Filter panel */}
-      <div className="card space-y-4">
+      <div className="card space-y-4" data-help-form="filtrosRelatorioFavorecido">
         <h3 className="text-sm font-semibold text-texto-2 flex items-center gap-2">
           <Users size={14} className="text-texto-2" />
           Relatório por Favorecido
         </h3>
 
-        <div>
-          <label className="label">Período</label>
+        <div data-help-id="filtroFavorecido.periodo">
+          <label className="label">Período<HelpCampo campo="filtroFavorecido.periodo" /></label>
           <div data-guia="reports:favorecido.periodo" className="flex gap-1.5 flex-wrap">
             {PERIOD_OPTIONS.map(o => (
               <button
@@ -213,16 +214,16 @@ export default function RelatorioPorFavorecido() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div data-guia="reports:favorecido.datas">
-            <label className="label">Data Inicial</label>
+          <div data-guia="reports:favorecido.datas" data-help-id="filtroFavorecido.dataDe">
+            <label className="label">Data Inicial<HelpCampo campo="filtroFavorecido.dataDe" /></label>
             <DateInput className="input" value={fromDraft} onChange={e => setFromDraft(e.target.value)} />
           </div>
-          <div>
-            <label className="label">Data Final</label>
+          <div data-help-id="filtroFavorecido.dataAte">
+            <label className="label">Data Final<HelpCampo campo="filtroFavorecido.dataAte" /></label>
             <DateInput className="input" value={toDraft} onChange={e => setToDraft(e.target.value)} />
           </div>
-          <div data-guia="reports:favorecido.contas">
-            <label className="label">Contas ({selectedAccsDraft.length}/{accItems.length})</label>
+          <div data-guia="reports:favorecido.contas" data-help-id="filtroFavorecido.contas">
+            <label className="label">Contas ({selectedAccsDraft.length}/{accItems.length})<HelpCampo campo="filtroFavorecido.contas" /></label>
             <MultiSelectPanel items={accItems} selected={selectedAccsDraft} onChange={setSelectedAccsDraft} />
           </div>
         </div>
@@ -265,11 +266,12 @@ export default function RelatorioPorFavorecido() {
 
       {/* Search */}
       {reportData.length > 0 && (
-        <div className="relative">
+        <div className="relative" data-help-form="filtrosRelatorioFavorecido" data-help-id="filtroFavorecido.busca">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3 pointer-events-none" />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2"><HelpCampo campo="filtroFavorecido.busca" /></span>
           <input
             data-guia="reports:favorecido.busca"
-            className="input pl-9"
+            className="input pl-9 pr-9"
             placeholder="Buscar favorecido..."
             value={search}
             onChange={e => setSearch(e.target.value)}

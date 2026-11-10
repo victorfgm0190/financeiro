@@ -8,6 +8,7 @@ import ReconcileBadge from '../shared/ReconcileBadge'
 import { isoLocal } from '../../lib/hoje'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 import { rotuloDoTipo } from '../../lib/rotuloMovimento'
+import HelpCampo from '../shared/HelpCampo'
 
 function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
@@ -80,20 +81,20 @@ export default function ExtratoGerencial({ initialCardId }) {
     <div className="space-y-4">
       <div className="card">
         <h2 className="text-sm font-semibold text-texto-2 mb-4">Extrato Gerencial</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="label">Cartão</label>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-help-form="filtrosExtratoGerencial">
+          <div data-help-id="filtroGerencial.cartao">
+            <label className="label">Cartão<HelpCampo campo="filtroGerencial.cartao" /></label>
             <select data-guia="credit:extrato.cartao" className="input" value={selectedCardId} onChange={e => setSelectedCardId(e.target.value)}>
               <option value="">Selecione...</option>
               {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <div data-guia="credit:extrato.de">
-            <label className="label">De</label>
+          <div data-guia="credit:extrato.de" data-help-id="filtroGerencial.dataDe">
+            <label className="label">De<HelpCampo campo="filtroGerencial.dataDe" /></label>
             <DateInput className="input" value={from} onChange={e => setFrom(e.target.value)} />
           </div>
-          <div data-guia="credit:extrato.ate">
-            <label className="label">Até</label>
+          <div data-guia="credit:extrato.ate" data-help-id="filtroGerencial.dataAte">
+            <label className="label">Até<HelpCampo campo="filtroGerencial.dataAte" /></label>
             <DateInput className="input" value={to} onChange={e => setTo(e.target.value)} />
           </div>
         </div>

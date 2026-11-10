@@ -9,6 +9,7 @@ import { useThemeColors } from '../../hooks/useTheme'
 import { corSerie } from '../../lib/chartPalette'
 import { linhasDasFuncoesNoPerfil } from '../../lib/fluxoReservaTotais'
 import ProfileBadge from '../shared/ProfileBadge'
+import HelpCampo from '../shared/HelpCampo'
 
 // ── Aba "Razão Diário" ──────────────────────────────────────────────────────
 // Lê reserve_daily_ledger (uma linha por função por dia) e mostra evolução + tabela.
@@ -331,10 +332,11 @@ export default function RazaoDiarioTab({
       </div>
 
       {/* Filtros */}
-      <div className="card p-3 space-y-3">
+      <div className="card p-3 space-y-3" data-help-form="filtrosRazao">
         <div className="flex items-center gap-3 flex-wrap">
-          <label className="text-xs text-texto-3 shrink-0">Mês</label>
+          <label className="text-xs text-texto-3 shrink-0 inline-flex items-center">Mês<HelpCampo campo="filtroRazao.mes" /></label>
           <select
+            data-help-id="filtroRazao.mes"
             data-guia="reservas:razao.mes"
             className="input w-auto text-xs py-1.5"
             value={selectedMonth}
@@ -358,8 +360,8 @@ export default function RazaoDiarioTab({
 
         {funcoesNoRazao.length > 0 && (
           <div className="flex items-start gap-3 flex-wrap">
-            <label className="text-xs text-texto-3 shrink-0 pt-1">Funções</label>
-            <div className="flex flex-wrap gap-1.5 flex-1" data-guia="reservas:razao.funcoes">
+            <label className="text-xs text-texto-3 shrink-0 pt-1 inline-flex items-center">Funções<HelpCampo campo="filtroRazao.funcoes" /></label>
+            <div className="flex flex-wrap gap-1.5 flex-1" data-guia="reservas:razao.funcoes" data-help-id="filtroRazao.funcoes">
               {funcoesNoRazao.map(f => {
                 const on = selecionadas.includes(f.id)
                 return (

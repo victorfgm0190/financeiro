@@ -5,16 +5,17 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import {
   erroPeriodo, atalhosPeriodo, aplicarAtalho, periodoPadrao, rotuloPeriodo, somarMeses, MAX_MESES_FLUXO,
 } from '../../lib/fluxoPeriodo'
+import HelpCampo from '../shared/HelpCampo'
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
 // Mês + ano ('YYYY-MM') com dois selects. Anos: do atual até onde o limite de meses alcança.
-function CampoMes({ rotulo, valor, anos, onChange }) {
+function CampoMes({ rotulo, valor, anos, onChange, helpId }) {
   const [ano, mes] = valor.split('-')
   const id = `fluxo-periodo-${rotulo.toLowerCase()}`
   return (
-    <div className="space-y-1">
-      <label htmlFor={id} className="text-xs text-texto-2">{rotulo}</label>
+    <div className="space-y-1" data-help-id={helpId}>
+      <label htmlFor={id} className="text-xs text-texto-2 inline-flex items-center">{rotulo}<HelpCampo campo={helpId} /></label>
       <div className="flex gap-2">
         <select id={id} className="input text-xs py-1.5 flex-1" value={mes} onChange={e => onChange(`${ano}-${e.target.value}`)} aria-label={`${rotulo}: mês`}>
           {MESES.map((m, i) => <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>)}
@@ -44,12 +45,12 @@ function Conteudo({ periodo, atual, onAplicar, onFechar }) {
   const padrao = () => { const p = periodoPadrao(atual); onAplicar({ ...p, meses: null }) }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-help-form="periodoFluxoReservas">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <CampoMes rotulo="De" valor={de} anos={anos} onChange={mudarDe} />
-        <CampoMes rotulo="Até" valor={ate} anos={anos} onChange={mudarAte} />
+        <CampoMes rotulo="De" valor={de} anos={anos} onChange={mudarDe} helpId="periodoFluxo.de" />
+        <CampoMes rotulo="Até" valor={ate} anos={anos} onChange={mudarAte} helpId="periodoFluxo.ate" />
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5" data-help-id="periodoFluxo.atalhos">
         {atalhosPeriodo(atual).map(a => {
           const ativo = aplicarAtalho(a, de) === ate && (a.meses ? meses === a.meses : !meses)
           return (
@@ -59,6 +60,7 @@ function Conteudo({ periodo, atual, onAplicar, onFechar }) {
             </button>
           )
         })}
+        <HelpCampo campo="periodoFluxo.atalhos" />
       </div>
       <p className="text-[11px] text-texto-3">
         A projeção sempre parte do saldo de hoje; meses antes do "De" só ficam escondidos. Máximo de {MAX_MESES_FLUXO} meses.

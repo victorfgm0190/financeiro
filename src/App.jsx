@@ -321,7 +321,7 @@ function AppContent() {
 function PrivateRoute({ children }) {
   // Lido uma vez ao montar: o login salva o token e recarrega a página, então a sessão vem daqui.
   const [token] = useState(() => getToken())
-  if (!token) return <Login />
+  if (!token) return <><Login /><HelpCampoPainel /></>
   // "Trocar senha no próximo login": o app só abre depois da troca.
   if (getSessao()?.trocarSenha) return <TrocarSenha />
   return children
@@ -345,7 +345,8 @@ export default function App() {
   // breakpoint ou mudar o tema do sistema, mesmo sem nenhum ThemeToggle montado.
   useTheme()
   const publica = PAGINAS_PUBLICAS[window.location.pathname.replace(/\/+$/, '')]
-  if (publica) return publica()
+  // Painel do help de campo também nas páginas públicas (Pedido de cadastro, Definir senha).
+  if (publica) return <>{publica()}<HelpCampoPainel /></>
   return (
     <PrivateRoute>
       <AppProvider>

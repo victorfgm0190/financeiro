@@ -361,6 +361,20 @@ export const campos = {
     relacaoComTela: 'Vem o mais provável. Troque por outro da lista ou escolha Pular. Em "Vincular", o repasse da competência é baixado por ele; o lançamento não muda.',
     obrigatorio: false,
   },
+
+  // ── Relatório de Rendimentos: conferência com o informe da administradora (bloco 5b) ─────────
+  'informeAdm.rendimentos': {
+    titulo: 'Rendimentos do informe',
+    paraQueServe: 'Aluguel bruto do ano que consta no informe da administradora.',
+    relacaoComTela: 'A coluna Diferença compara com o calculado. "Gravar informe" guarda o valor no contrato, por ano.',
+    obrigatorio: false,
+  },
+  'informeAdm.deducoes': {
+    titulo: 'Deduções do informe',
+    paraQueServe: 'Deduções dedutíveis do ano que constam no informe da administradora.',
+    relacaoComTela: 'A coluna Diferença compara com o calculado. "Gravar informe" guarda o valor no contrato, por ano.',
+    obrigatorio: false,
+  },
 }
 
 export const formularios = {}

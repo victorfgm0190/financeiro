@@ -7,6 +7,7 @@ import { valorAtual, proximaParcela, rotuloContrato, STATUS_CONTRATO } from '../
 import { MODALIDADES, rotuloModalidade, rotuloTipo } from '../../lib/contratos/rotulos'
 import ContratoWizard from './ContratoWizard'
 import RegrasItensPanel from './RegrasItensPanel'
+import HelpCampo from '../shared/HelpCampo'
 
 // Lista de contratos (filtros perfil / modalidade / tipo / status) + "Novo contrato". Clique abre a ficha.
 export default function ContratosPanel() {
@@ -45,29 +46,29 @@ export default function ContratosPanel() {
   return (
     <div className="space-y-4">
       {abas}
-      <div className="flex flex-wrap items-end gap-2">
-        <div>
-          <label className="label text-xs">Perfil</label>
+      <div className="flex flex-wrap items-end gap-2" data-help-form="filtrosContratos">
+        <div data-help-id="filtroContratos.perfil">
+          <label className="label text-xs">Perfil<HelpCampo campo="filtroContratos.perfil" /></label>
           <select className="input py-1.5 text-sm" data-guia="contratos.perfil" value={perfil} onChange={e => setPerfil(e.target.value)}>
             <option value="">Todos</option>
             {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
-        <div>
-          <label className="label text-xs">Modalidade</label>
+        <div data-help-id="filtroContratos.modalidade">
+          <label className="label text-xs">Modalidade<HelpCampo campo="filtroContratos.modalidade" /></label>
           <select className="input py-1.5 text-sm" data-guia="contratos.modalidade" value={modalidade} onChange={e => setModalidade(e.target.value)}>
             <option value="">Todas</option>
             {Object.entries(MODALIDADES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </div>
-        <div>
-          <label className="label text-xs">Tipo</label>
+        <div data-help-id="filtroContratos.tipo">
+          <label className="label text-xs">Tipo<HelpCampo campo="filtroContratos.tipo" /></label>
           <select className="input py-1.5 text-sm" data-guia="contratos.tipo" value={tipo} onChange={e => setTipo(e.target.value)}>
             <option value="">Todos</option><option value="pagar">A pagar</option><option value="receber">A receber</option>
           </select>
         </div>
-        <div>
-          <label className="label text-xs">Status</label>
+        <div data-help-id="filtroContratos.status">
+          <label className="label text-xs">Status<HelpCampo campo="filtroContratos.status" /></label>
           <select className="input py-1.5 text-sm" data-guia="contratos.status" value={status} onChange={e => setStatus(e.target.value)}>
             <option value="">Todos</option>
             {Object.entries(STATUS_CONTRATO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}

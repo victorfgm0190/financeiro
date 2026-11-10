@@ -4,6 +4,7 @@ import { AUTH_TOKEN_KEY, getSessao } from '../lib/api'
 import { garantirCacheDoUsuario } from '../lib/armazenamentoLocal'
 import { ambienteDoHost } from '../lib/ambienteHost'
 import MarcaDagua from '../components/MarcaDagua'
+import HelpCampo from '../components/shared/HelpCampo'
 
 // Último ambiente digitado no www (só conveniência deste navegador).
 const ULTIMO_AMBIENTE_KEY = 'finup_ultimo_ambiente'
@@ -24,8 +25,8 @@ function CampoAmbiente({ doEndereco, valor, onChange, autoFocus }) {
       : null
   }
   return (
-    <div>
-      <label htmlFor="ambiente" className="block text-xs text-texto-2 mb-1.5">Ambiente</label>
+    <div data-help-id="acesso.ambiente">
+      <label htmlFor="ambiente" className="block text-xs text-texto-2 mb-1.5">Ambiente<HelpCampo campo="acesso.ambiente" /></label>
       <div className="relative">
         <Building2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
         <input
@@ -144,14 +145,14 @@ export default function Login() {
         </div>
 
         {esqueci ? (
-          <form onSubmit={pedirLink} className="bg-surface border border-borda rounded-xl p-6 space-y-4 shadow-2xl">
+          <form onSubmit={pedirLink} className="bg-surface border border-borda rounded-xl p-6 space-y-4 shadow-2xl" data-help-form="esqueciSenha">
             <div>
               <h2 className="text-sm font-semibold text-texto-1">Esqueci minha senha</h2>
               <p className="text-xs text-texto-3 mt-1">Informe seu usuário ou e-mail. Se ele existir, enviamos um link para criar uma nova senha.</p>
             </div>
             <CampoAmbiente doEndereco={doEndereco} valor={ambiente} onChange={v => { setAmbiente(v); setPedido(p => ({ ...p, enviado: false })) }} autoFocus={!ambiente} />
-            <div>
-              <label htmlFor="login-esqueci" className="block text-xs text-texto-2 mb-1.5">Usuário ou e-mail</label>
+            <div data-help-id="acesso.usuarioEsqueci">
+              <label htmlFor="login-esqueci" className="block text-xs text-texto-2 mb-1.5">Usuário ou e-mail<HelpCampo campo="acesso.usuarioEsqueci" /></label>
               <div className="relative">
                 <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
                 <input
@@ -186,13 +187,13 @@ export default function Login() {
         ) : (
           /* method/action marcam um envio de formulário de verdade para o gerenciador de senhas; o
              onSubmit com preventDefault continua fazendo o login por fetch. */
-          <form method="post" action="/api/auth" onSubmit={handleSubmit} className="bg-surface border border-borda rounded-xl p-6 space-y-4 shadow-2xl">
+          <form method="post" action="/api/auth" onSubmit={handleSubmit} className="bg-surface border border-borda rounded-xl p-6 space-y-4 shadow-2xl" data-help-form="login">
             {aviso && <Aviso>{aviso}</Aviso>}
             {emergencia && <Aviso>Acesso de emergência: use o usuário e a senha de recuperação.</Aviso>}
             <CampoAmbiente doEndereco={doEndereco} valor={ambiente} onChange={setAmbiente} autoFocus={!ambiente} />
 
-            <div>
-              <label htmlFor="username" className="block text-xs text-texto-2 mb-1.5">Usuário ou e-mail</label>
+            <div data-help-id="acesso.usuario">
+              <label htmlFor="username" className="block text-xs text-texto-2 mb-1.5">Usuário ou e-mail<HelpCampo campo="acesso.usuario" /></label>
               <div className="relative">
                 <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
                 {/* name/id/autoComplete padrão: é o que o Safari usa para oferecer e salvar a senha nas
@@ -213,8 +214,8 @@ export default function Login() {
               </div>
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-xs text-texto-2 mb-1.5">Senha</label>
+            <div data-help-id="acesso.senha">
+              <label htmlFor="password" className="block text-xs text-texto-2 mb-1.5">Senha<HelpCampo campo="acesso.senha" /></label>
               <div className="relative">
                 <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
                 <input

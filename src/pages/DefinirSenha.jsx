@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Lock, Check, KeyRound } from 'lucide-react'
+import HelpCampo from '../components/shared/HelpCampo'
 
 // /definir-senha?token=… — link do e-mail ("Esqueci minha senha" ou convite do admin). O token sai da
 // URL logo ao montar (histórico, prints, Referer); a API o procura no banco do ambiente DESTE endereço.
@@ -54,9 +55,9 @@ export default function DefinirSenha() {
     }
   }
 
-  const campo = (id, rotulo, valor, onChange, autoFocus = false) => (
-    <div>
-      <label htmlFor={id} className="block text-xs text-texto-2 mb-1.5">{rotulo}</label>
+  const campo = (id, rotulo, valor, onChange, autoFocus = false, helpId = null) => (
+    <div data-help-id={helpId}>
+      <label htmlFor={id} className="block text-xs text-texto-2 mb-1.5">{rotulo}<HelpCampo campo={helpId} /></label>
       <div className="relative">
         <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
         <input
@@ -95,10 +96,10 @@ export default function DefinirSenha() {
         )}
 
         {link.nome !== undefined && !link.erro && (
-          <form onSubmit={salvar} className="bg-surface border border-borda rounded-xl p-6 space-y-4 shadow-2xl">
+          <form onSubmit={salvar} className="bg-surface border border-borda rounded-xl p-6 space-y-4 shadow-2xl" data-help-form="definirSenha">
             <p className="text-sm text-texto-1">Olá, <span className="font-semibold">{link.nome}</span>! Crie a sua {link.tipo === 'convite' ? 'senha de acesso' : 'nova senha'}.</p>
-            {campo('nova-senha', 'Nova senha', senha, setSenha, true)}
-            {campo('confirmar-senha', 'Confirmar senha', confirmar, setConfirmar)}
+            {campo('nova-senha', 'Nova senha', senha, setSenha, true, 'acesso.novaSenha')}
+            {campo('confirmar-senha', 'Confirmar senha', confirmar, setConfirmar, false, 'acesso.confirmarSenha')}
             <ul className="space-y-1">
               {requisitos.map(r => (
                 <li key={r.texto} className={`flex items-center gap-1.5 text-xs ${r.ok ? 'text-primary-fg' : 'text-texto-3'}`}>

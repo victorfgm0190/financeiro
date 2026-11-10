@@ -824,11 +824,11 @@ export default function CreditCardPanel() {
       {/* ── Seletor de cartão + navegador de fatura ── */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Dropdown de cartão */}
-        <div className="flex items-center gap-2 flex-1 min-w-[180px]">
+        <div className="flex items-center gap-2 flex-1 min-w-[180px]" data-help-form="seletorCartao" data-help-id="filtroCartao.cartao">
           <CreditCard size={15} className="text-texto-2 shrink-0" />
           <select
             data-guia="credit.cartao"
-            className="bg-surface-2 border border-borda-campo text-texto-1 rounded-lg px-3 py-2 text-sm focus:outline-none w-full"
+            className="bg-surface-2 border border-borda-campo text-texto-1 rounded-lg px-3 py-2 text-sm focus:outline-none w-full min-w-0"
             value={selectedCardId}
             onChange={e => handleCardChange(e.target.value)}
           >
@@ -836,6 +836,7 @@ export default function CreditCardPanel() {
               <option key={c.id} value={c.id}>{c.apelido || c.name}</option>
             ))}
           </select>
+          <HelpCampo campo="filtroCartao.cartao" />
           {podeEditarCartao && selectedCard && (
             <button type="button" data-guia="credit.editar-cartao" onClick={() => setEditarCartao(true)} title="Editar cartão" aria-label="Editar cartão"
               className="p-2 rounded-lg border border-borda-campo bg-surface-2 text-texto-2 hover:text-texto-1 hover:bg-surface-hover transition-colors shrink-0 min-h-[38px]">

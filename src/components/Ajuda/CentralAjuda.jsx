@@ -20,6 +20,7 @@ import { iniciarTour, iniciarTarefa } from '../BoasVindas/tourEstado'
 import PrimeirosPassos from '../BoasVindas/PrimeirosPassos'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { telaNaAjuda, telasDaAjuda, rotaDaTela, tarefaDaSecao, montarIndice, buscar, ESPERA_TOUR_MS } from './centralAjudaRegras'
+import HelpCampo from '../shared/HelpCampo'
 
 const ROTULO_TIPO = { tela: 'Tela', funcao: 'Função', tarefa: 'Faça comigo', pergunta: 'Pergunta' }
 
@@ -169,8 +170,8 @@ export default function CentralAjuda() {
 
   return (
     <div className="space-y-4" data-testid="central-ajuda">
-      <div className="card">
-        <label htmlFor="busca-ajuda" className="text-sm font-semibold text-texto-1 flex items-center gap-2"><LifeBuoy size={18} className="text-primary-fg" aria-hidden="true" /> O que você quer fazer?</label>
+      <div className="card" data-help-form="buscaAjuda" data-help-id="buscaAjuda.busca">
+        <label htmlFor="busca-ajuda" className="text-sm font-semibold text-texto-1 flex items-center gap-2"><LifeBuoy size={18} className="text-primary-fg" aria-hidden="true" /> O que você quer fazer?<HelpCampo campo="buscaAjuda.busca" /></label>
         <div className="relative mt-2">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" aria-hidden="true" />
           <input id="busca-ajuda" type="search" className="input pl-9" value={busca} onChange={e => setBusca(e.target.value)}

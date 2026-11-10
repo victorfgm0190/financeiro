@@ -12,6 +12,7 @@ import {
   filtroInicial,
   textoPrincipal, textoComplemento, refinamentos, aplicarMudanca, MAX_ITENS, MAX_RELACIONADOS, MAX_BOTOES,
 } from '../../lib/assistente/consultaMovimentos'
+import HelpCampo from '../shared/HelpCampo'
 
 // consultar_movimentos 🟢 — consulta PROPOSITIVA. SOMENTE LEITURA.
 // Responde o que foi perguntado, mostra o FILTRO usado, "Também encontrei" (o lado oposto, pela
@@ -76,8 +77,9 @@ export default function ConsultaMovimentos({ parametros, textoOriginal, onClose,
             ))}
           </div>
         )}
-        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const t = outro.trim(); if (t) { mudar(resolvido.campo === 'categoria' ? { categoriaTermo: t, categoriaId: null } : { favorecido: t }); setOutro('') } }}>
-          <input className="input flex-1 min-w-0" value={outro} onChange={e => setOutro(e.target.value.slice(0, 80))} placeholder={p ? 'Outro nome' : 'Nome, categoria ou descrição'} aria-label="Outro nome" />
+        <form className="flex items-center gap-2" data-help-form="consultaAssistente" onSubmit={(e) => { e.preventDefault(); const t = outro.trim(); if (t) { mudar(resolvido.campo === 'categoria' ? { categoriaTermo: t, categoriaId: null } : { favorecido: t }); setOutro('') } }}>
+          <input data-help-id="consultaAssistente.outroNome" className="input flex-1 min-w-0" value={outro} onChange={e => setOutro(e.target.value.slice(0, 80))} placeholder={p ? 'Outro nome' : 'Nome, categoria ou descrição'} aria-label="Outro nome" />
+          <HelpCampo campo="consultaAssistente.outroNome" />
           <button className="btn-primary px-3 shrink-0" aria-label="Procurar" disabled={!outro.trim()}><Search size={15} /></button>
         </form>
         {textoOriginal && <p className="text-[11px] text-texto-3 whitespace-pre-wrap break-words">Pedido: “{textoOriginal}”</p>}
@@ -169,9 +171,9 @@ export default function ConsultaMovimentos({ parametros, textoOriginal, onClose,
         </div>
       )}
       {datas && (
-        <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); if (datas.de && datas.ate && datas.de <= datas.ate) mudar({ periodo: 'intervalo', de: datas.de, ate: datas.ate }) }}>
-          <div className="w-36"><label className="label">De</label><DateInput className="input" value={datas.de} onChange={e => setDatas(x => ({ ...x, de: e.target.value }))} aria-label="De" /></div>
-          <div className="w-36"><label className="label">Até</label><DateInput className="input" value={datas.ate} onChange={e => setDatas(x => ({ ...x, ate: e.target.value }))} aria-label="Até" /></div>
+        <form className="flex flex-wrap items-end gap-2" data-help-form="consultaAssistente" onSubmit={(e) => { e.preventDefault(); if (datas.de && datas.ate && datas.de <= datas.ate) mudar({ periodo: 'intervalo', de: datas.de, ate: datas.ate }) }}>
+          <div className="w-36" data-help-id="consultaAssistente.de"><label className="label">De<HelpCampo campo="consultaAssistente.de" /></label><DateInput className="input" value={datas.de} onChange={e => setDatas(x => ({ ...x, de: e.target.value }))} aria-label="De" /></div>
+          <div className="w-36" data-help-id="consultaAssistente.ate"><label className="label">Até<HelpCampo campo="consultaAssistente.ate" /></label><DateInput className="input" value={datas.ate} onChange={e => setDatas(x => ({ ...x, ate: e.target.value }))} aria-label="Até" /></div>
           <button className="btn-primary px-3" disabled={!(datas.de && datas.ate && datas.de <= datas.ate)}>Aplicar</button>
         </form>
       )}

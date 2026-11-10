@@ -18,6 +18,7 @@ import TransactionForm from '../Transactions/TransactionForm'
 import ScheduleForm from '../Schedule/ScheduleForm'
 import InputMoeda from './InputMoeda'
 import FavorecidoAutocomplete from './FavorecidoAutocomplete'
+import HelpCampo from './HelpCampo'
 
 const todayStr = () => {
   const d = new Date()
@@ -274,12 +275,12 @@ export default function GlobalSearch({ open, onClose }) {
   return (
     <>
       <Modal open={open} onClose={() => { reset(); onClose() }} title="Busca Global" size="lg">
-        <form onSubmit={runSearch} className="space-y-3">
+        <form onSubmit={runSearch} className="space-y-3" data-help-form="buscaGlobal">
           {/* md+: Valor (+ Exato/Aproximado) | Favorecido; Descrição em largura total; datas lado a
               lado. Celular: uma coluna na mesma ordem, só as datas lado a lado. */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="max-md:col-span-2">
-              <label className="label">Valor</label>
+            <div className="max-md:col-span-2" data-help-id="buscaGlobal.valor">
+              <label className="label">Valor<HelpCampo campo="buscaGlobal.valor" /></label>
               <InputMoeda
                 className="input"
                 placeholder="0,00"
@@ -287,7 +288,7 @@ export default function GlobalSearch({ open, onClose }) {
                 onChange={e => setValue(e.target.value)}
                 autoFocus
               />
-              <div className={`flex gap-1 bg-surface-2/60 rounded-lg p-1 mt-2 ${semValor ? 'opacity-50' : ''}`} role="group" aria-label="Modo do valor">
+              <div data-help-id="buscaGlobal.modoValor" className={`flex gap-1 bg-surface-2/60 rounded-lg p-1 mt-2 ${semValor ? 'opacity-50' : ''}`} role="group" aria-label="Modo do valor">
                 {MODO_OPTIONS.map(o => (
                   <button
                     key={o.id}
@@ -305,8 +306,8 @@ export default function GlobalSearch({ open, onClose }) {
               </div>
               <p className="text-[11px] text-texto-3 mt-1">{dicaValor}</p>
             </div>
-            <div className="max-md:col-span-2">
-              <label className="label">Favorecido</label>
+            <div className="max-md:col-span-2" data-help-id="buscaGlobal.favorecido">
+              <label className="label">Favorecido<HelpCampo campo="buscaGlobal.favorecido" /></label>
               <FavorecidoAutocomplete
                 value={payee}
                 onChange={setPayee}
@@ -314,8 +315,8 @@ export default function GlobalSearch({ open, onClose }) {
                 placeholder="Digite parte do nome do favorecido"
               />
             </div>
-            <div className="col-span-2">
-              <label className="label">Descrição</label>
+            <div className="col-span-2" data-help-id="buscaGlobal.descricao">
+              <label className="label">Descrição<HelpCampo campo="buscaGlobal.descricao" /></label>
               <input
                 className="input"
                 placeholder="Digite parte da descrição"
@@ -324,18 +325,18 @@ export default function GlobalSearch({ open, onClose }) {
                 onChange={e => setDescription(e.target.value)}
               />
             </div>
-            <div>
-              <label className="label">Data de</label>
+            <div data-help-id="buscaGlobal.dataDe">
+              <label className="label">Data de<HelpCampo campo="buscaGlobal.dataDe" /></label>
               <DateInput className="input" value={from} onChange={e => setFrom(e.target.value)} />
             </div>
-            <div>
-              <label className="label">Data até</label>
+            <div data-help-id="buscaGlobal.dataAte">
+              <label className="label">Data até<HelpCampo campo="buscaGlobal.dataAte" /></label>
               <DateInput className="input" value={to} onChange={e => setTo(e.target.value)} />
             </div>
           </div>
 
           <div className="flex items-center justify-between gap-3 flex-wrap max-md:flex-col max-md:items-stretch">
-            <div className="flex gap-1 bg-surface-2/60 rounded-lg p-1">
+            <div className="flex items-center gap-1 bg-surface-2/60 rounded-lg p-1" data-help-id="buscaGlobal.status">
               {STATUS_OPTIONS.map(o => (
                 <button
                   key={o.id}
@@ -348,6 +349,7 @@ export default function GlobalSearch({ open, onClose }) {
                   {o.label}
                 </button>
               ))}
+              <HelpCampo campo="buscaGlobal.status" />
             </div>
             <button type="submit" className="btn-primary flex items-center gap-2 max-md:justify-center max-md:min-h-[44px]" disabled={loading}>
               {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}

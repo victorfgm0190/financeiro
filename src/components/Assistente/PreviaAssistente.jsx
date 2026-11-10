@@ -36,6 +36,7 @@ import { cotacaoDolar } from '../../lib/assistenteApi'
 import {
   spreadDoCartao, aliquotaIof, iofEmLinhaSeparada, planoCompraEstrangeira, camposDaCompra, categoriaDoIof, iofDe, lancamentoDoIof,
 } from '../../lib/cambio'
+import HelpCampo from '../shared/HelpCampo'
 
 const ROTULO_HERDADO = { categoryId: 'categoria', costCenter: 'centro de custo', tipoDocumentoId: 'tipo de documento', grupoGerencial: 'grupo gerencial' }
 const fmtMoeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0)
@@ -525,10 +526,10 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
         ? (
           <div className="space-y-3">
             {veioDosCartoes && (
-              <label className="flex items-center gap-2.5 rounded-xl border-2 border-borda bg-surface px-3 min-h-[48px] cursor-pointer opacity-70">
+              <label className="flex items-center gap-2.5 rounded-xl border-2 border-borda bg-surface px-3 min-h-[48px] cursor-pointer opacity-70" data-help-form="previaDespesa" data-help-id="previaDespesa.marcar">
                 <input type="checkbox" className="accent-primary w-5 h-5" checked={false}
                   onChange={() => { setAcaoDespesa(ACAO.DESPESA_AGENDAMENTO); setVeioDosCartoes(false) }} />
-                <span className="text-sm font-semibold text-texto-1">Despesa</span>
+                <span className="text-sm font-semibold text-texto-1 inline-flex items-center">Despesa<HelpCampo campo="previaDespesa.marcar" /></span>
                 <span className="text-xs text-texto-3">desmarcada — só o agendamento será gravado</span>
               </label>
             )}
@@ -540,10 +541,10 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
           // Cartões separados: Despesa (o formulário) + Agendamento; "Confirmar tudo" grava só os marcados.
           <div className="space-y-3">
             <section className="rounded-xl border-2 border-primary/50 bg-surface p-3 space-y-3" aria-label="Cartão da despesa">
-              <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]">
+              <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]" data-help-form="previaDespesa" data-help-id="previaDespesa.marcar">
                 <input type="checkbox" className="accent-primary w-5 h-5" checked
                   onChange={() => { setCartaoAg({ ...cfgAgendamento, ativo: true }); setVeioDosCartoes(true); setAcaoDespesa(ACAO.SO_AGENDAMENTO) }} />
-                <span className="text-sm font-semibold text-texto-1">Despesa</span>
+                <span className="text-sm font-semibold text-texto-1 inline-flex items-center">Despesa<HelpCampo campo="previaDespesa.marcar" /></span>
               </label>
               <TransactionForm key={`${favorecidoUsado || ''}|cartoes|${rateioResolvido ? 'r' : ''}`} initial={initialForm} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
                 preLancamentos={pres || []} parecidosAceitos={[...(aceitos || []), ...(preId ? [preId] : [])]} onMesmo={ehOMesmo}

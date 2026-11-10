@@ -42,6 +42,7 @@ import MudarDataModal from './MudarDataModal'
 import FluxoMobileLista, { FluxoSheet } from './FluxoMobileLista'
 import { MASCARA, lerOcultar } from '../../mobile/ocultarValores'
 import { HORIZONTES_MOBILE, marcadoresLinhaMobile } from '../../lib/fluxoMobile'
+import HelpCampo from '../shared/HelpCampo'
 
 const round2 = n => Math.round(n * 100) / 100
 const SEM_EXCLUSOES = new Set()
@@ -472,8 +473,8 @@ export default function CashFlowPanel({ setActivePage }) {
           </div>
         </div>
         {isMobile && cartoes.length > 6 ? (
-          <div>
-            <label className="label">Trocar consulta</label>
+          <div data-help-form="opcoesFluxo" data-help-id="opcoesFluxo.consulta">
+            <label className="label">Trocar consulta<HelpCampo campo="opcoesFluxo.consulta" /></label>
             <select data-guia="cashflow.consultas" className="input" value={consulta.id} onChange={e => setAtivaId(e.target.value)}>
               {cartoes.map(c => (
                 <option key={c.id} value={c.id}>{c.nome}{c.id === padraoId ? ' (padrão)' : ''}</option>
@@ -735,12 +736,12 @@ export default function CashFlowPanel({ setActivePage }) {
             </>
           ) : (
           <div className="card p-0 overflow-hidden">
-            <div className="px-4 py-3 border-b border-borda flex items-center gap-3 flex-wrap">
+            <div className="px-4 py-3 border-b border-borda flex items-center gap-3 flex-wrap" data-help-form="opcoesFluxo">
               <Calendar size={14} className="text-texto-2" />
               <h2 className="text-sm font-semibold text-texto-2">Eventos projetados</h2>
               <span className="text-xs text-texto-3">{rowsView.length} evento{rowsView.length !== 1 ? 's' : ''}</span>
               {rowsView.length > 0 && (
-                <label data-guia="cashflow.marcar-todos" className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Só os eventos visíveis no prazo e filtros atuais">
+                <label data-guia="cashflow.marcar-todos" data-help-id="opcoesFluxo.marcarTodos" className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Só os eventos visíveis no prazo e filtros atuais">
                   <input
                     type="checkbox"
                     className="accent-primary w-3.5 h-3.5"
@@ -748,17 +749,17 @@ export default function CashFlowPanel({ setActivePage }) {
                     ref={el => { if (el) el.indeterminate = marcacao.parcial }}
                     onChange={() => marcarVarias(rowsView, !marcacao.todas)}
                   />
-                  Marcar todos{marcacao.parcial && <span className="text-texto-3">({marcacao.ativas}/{marcacao.total})</span>}
+                  Marcar todos{marcacao.parcial && <span className="text-texto-3">({marcacao.ativas}/{marcacao.total})</span>}<HelpCampo campo="opcoesFluxo.marcarTodos" />
                 </label>
               )}
               <div className="flex items-center gap-4 flex-wrap ml-auto">
-                <label data-guia="cashflow.incluir-envelopes" className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Override temporário da consulta">
+                <label data-guia="cashflow.incluir-envelopes" data-help-id="opcoesFluxo.envelopes" className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Override temporário da consulta">
                   <input type="checkbox" className="accent-primary w-3.5 h-3.5" checked={incluirEnvelopes} onChange={e => setOvr('incluir_envelopes', e.target.checked)} />
-                  Incluir envelopes
+                  Incluir envelopes<HelpCampo campo="opcoesFluxo.envelopes" />
                 </label>
-                <label data-guia="cashflow.ocultar-reservas" className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Override temporário da consulta">
+                <label data-guia="cashflow.ocultar-reservas" data-help-id="opcoesFluxo.ocultarReservas" className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Override temporário da consulta">
                   <input type="checkbox" className="accent-primary w-3.5 h-3.5" checked={ocultarReserva} onChange={e => setOvr('ocultar_reserva', e.target.checked)} />
-                  Ocultar reservas
+                  Ocultar reservas<HelpCampo campo="opcoesFluxo.ocultarReservas" />
                 </label>
                 {podeIncluirF && (
                 <button
@@ -779,7 +780,7 @@ export default function CashFlowPanel({ setActivePage }) {
               <table className="w-full text-sm" style={{ minWidth: isMobile ? 960 : 1030 }}>
                 <thead>
                   <tr className="border-b border-borda">
-                    <th data-guia="cashflow.caixinha" className="w-9 px-2 py-2.5" title="Desmarque um evento para tirá-lo do cálculo" />
+                    <th data-guia="cashflow.caixinha" className="w-9 px-2 py-2.5" title="Desmarque um evento para tirá-lo do cálculo"><HelpCampo campo="opcoesFluxo.linha" /></th>
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-28">Data</th>
                     <th data-guia="cashflow.status" className="text-left px-2 py-2.5 text-xs text-texto-2 font-medium w-[100px]" title="Confirmado / A confirmar (agendamentos) — clique no badge para alternar">Status</th>
                     <th className="text-left px-2 py-2.5 text-xs text-texto-2 font-medium w-[70px]" title="Tipo de documento">Doc.</th>
@@ -812,6 +813,7 @@ export default function CashFlowPanel({ setActivePage }) {
                         <td className="px-2 py-2 text-center">
                           <input
                             type="checkbox"
+                            data-help-id="opcoesFluxo.atraso"
                             className="accent-primary w-3.5 h-3.5 align-middle cursor-pointer"
                             checked={atrasoAtivas > 0}
                             ref={el => { if (el) el.indeterminate = atrasoAtivas > 0 && atrasoAtivas < atraso.length }}
@@ -824,7 +826,7 @@ export default function CashFlowPanel({ setActivePage }) {
                           <button type="button" onClick={() => setAtrasoAberto(o => !o)} className="inline-flex items-center gap-1 text-perigo hover:text-texto-1">
                             {atrasoAberto ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                             Pendências em atraso ({atraso.length})
-                          </button>
+                          </button><HelpCampo campo="opcoesFluxo.atraso" />
                         </td>
                         <td className="px-3 py-2 text-right text-xs font-semibold text-receita">{atrasoTotal > 0 ? fmt(atrasoTotal) : ''}</td>
                         <td className="px-3 py-2 text-right text-xs font-semibold text-despesa">{atrasoTotal < 0 ? fmt(-atrasoTotal) : ''}</td>
@@ -836,7 +838,7 @@ export default function CashFlowPanel({ setActivePage }) {
                         return (
                           <tr key={r._key} className={`border-b border-borda/30 bg-perigo/[0.03] ${ativa ? '' : 'opacity-40'}`}>
                             <td className="px-2 py-1.5 text-center">
-                              <input type="checkbox" className="accent-primary w-3.5 h-3.5 align-middle cursor-pointer" checked={ativa} onChange={() => toggleLinha(r._key)} />
+                              <input type="checkbox" data-help-id="opcoesFluxo.linha" className="accent-primary w-3.5 h-3.5 align-middle cursor-pointer" checked={ativa} onChange={() => toggleLinha(r._key)} />
                             </td>
                             <td className="px-3 py-1.5 text-[11px] text-perigo pl-6">{fmtDate(r.date)}</td>
                             <td className="px-2 py-1.5 w-[100px]">{statusCelula(r)}</td>
@@ -883,6 +885,7 @@ export default function CashFlowPanel({ setActivePage }) {
                         <td className="px-2 py-2.5 text-center">
                           <input
                             type="checkbox"
+                            data-help-id="opcoesFluxo.linha"
                             className="accent-primary w-3.5 h-3.5 align-middle cursor-pointer"
                             checked={r.ativa}
                             onChange={() => toggleLinha(r._key)}
@@ -967,15 +970,15 @@ export default function CashFlowPanel({ setActivePage }) {
       {isMobile && (
         <FluxoSheet open={filtrosAbertos} onClose={() => setFiltrosAbertos(false)} title="Filtros e consultas">
           {secaoConsultas}
-          <div className="space-y-1">
+          <div className="space-y-1" data-help-form="opcoesFluxo">
             <p className="text-xs text-texto-3 uppercase tracking-wide">Eventos</p>
-            <label data-guia="cashflow.incluir-envelopes" className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-texto-2" title="Override temporário da consulta">
+            <label data-guia="cashflow.incluir-envelopes" data-help-id="opcoesFluxo.envelopes" className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-texto-2" title="Override temporário da consulta">
               <input type="checkbox" className="accent-primary w-4 h-4" checked={incluirEnvelopes} onChange={e => setOvr('incluir_envelopes', e.target.checked)} />
-              Incluir envelopes
+              Incluir envelopes<HelpCampo campo="opcoesFluxo.envelopes" />
             </label>
-            <label data-guia="cashflow.ocultar-reservas" className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-texto-2" title="Override temporário da consulta">
+            <label data-guia="cashflow.ocultar-reservas" data-help-id="opcoesFluxo.ocultarReservas" className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-texto-2" title="Override temporário da consulta">
               <input type="checkbox" className="accent-primary w-4 h-4" checked={ocultarReserva} onChange={e => setOvr('ocultar_reserva', e.target.checked)} />
-              Ocultar reservas
+              Ocultar reservas<HelpCampo campo="opcoesFluxo.ocultarReservas" />
             </label>
             {podeIncluirF && (
             <button

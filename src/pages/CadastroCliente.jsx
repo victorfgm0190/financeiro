@@ -4,6 +4,7 @@ import { checarSiglaPublica, enviarPedidoPublico } from '../lib/clientesApi'
 import {
   candidatasSigla, normalizarSigla, problemaSigla, documentoValido, problemaTelefone, mascararTelefone, normalizarTelefone, normalizarDocumento, DOMINIO_CLIENTES, SIGLA_MAX,
 } from '../lib/plataforma'
+import HelpCampo from '../components/shared/HelpCampo'
 
 // Página PÚBLICA "Quero me tornar cliente" (/quero-ser-cliente, sem login). Só registra o pedido:
 // a aprovação é manual no Controle de Clientes. A API revalida tudo — aqui é só ajuda ao usuário.
@@ -31,10 +32,11 @@ function validar(f) {
   return null
 }
 
-function Campo({ label, children, ajuda }) {
+// help: id da base de ajuda (ⓘ no rótulo e F1 no campo).
+function Campo({ label, children, ajuda, help }) {
   return (
-    <div>
-      <label className="block text-xs text-texto-2 mb-1.5">{label}</label>
+    <div data-help-id={help}>
+      <label className="block text-xs text-texto-2 mb-1.5">{label}{help && <HelpCampo campo={help} />}</label>
       {children}
       {ajuda && <p className="text-[11px] text-texto-3 mt-1">{ajuda}</p>}
     </div>
@@ -140,23 +142,23 @@ export default function CadastroCliente() {
           <p className="text-sm text-texto-3 mt-1">Preencha os dados abaixo. Entraremos em contato para concluir.</p>
         </div>
 
-        <form onSubmit={enviar} noValidate className="bg-surface border border-borda rounded-xl p-5 space-y-4 shadow-2xl relative">
-          <Campo label="Nome completo">
+        <form onSubmit={enviar} noValidate className="bg-surface border border-borda rounded-xl p-5 space-y-4 shadow-2xl relative" data-help-form="pedidoCadastro">
+          <Campo label="Nome completo" help="pedidoCadastro.nome">
             <input className="input" autoComplete="name" value={f.nome} onChange={e => set('nome', e.target.value)} autoFocus />
           </Campo>
-          <Campo label="E-mail">
+          <Campo label="E-mail" help="pedidoCadastro.email">
             <input className="input" type="email" autoComplete="email" autoCapitalize="none" value={f.email} onChange={e => set('email', e.target.value)} />
           </Campo>
-          <Campo label="Telefone / WhatsApp" ajuda="Celular com DDD.">
+          <Campo label="Telefone / WhatsApp" ajuda="Celular com DDD." help="pedidoCadastro.telefone">
             <input className="input" type="tel" inputMode="tel" autoComplete="tel" value={f.telefone}
               onChange={e => set('telefone', mascararTelefone(e.target.value))} placeholder="(43) 99999-9999" />
-            <label className="flex items-center gap-2 text-xs text-texto-3 mt-1.5 cursor-pointer">
+            <label className="flex items-center gap-2 text-xs text-texto-3 mt-1.5 cursor-pointer" data-help-id="pedidoCadastro.naoWhatsapp">
               <input type="checkbox" className="w-3.5 h-3.5 accent-primary" checked={f.nao_whatsapp} onChange={e => set('nao_whatsapp', e.target.checked)} />
-              Não é WhatsApp (telefone fixo)
+              Não é WhatsApp (telefone fixo)<HelpCampo campo="pedidoCadastro.naoWhatsapp" />
             </label>
           </Campo>
 
-          <Campo label="Tipo">
+          <Campo label="Tipo" help="pedidoCadastro.tipo">
             <div className="grid grid-cols-2 gap-2">
               {[['PF', 'Pessoa física'], ['PJ', 'Pessoa jurídica']].map(([v, l]) => (
                 <button key={v} type="button" onClick={() => set('tipo_pessoa', v)}
@@ -166,37 +168,37 @@ export default function CadastroCliente() {
               ))}
             </div>
           </Campo>
-          <Campo label={f.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'}>
+          <Campo label={f.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'} help="pedidoCadastro.documento">
             <input className="input" inputMode={f.tipo_pessoa === 'PJ' ? 'text' : 'numeric'} autoCapitalize="characters" value={f.documento}
               onChange={e => set('documento', f.tipo_pessoa === 'PJ' ? e.target.value.toUpperCase() : e.target.value)}
               placeholder={f.tipo_pessoa === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00'} />
           </Campo>
           {f.tipo_pessoa === 'PJ' && (
-            <Campo label="Empresa">
+            <Campo label="Empresa" help="pedidoCadastro.empresa">
               <input className="input" autoComplete="organization" value={f.empresa} onChange={e => set('empresa', e.target.value)} />
             </Campo>
           )}
 
-          <Campo label="Sigla desejada" ajuda={<>Endereço do seu ambiente: <span className="font-mono">{siglaAtual || 'sigla'}.{DOMINIO_CLIENTES}</span></>}>
+          <Campo label="Sigla desejada" help="pedidoCadastro.sigla" ajuda={<>Endereço do seu ambiente: <span className="font-mono">{siglaAtual || 'sigla'}.{DOMINIO_CLIENTES}</span></>}>
             <input className="input font-mono" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={SIGLA_MAX}
               value={siglaAtual} onChange={e => escolherSigla(e.target.value)} />
             <p className="text-[11px] mt-1 min-h-[1em]">{statusSigla}</p>
           </Campo>
 
-          <Campo label="Como conheceu o Finup? (opcional)">
+          <Campo label="Como conheceu o Finup? (opcional)" help="pedidoCadastro.comoConheceu">
             <input className="input" value={f.como_conheceu} onChange={e => set('como_conheceu', e.target.value)} />
           </Campo>
 
           {/* Anti-robô: invisível para pessoas; robô que preenche tudo é descartado pela API. */}
-          <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
+          <div aria-hidden="true" data-guia-fora style={{ position: 'absolute', left: '-10000px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
             <label>Site <input tabIndex={-1} autoComplete="off" name="website" value={f.website} onChange={e => set('website', e.target.value)} /></label>
           </div>
 
-          <label className="flex items-start gap-2 text-sm text-texto-2 cursor-pointer">
+          <label className="flex items-start gap-2 text-sm text-texto-2 cursor-pointer" data-help-id="pedidoCadastro.termos">
             <input type="checkbox" className="w-4 h-4 mt-0.5 accent-primary shrink-0" checked={f.aceite_termos} onChange={e => set('aceite_termos', e.target.checked)} />
             <span>
               Li e aceito os <a href="/termos" target="_blank" rel="noopener" className="underline text-primary-fg">termos de uso</a> e
-              a <a href="/privacidade" target="_blank" rel="noopener" className="underline text-primary-fg">política de privacidade</a>.
+              a <a href="/privacidade" target="_blank" rel="noopener" className="underline text-primary-fg">política de privacidade</a>.<HelpCampo campo="pedidoCadastro.termos" />
             </span>
           </label>
 

@@ -14,6 +14,7 @@ import {
 } from '../../lib/contratos/rendimentos'
 import { specRendimentos } from '../../lib/contratos/rendimentosExcel'
 import { exportarExcel } from '../../lib/exportExcel'
+import HelpCampo from '../shared/HelpCampo'
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const TODOS = '__todos'
@@ -97,22 +98,22 @@ export default function RelatorioRendimentos() {
             {exportando ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />} Exportar Excel
           </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="label" htmlFor="rend-contrato">Contrato</label>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-help-form="filtrosRendimentos">
+          <div data-help-id="filtroRendimentos.contrato">
+            <label className="label" htmlFor="rend-contrato">Contrato<HelpCampo campo="filtroRendimentos.contrato" /></label>
             <select id="rend-contrato" className="input" value={contratoId} onChange={e => setContratoId(e.target.value)}>
               <option value={TODOS}>Todos os contratos a receber</option>
               {doPerfil.map(c => <option key={c.id} value={c.id}>{rotuloContrato(c)}</option>)}
             </select>
           </div>
-          <div>
-            <label className="label" htmlFor="rend-ano">Ano</label>
+          <div data-help-id="filtroRendimentos.ano">
+            <label className="label" htmlFor="rend-ano">Ano<HelpCampo campo="filtroRendimentos.ano" /></label>
             <select id="rend-ano" className="input" value={ano} onChange={e => setAno(e.target.value)}>
               {anos.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
-          <div>
-            <span className="label">Mês de referência do aluguel</span>
+          <div data-help-id="filtroRendimentos.referencia">
+            <span className="label">Mês de referência do aluguel<HelpCampo campo="filtroRendimentos.referencia" /></span>
             <Segmentado opcoes={REFERENCIAS_RENDIMENTO} valor={referencia} onChange={setReferencia} rotulo="Mês de referência" />
           </div>
         </div>
@@ -210,21 +211,21 @@ function ConferenciaInforme({ item, ano, mostrarNome, podeEditar, atualizarContr
   }
   const dif = (x) => (x.diferenca == null ? '—' : <span className={Math.abs(x.diferenca) > 0.004 ? 'text-despesa font-semibold' : 'text-receita'}>{fmt(x.diferenca)}</span>)
   return (
-    <div className="mb-3 last:mb-0">
+    <div className="mb-3 last:mb-0" data-help-form="informeAdm">
       {mostrarNome && <p className="text-xs font-medium text-texto-1 mb-1">{rotulo}</p>}
       <table className="w-full text-xs">
         <thead><tr className="text-texto-3"><th className="text-left font-medium py-1" /><th className="text-right font-medium">Calculado</th><th className="text-right font-medium">Informe da adm.</th><th className="text-right font-medium">Diferença</th></tr></thead>
         <tbody>
           <tr className="border-t border-borda">
-            <td className="py-1">Rendimentos (aluguel bruto)</td>
+            <td className="py-1">Rendimentos (aluguel bruto)<HelpCampo campo="informeAdm.rendimentos" /></td>
             <td className="text-right tabular-nums">{fmt(conferencia.rendimentos.calculado)}</td>
-            <td className="text-right w-36"><CampoValor className="input py-1 text-right text-xs" aria-label={`Rendimentos informados ${rotulo}`} value={rend} onChange={setRend} disabled={!podeEditar} placeholder="0,00" /></td>
+            <td className="text-right w-36"><CampoValor helpId="informeAdm.rendimentos" className="input py-1 text-right text-xs" aria-label={`Rendimentos informados ${rotulo}`} value={rend} onChange={setRend} disabled={!podeEditar} placeholder="0,00" /></td>
             <td className="text-right tabular-nums">{dif(conferencia.rendimentos)}</td>
           </tr>
           <tr className="border-t border-borda">
-            <td className="py-1">Deduções dedutíveis</td>
+            <td className="py-1">Deduções dedutíveis<HelpCampo campo="informeAdm.deducoes" /></td>
             <td className="text-right tabular-nums">{fmt(conferencia.deducoes.calculado)}</td>
-            <td className="text-right w-36"><CampoValor className="input py-1 text-right text-xs" aria-label={`Deduções informadas ${rotulo}`} value={ded} onChange={setDed} disabled={!podeEditar} placeholder="0,00" /></td>
+            <td className="text-right w-36"><CampoValor helpId="informeAdm.deducoes" className="input py-1 text-right text-xs" aria-label={`Deduções informadas ${rotulo}`} value={ded} onChange={setDed} disabled={!podeEditar} placeholder="0,00" /></td>
             <td className="text-right tabular-nums">{dif(conferencia.deducoes)}</td>
           </tr>
         </tbody>

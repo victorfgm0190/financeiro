@@ -18,6 +18,7 @@ import PreviaBaixa from './PreviaBaixa'
 import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { ehPagamentoDeCartao, rotuloDoTipo } from '../../lib/rotuloMovimento'
 import PreviaAssistente from './PreviaAssistente'
+import HelpCampo from '../shared/HelpCampo'
 
 // Respostas do Assistente IA por ferramenta (mapeadas em executores.jsx). Props comuns:
 //   { parametros, extra, textoOriginal, onClose, onToast, onNovo, onResponder, onTrocar }
@@ -70,8 +71,9 @@ export function Pergunta({ parametros, textoOriginal, onResponder, onNovo }) {
           ))}
         </div>
       )}
-      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (outra.trim()) onResponder(outra.trim(), parametros.pergunta) }}>
-        <input className="input flex-1 min-w-0" value={outra} onChange={e => setOutra(e.target.value.slice(0, 300))} placeholder="Digite outra resposta" />
+      <form className="flex items-center gap-2" data-help-form="consultaAssistente" onSubmit={(e) => { e.preventDefault(); if (outra.trim()) onResponder(outra.trim(), parametros.pergunta) }}>
+        <input data-help-id="consultaAssistente.resposta" className="input flex-1 min-w-0" value={outra} onChange={e => setOutra(e.target.value.slice(0, 300))} placeholder="Digite outra resposta" />
+        <HelpCampo campo="consultaAssistente.resposta" />
         <button className="btn-primary px-3 shrink-0" aria-label="Responder" disabled={!outra.trim()}><Send size={15} /></button>
       </form>
       {textoOriginal && <p className="text-[11px] text-texto-3 whitespace-pre-wrap break-words">Pedido: “{textoOriginal}”</p>}
@@ -139,8 +141,8 @@ export function SaldoResposta({ parametros, onClose, onNovo }) {
   const ciclo = conta ? getAccountSaldos(conta) : null
   return (
     <Caixa>
-      <div>
-        <label className="label">Conta{!parametros.conta_id && <span className="ml-1.5 text-[11px] font-medium text-aviso">● escolha</span>}</label>
+      <div data-help-form="consultaAssistente" data-help-id="consultaAssistente.conta">
+        <label className="label">Conta<HelpCampo campo="consultaAssistente.conta" />{!parametros.conta_id && <span className="ml-1.5 text-[11px] font-medium text-aviso">● escolha</span>}</label>
         <select className="input" value={contaId} onChange={e => setContaId(e.target.value)}>
           <option value="">Selecione a conta...</option>
           {ativas.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
@@ -231,8 +233,8 @@ export function FaturaResposta({ parametros, onClose, onNovo }) {
   const mmaaaa = key ? `${key.slice(5, 7)}/${key.slice(0, 4)}` : ''
   return (
     <Caixa>
-      <div>
-        <label className="label">Cartão{!parametros.cartao_id && <span className="ml-1.5 text-[11px] font-medium text-aviso">● escolha</span>}</label>
+      <div data-help-form="consultaAssistente" data-help-id="consultaAssistente.cartao">
+        <label className="label">Cartão<HelpCampo campo="consultaAssistente.cartao" />{!parametros.cartao_id && <span className="ml-1.5 text-[11px] font-medium text-aviso">● escolha</span>}</label>
         <select className="input" value={cardId} onChange={e => setCardId(e.target.value)}>
           <option value="">Selecione o cartão...</option>
           {cartoes.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}

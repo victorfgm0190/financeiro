@@ -1220,7 +1220,13 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
         {/* Filtros — DESKTOP: em tabela com o MESMO colGroup do header → cada input exatamente
             sob sua coluna. Espaçamento vertical mínimo (py-1) coladinho ao cabeçalho. */}
-        <div data-guia="accounts:extrato.filtros" className="hidden md:block border-x border-borda bg-surface/60">
+        <div data-guia="accounts:extrato.filtros" data-help-form="filtrosLancamentos" className="hidden md:block border-x border-borda bg-surface/60">
+          <p data-testid="legenda-filtros-coluna" className="flex flex-wrap items-center gap-x-3 px-3 pt-1 text-[11px] text-texto-3">
+            <span>Filtros:</span>
+            {[['Data', 'filtroLanc.data'], ['Histórico', 'filtroLanc.historico'], ['Favorecido', 'filtroLanc.favorecido'], ['Conta De', 'filtroLanc.de'], ['Conta Para', 'filtroLanc.para'], ['Entrada', 'filtroLanc.entrada'], ['Saída', 'filtroLanc.saida'], ['Conciliação', 'filtroLanc.conciliacao']].map(([r, id]) => (
+              <span key={id} className="inline-flex items-center">{r}<HelpCampo campo={id} /></span>
+            ))}
+          </p>
           <table className="w-full text-sm table-fixed">
             {colGroup}
             <tbody>
@@ -1236,6 +1242,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                   <td key={c.key} className="px-2 py-1">
                     <input
                       type="text"
+                      data-help-id={`filtroLanc.${c.key}`}
                       value={filtros[c.key] || ''}
                       onChange={e => setFiltros(f => ({ ...f, [c.key]: e.target.value }))}
                       placeholder={c.ph}
@@ -1244,14 +1251,14 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                   </td>
                 ))}
                 <td className="px-1 py-1">
-                  <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-receita" />
+                  <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-receita" helpId="filtroLanc.entrada" />
                 </td>
                 <td className="px-1 py-1">
-                  <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-despesa" />
+                  <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-despesa" helpId="filtroLanc.saida" />
                 </td>
                 <td colSpan={3} className="px-2 py-1">
                   <div className="flex items-center justify-end gap-2">
-                    <div data-guia="accounts:extrato.filtro-conciliacao" className="flex items-center rounded-md border border-borda-forte overflow-hidden shrink-0">
+                    <div data-guia="accounts:extrato.filtro-conciliacao" data-help-id="filtroLanc.conciliacao" className="flex items-center rounded-md border border-borda-forte overflow-hidden shrink-0">
                       {[
                         { v: 'todos', label: 'Todos' },
                         { v: 'conciliados', label: '✓ Conc.' },
@@ -1297,11 +1304,12 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           <LancamentoFiltros
             filtros={filtros}
             setFiltros={setFiltros}
+            legendaExtra={[['Entrada', 'filtroLanc.entrada'], ['Saída', 'filtroLanc.saida'], ['Conciliação', 'filtroLanc.conciliacao']]}
             extra={
               <>
-                <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-receita" />
-                <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-despesa" />
-                <div data-guia="accounts:extrato.filtro-conciliacao" className="flex items-center rounded-md border border-borda-forte overflow-hidden shrink-0">
+                <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-receita" helpId="filtroLanc.entrada" />
+                <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-despesa" helpId="filtroLanc.saida" />
+                <div data-guia="accounts:extrato.filtro-conciliacao" data-help-id="filtroLanc.conciliacao" className="flex items-center rounded-md border border-borda-forte overflow-hidden shrink-0">
                   {[
                     { v: 'todos', label: 'Todos' },
                     { v: 'conciliados', label: '✓ Conciliados' },

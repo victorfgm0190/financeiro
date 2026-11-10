@@ -3474,46 +3474,49 @@ export default function SchedulePanel() {
           aberto={filtrosAbertos}
           onToggle={() => setFiltrosAbertos(v => !v)}
           extra={activeTab === 'cartao' && cartoesDisponiveis.length > 0 ? (
-            <select
-              className="input py-1.5 text-xs w-auto max-w-[10rem]"
-              value={cartaoFiltroId}
-              onChange={e => setCartaoFiltroId(e.target.value)}
-              aria-label="Cartão"
-            >
-              <option value="">Todos os cartões</option>
-              {cartoesDisponiveis.map(c => (
-                <option key={c.id} value={c.id}>{c.apelido || c.name}</option>
-              ))}
-            </select>
+            <span className="flex items-center gap-1 shrink-0" data-help-id="filtroAgenda.cartao">
+              <select
+                className="input py-1.5 text-xs w-auto max-w-[10rem]"
+                value={cartaoFiltroId}
+                onChange={e => setCartaoFiltroId(e.target.value)}
+                aria-label="Cartão"
+              >
+                <option value="">Todos os cartões</option>
+                {cartoesDisponiveis.map(c => (
+                  <option key={c.id} value={c.id}>{c.apelido || c.name}</option>
+                ))}
+              </select>
+              <HelpCampo campo="filtroAgenda.cartao" />
+            </span>
           ) : null}
         >
-          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 items-end">
-            <div>
-              <label className="label text-xs">Data de</label>
+          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 items-end" data-help-form="filtrosAgendamentos">
+            <div data-help-id="filtroAgenda.dataDe">
+              <label className="label text-xs">Data de<HelpCampo campo="filtroAgenda.dataDe" /></label>
               <DateInput className="input py-1.5 text-xs" value={fltFrom} onChange={mudarData(setFltFrom)} />
             </div>
-            <div>
-              <label className="label text-xs">Data até</label>
+            <div data-help-id="filtroAgenda.dataAte">
+              <label className="label text-xs">Data até<HelpCampo campo="filtroAgenda.dataAte" /></label>
               <DateInput className="input py-1.5 text-xs" value={fltTo} onChange={mudarData(setFltTo)} />
             </div>
-            <div className="col-span-2 sm:col-span-1">
-              <label className="label text-xs">Descrição</label>
+            <div className="col-span-2 sm:col-span-1" data-help-id="filtroAgenda.descricao">
+              <label className="label text-xs">Descrição<HelpCampo campo="filtroAgenda.descricao" /></label>
               <input type="text" className="input py-1.5 text-xs" value={fltDesc} onChange={e => setFltDesc(e.target.value)} placeholder="Buscar..." />
             </div>
-            <div>
-              <label className="label text-xs">Favorecido</label>
+            <div data-help-id="filtroAgenda.favorecido">
+              <label className="label text-xs">Favorecido<HelpCampo campo="filtroAgenda.favorecido" /></label>
               <input type="text" className="input py-1.5 text-xs" value={fltPayee} onChange={e => setFltPayee(e.target.value)} placeholder="Buscar..." />
             </div>
-            <div>
-              <label className="label text-xs">Categoria</label>
+            <div data-help-id="filtroAgenda.categoria">
+              <label className="label text-xs">Categoria<HelpCampo campo="filtroAgenda.categoria" /></label>
               <CategorySelect filtro categories={categories} value={fltCat} onChange={e => setFltCat(e.target.value)} className="input py-1.5 text-xs" />
             </div>
-            <div>
-              <label className="label text-xs">Tipo de documento</label>
+            <div data-help-id="filtroAgenda.tipoDocumento">
+              <label className="label text-xs">Tipo de documento<HelpCampo campo="filtroAgenda.tipoDocumento" /></label>
               <TipoDocumentoFiltro tipos={tiposDocumento} extras={extrasTipoFiltro} selected={selTipos} onChange={setSelTipos} />
             </div>
-            <div>
-              <label className="label text-xs">Agenda do celular</label>
+            <div data-help-id="filtroAgenda.agendaCelular">
+              <label className="label text-xs">Agenda do celular<HelpCampo campo="filtroAgenda.agendaCelular" /></label>
               <select className="input py-1.5 text-xs" value={fltAgenda} onChange={e => setFltAgenda(e.target.value)}>
                 <option value="">Todos</option>
                 <option value="sim">Sincroniza</option>
@@ -3523,15 +3526,15 @@ export default function SchedulePanel() {
             {/* Valor: faixa Mín./Máx. num campo só. O botão "Valor" ao lado é OUTRO filtro: escolhe
                 valores exatos da lista. */}
             <div className="col-span-2 sm:col-span-3 lg:col-span-2 flex items-end gap-2 min-w-0">
-              <div className="flex-1 min-w-0">
-                <label className="label text-xs">Valor</label>
+              <div className="flex-1 min-w-0" data-help-id="filtroAgenda.valor">
+                <label className="label text-xs">Valor<HelpCampo campo="filtroAgenda.valor" /></label>
                 <div className="flex gap-1.5">
                   <InputMoeda className="input py-1.5 text-xs flex-1 min-w-0" value={fltMin} onChange={e => setFltMin(e.target.value)} placeholder="Mín." aria-label="Valor mínimo" />
                   <InputMoeda className="input py-1.5 text-xs flex-1 min-w-0" value={fltMax} onChange={e => setFltMax(e.target.value)} placeholder="Máx." aria-label="Valor máximo" />
                 </div>
               </div>
               <div className="mb-0.5 shrink-0">
-                <ValueFilterDropdown label="Valor" values={valorOptions} selected={selValores} onChange={setSelValores} />
+                <ValueFilterDropdown label="Valor" values={valorOptions} selected={selValores} onChange={setSelValores} helpId="filtroAgenda.valorLista" />
               </div>
             </div>
             <div className="col-span-2 sm:col-span-3 lg:col-span-8 flex items-center justify-between gap-2 pt-1 border-t border-borda">

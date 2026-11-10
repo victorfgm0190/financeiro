@@ -9,6 +9,7 @@ import { normalizarTermo } from '../../lib/assistente/texto'
 import { ehPagamentoDeCartao } from '../../lib/rotuloMovimento'
 import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { procurarAgendamentos, resumoAgendamento, textoDoResumo, rotuloFrequencia } from '../../lib/assistente/consultaAgendamento'
+import HelpCampo from '../shared/HelpCampo'
 
 // consultar_agendamento 🟢 — situação de UM agendamento. SOMENTE LEITURA: nada aqui grava.
 // Localiza entre os agendamentos do PERFIL ATIVO (profileSchedules, o mesmo recorte da tela de
@@ -206,8 +207,9 @@ export default function ConsultaAgendamento({ parametros, textoOriginal, onClose
       ) : (
         <>
           <Titulo>Não achei agendamento com “{citado}” na descrição ou no favorecido{(profileSchedules || []).length ? '' : ' (nenhum agendamento neste perfil)'}. Pode dar mais um detalhe — outra palavra da descrição ou o nome de quem recebe/paga?</Titulo>
-          <form className="flex gap-2" onSubmit={refinar}>
-            <input className="input flex-1 min-w-0" value={detalhe} onChange={e => setDetalhe(e.target.value.slice(0, 80))} placeholder="Ex.: parte do nome ou o favorecido" aria-label="Detalhe do agendamento" />
+          <form className="flex items-center gap-2" onSubmit={refinar} data-help-form="consultaAssistente">
+            <input data-help-id="consultaAssistente.detalhe" className="input flex-1 min-w-0" value={detalhe} onChange={e => setDetalhe(e.target.value.slice(0, 80))} placeholder="Ex.: parte do nome ou o favorecido" aria-label="Detalhe do agendamento" />
+            <HelpCampo campo="consultaAssistente.detalhe" />
             <button className="btn-primary px-3 shrink-0" aria-label="Procurar" disabled={!detalhe.trim()}><Search size={15} /></button>
           </form>
         </>

@@ -471,10 +471,10 @@ export default function FluxoCaixaPorConta() {
   return (
     <div className="space-y-4">
       {/* Filtros — fixos no topo ao rolar apenas no desktop (md+) */}
-      <div className="card space-y-3 md:sticky md:top-0 md:z-20">
+      <div className="card space-y-3 md:sticky md:top-0 md:z-20" data-help-form="filtrosFluxoConta">
         {/* Visão (toggle) + criação de provisório */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div data-guia="reports:fluxo-conta.visao" className="flex gap-1 bg-surface-2/60 rounded-lg p-1 w-full sm:w-auto">
+          <div data-guia="reports:fluxo-conta.visao" data-help-id="filtroFluxoConta.visao" className="flex items-center gap-1 bg-surface-2/60 rounded-lg p-1 w-full sm:w-auto">
             {VISOES.map(v => (
               <button
                 key={v.id}
@@ -486,6 +486,7 @@ export default function FluxoCaixaPorConta() {
                 {v.label}
               </button>
             ))}
+            <HelpCampo campo="filtroFluxoConta.visao" />
           </div>
           {podeIncluirF && (
           <button
@@ -502,8 +503,8 @@ export default function FluxoCaixaPorConta() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {visao === 'conta' && (
-            <div data-guia="reports:fluxo-conta.selecao" className="lg:col-span-2 relative" ref={contaDropRef}>
-              <label className="label">Contas</label>
+            <div data-guia="reports:fluxo-conta.selecao" data-help-id="filtroFluxoConta.contas" className="lg:col-span-2 relative" ref={contaDropRef}>
+              <label className="label">Contas<HelpCampo campo="filtroFluxoConta.contas" /></label>
               <button
                 type="button"
                 onClick={() => setContaDropOpen(o => !o)}
@@ -545,8 +546,8 @@ export default function FluxoCaixaPorConta() {
             </div>
           )}
           {visao === 'grupo' && (
-            <div data-guia="reports:fluxo-conta.selecao" className="lg:col-span-2">
-              <label className="label">Grupo de Contas</label>
+            <div data-guia="reports:fluxo-conta.selecao" data-help-id="filtroFluxoConta.grupo" className="lg:col-span-2">
+              <label className="label">Grupo de Contas<HelpCampo campo="filtroFluxoConta.grupo" /></label>
               <select className="input" value={groupId} onChange={e => setGroupId(e.target.value)}>
                 <option value="">Selecione...</option>
                 {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -561,41 +562,41 @@ export default function FluxoCaixaPorConta() {
               </p>
             </div>
           )}
-          <div data-guia="reports:fluxo-conta.datas">
-            <label className="label">Data inicial</label>
+          <div data-guia="reports:fluxo-conta.datas" data-help-id="filtroFluxoConta.dataDe">
+            <label className="label">Data inicial<HelpCampo campo="filtroFluxoConta.dataDe" /></label>
             <DateInput className="input" value={start} onChange={e => setStart(e.target.value)} />
           </div>
-          <div>
-            <label className="label">Data final</label>
+          <div data-help-id="filtroFluxoConta.dataAte">
+            <label className="label">Data final<HelpCampo campo="filtroFluxoConta.dataAte" /></label>
             <DateInput className="input" value={end} onChange={e => setEnd(e.target.value)} />
           </div>
         </div>
 
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-5 flex-wrap">
-            <label data-guia="reports:fluxo-conta.incluir-agendamentos" className="flex items-center gap-2 cursor-pointer">
+            <label data-guia="reports:fluxo-conta.incluir-agendamentos" data-help-id="filtroFluxoConta.agendamentos" className="flex items-center gap-2 cursor-pointer">
               <div className="relative shrink-0">
                 <input type="checkbox" checked={includeSchedules} onChange={e => setIncludeSchedules(e.target.checked)} className="sr-only peer" />
                 <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
-              <span className="text-sm text-texto-2 select-none">Incluir agendamentos (transações futuras)</span>
+              <span className="text-sm text-texto-2 select-none">Incluir agendamentos (transações futuras)</span><HelpCampo campo="filtroFluxoConta.agendamentos" />
             </label>
-            <label data-guia="reports:fluxo-conta.ocultar-reserva" className="flex items-center gap-2 cursor-pointer">
+            <label data-guia="reports:fluxo-conta.ocultar-reserva" data-help-id="filtroFluxoConta.ocultarReserva" className="flex items-center gap-2 cursor-pointer">
               <div className="relative shrink-0">
                 <input type="checkbox" checked={hideReserva} onChange={e => setHideReserva(e.target.checked)} className="sr-only peer" />
                 <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
-              <span className="text-sm text-texto-2 select-none">Ocultar movimentos de reserva</span>
+              <span className="text-sm text-texto-2 select-none">Ocultar movimentos de reserva</span><HelpCampo campo="filtroFluxoConta.ocultarReserva" />
             </label>
-            <label data-guia="reports:fluxo-conta.ocultar-patrimonio" className="flex items-center gap-2 cursor-pointer">
+            <label data-guia="reports:fluxo-conta.ocultar-patrimonio" data-help-id="filtroFluxoConta.ocultarPatrimonio" className="flex items-center gap-2 cursor-pointer">
               <div className="relative shrink-0">
                 <input type="checkbox" checked={hidePatrimonio} onChange={e => setHidePatrimonio(e.target.checked)} className="sr-only peer" />
                 <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
-              <span className="text-sm text-texto-2 select-none">Ocultar movimentos de patrimônio</span>
+              <span className="text-sm text-texto-2 select-none">Ocultar movimentos de patrimônio</span><HelpCampo campo="filtroFluxoConta.ocultarPatrimonio" />
             </label>
           </div>
           {!noSelection && qtdDatas > 0 && (
@@ -694,8 +695,8 @@ export default function FluxoCaixaPorConta() {
             <table className="w-full text-sm" style={{ minWidth: 920 }}>
               <thead>
                 <tr className="border-b border-borda">
-                  <th data-guia="reports:fluxo-conta.caixinha" className="w-9 px-2 py-2.5" title="Desmarque uma linha para tirá-la do cálculo" />
-                  <th data-guia="reports:fluxo-conta.data" className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-24">Data</th>
+                  <th data-guia="reports:fluxo-conta.caixinha" className="w-9 px-2 py-2.5" title="Desmarque uma linha para tirá-la do cálculo"><HelpCampo campo="filtroFluxoConta.linha" /></th>
+                  <th data-guia="reports:fluxo-conta.data" className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-24">Data<HelpCampo campo="filtroFluxoConta.dataLinha" /></th>
                   <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
                   <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Movimentação</th>
                   <th className="text-right px-3 py-2.5 text-xs text-despesa font-medium w-28">Pagamento</th>
@@ -741,6 +742,7 @@ export default function FluxoCaixaPorConta() {
                     <td className="px-2 py-2.5 text-center">
                       <input
                         type="checkbox"
+                        data-help-id="filtroFluxoConta.linha"
                         className="accent-primary w-3.5 h-3.5 align-middle cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                         checked={r.ativa}
                         disabled={!simulavel(r)}
@@ -755,6 +757,7 @@ export default function FluxoCaixaPorConta() {
                         <input
                           type="date"
                           autoFocus
+                          data-help-id="filtroFluxoConta.dataLinha"
                           className="input py-0.5 px-1 text-xs w-32"
                           value={editandoData.valor}
                           onChange={e => setEditandoData(ed => ({ ...ed, valor: e.target.value }))}

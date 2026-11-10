@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { rotuloParcela } from '../../lib/numeroParcela'
 import { chaveCandidato } from '../../lib/assistente/agendamentoDoLancamento'
+import HelpCampo from '../shared/HelpCampo'
 
 // Cartão da BAIXA SUGERIDA na prévia do Assistente (em vez da etapa antes do formulário): o lançamento
 // paga um agendamento pendente. Marcado, "Confirmar tudo" cria o lançamento e o liga à ocorrência
@@ -23,17 +24,18 @@ export default function CartaoBaixaPrevia({ candidatos, marcado, alvo, parecido 
   const um = candidatos.length === 1
   const l = linha(alvo)
   return (
-    <section className={`rounded-xl border-2 ${marcado ? 'border-primary/50' : 'border-borda'} bg-surface p-3 space-y-2`} aria-label="Cartão da baixa">
-      <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]">
+    <section className={`rounded-xl border-2 ${marcado ? 'border-primary/50' : 'border-borda'} bg-surface p-3 space-y-2`} aria-label="Cartão da baixa" data-help-form="previaBaixa">
+      <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]" data-help-id="previaBaixa.marcar">
         <input type="checkbox" className="accent-primary w-5 h-5" checked={marcado} onChange={e => onMarcar(e.target.checked)} />
         <CalendarCheck size={16} className="text-primary-fg" />
-        <span className="text-sm font-semibold text-texto-1">Dar baixa no agendamento</span>
+        <span className="text-sm font-semibold text-texto-1 inline-flex items-center">Dar baixa no agendamento<HelpCampo campo="previaBaixa.marcar" /></span>
         {parecido && <span className="text-[11px] text-aviso">parecido — confira</span>}
       </label>
       {um ? (
         <p className="text-xs text-texto-2 break-words"><strong className="text-texto-1">{l.titulo}</strong> — <span className={alvo.atrasado ? 'text-aviso' : ''}>{l.detalhe}</span></p>
       ) : (
-        <div className="space-y-1" role="radiogroup" aria-label="Qual agendamento">
+        <div className="space-y-1" role="radiogroup" aria-label="Qual agendamento" data-help-id="previaBaixa.qual">
+          <p className="text-[11px] text-texto-3 inline-flex items-center">Qual agendamento<HelpCampo campo="previaBaixa.qual" /></p>
           {candidatos.map(c => {
             const x = linha(c)
             return (
@@ -58,12 +60,12 @@ export default function CartaoBaixaPrevia({ candidatos, marcado, alvo, parecido 
 // Cartão "Vincular ao contrato X": o nº lido no documento é o de um contrato cadastrado.
 export function CartaoContratoPrevia({ contrato, marcado, onMarcar }) {
   return (
-    <section className={`rounded-xl border-2 ${marcado ? 'border-primary/50' : 'border-borda'} bg-surface p-3`} aria-label="Cartão do contrato">
-      <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]">
+    <section className={`rounded-xl border-2 ${marcado ? 'border-primary/50' : 'border-borda'} bg-surface p-3`} aria-label="Cartão do contrato" data-help-form="previaContrato">
+      <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]" data-help-id="previaContrato.marcar">
         <input type="checkbox" className="accent-primary w-5 h-5" checked={marcado} onChange={e => onMarcar(e.target.checked)} />
         <FileSignature size={16} className="text-primary-fg" />
         <span className="text-sm font-semibold text-texto-1">Vincular ao contrato {contrato.nome}</span>
-        <span className="text-[11px] text-texto-3">nº {contrato.numero}</span>
+        <span className="text-[11px] text-texto-3">nº {contrato.numero}</span><HelpCampo campo="previaContrato.marcar" />
       </label>
     </section>
   )

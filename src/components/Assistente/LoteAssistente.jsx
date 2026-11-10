@@ -9,6 +9,7 @@ import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import { listarPreLancamentos, guardarPreLancamento, interpretar } from '../../lib/assistenteApi'
 import EscolherConta from './EscolherConta'
 import PreviaAssistente from './PreviaAssistente'
+import HelpCampo from '../shared/HelpCampo'
 
 // Assistente IA — VÁRIOS lançamentos num pedido (src/lib/assistente/lote.js): lista com um item por
 // movimento (checkbox, editar = a prévia normal, remover).
@@ -163,7 +164,8 @@ export default function LoteAssistente({ itens: itensIniciais, faltantes = null,
           titulo="Em qual conta? Vale para todos (dá para trocar em cada item)." />
       )}
 
-      <ul className="divide-y divide-borda rounded-lg border border-borda">
+      <p data-testid="legenda-lote" className="flex flex-wrap items-center gap-x-3 text-[11px] text-texto-3"><span className="inline-flex items-center">Marcar o item<HelpCampo campo="previaLote.selecionar" /></span><span className="inline-flex items-center">Conta do item<HelpCampo campo="previaLote.conta" /></span></p>
+      <ul className="divide-y divide-borda rounded-lg border border-borda" data-help-form="previaLote">
         {linhas.map(l => {
           const p = l.sugestao
           const fechado = l.status !== 'aberto'
@@ -171,7 +173,7 @@ export default function LoteAssistente({ itens: itensIniciais, faltantes = null,
           return (
             <li key={l.i} className={`px-3 py-2 ${fechado ? 'opacity-60' : ''}`}>
               <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1 w-4 h-4 accent-primary shrink-0" aria-label={`Selecionar item ${l.i + 1}`}
+                <input type="checkbox" data-help-id="previaLote.selecionar" className="mt-1 w-4 h-4 accent-primary shrink-0" aria-label={`Selecionar item ${l.i + 1}`}
                   checked={l.sel && !fechado} disabled={fechado} onChange={e => mudar(l.i, { sel: e.target.checked })} />
                 <div className="flex-1 min-w-0 space-y-0.5">
                   <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-texto-1">
@@ -182,7 +184,7 @@ export default function LoteAssistente({ itens: itensIniciais, faltantes = null,
                   <p className="text-[11px] text-texto-3 break-words">
                     {nomeCat(p.categoria_id) || 'sem categoria'} · {fmtDate(p.data || p.vencimento)} ·{' '}
                     {fechado ? (nome(p.conta_id) || 'sem conta') : (
-                      <select className="bg-transparent border-b border-borda-campo text-texto-2 text-[11px] max-w-[11rem]" aria-label={`Conta do item ${l.i + 1}`}
+                      <select data-help-id="previaLote.conta" className="bg-transparent border-b border-borda-campo text-texto-2 text-[11px] max-w-[11rem]" aria-label={`Conta do item ${l.i + 1}`}
                         value={p.conta_id || ''} onChange={e => mudar(l.i, { conta: e.target.value })}>
                         <option value="">Em qual conta?</option>
                         {contasTroca.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}

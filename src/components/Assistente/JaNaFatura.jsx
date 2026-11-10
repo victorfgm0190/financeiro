@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { fmt, fmtDate } from '../shared/utils'
 import { rotuloFatura, ajusteProposto } from '../../lib/matchLancamento'
 import { numeroParcelaDoTx, totalParcelasDoTx } from '../../lib/revisaoImportacao'
+import HelpCampo from '../shared/HelpCampo'
 
 // Prévia do Assistente: o lançamento do SMS/pedido parece já estar numa fatura do cartão
 // (lib/matchLancamento). Forte → "Confirmar o existente" (só concilia, nada novo), "Ajustar o
@@ -52,8 +53,8 @@ export default function JaNaFatura({ fortes = [], fracos = [], novo, textoOrigin
             ? `A parcela ${parcela.num}/${parcela.total || m.tx.installmentTotal || '?'} de ${m.tx.description || m.tx.payee || 'esta compra'} já está lançada na fatura de ${mesAno(m.fatura)} (${fmt(m.tx.amount)}).`
             : `Este lançamento parece já estar na Fatura ${faturas.join(' / ')}`}
         </p>
-        {lista.length > 1 && <p className="pl-6 text-xs text-texto-2">Escolha qual é:</p>}
-        <ul className="space-y-1.5 pl-6">
+        {lista.length > 1 && <p className="pl-6 text-xs text-texto-2 inline-flex items-center">Escolha qual é:<HelpCampo campo="jaNaFatura.qual" /></p>}
+        <ul className="space-y-1.5 pl-6" data-help-form="jaNaFatura" data-help-id="jaNaFatura.qual">
           {lista.map((x, i) => (
             <li key={x.tx.id}>
               <label className={`flex items-start gap-2 text-xs ${lista.length > 1 ? 'cursor-pointer' : ''}`}>

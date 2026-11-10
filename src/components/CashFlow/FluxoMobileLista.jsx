@@ -7,6 +7,7 @@ import { STATUS_CONFIRMACAO } from '../../lib/fluxoStatus'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import BottomSheet from '../shared/BottomSheet'
 import { MASCARA } from '../../mobile/ocultarValores'
+import HelpCampo from '../shared/HelpCampo'
 
 // Bottom sheet dos filtros/consultas do Fluxo no celular (componente compartilhado).
 export const FluxoSheet = BottomSheet
@@ -94,9 +95,9 @@ export default function FluxoMobileLista({
             </span>
           )}
         </div>
-        <label className="flex items-center gap-2 min-h-[44px] text-xs text-texto-2 cursor-pointer">
+        <label className="flex items-center gap-2 min-h-[44px] text-xs text-texto-2 cursor-pointer" data-help-id="opcoesFluxo.linha">
           <input type="checkbox" className="accent-primary w-4 h-4" checked={ativa} onChange={() => toggleLinha(r._key)} />
-          Incluir no cálculo
+          Incluir no cálculo<HelpCampo campo="opcoesFluxo.linha" />
         </label>
         <div className="flex flex-wrap gap-2">
           {!r._provisorio && onMudarData && (
@@ -177,7 +178,7 @@ export default function FluxoMobileLista({
       {atraso.length > 0 && (
         <div className={`border-b border-borda bg-perigo/5 ${atrasoAtivas === 0 ? 'opacity-60' : ''}`}>
           <div className="flex items-center gap-1 pl-2 pr-4">
-            <label className="w-11 h-11 flex items-center justify-center cursor-pointer" title={atrasoAtivas > 0 ? 'Tirar as pendências em atraso do cálculo' : 'Voltar a considerar as pendências em atraso'}>
+            <label data-help-id="opcoesFluxo.atraso" className="w-11 h-11 flex items-center justify-center cursor-pointer" title={atrasoAtivas > 0 ? 'Tirar as pendências em atraso do cálculo' : 'Voltar a considerar as pendências em atraso'}>
               <input
                 type="checkbox"
                 className="accent-primary w-4 h-4"
@@ -192,6 +193,7 @@ export default function FluxoMobileLista({
               <span className="text-sm text-perigo flex-1">⚠ Pendências em atraso ({atraso.length})</span>
               <span className={`text-sm font-semibold ${atrasoTotal >= 0 ? 'text-receita' : 'text-despesa'}`}>{vf(atrasoTotal)}</span>
             </button>
+            <HelpCampo campo="opcoesFluxo.atraso" />
           </div>
           <p className="px-4 pb-2 -mt-1 text-[11px] text-texto-3">Saldo com atrasos: <span className={`font-semibold ${corSaldo(base)}`}>{vf(base, fmt)}</span></p>
           {atrasoAberto && (
@@ -204,9 +206,9 @@ export default function FluxoMobileLista({
 
       {/* Marcar todos (só os eventos visíveis no prazo e filtros atuais) */}
       {rowsView.length > 0 && (
-        <label data-guia="cashflow.marcar-todos" className="flex items-center gap-3 min-h-[44px] px-4 border-b border-borda text-sm text-texto-2 cursor-pointer">
+        <label data-guia="cashflow.marcar-todos" data-help-id="opcoesFluxo.marcarTodos" className="flex items-center gap-3 min-h-[44px] px-4 border-b border-borda text-sm text-texto-2 cursor-pointer">
           {caixaVarias(rowsView, 'Marcar todos os eventos')}
-          <span className="flex-1">Marcar todos</span>
+          <span className="flex-1 inline-flex items-center">Marcar todos<HelpCampo campo="opcoesFluxo.marcarTodos" /></span>
           <span className="text-xs text-texto-3">{marcacao.ativas}/{marcacao.total} no cálculo</span>
         </label>
       )}
@@ -215,7 +217,7 @@ export default function FluxoMobileLista({
       {grupos.map(g => (
         <section key={g.date}>
           <h3 className="sticky top-0 z-[1] pl-1 pr-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-texto-2 bg-surface/95 border-b border-borda">
-            <label className="w-9 h-9 shrink-0 flex items-center justify-center cursor-pointer" title="Marcar / desmarcar os eventos deste dia">
+            <label data-help-id="opcoesFluxo.marcarTodos" className="w-9 h-9 shrink-0 flex items-center justify-center cursor-pointer" title="Marcar / desmarcar os eventos deste dia">
               {caixaVarias(g.rows, `Marcar os eventos de ${fmtDate(g.date)}`, 'w-3.5 h-3.5')}
             </label>
             <span className="shrink-0">{fmtDate(g.date)}</span>

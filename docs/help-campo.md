@@ -148,7 +148,10 @@ Agendamentos têm roteiro de Preenchimento Guiado (`formularios`); os demais tê
   O conteúdo está em `categorias.js`, `favorecidos.js` e `cadastros.js`. O `help:check` passou a
   incluir `PerfisMultiSelect` como campo.
 
-## Etapa 3 — formulários que faltavam (em blocos)
+## Etapa 3 — formulários que faltavam (em blocos) — concluída
+
+Concluída no bloco 5b (09/11/2026). Ficam fora, por decisão: Controle de Clientes, Consumo de IA e a caixa
+de mensagem e os anexos do Assistente.
 
 ### Bloco 1 — Patrimônio
 
@@ -288,4 +291,29 @@ Agendamentos têm roteiro de Preenchimento Guiado (`formularios`); os demais tê
 - **Celular:** `inicioCards` (Personalizar cards do Início).
 - Teste: `src/components/Ajuda/camposBloco5a.test.jsx`.
 - Ficam para o bloco 5b: filtros e busca, prévias do Assistente e telas sem login.
+
+### Bloco 5b — busca, filtros, prévias do Assistente e telas sem login
+
+- Texto curto (uma linha em `paraQueServe` e em `relacaoComTela`).
+- **Busca e filtros** (`src/help/filtros.js`):
+  - Agendamentos: `filtrosAgendamentos` (período, cartão e o painel de filtros);
+  - Lançamentos e extrato: `filtrosLancamentos` em `LancamentoFiltros` e nos filtros de coluna do
+    extrato (desktop). A linha não tem rótulo: uma legenda com ⓘ fica acima, e a altura da linha não muda.
+    Quem passa controles em `extra` informa a legenda em `legendaExtra`;
+  - `ValueFilterDropdown` aceita `helpId` (no contêiner);
+  - seletor de cartão (`seletorCartao`), busca global (`buscaGlobal`) e busca da Central de Ajuda (`buscaAjuda`);
+  - relatórios: Demonstrativo, Fluxo por Conta (inclui a caixinha e a data de cada linha), Bens,
+    Por favorecido, Rendimentos, Relatório da fatura, Extrato gerencial e o mês de Despesas por Categoria;
+  - Fluxo de Caixa Futuro (`opcoesFluxo`): consulta, marcar todos, envelopes, reservas, evento no cálculo e
+    pendências em atraso, no desktop e no celular; o nome da consulta no cartão usa `consultaFluxo.nome`;
+  - Reservas: período do Fluxo Futuro (`periodoFluxoReservas`) e filtros do Razão (`filtrosRazao`);
+  - Contratos (`filtrosContratos`); Patrimônio: "Mostrar vendidos" e a simulação de saída (`simulacaoSaida`).
+- **Rendimentos:** a conferência com o informe da administradora grava e ganhou `informeAdm` (em
+  `src/help/contratosAcoes.js`).
+- **Prévias do Assistente** (`src/help/assistente.js`): agendamento, baixa, contrato, despesa, lote,
+  compra em dólar, já na fatura, escolher conta e as consultas.
+- **Telas sem login** (`src/help/acesso.js`): Login, Esqueci minha senha, Definir senha e Pedido de cadastro.
+  Texto genérico, sem detalhe de segurança. O `HelpCampoPainel` (ⓘ e F1) também é montado no Login e
+  nas páginas públicas (`src/App.jsx`).
+- Teste: `src/components/Ajuda/camposBloco5b.test.jsx`.
 

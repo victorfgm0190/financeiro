@@ -260,8 +260,8 @@ export default function PatrimonioPanel({ setActivePage }) {
           <h2 className="text-sm font-semibold text-texto-2 flex items-center gap-2">
             <Home size={14} className="text-receita" /> Bens e Ativos
             {categorized.bens.some(a => a.foiVendido) && (
-              <label className="ml-auto flex items-center gap-1.5 text-xs font-normal text-texto-3">
-                <input type="checkbox" className="accent-primary" checked={mostrarVendidos} onChange={e => setMostrarVendidos(e.target.checked)} /> Mostrar vendidos
+              <label className="ml-auto flex items-center gap-1.5 text-xs font-normal text-texto-3" data-help-form="filtroPatrimonio" data-help-id="filtroPatrimonio.mostrarVendidos">
+                <input type="checkbox" className="accent-primary" checked={mostrarVendidos} onChange={e => setMostrarVendidos(e.target.checked)} /> Mostrar vendidos<HelpCampo campo="filtroPatrimonio.mostrarVendidos" />
               </label>
             )}
           </h2>

@@ -17,6 +17,7 @@ import { exportarExcel } from '../../lib/exportExcel'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 import SeletorModoValor from '../Contratos/SeletorModoValor'
 import { lancamentosNoModo, CATEGORIA_ADMINISTRADORA } from '../../lib/contratos/despesaReal'
+import HelpCampo from '../shared/HelpCampo'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -628,14 +629,14 @@ export default function DemonstrativoFinanceiro() {
   return (
     <div className="space-y-4">
       {/* Filter panel */}
-      <div className="card space-y-4">
+      <div className="card space-y-4" data-help-form="filtrosDemonstrativo">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h3 className="text-sm font-semibold text-texto-2 flex items-center gap-2">
             <FileSpreadsheet size={14} className="text-texto-2" />
             Demonstrativo Financeiro
           </h3>
           <div className="flex items-center gap-4 flex-wrap">
-            <label data-guia="reports:demonstrativo.entre-perfis" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
+            <label data-guia="reports:demonstrativo.entre-perfis" data-help-id="filtroDemo.entrePerfis" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setIncludeInterProfile(v => !v)}
                 className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${includeInterProfile ? 'bg-primary' : 'bg-borda-campo'}`}
@@ -643,43 +644,43 @@ export default function DemonstrativoFinanceiro() {
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${includeInterProfile ? 'left-4' : 'left-0.5'}`} />
               </div>
               <ArrowLeftRight size={13} className="text-texto-2" />
-              Incluir transferências entre perfis (CPF/CNPJ)
+              Incluir transferências entre perfis (CPF/CNPJ)<HelpCampo campo="filtroDemo.entrePerfis" />
             </label>
-            <label data-guia="reports:demonstrativo.ocultar-reserva" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
+            <label data-guia="reports:demonstrativo.ocultar-reserva" data-help-id="filtroDemo.ocultarReserva" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setHideReserva(v => !v)}
                 className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${hideReserva ? 'bg-primary' : 'bg-borda-campo'}`}
               >
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${hideReserva ? 'left-4' : 'left-0.5'}`} />
               </div>
-              Ocultar movimentos de reserva
+              Ocultar movimentos de reserva<HelpCampo campo="filtroDemo.ocultarReserva" />
             </label>
-            <label data-guia="reports:demonstrativo.ocultar-patrimonio" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
+            <label data-guia="reports:demonstrativo.ocultar-patrimonio" data-help-id="filtroDemo.ocultarPatrimonio" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setHidePatrimonio(v => !v)}
                 className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${hidePatrimonio ? 'bg-primary' : 'bg-borda-campo'}`}
               >
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${hidePatrimonio ? 'left-4' : 'left-0.5'}`} />
               </div>
-              Ocultar movimentos de patrimônio
+              Ocultar movimentos de patrimônio<HelpCampo campo="filtroDemo.ocultarPatrimonio" />
             </label>
-            <label data-guia="reports:demonstrativo.exibir-lancamentos" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
+            <label data-guia="reports:demonstrativo.exibir-lancamentos" data-help-id="filtroDemo.exibirLancamentos" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setShowTxDraft(v => !v)}
                 className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${showTxDraft ? 'bg-primary' : 'bg-borda-campo'}`}
               >
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${showTxDraft ? 'left-4' : 'left-0.5'}`} />
               </div>
-              Exibir lançamentos
+              Exibir lançamentos<HelpCampo campo="filtroDemo.exibirLancamentos" />
             </label>
-            <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
+            <span className="inline-flex items-center" data-help-id="filtroDemo.regraValor"><Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" /><HelpCampo campo="filtroDemo.regraValor" /></span>
             <SeletorModoValor soRepasse value="pago" onChange={() => {}} porComposicao={porComposicao} onPorComposicao={setPorComposicao} />
           </div>
         </div>
 
         {/* Period quick-select */}
-        <div>
-          <label className="label">Período</label>
+        <div data-help-id="filtroDemo.periodo">
+          <label className="label">Período<HelpCampo campo="filtroDemo.periodo" /></label>
           <div data-guia="reports:demonstrativo.periodo" className="flex gap-1.5 flex-wrap">
             {PERIOD_OPTIONS.map(o => (
               <button
@@ -696,20 +697,20 @@ export default function DemonstrativoFinanceiro() {
 
         {/* Date range */}
         <div data-guia="reports:demonstrativo.datas" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="label">Data Inicial</label>
+          <div data-help-id="filtroDemo.dataDe">
+            <label className="label">Data Inicial<HelpCampo campo="filtroDemo.dataDe" /></label>
             <DateInput className="input" value={fromDraft} onChange={e => setFromDraft(e.target.value)} />
           </div>
-          <div>
-            <label className="label">Data Final</label>
+          <div data-help-id="filtroDemo.dataAte">
+            <label className="label">Data Final<HelpCampo campo="filtroDemo.dataAte" /></label>
             <DateInput className="input" value={toDraft} onChange={e => setToDraft(e.target.value)} />
           </div>
         </div>
 
         {/* Category and account multi-selects */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div data-guia="reports:demonstrativo.categorias">
-            <label className="label">Categorias ({selectedCatsDraft.length}/{catItems.length})</label>
+          <div data-guia="reports:demonstrativo.categorias" data-help-id="filtroDemo.categorias">
+            <label className="label">Categorias ({selectedCatsDraft.length}/{catItems.length})<HelpCampo campo="filtroDemo.categorias" /></label>
             <MultiSelectPanel
               label="Categorias"
               items={catItems}
@@ -717,8 +718,8 @@ export default function DemonstrativoFinanceiro() {
               onChange={setSelectedCatsDraft}
             />
           </div>
-          <div data-guia="reports:demonstrativo.contas">
-            <label className="label">Contas ({selectedAccsDraft.length}/{accItems.length})</label>
+          <div data-guia="reports:demonstrativo.contas" data-help-id="filtroDemo.contas">
+            <label className="label">Contas ({selectedAccsDraft.length}/{accItems.length})<HelpCampo campo="filtroDemo.contas" /></label>
             <MultiSelectPanel
               label="Contas"
               items={accItems}

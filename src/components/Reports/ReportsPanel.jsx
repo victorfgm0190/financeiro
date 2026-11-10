@@ -24,6 +24,7 @@ import { corSerie, estiloTooltip } from '../../lib/chartPalette'
 import SeletorModoValor from '../Contratos/SeletorModoValor'
 import { lancamentosNoModo, MODO_VALOR_PADRAO, categoriaEspecial } from '../../lib/contratos/despesaReal'
 import { isoLocal } from '../../lib/hoje'
+import HelpCampo from '../shared/HelpCampo'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -308,16 +309,19 @@ export default function ReportsPanel() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-texto-2">Despesas por Categoria</h2>
             <SeletorModoValor value={modoValor} onChange={setModoValor} porComposicao={porComposicao} onPorComposicao={setPorComposicao} />
-            <select
-              data-guia="reports.mes"
-              className="input w-auto text-xs py-1.5"
-              value={selectedMonth}
-              onChange={e => setSelectedMonth(Number(e.target.value))}
-            >
-              {last6Months.map((m, i) => (
-                <option key={m.label} value={5 - i}>{m.label}</option>
-              ))}
-            </select>
+            <span className="inline-flex items-center gap-1" data-help-form="filtroDespesasCategoria" data-help-id="filtroRelatorio.mes">
+              <select
+                data-guia="reports.mes"
+                className="input w-auto text-xs py-1.5"
+                value={selectedMonth}
+                onChange={e => setSelectedMonth(Number(e.target.value))}
+              >
+                {last6Months.map((m, i) => (
+                  <option key={m.label} value={5 - i}>{m.label}</option>
+                ))}
+              </select>
+              <HelpCampo campo="filtroRelatorio.mes" />
+            </span>
           </div>
           {categoryData.length === 0 ? (
             <p className="text-texto-3 text-sm text-center py-8">Sem dados de despesas neste período</p>

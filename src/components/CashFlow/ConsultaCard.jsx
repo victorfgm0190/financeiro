@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { MoreHorizontal, Pencil } from 'lucide-react'
 import { NOME_MAX, rotuloModo } from '../../lib/fluxoConsultas'
+import HelpCampo from '../shared/HelpCampo'
 
 // Cartão de uma consulta do Fluxo de Caixa Futuro: nome, "Modo · N contas", badge "padrão",
 // renomear inline (lápis ou duplo clique; Enter/blur salva, Esc cancela) e menu "⋯".
@@ -72,10 +73,11 @@ export default function ConsultaCard({
     >
       <div className="min-w-0 flex-1">
         {editando != null ? (
-          <div onClick={e => e.stopPropagation()}>
+          <div onClick={e => e.stopPropagation()} data-help-form="consultaFluxo" data-help-id="consultaFluxo.nome">
+            <div className="flex items-center gap-1">
             <input
               autoFocus
-              className={`input py-0.5 px-1.5 text-sm w-full ${erro || erroSalvar ? 'border-perigo' : ''}`}
+              className={`input py-0.5 px-1.5 text-sm w-full min-w-0 ${erro || erroSalvar ? 'border-perigo' : ''}`}
               value={editando}
               maxLength={NOME_MAX}
               autoComplete="off"
@@ -87,6 +89,8 @@ export default function ConsultaCard({
                 if (e.key === 'Escape') { e.stopPropagation(); cancelouRef.current = true; setEditando(null) }
               }}
             />
+            <HelpCampo campo="consultaFluxo.nome" />
+            </div>
             {(erro || erroSalvar) && <p className="text-[11px] text-perigo mt-0.5 max-w-[220px]">{erro || erroSalvar}</p>}
           </div>
         ) : (

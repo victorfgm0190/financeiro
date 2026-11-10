@@ -2,6 +2,7 @@ import { CalendarPlus } from 'lucide-react'
 import FimRepeticao from '../shared/FimRepeticao'
 import { primeiraOcorrencia } from '../../lib/assistente/prontidao'
 import { fmt, fmtDate } from '../shared/utils'
+import HelpCampo from '../shared/HelpCampo'
 
 const FREQS = [['monthly', 'Mensal'], ['weekly', 'Semanal'], ['biweekly', 'Quinzenal'], ['bimonthly', 'Bimestral'], ['quarterly', 'Trimestral'], ['semiannual', 'Semestral'], ['annual', 'Anual']]
 
@@ -13,18 +14,18 @@ export default function CartaoAgendamentoPrevia({ cfg, onChange, rateio = [], ca
   const primeira = cfg.repeatStartDate ? primeiraOcorrencia({ data: cfg.repeatStartDate, recorrencia: cfg.repeatFrequency }) : null
   const nome = (id) => categories.find(c => c.id === id)?.name || 'Categoria'
   return (
-    <section className={`rounded-xl border-2 ${cfg.ativo ? 'border-primary/50' : 'border-borda opacity-70'} bg-surface p-3 space-y-3`} aria-label="Cartão do agendamento">
-      <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]">
+    <section className={`rounded-xl border-2 ${cfg.ativo ? 'border-primary/50' : 'border-borda opacity-70'} bg-surface p-3 space-y-3`} aria-label="Cartão do agendamento" data-help-form="previaAgendamento">
+      <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]" data-help-id="previaAgendamento.ativo">
         <input type="checkbox" className="accent-primary w-5 h-5" checked={cfg.ativo} onChange={e => onChange({ ...cfg, ativo: e.target.checked })} />
         <CalendarPlus size={16} className="text-primary-fg" />
-        <span className="text-sm font-semibold text-texto-1">Agendamento</span>
+        <span className="text-sm font-semibold text-texto-1 inline-flex items-center">Agendamento<HelpCampo campo="previaAgendamento.ativo" /></span>
         {motivo && <span className="text-[11px] text-texto-3 truncate">· {motivo}</span>}
       </label>
       {cfg.ativo && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="label" htmlFor="prev-freq">Recorrência</label>
+            <div data-help-id="previaAgendamento.recorrencia">
+              <label className="label" htmlFor="prev-freq">Recorrência<HelpCampo campo="previaAgendamento.recorrencia" /></label>
               <select id="prev-freq" className="input" value={cfg.repeatFrequency} onChange={e => onChange({ ...cfg, repeatFrequency: e.target.value })}>
                 {FREQS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
@@ -33,8 +34,8 @@ export default function CartaoAgendamentoPrevia({ cfg, onChange, rateio = [], ca
               {primeira && <>1ª ocorrência: <strong>{fmtDate(primeira)}</strong> (a despesa conta como a de {fmtDate(cfg.repeatStartDate)})</>}
             </div>
           </div>
-          <div>
-            <label className="label">Até quando</label>
+          <div data-help-id="previaAgendamento.ateQuando">
+            <label className="label">Até quando<HelpCampo campo="previaAgendamento.ateQuando" /></label>
             <FimRepeticao
               inicio={cfg.repeatStartDate}
               recorrencia={cfg.repeatFrequency}

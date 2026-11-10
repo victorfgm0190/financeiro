@@ -9,6 +9,7 @@ import { specRelatorioBens } from '../../lib/relatorioBensExcel'
 import { exportarExcel } from '../../lib/exportExcel'
 import { isoLocal } from '../../lib/hoje'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
+import HelpCampo from '../shared/HelpCampo'
 
 const rotuloMes = (mes) => { const [a, m] = mes.split('-'); return `${m}/${a}` }
 
@@ -61,24 +62,24 @@ export default function RelatorioBens() {
           O que saiu das suas contas para pagar cada bem. O que um terceiro pagou e as devoluções ficam em
           colunas próprias, fora do total. Bem dado na troca e ajuste de avaliação não são caixa e não aparecem.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div data-guia="reports:bens.datas">
-            <label className="label">Data inicial</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" data-help-form="filtrosRelatorioBens">
+          <div data-guia="reports:bens.datas" data-help-id="filtroBens.dataDe">
+            <label className="label">Data inicial<HelpCampo campo="filtroBens.dataDe" /></label>
             <DateInput className="input" value={de} onChange={e => setDe(e.target.value)} />
           </div>
-          <div>
-            <label className="label">Data final</label>
+          <div data-help-id="filtroBens.dataAte">
+            <label className="label">Data final<HelpCampo campo="filtroBens.dataAte" /></label>
             <DateInput className="input" value={ate} onChange={e => setAte(e.target.value)} />
           </div>
-          <div data-guia="reports:bens.perfil">
-            <label className="label">Perfil</label>
+          <div data-guia="reports:bens.perfil" data-help-id="filtroBens.perfil">
+            <label className="label">Perfil<HelpCampo campo="filtroBens.perfil" /></label>
             <select className="input" value={perfilId} onChange={e => { setPerfilId(e.target.value); setBemId('') }}>
               <option value="">Todos os perfis</option>
               {(profiles || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
-          <div data-guia="reports:bens.bem">
-            <label className="label">Bem</label>
+          <div data-guia="reports:bens.bem" data-help-id="filtroBens.bem">
+            <label className="label">Bem<HelpCampo campo="filtroBens.bem" /></label>
             <select className="input" value={bemId} onChange={e => setBemId(e.target.value)}>
               <option value="">Todos os bens</option>
               {bensDoPerfil.map(b => <option key={b.id} value={b.id}>{b.nome}</option>)}

@@ -8,6 +8,7 @@ import { FECHAMENTO_PADRAO } from '../../lib/fatura'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import SeloCambio from '../shared/SeloCambio'
 import { exportarExcel } from '../../lib/exportExcel'
+import HelpCampo from '../shared/HelpCampo'
 
 // Badge do grupo gerencial — mesmas cores do extrato do cartão (CreditCardPanel):
 // G (número 1) = reserva; D = cinza; numerados (2/3/…) = laranja.
@@ -237,9 +238,9 @@ export default function RelatorioFatura({ initialCardId }) {
         <h2 className="text-sm font-semibold text-texto-2 mb-4 flex items-center gap-2">
           <FileBarChart size={14} className="text-primary-fg" /> Relatório de Fatura
         </h2>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-36">
-            <label className="label">Cartão</label>
+        <div className="flex flex-wrap items-end gap-3" data-help-form="filtrosRelatorioFatura">
+          <div className="flex-1 min-w-36" data-help-id="filtroFatura.cartao">
+            <label className="label">Cartão<HelpCampo campo="filtroFatura.cartao" /></label>
             <select
               className="input"
               value={selectedCardId}
@@ -249,8 +250,8 @@ export default function RelatorioFatura({ initialCardId }) {
               {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <div className="flex-1 min-w-52">
-            <label className="label">Fatura</label>
+          <div className="flex-1 min-w-52" data-help-id="filtroFatura.fatura">
+            <label className="label">Fatura<HelpCampo campo="filtroFatura.fatura" /></label>
             <select
               className="input"
               value={selectedBill?.key || ''}

@@ -4,7 +4,7 @@ import { fmt } from './utils'
 
 // Dropdown multiselect de valores reais. `values` = números distintos já ordenados
 // (maior → menor). `selected` = Set<number>. `onChange(novoSet)`. Fecha ao clicar fora.
-export default function ValueFilterDropdown({ label = 'Valor', values = [], selected, onChange, iconColor = 'text-texto-3' }) {
+export default function ValueFilterDropdown({ label = 'Valor', values = [], selected, onChange, iconColor = 'text-texto-3', helpId = null }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -25,7 +25,7 @@ export default function ValueFilterDropdown({ label = 'Valor', values = [], sele
   const clear = (e) => { e.stopPropagation(); onChange(new Set()) }
 
   return (
-    <div className="relative shrink-0" ref={ref}>
+    <div className="relative shrink-0" ref={ref} {...(helpId ? { 'data-help-id': helpId } : {})}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}

@@ -4,6 +4,7 @@ import { fmt } from '../shared/utils'
 import { getExtratoBens } from '../../lib/bemApi'
 import { extratoDoBem, historicoDePagamentos } from '../../lib/extratoBem'
 import { cenariosDeSaida, simularSaida, totaisDasCotas } from '../../lib/consorcio'
+import HelpCampo from '../shared/HelpCampo'
 
 const pct = (v) => (v == null ? '—' : `${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`)
 
@@ -51,17 +52,17 @@ export default function SimulacaoTab({ bemId, cotas = [] }) {
       <div className="card">
         <h3 className="text-sm font-semibold text-texto-2 mb-1">Simular a saída</h3>
         <p className="text-xs text-texto-3 mb-3">Só uma estimativa: nada é gravado, e o valor de venda não entra no patrimônio.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="label">Mês previsto da contemplação</label>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-help-form="simulacaoSaida">
+          <div data-help-id="simulacaoSaida.mes">
+            <label className="label">Mês previsto da contemplação<HelpCampo campo="simulacaoSaida.mes" /></label>
             <input className="input" type="number" min="1" value={mes} onChange={e => setMes(e.target.value)} placeholder="Meses desde o primeiro pagamento" />
           </div>
-          <div>
-            <label className="label">Ágio na venda (% da carta)</label>
+          <div data-help-id="simulacaoSaida.agio">
+            <label className="label">Ágio na venda (% da carta)<HelpCampo campo="simulacaoSaida.agio" /></label>
             <input className="input" type="number" min="0" step="0.01" value={agio} onChange={e => setAgio(e.target.value)} placeholder="Quanto da carta o comprador paga" />
           </div>
-          <div>
-            <label className="label">CDI anual (%)</label>
+          <div data-help-id="simulacaoSaida.cdi">
+            <label className="label">CDI anual (%)<HelpCampo campo="simulacaoSaida.cdi" /></label>
             <input className="input" type="number" min="0" step="0.01" value={cdi} onChange={e => setCdi(e.target.value)} placeholder="Taxa anual para comparar" />
           </div>
         </div>

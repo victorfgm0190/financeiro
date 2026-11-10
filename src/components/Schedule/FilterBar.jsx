@@ -1,5 +1,6 @@
 import { SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react'
 import { PERIODOS } from '../../lib/agendamentosFiltro'
+import HelpCampo from '../shared/HelpCampo'
 
 // Barra de filtros das abas de Agendamentos: STATUS (segmentado, escolha única, com contador) à
 // esquerda, PERÍODO (dropdown) e o botão FILTROS (badge = filtros avançados ativos) à direita. O
@@ -15,7 +16,7 @@ export default function FilterBar({
   extra = null, children, semPeriodo = false,
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-help-form="filtrosAgendamentos">
       <div className="flex flex-wrap items-center gap-2">
         {/* STATUS — segmentado */}
         <div role="radiogroup" aria-label="Status" data-guia="schedule.status" className="flex w-full sm:w-auto max-w-full overflow-x-auto rounded-lg border border-borda-forte bg-surface-2 p-0.5">
@@ -46,8 +47,8 @@ export default function FilterBar({
         <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
           {extra}
           {/* PERÍODO */}
-          {!semPeriodo && <label className="flex items-center gap-1.5 flex-1 sm:flex-none min-w-0">
-            <span className="text-xs text-texto-3 shrink-0">Período:</span>
+          {!semPeriodo && <label className="flex items-center gap-1.5 flex-1 sm:flex-none min-w-0" data-help-id="filtroAgenda.periodo">
+            <span className="text-xs text-texto-3 shrink-0 inline-flex items-center">Período:<HelpCampo campo="filtroAgenda.periodo" /></span>
             <select
               data-guia="schedule.periodo"
               className="input py-1.5 text-xs w-full sm:w-auto"

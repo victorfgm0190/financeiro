@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CreditCard, Star } from 'lucide-react'
 import { papelDaContaApp } from '../../lib/assistente/contas'
+import HelpCampo from '../shared/HelpCampo'
 
 // Prévia do Assistente sem conta (nenhuma citada e sem favorita no perfil ativo, ou perfil "Tudo",
 // ou cartão ambíguo): "Em qual conta?" com só as SUGERÍVEIS (cartões de uso comum + favoritas) e
@@ -36,10 +37,13 @@ export default function EscolherConta({ accounts, activeProfileId, onEscolher, o
         )}
       </div>
       {outra && (
-        <select className="input" defaultValue="" onChange={e => e.target.value && onEscolher(e.target.value)} aria-label="Outra conta">
-          <option value="" disabled>Escolha a conta…</option>
-          {todas.map(a => <option key={a.id} value={a.id}>{nome(a)}</option>)}
-        </select>
+        <div className="flex items-center gap-1" data-help-form="escolherConta" data-help-id="escolherConta.outra">
+          <select className="input flex-1 min-w-0" defaultValue="" onChange={e => e.target.value && onEscolher(e.target.value)} aria-label="Outra conta">
+            <option value="" disabled>Escolha a conta…</option>
+            {todas.map(a => <option key={a.id} value={a.id}>{nome(a)}</option>)}
+          </select>
+          <HelpCampo campo="escolherConta.outra" />
+        </div>
       )}
     </div>
   )
