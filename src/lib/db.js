@@ -1535,22 +1535,6 @@ export async function syncSettings(settings, costCenters, { todosAlterados } = {
   }
 }
 
-// ─── Restauração de backup (importação manual) ───────────────────────────────
-
-// Restaura a tabela account_mapping (upsert por id — não remove linhas extras,
-// pois é dado de referência). Os rows já vêm em snake_case (formato exportado).
-export async function restoreAccountMappings(rows) {
-  if (!Array.isArray(rows) || rows.length === 0) return
-  try {
-    await apiPost('/api/sync', { type: 'section', table: 'account_mapping', upsert: rows, delete: [] })
-  } catch (err) {
-    console.error('[db] restore account_mapping:', err.message)
-  }
-}
-
-// Restaura um backup completo no Neon: faz upsert de tudo que está no backup e
-// remove do banco o que não existir mais nele (substituição total). Usa o estado
-// atual do Neon como "prev" para calcular as exclusões por id.
 // Seções gravadas pelo syncSection genérico: chave no estado do app → tabela → mapper.
 // Contas/cartões, favorecidos, detalhamento (srf) e configurações têm sync próprio.
 export const SECOES_SYNC = [
@@ -1570,38 +1554,3 @@ export const SECOES_SYNC = [
   { chave: 'favorecidoAliases', tabela: 'favorecido_alias', toRow: favorecidoAliasToRow },
 ]
 
-export async function restoreFullBackup(backup, accountMapping) {
-  const empty = {
-    accounts: [], transactions: [], schedules: [], categories: [], budgets: [],
-    classificationRules: [], gerencialRules: [], gerencialGroups: [], payables: [],
-    payees: [], envelopes: [], accountGroups: [], profiles: [], cardImports: [],
-    reserveFunctions: [],
-  }
-  // Sem ler o banco não dá para saber o que apagar: a restauração sairia pela metade (grava o
-  // backup por cima e deixa no banco o que não está nele). Cancela antes de gravar qualquer coisa.
-  let current
-  try {
-    current = await loadFromDb({ settings: {}, costCenters: [] })
-  } catch (err) {
-    current = { status: 'error', error: err.message }
-  }
-  if (current.status !== 'connected' && current.status !== 'empty') {
-    console.error('[db] restore: falha ao ler estado atual do Neon:', current.error || current.status)
-    throw new Error('Não foi possível ler o banco antes de restaurar. Nada foi gravado; tente de novo.')
-  }
-  const prev = current.status === 'connected' ? { ...empty, ...current.data } : empty
-
-  const d = backup
-  // Restauração é substituição total pedida pelo usuário: tabela inteira, exclusão em massa
-  // confirmada e todas as chaves de configuração como alteradas. FK contas→cartões é tratada
-  // internamente por syncAccounts; demais tabelas não têm FK restritiva.
-  const opts = { confirmarExclusaoEmMassa: true }
-  await Promise.all([
-    syncAccounts(prev.accounts, d.accounts || [], opts),
-    ...SECOES_SYNC.map(({ chave, tabela, toRow }) => syncSection(tabela, prev[chave] || [], d[chave] || [], toRow, opts)),
-    syncPayees(prev.payees, d.payees || [], opts),
-    syncSettings(d.settings || {}, d.costCenters || [], { todosAlterados: true }),
-  ])
-
-  await restoreAccountMappings(accountMapping)
-}

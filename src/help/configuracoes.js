@@ -126,9 +126,39 @@ export const campos = {
 
   // ── Backup e manutenção ───────────────────────────────────────────────────────────────────
   'backup.importar': {
-    titulo: 'Importar backup',
-    paraQueServe: 'Restaura um arquivo de backup (.json) exportado pelo Finup.',
-    relacaoComTela: 'Pede confirmação antes de gravar. Use só arquivos gerados por "Exportar backup completo".',
+    titulo: 'Restaurar backup',
+    paraQueServe: 'Troca os dados deste ambiente pelos de um arquivo de backup (.json) gerado pelo Finup.',
+    relacaoComTela: 'Mostra antes uma prévia (origem, data, versão, quantidades e avisos) e pede para digitar RESTAURAR. É tudo ou nada: se algo falhar, nada muda. Usuários, senhas e a identidade do ambiente ficam como estão. Arquivo de versão antiga do backup é recusado.',
+    obrigatorio: false,
+  },
+  'backup.confirmacao': {
+    titulo: 'Confirmação da restauração',
+    paraQueServe: 'Evita restaurar por engano: a restauração troca os dados do ambiente.',
+    relacaoComTela: 'O botão Restaurar só libera com a palavra RESTAURAR, em maiúsculas.',
+    obrigatorio: true,
+  },
+  'backup.conferir': {
+    titulo: 'Conferir com um arquivo',
+    paraQueServe: 'Compara um arquivo de backup com o banco atual, tabela por tabela, sem mudar nada.',
+    relacaoComTela: 'Mostra, para cada tabela, a quantidade no arquivo e no banco e se o conteúdo é igual (ok) ou diferente.',
+    obrigatorio: false,
+  },
+  'backup.pasta': {
+    titulo: 'Pasta de backup',
+    paraQueServe: 'Pasta deste computador onde o backup ao sair é gravado.',
+    relacaoComTela: 'Fica guardada neste navegador, para o seu usuário. Se o navegador pedir permissão de novo, ela é pedida no clique do "Sim" ao sair.',
+    obrigatorio: false,
+  },
+  'backup.perguntarAoSair': {
+    titulo: 'Perguntar ao sair',
+    paraQueServe: 'Liga ou desliga a pergunta "Deseja fazer backup antes de sair?" no botão Sair deste computador.',
+    relacaoComTela: 'Sempre: pergunta a cada Sair. Nunca: sai direto. Sem escolha, pergunta depois que a pasta de backup é escolhida. No celular nunca pergunta.',
+    obrigatorio: false,
+  },
+  'backup.manter': {
+    titulo: 'Backups a manter na pasta',
+    paraQueServe: 'Quantos backups deste ambiente ficam guardados na pasta.',
+    relacaoComTela: 'Ao gravar um novo, os mais antigos do Finup deste ambiente além dessa quantidade são apagados. Nenhum outro arquivo da pasta é tocado.',
     obrigatorio: false,
   },
   'ajusteSaldo.grupo': {

@@ -4,6 +4,7 @@
   "framework": "vite",
   "functions": {
     "api/assistente.js": { "maxDuration": 60 },
+    "api/backup.js": { "maxDuration": 300 },
     "api/transcrever-audio.js": { "maxDuration": 30 }
   },
   "headers": [

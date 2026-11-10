@@ -10,14 +10,12 @@
 //    fictícios. Nada disso toca o localStorage real nem o banco.
 //  - 'auth_token' lido devolve um token fictício (nunca sai do navegador: o /api está bloqueado).
 //    Logout (removeItem do token) = sair do modo dev.
-//  - 'finup_last_backup_ts' devolve "agora": o backup automático não baixa arquivo de dados falsos.
 import { STORAGE_KEY } from '../lib/storage'
 import { AUTH_TOKEN_KEY } from '../lib/api'
 import { gerarDadosFicticios } from './dadosFicticios'
 
 export const FLAG_MODO_DEV = 'finup_modo_dev_sem_banco'
 const TOKEN_FICTICIO = 'modo-dev-sem-banco'
-const BACKUP_TS_KEY = 'finup_last_backup_ts'
 
 const ativo = () => {
   try { return sessionStorage.getItem(FLAG_MODO_DEV) === '1' } catch { return false }
@@ -40,7 +38,6 @@ function instalarStorage() {
   proto.getItem = function (k) {
     if (!ehLocal(this)) return getItem.call(this, k)
     if (k === AUTH_TOKEN_KEY) return ativo() ? TOKEN_FICTICIO : null
-    if (k === BACKUP_TS_KEY) return String(Date.now())
     if (ehChaveDeDados(k)) return memoria.has(k) ? memoria.get(k) : null
     return getItem.call(this, k)
   }

@@ -11,6 +11,10 @@ import AgendaCelularPanel from '../Settings/AgendaCelularPanel'
 import Modal from '../shared/Modal'
 import { rotuloNivel } from '../../lib/permissoes'
 import Toast from '../shared/Toast'
+import { useIsMobile } from '../../hooks/useIsMobile'
+import { useBackupLocal, podeFazerBackup } from '../../hooks/useBackupLocal'
+import { diasDesde, DIAS_LEMBRETE } from '../../lib/backupFormato'
+import { configHash } from '../../lib/configRota'
 
 // Quem está logado (Sidebar no desktop, tela "Mais" no mobile): nome, aviso discreto quando a
 // sessão veio do login fixo de emergência e "Trocar minha senha" para usuários do cadastro.
@@ -20,7 +24,12 @@ export default function SessaoUsuario({ comSair = false }) {
   const [agenda, setAgenda] = useState(false)
   const [toast, setToast] = useState(null)
   const { sair, saindo, aviso } = useSair()
+  const isMobile = useIsMobile()
+  const { cfg: backupCfg } = useBackupLocal()
   if (!sessao) return null
+  // Lembrete discreto (só no computador): backup feito neste aparelho há mais de 7 dias, ou nunca.
+  const diasBackup = backupCfg ? diasDesde(backupCfg.ultimo) : null
+  const lembrarBackup = !isMobile && !!backupCfg && podeFazerBackup(sessao) && (diasBackup == null || diasBackup > DIAS_LEMBRETE)
   const emergencia = sessao.origem === 'env'
 
   return (
@@ -32,6 +41,11 @@ export default function SessaoUsuario({ comSair = false }) {
       </div>
       {sessao.ambSigla && (
         <p className="text-[10px] text-texto-3 leading-tight font-mono" title="Ambiente (banco de dados) desta sessão">Ambiente {sessao.ambSigla.toUpperCase()}</p>
+      )}
+      {lembrarBackup && (
+        <a href={configHash('dados', 'backup')} className="block text-[10px] text-aviso hover:underline leading-tight">
+          {diasBackup == null ? 'Nenhum backup feito neste computador' : `Último backup há ${diasBackup} dias`}
+        </a>
       )}
       {emergencia && (
         <p className="flex items-center gap-1.5 text-[11px] text-aviso leading-tight">

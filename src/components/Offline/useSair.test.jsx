@@ -5,7 +5,8 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 // "Sair" com a fila offline (item 11): sem pendências sai direto; com pendências pergunta. Sair nunca
 // apaga a fila do aparelho (só o "Sair e apagar dados", que é outra tela).
 const app = vi.hoisted(() => ({}))
-const api = vi.hoisted(() => ({ clearTokenAndRedirect: vi.fn() }))
+// Sem sessão de administrador: o backup ao sair nunca pergunta (useSair.backup.test.jsx cobre a pergunta).
+const api = vi.hoisted(() => ({ clearTokenAndRedirect: vi.fn(), getSessao: () => null, authHeaders: () => ({}) }))
 vi.mock('../../context/AppContext', () => ({ useApp: () => app }))
 vi.mock('../../lib/api', () => api)
 const { useSair } = await import('./useSair.js')

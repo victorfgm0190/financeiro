@@ -10,7 +10,6 @@ import AtalhosAjudaModal from './components/shared/AtalhosAjudaModal'
 import ModoAltAtalhos from './components/shared/ModoAltAtalhos'
 import { useIsMobile } from './hooks/useIsMobile'
 import { useTheme } from './hooks/useTheme'
-import { useAutoBackup } from './hooks/useAutoBackup'
 import { useAgendaFeed } from './hooks/useAgendaFeed'
 import { useScrollRestoration, ScrollScopeContext, saveScrollNow } from './hooks/useScrollRestoration'
 import Toast from './components/shared/Toast'
@@ -95,7 +94,6 @@ function AppContent() {
   // Remonta a Busca global quando aberta de fora (lê o filtro do handoff na montagem).
   const [buscaKey, setBuscaKey] = useState(0)
   const [showAssistente, setShowAssistente] = useState(false)
-  const [backupToast, setBackupToast] = useState(false)
   const [genericToast, setGenericToast] = useState(null)
 
   // Scroll restoration: <main> é o container que rola. A chave base é a activePage; sub-telas
@@ -143,13 +141,11 @@ function AppContent() {
     setScope: setScrollScope,
     saveNow: () => saveScrollNow(mainRef, scrollScope ?? activePage),
   }), [scrollScope, activePage])
-  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, data, syncError, dismissSyncError, avisoRecarga, fecharAvisoRecarga, avisoToast, setAvisoToast, usuario, podeVer, pode } = useApp()
+  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, syncError, dismissSyncError, avisoRecarga, fecharAvisoRecarga, avisoToast, setAvisoToast, usuario, podeVer, pode } = useApp()
   const podeAssistente = pode('lancamentos', 'incluir')
   // Agenda no celular: gera e publica o .ics do usuário quando os dados mudam (hooks/useAgendaFeed).
   useAgendaFeed()
 
-  const handleAutoBackup = useCallback(() => setBackupToast(true), [])
-  useAutoBackup(data, handleAutoBackup)
 
   // Saldos principais (sidebar/header/hero do Dashboard): os 5 saldos do ciclo derivados da
   // MESMA fonte de verdade do card "Saldo Principal" (getSaldoPrincipal). Assim o
@@ -239,12 +235,6 @@ function AppContent() {
       <Modal open={showPosicao} onClose={() => setShowPosicao(false)} title="Como chegamos aqui" size="lg">
         <SaldoPrincipalBreakdownModal />
       </Modal>
-      {backupToast && (
-        <Toast
-          message="Backup automático salvo na pasta Downloads"
-          onClose={() => setBackupToast(false)}
-        />
-      )}
       {genericToast && (
         <Toast message={genericToast} onClose={() => setGenericToast(null)} />
       )}

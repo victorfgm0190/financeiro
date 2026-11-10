@@ -1,8 +1,8 @@
 import HelpCampo from '../shared/HelpCampo'
 import { DIAS_CAIXA_PADRAO } from '../../lib/avisoCaixaReserva'
 import AdicionarCategoriasKit from './AdicionarCategoriasKit'
-import { useState, useRef, useEffect } from 'react'
-import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator, ChevronRight, Smartphone } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Save, Trash2, Plus, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, EyeOff, Eye, RefreshCw, Anchor, Calculator, ChevronRight, Smartphone } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from '../Layout/RodapeIdentidade'
 import VersaoAmbiente from '../Layout/VersaoAmbiente'
@@ -11,8 +11,7 @@ import VarreduraRateio from './VarreduraRateio'
 import { noAmbientePrincipal } from '../../lib/api'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
-import { downloadFullBackup, getLastBackupTs } from '../../hooks/useAutoBackup'
-import { restoreFullBackup } from '../../lib/db'
+import BackupPanel from './BackupPanel'
 import DindinImportPanel from './DindinImportPanel'
 import DeParaImportacaoPanel from './DeParaImportacaoPanel'
 import ApelidosIaPanel from './ApelidosIaPanel'
@@ -529,59 +528,6 @@ export default function SettingsPanel() {
     if (!newRule.contains || !newRule.categoryId) return
     addRule(newRule)
     setNewRule({ contains: '', categoryId: '', payee: '' })
-  }
-
-  const importInputRef = useRef(null)
-  const [pendingImport, setPendingImport] = useState(null) // { parsed, fileName }
-  const [confirmImport, setConfirmImport] = useState(false)
-  const [exporting, setExporting] = useState(false)
-  const [importing, setImporting] = useState(false)
-
-  const handleExport = async () => {
-    setExporting(true)
-    try { await downloadFullBackup(data) } finally { setExporting(false) }
-  }
-
-  const handleImportFileChange = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const parsed = JSON.parse(ev.target.result)
-        if (!parsed.accounts || !parsed.transactions) {
-          alert('Este arquivo não parece ser um backup válido do Finup.')
-          return
-        }
-        setPendingImport({ parsed, fileName: file.name })
-        setConfirmImport(true)
-      } catch {
-        alert('Arquivo inválido — não é um JSON válido.')
-      }
-    }
-    reader.readAsText(file)
-    e.target.value = ''
-  }
-
-  const handleImportConfirm = async () => {
-    if (!pendingImport) return
-    if (avisoPendencias()) return
-    const accountMapping = pendingImport.parsed._accountMapping
-    const cleanData = { ...pendingImport.parsed }
-    delete cleanData._exportedAt
-    delete cleanData._app
-    delete cleanData._accountMapping
-    setImporting(true)
-    try {
-      // Restaura no Neon (fonte autoritativa) e recarrega a partir dele.
-      await restoreFullBackup(cleanData, accountMapping)
-      // O banco foi substituído: o estado guardado no aparelho fica velho — recarrega do banco.
-      await apagarDadosDoAparelho()
-      window.location.reload()
-    } catch (err) {
-      setImporting(false)
-      alert('Falha ao restaurar o backup: ' + (err?.message || err))
-    }
   }
 
   const openGroupEdit = (group) => {
@@ -1718,79 +1664,13 @@ export default function SettingsPanel() {
       </div>
       )}
 
-      {/* Backup */}
+      {/* Backup (src/components/Settings/BackupPanel.jsx) */}
       {secao === 'backup' && (
-      <div className="card space-y-4">
-        <div className="flex items-center gap-2">
-          <ShieldCheck size={15} className="text-primary-fg" />
-          <h2 className="text-sm font-semibold text-texto-2">Backup de Dados</h2>
-        </div>
-        <p className="text-xs text-texto-3 -mt-3">Exporte ou restaure todos os dados do app.</p>
-
-        {/* Status */}
-        {(() => {
-          const ts = getLastBackupTs()
-          return ts ? (
-            <div className="flex items-center gap-2 text-xs text-texto-3 bg-surface-2/60 rounded-lg px-3 py-2">
-              <Clock size={12} className="text-primary-fg shrink-0" />
-              <span>
-                Último backup baixado:{' '}
-                <span className="text-texto-2">
-                  {new Date(ts).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-                </span>
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-xs text-aviso bg-aviso/5 border border-aviso/20 rounded-lg px-3 py-2">
-              <AlertTriangle size={12} className="shrink-0" />
-              <span>Nenhum backup baixado ainda. Recomendamos exportar regularmente.</span>
-            </div>
-          )
-        })()}
-
-        {/* Counts */}
-        <div data-guia="settings:backup.contagem" className="grid grid-cols-3 gap-2 text-xs text-center">
-          {[
-            ['Contas', data.accounts?.length ?? 0],
-            ['Lançamentos', data.transactions?.length ?? 0],
-            ['Agendamentos', data.schedules?.length ?? 0],
-          ].map(([label, count]) => (
-            <div key={label} className="bg-surface-2 rounded-lg py-2 px-1">
-              <p className="text-texto-1 font-bold text-base">{count}</p>
-              <p className="text-texto-3">{label}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-3" data-help-form="backup">
-          <button
-            data-guia="settings:backup.exportar"
-            className="btn-primary flex items-center justify-center gap-2 flex-1 disabled:opacity-60"
-            onClick={handleExport}
-            disabled={exporting || importing}
-          >
-            <Download size={14} /> {exporting ? 'Exportando…' : 'Exportar backup completo'}
-          </button>
-          <label data-guia="settings:backup.importar" data-help-id="backup.importar" className={`btn-secondary flex items-center justify-center gap-2 flex-1 cursor-pointer ${importing ? 'opacity-60 pointer-events-none' : ''}`}>
-            <Upload size={14} /> Importar backup<HelpCampo campo="backup.importar" />
-            <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFileChange} disabled={importing} />
-          </label>
-        </div>
-
-        {importing && (
-          <div className="flex items-center gap-2 text-xs text-primary-fg bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
-            <RefreshCw size={12} className="shrink-0 animate-spin" />
-            <span>Restaurando backup no servidor… não feche a aba.</span>
-          </div>
-        )}
-
-        <p className="text-xs text-texto-3 leading-relaxed">
-          Os dados são salvos automaticamente no navegador a cada alteração.
-          O backup periódico (a cada 24h com o app aberto) é baixado automaticamente para a pasta Downloads.
-          Download ao fechar a aba não é suportado pelos navegadores — use o botão acima antes de sair.
-        </p>
-      </div>
+        <BackupPanel avisoPendencias={avisoPendencias} aoRestaurar={async () => {
+          // O banco foi substituído: o estado guardado no aparelho fica velho — recarrega do banco.
+          await apagarDadosDoAparelho()
+          window.location.reload()
+        }} />
       )}
 
       {/* Importação histórica Dindin */}
@@ -2095,15 +1975,6 @@ export default function SettingsPanel() {
         onConfirm={() => { if (avisoPendencias()) return; apagarDadosDoAparelho().then(() => window.location.reload()) }}
         title="Apagar Todos os Dados"
         message="Tem certeza? Todos os dados (contas, lançamentos, agendamentos) serão apagados permanentemente."
-        danger
-      />
-
-      <ConfirmDialog
-        open={confirmImport}
-        onClose={() => { setConfirmImport(false); setPendingImport(null) }}
-        onConfirm={handleImportConfirm}
-        title="Restaurar Backup"
-        message={`Importar "${pendingImport?.fileName}"? Todos os dados atuais (${data.accounts?.length ?? 0} contas, ${data.transactions?.length ?? 0} lançamentos) serão substituídos pelo backup. Esta ação não pode ser desfeita.`}
         danger
       />
 

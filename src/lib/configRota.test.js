@@ -49,6 +49,8 @@ describe('rota de Configurações no hash', () => {
 describe('nenhuma seção sumiu da tela Configurações', () => {
   const painel = ler('../components/Settings/SettingsPanel.jsx')
   const dindin = ler('../components/Settings/DindinImportPanel.jsx')
+  // Backup saiu para um componente próprio (BackupPanel.jsx), renderizado pelo painel.
+  const backup = ler('../components/Settings/BackupPanel.jsx')
 
   it('toda seção do menu tem um bloco renderizado no painel', () => {
     for (const a of CONFIG_ABAS) for (const s of a.secoes) {
@@ -60,9 +62,11 @@ describe('nenhuma seção sumiu da tela Configurações', () => {
     const antes = [
       'Período Financeiro', 'Estornos de Cartão', 'Perfis CPF / CNPJ', 'Categorias (',
       'Regras de Classificação (', 'Regras de Grupo Gerencial (', 'Centros de Custo', 'Grupos de Contas',
-      'Controle Gerencial de Cartão', 'Backup de Dados', 'Manutenção', 'Zona de Perigo',
+      'Controle Gerencial de Cartão', 'Manutenção', 'Zona de Perigo',
     ]
     for (const t of antes) expect(painel, t).toContain(t)
+    expect(painel).toContain('<BackupPanel')
+    expect(backup).toContain('Backup de Dados')
     expect(painel).toContain('<DindinImportPanel />')
     expect(dindin).toContain('Importação Dindin')
   })
