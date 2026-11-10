@@ -3133,7 +3133,9 @@ export function AppProvider({ children }) {
   // `amountArg` = valor editado no registro, só desta ocorrência (o valor-base do agendamento não
   // muda). Ausente → valor EFETIVO da ocorrência. Ignorado no resgate com detalhamento por função,
   // cujo valor é fixado pelas linhas do detalhamento.
-  const registerScheduleOccurrence = useCallback((scheduleId, dateArg, occurrenceDate = dateArg, amountArg = null) => {
+  // `extras.toAccountId`: destino escolhido na baixa de uma transferência cujo agendamento não tem
+  // destino gravado — vale só para este lançamento (o agendamento não muda).
+  const registerScheduleOccurrence = useCallback((scheduleId, dateArg, occurrenceDate = dateArg, amountArg = null, extras = {}) => {
     const schedAtual = dataRef.current.schedules.find(s => s.id === scheduleId)
     const date = dateArg || (schedAtual ? occEfetiva(schedAtual, occurrenceDate).date : occurrenceDate)
     const newTxId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
@@ -3141,7 +3143,8 @@ export function AppProvider({ children }) {
       const scheduleBase = d.schedules.find(s => s.id === scheduleId)
       if (!scheduleBase) return d
       // Campos da parcela com o override da ocorrência ("Só esta parcela") aplicado.
-      const schedule = comCamposDaOcorrencia(scheduleBase, occurrenceDate, d.accounts)
+      const comOcorrencia = comCamposDaOcorrencia(scheduleBase, occurrenceDate, d.accounts)
+      const schedule = extras?.toAccountId && !comOcorrencia.toAccountId ? { ...comOcorrencia, toAccountId: extras.toAccountId } : comOcorrencia
 
       // Rastreabilidade: para os agendamentos gerenciais (gerencial_devolucao / resgate_reserva /
       // pagamento_fatura), copia cartão, fatura e o próprio agendamento para o lançamento gerado.

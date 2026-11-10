@@ -166,6 +166,12 @@ export function errosDoForm(form) {
   if (!v?.erros) return null
   try { return v.erros() || [] } catch { return [] }
 }
+// Aviso do formulário sobre o campo que NÃO segura o Próximo (validacao.aviso(id)), ou null.
+export function avisoDoCampo(form, id) {
+  const v = validacaoDe(form)
+  if (!v?.aviso) return null
+  try { return v.aviso(id) || null } catch { return null }
+}
 // Mensagem que barra o campo agora (ou null).
 export function erroDoCampo(form, raiz, id) {
   const erros = errosDoForm(form)

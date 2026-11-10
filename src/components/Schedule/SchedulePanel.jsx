@@ -11,6 +11,7 @@ import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import BotaoPreencherGuia from '../Ajuda/BotaoPreencherGuia'
+import OpcoesDestinoPorPerfil from '../shared/OpcoesDestinoPorPerfil'
 import { rateioComQuitacao, quitarPorPadrao, podeQuitarComDesconto } from '../../lib/financiamento'
 import ExecutarGerenciaisModal from './ExecutarGerenciaisModal'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
@@ -198,7 +199,11 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
   // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
   const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
-  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados, desfazerPuloOcorrencia, settings, vincularLancamento } = useApp()
+  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados, desfazerPuloOcorrencia, settings, vincularLancamento, accounts: contasPermitidas } = useApp()
+  // Destino da transferência: também as contas dos outros perfis permitidos (OpcoesDestinoPorPerfil).
+  // `accounts` (prop) continua sendo a lista da origem.
+  const todasContas = contasPermitidas?.length ? contasPermitidas : accounts
+  const contaPorId = (id) => (id ? todasContas.find(a => a.id === id) || accounts.find(a => a.id === id) : undefined)
   const gerencialLigado = controleGerencialAtivo(settings)
   // Lançamento parecido que fez o registro automático parar nesta ocorrência (src/lib/autoRegistro.js).
   const duplicadoId = possiveisDuplicados?.get(scheduleProp.id)?.get(nextDate)
@@ -291,13 +296,16 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   // Editar aqui vale só para este lançamento — o agendamento não muda.
   const [trfCatCnpj, setTrfCatCnpj] = useState(schedule.categoriaCnpjId || '')
   const [trfCatCpf, setTrfCatCpf] = useState(schedule.categoriaCpfId || '')
-  const trfFromAcc = accounts.find(a => a.id === trfFromId)
-  const trfToAcc = accounts.find(a => a.id === trfToId)
+  const trfFromAcc = contaPorId(trfFromId)
+  const trfToAcc = contaPorId(trfToId)
+  // Transferência sem conta destino: a baixa pede o destino antes de confirmar.
+  const [erroDestinoTrf, setErroDestinoTrf] = useState('')
   // Contas trocadas para o mesmo perfil: o bloco some e as duas categorias são limpas.
   const setTrfContas = (fromId, toId) => {
     setTrfFromId(fromId)
     setTrfToId(toId)
-    if (!isTransferenciaEntrePerfis(accounts.find(a => a.id === fromId), accounts.find(a => a.id === toId))) {
+    if (toId) setErroDestinoTrf('')
+    if (!isTransferenciaEntrePerfis(contaPorId(fromId), contaPorId(toId))) {
       setTrfCatCnpj('')
       setTrfCatCpf('')
     }
@@ -413,6 +421,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   const handleConfirm = (escolha = null) => {
     // Guarda além do botão desabilitado: parse falho nunca vira lançamento de R$ 0.
     if (!valorOk) return
+    if (tab === 'transferencia' && !trfToId) { setErroDestinoTrf('Escolha a conta destino.'); return }
     if (!escolha) {
       const pulado = nextDate ? puloNoPeriodo(scheduleProp, dataDaAba, nextDate) : null
       if (pulado) { setAvisoPulo({ pulado, chave: `${tab}|${dataDaAba}` }); return }
@@ -484,14 +493,14 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
     } else if (hasDetalhe) {
       // Resgate detalhado: gera uma transferência por função (via registerScheduleOccurrence)
       // e marca a ocorrência. Não usa o valor/contas do formulário (fixos pelo detalhamento).
-      registerScheduleOccurrence(schedule.id, trfDate, regDate)
+      // Agendamento sem destino gravado: vale o destino escolhido aqui (só para esta baixa).
+      registerScheduleOccurrence(schedule.id, trfDate, regDate, null, schedule.toAccountId ? {} : { toAccountId: trfToId })
     } else {
       // Resgate/depósito sem detalhamento: prioriza a função do próprio agendamento
       // (resgate_reserva carrega reservaFuncaoId desde a criação). Sem ela, se a conta de
       // reserva envolvida (origem ou destino) tem função ÚNICA, preenche automaticamente —
       // mesma regra do formulário de transferência (TransactionForm).
-      const resvAcc = accounts.find(a => a.id === trfFromId && a.isReserva)
-        || accounts.find(a => a.id === trfToId && a.isReserva)
+      const resvAcc = [contaPorId(trfFromId), contaPorId(trfToId)].find(a => a?.isReserva)
       const resvFuncs = resvAcc ? (reserveFunctions || []).filter(f => f.accountId === resvAcc.id) : []
       const autoFuncId = resvFuncs.length === 1 ? resvFuncs[0].id : null
       const txId = addTransaction({
@@ -523,12 +532,16 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
         ...(!(finValorNum > 0) ? [{ id: 'registrarAgendamento.valor', msg: 'Informe quanto você vai pagar.' }]
           : finExcede ? [{ id: 'registrarAgendamento.valor', msg: `O valor não pode passar de ${fmt(parcelaFin.total)}.` }] : []),
       ]
-      : valorOk ? [] : [{ id: 'registrarAgendamento.valor', msg: 'Valor inválido.' }]),
-    obrigatorio: (id) => id === 'registrarAgendamento.valor' || (!!parcelaFin && id === 'registrarAgendamento.conta'),
+      : [
+        ...(tab === 'transferencia' && !trfToId ? [{ id: 'registrarAgendamento.contaDestino', msg: 'Escolha a conta destino.' }] : []),
+        ...(valorOk ? [] : [{ id: 'registrarAgendamento.valor', msg: 'Valor inválido.' }]),
+      ]),
+    obrigatorio: (id) => id === 'registrarAgendamento.valor' || (!!parcelaFin && id === 'registrarAgendamento.conta')
+      || (!parcelaFin && tab === 'transferencia' && id === 'registrarAgendamento.contaDestino'),
   }
   // Preenchimento Guiado: "Ao salvar, vai acontecer…" com os dados escolhidos.
   const resumoGuia = () => {
-    const nome = (id) => { const a = accounts.find(x => x.id === id); return a?.apelido || a?.name || '—' }
+    const nome = (id) => { const a = contaPorId(id); return a?.apelido || a?.name || '—' }
     const cat = (id) => categories.find(c => c.id === id)?.name
     if (parcelaFin) return [`Pagamento de ${fmt(finValorNum || 0)} da parcela em ${fmtDate(finDate)}, saindo de ${nome(finAccountId)}.`]
     if (tab === 'pagamento') return [`Despesa de ${fmt(Number(payAmount) || 0)} em ${fmtDate(payDate)}, saindo de ${nome(payAccountId)}.`, ...(cat(payCategoryId) ? [`Categoria: ${cat(payCategoryId)}.`] : [])]
@@ -775,10 +788,12 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 </select>
               </div>
               <div data-help-id="registrarAgendamento.contaDestino">
-                <label className="label">Banco para<HelpCampo campo="registrarAgendamento.contaDestino" /></label>
-                <select className="input" value={trfToId} onChange={e => setTrfContas(trfFromId, e.target.value)} disabled={hasDetalhe}>
-                  <AccountOptions accounts={accounts} accountGroups={accountGroups} />
+                <label className="label">Banco para *<HelpCampo campo="registrarAgendamento.contaDestino" /></label>
+                <select className={`input ${erroDestinoTrf ? '!border-perigo' : ''}`} value={trfToId} onChange={e => setTrfContas(trfFromId, e.target.value)}
+                  disabled={hasDetalhe && !!schedule.toAccountId} aria-label="Banco para" aria-invalid={!!erroDestinoTrf}>
+                  <OpcoesDestinoPorPerfil accounts={todasContas} accountGroups={accountGroups} excludeId={trfFromId} />
                 </select>
+                {erroDestinoTrf && <p role="alert" className="text-[11px] text-perigo mt-1">{erroDestinoTrf}</p>}
               </div>
               <div data-guia="baixa-form.valor" data-help-id="registrarAgendamento.valor">
                 <label className="label">Valor{hasDetalhe ? ' (soma das funções)' : ''}<HelpCampo campo="registrarAgendamento.valor" /></label>
@@ -1953,8 +1968,11 @@ function ResumoLote({ resumo, deFato = null, onDeFato = null }) {
   )
 }
 
-function BatchRegisterModal({ selectedRows, accounts, reservaFoco = null, onConfirm, onClose }) {
-  const { scheduleReservaFuncoes } = useApp()
+export function BatchRegisterModal({ selectedRows, accounts, reservaFoco = null, onConfirm, onClose }) {
+  const { scheduleReservaFuncoes, accounts: contasPermitidas, accountGroups } = useApp()
+  // Transferência sem conta destino no agendamento: a linha pede o destino (vale só para esta baixa).
+  const semDestino = (r) => r.schedule.transactionType === 'transfer' && !r.schedule.toAccountId
+  const [destinos, setDestinos] = useState({})
   // Vencimento de cada linha = data efetiva da ocorrência pendente (a mesma do registro
   // individual); a data geral só tem vencimento quando todas as linhas vencem no mesmo dia.
   const vencDe = (r) => (r.nextDate ? occEfetiva(r.schedule, r.nextDate).date || r.nextDate : null)
@@ -1981,9 +1999,10 @@ function BatchRegisterModal({ selectedRows, accounts, reservaFoco = null, onConf
   }
 
   const valorItem = (r) => (comDetalhe.has(r.schedule.id) ? valorDe(r) : parseValorBR(itens[r.schedule.id]?.valor))
+  const faltaDestino = (r) => semDestino(r) && !destinos[r.schedule.id]
   const invalido = (r) => {
     const v = valorItem(r)
-    return !(Number.isFinite(v) && v > 0) || !itens[r.schedule.id]?.date
+    return !(Number.isFinite(v) && v > 0) || !itens[r.schedule.id]?.date || faltaDestino(r)
   }
   const algumInvalido = selectedRows.some(invalido)
   // Recalculado a cada edição de valor (mesma função do painel de seleção).
@@ -2006,6 +2025,7 @@ function BatchRegisterModal({ selectedRows, accounts, reservaFoco = null, onConf
       // Detalhado: null → registerScheduleOccurrence usa o detalhamento.
       amount: comDetalhe.has(r.schedule.id) ? null : Math.round(valorItem(r) * 100) / 100,
       date: itens[r.schedule.id].date,
+      ...(semDestino(r) ? { toAccountId: destinos[r.schedule.id] } : {}),
     })), diferencas)
   }
 
@@ -2084,7 +2104,7 @@ function BatchRegisterModal({ selectedRows, accounts, reservaFoco = null, onConf
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className={`text-[11px] ${ruim ? 'text-perigo' : 'text-texto-3'}`}>
-                      {ruim ? (it?.date ? 'Informe um valor maior que zero.' : 'Informe a data.') : detalhado ? 'Valor do detalhamento por função' : 'Data do lançamento'}
+                      {ruim ? (!it?.date ? 'Informe a data.' : faltaDestino(r) && Number.isFinite(valorItem(r)) && valorItem(r) > 0 ? 'Escolha a conta destino.' : 'Informe um valor maior que zero.') : detalhado ? 'Valor do detalhamento por função' : 'Data do lançamento'}
                     </span>
                     <DataPagamentoField
                       compact
@@ -2096,6 +2116,12 @@ function BatchRegisterModal({ selectedRows, accounts, reservaFoco = null, onConf
                       vencimento={vencDe(r)}
                     />
                   </div>
+                  {semDestino(r) && (
+                    <select data-help-id="registrarLote.contaDestino" className={`input !py-1 text-xs ${faltaDestino(r) ? '!border-perigo' : ''}`} aria-label={`Conta destino de ${schedule.description}`}
+                      value={destinos[schedule.id] || ''} onChange={e => setDestinos(d => ({ ...d, [schedule.id]: e.target.value }))}>
+                      <OpcoesDestinoPorPerfil accounts={contasPermitidas?.length ? contasPermitidas : accounts} accountGroups={accountGroups} excludeId={schedule.accountId} placeholder="Conta destino…" />
+                    </select>
+                  )}
                 </div>
               )
             })}
@@ -2257,7 +2283,7 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
   // occurrenceDate = ocorrência a baixar (nextDate); txDate = data dos lançamentos criados.
   // Registrar a ocorrência em nextDate (e não em txDate) é o que faz o agendamento avançar —
   // mesmo comportamento do pagamento individual (PayModal usa regDate = nextDate).
-  const registerWithGerencial = (scheduleBase, occurrenceDate, txDate, amountArg = null) => {
+  const registerWithGerencial = (scheduleBase, occurrenceDate, txDate, amountArg = null, extras = {}) => {
     const schedule = comCamposDaOcorrencia(scheduleBase, occurrenceDate, accounts)
     // Grupo numerado gera resgate para a Conta central do PERFIL DA CONTA DO AGENDAMENTO: sem ela,
     // esta ocorrência não é registrada (as outras do lote seguem).
@@ -2266,7 +2292,7 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
     const central = precisaCentral ? contaCentralParaId(accounts, profiles, schedule.accountId) : { conta: null, erro: null }
     if (central.erro) { setAvisoOperacao(central.erro); return }
     const contaPrincipal = central.conta
-    registerScheduleOccurrence(schedule.id, txDate, occurrenceDate, amountArg)
+    registerScheduleOccurrence(schedule.id, txDate, occurrenceDate, amountArg, extras)
     if (!schedule.grupoGerencial) return
     const amount = amountArg != null ? Number(amountArg) : (Number(occEfetiva(schedule, occurrenceDate).amount) || 0)
     if (!grupo || grupo.number === 'D') return
@@ -2291,7 +2317,7 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
     selectedRows.forEach(({ schedule, nextDate }) => {
       const it = porId.get(schedule.id)
       if (!it) return
-      registerWithGerencial(schedule, nextDate || it.date, it.date, it.amount)
+      registerWithGerencial(schedule, nextDate || it.date, it.date, it.amount, it.toAccountId ? { toAccountId: it.toAccountId } : {})
     })
     for (const t of diferencas) addTransaction(t)
     cancelSelection()

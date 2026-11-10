@@ -16,7 +16,7 @@ import {
   lerPreenchimento, assinarPreenchimento, encerrarPreenchimento, provedorGuia, raizDoForm, elementoDoCampo,
   controleDo, botaoDoForm, faseDepoisDosCampos, definirRetornoGuia, visivel, ABRIR_FORMULARIO, armarPreenchimento,
   camposNaTela, caixaDe, obrigatorioNoForm, erroDoCampo, faltandoNaTela, campoComErroNaTela, errosDoForm, ladoDoBalaoCelular,
-  posicaoBalaoComputador, caixasDosControles, janelaDoForm, algoAbertoNoForm,
+  posicaoBalaoComputador, caixasDosControles, janelaDoForm, algoAbertoNoForm, avisoDoCampo,
 } from '../../help/guiaPreenchimento.js'
 import { lerHelpCampo } from '../../help/helpCampoEstado.js'
 import { MARGEM, LARGURA_BALAO } from '../BoasVindas/tourPassos'
@@ -420,6 +420,7 @@ function Guia({ ativo }) {
         {campo.relacaoComTela && <p className="text-xs text-texto-2 mt-1.5 leading-relaxed">{campo.relacaoComTela}</p>}
         {campo.exemplo && <p className="text-xs text-texto-3 mt-1.5">Exemplo: {campo.exemplo}</p>}
         {aviso && erroDoCampo(form, raizDoForm(form), id) && <p role="alert" className="text-xs text-perigo mt-2">{aviso}</p>}
+        {avisoDoCampo(form, id) && <p role="note" className="text-xs text-aviso mt-2">{avisoDoCampo(form, id)}</p>}
       </>
     )
     acoes = (

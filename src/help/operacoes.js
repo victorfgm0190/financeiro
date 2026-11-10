@@ -41,6 +41,12 @@ export const campos = {
     relacaoComTela: 'Trocada aqui, ela deixa de seguir a data de registro geral.',
     obrigatorio: true,
   },
+  'registrarLote.contaDestino': {
+    titulo: 'Conta destino do item',
+    paraQueServe: 'Conta que recebe esta transferência, para agendamento gravado sem destino.',
+    relacaoComTela: 'Vale só para este lançamento; o agendamento continua como está.',
+    obrigatorio: true,
+  },
   'registrarLote.deFato': {
     titulo: 'Valor transferido de fato',
     paraQueServe: 'Quanto realmente foi transferido entre a conta e a reserva.',

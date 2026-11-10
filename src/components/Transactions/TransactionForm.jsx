@@ -26,6 +26,8 @@ import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import TipoDocumentoSelect from '../shared/TipoDocumentoSelect'
+import { useOpcoesDestino } from '../shared/useOpcoesDestino'
+import { contasDaOrigem } from '../../lib/contasPorPerfil'
 import TransferenciaPerfisCategorias from '../shared/TransferenciaPerfisCategorias'
 import { isTransferenciaEntrePerfis } from '../../lib/transferenciaPerfis'
 import { tipoDocumentoObrigatorio, mostrarNumeroContrato } from '../../lib/tiposDocumento'
@@ -70,6 +72,10 @@ const TYPE_OPTIONS = [
 ]
 
 // Preencher com guia: campo do help → chave do formulário (para saber se ele barraria vazio).
+// Transferência sem conta destino (mesmo texto no Salvar, no campo e no guia).
+const MSG_SEM_DESTINO = 'Escolha a conta destino.'
+const AVISO_SEM_DESTINO = 'Esta transferência está sem conta destino.'
+
 const CHAVE_DO_HELP = {
   'lancamento.valor': 'amount', 'lancamento.conta': 'accountId', 'lancamento.contaDestino': 'toAccountId',
   'lancamento.tipoDocumento': 'tipoDocumentoId', 'lancamento.categoriaReserva': 'reservaExpenseCategoryId', 'lancamento.funcaoReserva': 'reservaFuncaoId',
@@ -286,6 +292,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   const [pedeNumeroContrato, setPedeNumeroContrato] = useState(false)
   // Tipo de documento: obrigatório só ao CRIAR despesa/receita; na edição pode ficar vazio.
   const [erroTipoDoc, setErroTipoDoc] = useState('')
+  // Transferência sem conta destino: bloqueia ao CRIAR. Uma que já existe sem destino (importação
+  // antiga) só avisa e deixa salvar.
+  const [erroDestino, setErroDestino] = useState('')
+  const destinoLegadoVazio = !!initial?.id && initial?.type === 'transfer' && !initial?.toAccountId
   const [erroRateio, setErroRateio] = useState('')
   const tipoDocObrigatorio = tipoDocumentoObrigatorio({ criando: !initial?.id, tipoMov: form.type })
   const [resgateInfo, setResgateInfo] = useState(null)
@@ -523,8 +533,11 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   const contaPrincipal = centralResgate.conta
 
   // Options for SearchableSelect fields
-  const accountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { isMobile }), [accounts, accountGroups, isMobile])
-  const destAccountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { excludeId: form.accountId, isMobile }), [accounts, accountGroups, form.accountId, isMobile])
+  // Origem: só as contas do perfil atual (a já escolhida fica). Destino da transferência: o perfil
+  // atual primeiro e, abaixo, os outros perfis permitidos (src/lib/contasPorPerfil.js).
+  const contasOrigem = useMemo(() => contasDaOrigem(accounts, activeProfileId, form.accountId), [accounts, activeProfileId, form.accountId])
+  const accountOpts = useMemo(() => buildAccountSelectOptions(contasOrigem, accountGroups, { isMobile }), [contasOrigem, accountGroups, isMobile])
+  const destino = useOpcoesDestino({ accounts, accountGroups, excludeId: form.accountId, isMobile })
   // Categorias por perfil: o da conta escolhida (se tiver perfil), senão o chip do topo. As
   // categorias já gravadas ficam na lista mesmo sendo de outro perfil.
   const perfilCategorias = perfilParaCategorias(accounts, form.accountId, activeProfileId)
@@ -594,7 +607,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     const erros = []
     if (!f.amount) erros.push({ id: 'lancamento.valor', msg: 'Informe o valor.' })
     if (!f.accountId) erros.push({ id: 'lancamento.conta', msg: 'Escolha a conta.' })
-    if (f.type === 'transfer' && !f.toAccountId) erros.push({ id: 'lancamento.contaDestino', msg: 'Escolha a conta destino.' })
+    if (f.type === 'transfer' && !f.toAccountId && !destinoLegadoVazio) erros.push({ id: 'lancamento.contaDestino', msg: MSG_SEM_DESTINO })
     if (tipoDocObrigatorio && !f.tipoDocumentoId) erros.push({ id: 'lancamento.tipoDocumento', msg: 'Selecione o tipo de documento.' })
     if (f.type !== 'transfer' && rateioRows.length > 0) {
       const v = validarRateio(rateioRows, Number(f.amount) || 0)
@@ -616,6 +629,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   }
   const validacaoGuia = {
     erros: () => errosDoLancamento(form),
+    // Aviso que não segura o Próximo: transferência antiga sem destino (pode salvar assim).
+    aviso: (id) => (id === 'lancamento.contaDestino' && destinoLegadoVazio && form.type === 'transfer' && !form.toAccountId ? AVISO_SEM_DESTINO : null),
     obrigatorio: (id) => (!!CHAVE_DO_HELP[id] && errosDoLancamento({ ...form, [CHAVE_DO_HELP[id]]: '' }).some(x => x.id === id))
       || !!controleObrigatorio(elementoDoCampo(raizDoForm('lancamento'), id)),
   }
@@ -638,6 +653,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     if (!podeGravarForm) { e?.preventDefault?.(); return }
     e?.preventDefault?.()
     if (!form.amount || !form.accountId) return
+    if (form.type === 'transfer' && !form.toAccountId && !destinoLegadoVazio) { setErroDestino(MSG_SEM_DESTINO); return }
     if (tipoDocObrigatorio && !form.tipoDocumentoId) { setErroTipoDoc('Selecione o tipo de documento.'); return }
     // Rateio: só grava quando as linhas fecham o valor do lançamento.
     if (form.type !== 'transfer' && rateioRows.length > 0) {
@@ -1689,14 +1705,20 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           <div data-guia="lancamento-form.conta-destino" data-help-id="lancamento.contaDestino">
             <label className="label">Conta Destino *{confira('toAccountId')}<HelpCampo campo="lancamento.contaDestino" /></label>
             <SearchableSelect
-              options={destAccountOpts}
+              options={destino.options}
+              sections={destino.sections}
               value={form.toAccountId}
-              onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '', categoryId: '', reservaFuncaoId: '', faturaMonthYear: '' }))}
+              onChange={id => { setErroDestino(''); setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '', categoryId: '', reservaFuncaoId: '', faturaMonthYear: '' })) }}
               placeholder="Selecione o destino..."
+              triggerClassName={`input ${erroDestino ? 'border-perigo' : ''}`}
               preserveGroupOrder
               ungroupedLast
               required
             />
+            {erroDestino && <p role="alert" className="text-[11px] text-perigo mt-1">{erroDestino}</p>}
+            {!erroDestino && destinoLegadoVazio && !form.toAccountId && (
+              <p role="note" data-testid="aviso-sem-destino" className="text-[11px] text-aviso mt-1">{AVISO_SEM_DESTINO}</p>
+            )}
           </div>
         ) : (
           <div data-guia="lancamento-form.valor" data-help-id="lancamento.valor">

@@ -9,6 +9,8 @@ import AvisoPrerequisitos from '../BoasVindas/AvisoPrerequisitos'
 import { publicarAgendaJa } from '../../lib/agendaFeedApi'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, fmtDate, buildAccountSelectOptions } from '../shared/utils'
+import { useOpcoesDestino } from '../shared/useOpcoesDestino'
+import { contasDaOrigem } from '../../lib/contasPorPerfil'
 import BotaoPreencherGuia from '../Ajuda/BotaoPreencherGuia'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import { rotuloParcela } from '../../lib/numeroParcela'
@@ -412,8 +414,11 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
   // Options for SearchableSelect fields
   const isMobile = useIsMobile()
-  const accountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { isMobile }), [accounts, accountGroups, isMobile])
-  const destAccountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { excludeId: form.accountId, isMobile }), [accounts, accountGroups, form.accountId, isMobile])
+  // Origem: só o perfil atual (a já escolhida fica); destino: perfil atual primeiro e, abaixo, os
+  // outros perfis permitidos (src/lib/contasPorPerfil.js).
+  const contasOrigem = useMemo(() => contasDaOrigem(accounts, activeProfileId, form.accountId), [accounts, activeProfileId, form.accountId])
+  const accountOpts = useMemo(() => buildAccountSelectOptions(contasOrigem, accountGroups, { isMobile }), [contasOrigem, accountGroups, isMobile])
+  const destino = useOpcoesDestino({ accounts, accountGroups, excludeId: form.accountId, isMobile })
   // Categorias por perfil: o da conta do agendamento (se tiver perfil), senão o chip do topo. As
   // categorias já gravadas ficam na lista mesmo sendo de outro perfil.
   const perfilCategorias = perfilParaCategorias(accounts, form.accountId, activeProfileId)
@@ -1119,7 +1124,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           <div data-help-id="agendamento.toAccount" data-guia="agendamento-form.conta-destino" className="sm:col-span-2">
             <LabelTip help="agendamento.toAccount" required confira={!!destaques?.includes('toAccountId')}>Conta Destino</LabelTip>
             <SearchableSelect
-              options={destAccountOpts}
+              options={destino.options}
+              sections={destino.sections}
               value={form.toAccountId}
               onChange={id => setContas({ toAccountId: id, reservaExpenseCategoryId: '' })}
               placeholder="Selecione a conta destino..."

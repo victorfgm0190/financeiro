@@ -406,11 +406,40 @@ de mensagem e os anexos do Assistente.
 - **Enter no seletor próprio** (SearchableSelect: Categoria, Conta…): com a lista fechada, Enter avança
   (vazio e obrigatório, o Próximo segura e avisa); a lista abre com clique, digitação ou Alt+↓. Com a
   lista aberta, o Enter escolhe o item e não avança no mesmo toque (é do campo de busca da lista).
-- **Transferência sem conta destino:** NÃO mudado. Há fluxos que gravam transferência sem destino:
-  confirmação de importação pendente (`api/importacoes-pendentes.js`: aceita só a origem), Importar
-  Fatura (`ImportPanel`: destino não mapeado vira `toAccountId: null`) e a baixa de agendamento de
-  transferência (`SchedulePanel`: confirma com o destino vazio). Aguarda decisão antes de bloquear o
-  Salvar do formulário (editar uma dessas transferências passaria a exigir o destino).
+- **Transferência sem conta destino** (decisão de 10/11/2026):
+  - **Criação bloqueada:** lançamento NOVO na aba Transferência (formulário completo, "+" do celular,
+    prévia do Assistente, com e sem guia): sem destino, o Salvar não grava e mostra "Escolha a conta
+    destino." no campo. Baixa de agendamento de transferência (Registrar, individual): pede o destino
+    antes de confirmar. Registro em lote: a linha sem destino ganha o seletor "Conta destino" e segura o
+    Confirmar. O destino escolhido na baixa vale só para aquele lançamento
+    (`registerScheduleOccurrence(…, { toAccountId })`); o agendamento não muda.
+  - **Edição não bloqueia:** transferência que já existe sem destino mostra "Esta transferência está sem
+    conta destino." e salva. No guia, o campo mostra o aviso (`validacao.aviso`), sem "Obrigatório" e
+    sem segurar o Próximo.
+  - **Etapa 6 (pendente):** importação pendente (`api/importacoes-pendentes.js`, aceita só a origem) e
+    Importar Fatura (`ImportPanel`, destino não mapeado vira `toAccountId: null`) continuam gravando
+    sem destino. A Etapa 6 terá o passo "Transferências sem destino: escolha a conta de cada uma".
+- **Conta destino de outro perfil** (`src/lib/contasPorPerfil.js`):
+  - Antes: o formulário de lançamento e o de agendamento listavam todas as contas permitidas na origem
+    e no destino, sem separar por perfil. A baixa de agendamento listava só as do perfil do filtro nos
+    dois campos, então não dava para transferir para outro perfil.
+  - Agora o destino mostra as contas do perfil atual primeiro e, abaixo, um bloco por outro perfil, com
+    o selo do perfil e o nome no cabeçalho (`useOpcoesDestino` no SearchableSelect;
+    `OpcoesDestinoPorPerfil` com um `<optgroup>` por perfil no seletor nativo da baixa). Com um perfil
+    só, a lista é a de sempre.
+  - A origem fica só no perfil atual quando há filtro de perfil (`contasDaOrigem`); a conta já escolhida
+    continua na lista. Sem filtro ("Tudo"), todas.
+  - Vale para o formulário de lançamento (completo, "+" do celular, prévia do Assistente), o de
+    agendamento e a baixa (individual e em lote).
+  - Só perfis permitidos: o servidor já entrega só as contas e os perfis permitidos
+    (`api/load.js › recortarLeitura`). No app, uma conta de perfil fora da lista nunca entra, e uma
+    conta sem perfil só aparece para quem vê todos.
+  - A transferência entre perfis (categorias por perfil, favorecido) não mudou. A baixa passou a achar
+    a conta de destino de outro perfil para montar esse bloco.
 - Testes: `GuiaPreenchimento.test.jsx` (posição no computador: fora da janela, afinar, vão, nunca o
   campo; `algoAbertoNoForm`; Enter no seletor fechado) e `GuiaContaLancamento.test.jsx` (Categoria de
   verdade: Alt+↓, Enter na lista não avança, Enter fechado avança; Esc fecha a lista e só depois o guia).
+- Testes da transferência: `src/components/Transactions/TransferenciaDestino.test.jsx`. Cobre: nova sem
+  destino bloqueada (completo e "+" do celular); edição antiga sem destino salva com o aviso; guia avisa
+  sem segurar; destino agrupado por perfil, com o atual primeiro e a origem só do perfil atual; usuário
+  restrito não vê outro perfil; baixa individual e em lote pedem o destino.
