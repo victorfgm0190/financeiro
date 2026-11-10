@@ -4,7 +4,7 @@
 //
 // Uso (na raiz do projeto):
 //   node --env-file=.env.local scripts/backup-exportar.js --ambiente vm [--saida <pasta ou arquivo .json>]
-// Sem --saida, grava na Área de Trabalho (ou na pasta atual, se não houver Área de Trabalho).
+// Sem --saida, grava na Área de Trabalho (ou na pasta do usuário, se não houver Área de Trabalho).
 import process from 'node:process'
 import os from 'node:os'
 import { existsSync, writeFileSync, statSync } from 'node:fs'
@@ -24,11 +24,15 @@ if (!sigla || !process.env.CENTRAL_DATABASE_URL) {
   process.exit(1)
 }
 
+// Área de Trabalho (Windows com OneDrive usa OneDrive\Área de Trabalho). Nunca a pasta do projeto:
+// o arquivo tem dados do cliente e não pode cair no repositório.
 function pastaPadrao() {
-  for (const p of [join(os.homedir(), 'Desktop'), join(os.homedir(), 'OneDrive', 'Desktop'), join(os.homedir(), 'Área de Trabalho')]) {
+  const casa = os.homedir()
+  const oneDrive = process.env.OneDrive || join(casa, 'OneDrive')
+  for (const p of [join(oneDrive, 'Área de Trabalho'), join(oneDrive, 'Desktop'), join(casa, 'Desktop'), join(casa, 'Área de Trabalho')]) {
     if (existsSync(p)) return p
   }
-  return process.cwd()
+  return casa
 }
 
 const conectar = async (url) => { const c = new pg.Client(configTlsVerificado(url)); await c.connect(); return c }

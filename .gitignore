@@ -38,3 +38,6 @@ backups/
 
 # documentos privados (dados reais, auditorias) — nunca versionar nada desta pasta
 docs/privado/
+
+# Arquivos de backup do Finup (dados de cliente): nunca no repositório
+finup-backup-*.json
