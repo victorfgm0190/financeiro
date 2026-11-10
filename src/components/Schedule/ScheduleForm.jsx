@@ -960,13 +960,17 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           a ordem e as 2 colunas são as de sempre. */}
       {!initial?.id && <AvisoPrerequisitos funcao="agendamento" onIr={onClose} />}
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-help-form="agendamento">
-        {podeGravarForm && (
-          <BotaoPreencherGuia form="agendamento" funcao={initial?.id ? null : 'agendamento'} resumo={resumoGuia} validacao={validacaoGuia} oferecer={!initial?.id}
+        {podeGravarForm && !initial?.id && (
+          <BotaoPreencherGuia form="agendamento" funcao="agendamento" resumo={resumoGuia} validacao={validacaoGuia} oferecer
             onFechar={onClose} className="max-sm:-order-2 sm:col-span-2 -mb-2" />
         )}
+        {/* Edição: "Preencher com guia" na MESMA linha do Histórico (lado a lado, sem sobrepor). */}
         {initial?.id && (
-          <div className="max-sm:-order-1 sm:col-span-2 flex items-center justify-end -mb-2">
-            <button type="button" onClick={() => setVerHistorico(true)} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5" title="Histórico de alterações">
+          <div className="max-sm:-order-1 sm:col-span-2 flex flex-wrap items-center justify-end gap-x-3 gap-y-1 -mb-2" data-testid="cabecalho-edicao">
+            {podeGravarForm && (
+              <BotaoPreencherGuia form="agendamento" resumo={resumoGuia} validacao={validacaoGuia} oferecer={false} onFechar={onClose} />
+            )}
+            <button type="button" onClick={() => setVerHistorico(true)} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5 min-h-[32px]" title="Histórico de alterações" data-testid="botao-historico">
               <History size={13} /> Histórico
               {temHistorico('agendamento', initial.id) && <span className="w-1.5 h-1.5 rounded-full bg-primary-fg" />}
             </button>

@@ -47,7 +47,7 @@ export const campos = {
   'buscaAjuda.busca': f('Busca da ajuda', 'Procura assuntos, telas e tarefas da ajuda.', 'Com duas letras ou mais, a lista de resultados aparece abaixo.'),
 
   // ── Relatórios ──
-  'filtroDemo.entrePerfis': f('Transferências entre perfis', 'Inclui o que passou de um CPF/CNPJ para outro.', 'Desligado, essas transferências ficam fora do resultado.'),
+  'filtroDemo.entrePerfis': f('Transferências entre perfis', 'Inclui o que passou de um perfil para outro.', 'Desligado, essas transferências ficam fora do resultado.'),
   'filtroDemo.ocultarReserva': f('Ocultar reserva', 'Esconde os movimentos das contas de reserva.', 'O resultado mostra só o dia a dia.'),
   'filtroDemo.ocultarPatrimonio': f('Ocultar patrimônio', 'Esconde os movimentos de bens e dívidas.', 'O resultado mostra só o que não é patrimônio.'),
   'filtroDemo.exibirLancamentos': f('Exibir lançamentos', 'Mostra os lançamentos de cada categoria.', 'Vale depois de "Atualizar".'),

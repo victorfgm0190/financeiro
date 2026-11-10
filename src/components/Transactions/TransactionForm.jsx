@@ -1608,12 +1608,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     <>
     {!initial?.id && <AvisoPrerequisitos funcao="lancamento" onIr={onClose} />}
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-4" data-help-form="lancamento">
-      {guiaNoForm && (
-        <BotaoPreencherGuia form="lancamento" funcao={initial?.id ? null : 'lancamento'} resumo={resumoGuia} validacao={validacaoGuia}
-          oferecer={!initial?.id} onFechar={onClose} className="-mb-2" />
+      {guiaNoForm && !initial?.id && (
+        <BotaoPreencherGuia form="lancamento" funcao="lancamento" resumo={resumoGuia} validacao={validacaoGuia}
+          oferecer onFechar={onClose} className="-mb-2" />
       )}
+      {/* Edição: "Preencher com guia" na MESMA linha do Histórico (lado a lado, sem sobrepor). */}
       {initial?.id && (
-        <div className="flex items-center justify-end gap-2 -mb-2">
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 -mb-2" data-testid="cabecalho-edicao">
           {seloParcela && (
             <span className="mr-auto flex items-center gap-1.5 text-xs text-texto-2" title={`Ocorrência de ${fmtDate(initial.dataOcorrencia)} do agendamento`}>
               Parcela <SeloParcela rotulo={seloParcela} />
@@ -1627,7 +1628,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               <Link2 size={13} /> Vincular
             </button>
           )}
-          <button type="button" onClick={() => setStep('historico')} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5" title="Histórico de alterações">
+          {guiaNoForm && (
+            <BotaoPreencherGuia form="lancamento" resumo={resumoGuia} validacao={validacaoGuia} oferecer={false} onFechar={onClose} />
+          )}
+          <button type="button" onClick={() => setStep('historico')} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5 min-h-[32px]" title="Histórico de alterações" data-testid="botao-historico">
             <History size={13} /> Histórico
             {(temHistorico('lancamento', initial.id) || (initial.scheduleId && temHistorico('agendamento', initial.scheduleId))) && <span className="w-1.5 h-1.5 rounded-full bg-primary-fg" />}
           </button>

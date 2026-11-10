@@ -82,7 +82,7 @@ export function buildReport(transactions, categories, from, to, accountIds, cate
     // destino (toAccountId) está selecionada. Sem o destino, resgates de reserva (origem = conta
     // de reserva não selecionada → destino = conta selecionada) sumiam do Demonstrativo.
     // Pernas de transferência entre perfis (_interProfile, via toggle) ignoram os filtros de
-    // conta e categoria — são uma visão deliberada das duas pernas com suas categorias CPF/CNPJ.
+    // conta e categoria — são uma visão deliberada das duas pernas com a categoria de cada lado.
     (tx._interProfile || tx.reservaAuto === true || accountIds.length === 0 ||
       accountIds.includes(tx.accountId) ||
       (tx.type === 'transfer' && accountIds.includes(tx.toAccountId))) &&
@@ -465,11 +465,11 @@ export default function DemonstrativoFinanceiro() {
   const [hideReserva, setHideReserva] = useState(() => initialFilters?.hideReserveMovements ?? false)
   const [hidePatrimonio, setHidePatrimonio] = useState(() => initialFilters?.hidePatrimonyMovements ?? false)
   const [modoDespesas, setModoDespesas] = useModoDespesas()
-  // Incluir as duas pernas das transferências entre perfis (CPF↔CNPJ) no modo "Todos". Não persiste.
+  // Incluir as duas pernas das transferências entre perfis no modo "Todos". Não persiste.
   const [includeInterProfile, setIncludeInterProfile] = useState(false)
 
   // Transações de entrada do relatório: no modo "Todos" com o toggle ligado, expande as
-  // transferências entre perfis em receita/despesa por categoria CPF/CNPJ. Com perfil ativo o
+  // transferências entre perfis em receita/despesa pela categoria de cada lado. Com perfil ativo o
   // contexto já converte a perna do perfil (comportamento inalterado) → não expande.
   const reportTransactions = useMemo(() => {
     const base = porComposicao && abridorDeRepasse ? lancamentosNoModo(transactions, 'pago', { abrirRepasse: abridorDeRepasse() }) : transactions
@@ -620,7 +620,7 @@ export default function DemonstrativoFinanceiro() {
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${includeInterProfile ? 'left-4' : 'left-0.5'}`} />
               </div>
               <ArrowLeftRight size={13} className="text-texto-2" />
-              Incluir transferências entre perfis (CPF/CNPJ)<HelpCampo campo="filtroDemo.entrePerfis" />
+              Incluir transferências entre perfis<HelpCampo campo="filtroDemo.entrePerfis" />
             </label>
             <label data-guia="reports:demonstrativo.ocultar-reserva" data-help-id="filtroDemo.ocultarReserva" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div

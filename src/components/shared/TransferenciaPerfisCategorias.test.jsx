@@ -19,6 +19,7 @@ vi.mock('../BoasVindas/useGuiaTela', () => ({ useEstadoBoasVindas: () => null })
 
 const { default: TransactionForm } = await import('../Transactions/TransactionForm.jsx')
 const { PayModal } = await import('../Schedule/SchedulePanel.jsx')
+const { default: ScheduleForm } = await import('../Schedule/ScheduleForm.jsx')
 const LENTO = { timeout: 90_000 }
 
 const PERFIS = [
@@ -130,5 +131,55 @@ describe('baixa de agendamento — quadro por lado', () => {
     const gravado = addTransaction.mock.calls[0][0]
     expect(gravado).toMatchObject({ categoriaOrigemId: 'k_pf1', categoriaDestinoId: 'r_pf2' })
     expect('categoriaCnpjId' in gravado || 'categoriaCpfId' in gravado).toBe(false)
+  })
+})
+
+describe('quadro — alinhamento dos seletores', () => {
+  it('no computador cada lado é coluna alinhada pela base (rótulo quebra acima, seletores na mesma linha); no celular nada muda', LENTO, () => {
+    render(<TransactionForm initial={{ type: 'transfer', accountId: 'c_pf1', toAccountId: 'c_pj1', amount: '100' }} onClose={() => {}} onToast={() => {}} preLancamentos={[]} />)
+    for (const qual of ['origem', 'destino']) {
+      const cls = lado(qual).className.split(/\s+/)
+      expect(cls).toEqual(expect.arrayContaining(['flex', 'flex-col', 'sm:justify-end']))
+      // Sem justify-end fora do sm: (uma coluna no celular, como antes).
+      expect(cls).not.toContain('justify-end')
+      // Rótulo antes do seletor, dentro do mesmo lado.
+      expect(lado(qual).firstElementChild).toBe(screen.getByTestId(`rotulo-${qual}`))
+    }
+  })
+})
+
+// "Preencher com guia" e "Histórico" no cabeçalho da edição: os dois presentes, na MESMA linha,
+// irmãos (um não está dentro do outro) e sem posicionamento absoluto/negativo que os sobreponha.
+function conferirCabecalho() {
+  const linha = screen.getByTestId('cabecalho-edicao')
+  const guia = screen.getByTestId('botao-preencher-guia')
+  const hist = screen.getByTestId('botao-historico')
+  expect(linha.contains(guia) && linha.contains(hist)).toBe(true)
+  expect(guia.contains(hist) || hist.contains(guia)).toBe(false)
+  expect(linha.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-wrap', 'items-center']))
+  // Só um botão do guia no formulário (não há outra linha acima com ele).
+  expect(screen.getAllByTestId('botao-preencher-guia')).toHaveLength(1)
+  for (let el = guia; el && el !== linha; el = el.parentElement) expect(el.className).not.toMatch(/absolute|fixed|-mt-|-mb-/)
+  for (let el = hist; el && el !== linha; el = el.parentElement) expect(el.className).not.toMatch(/absolute|fixed|-mt-|-mb-/)
+}
+
+describe('editar — "Preencher com guia" ao lado do "Histórico"', () => {
+  it('Editar lançamento', LENTO, () => {
+    const tx = { id: 't1', type: 'expense', accountId: 'c_pf1', amount: 10, date: '2026-11-05', description: 'Mercado', categoryId: 'k_pf1' }
+    app.transactions = [tx]
+    render(<TransactionForm initial={tx} onClose={() => {}} onToast={() => {}} preLancamentos={[]} />)
+    conferirCabecalho()
+  })
+  it('Editar agendamento', LENTO, () => {
+    const ag = { id: 's1', description: 'Aluguel', transactionType: 'expense', accountId: 'c_pf1', amount: 50, categoryId: 'k_pf1',
+      frequency: 'monthly', startDate: '2026-11-12', occurrenceType: 'continuous', registered: [], skipped: [], overrides: {} }
+    app.schedules = [ag]
+    render(<ScheduleForm initial={ag} onClose={() => {}} onAviso={() => {}} />)
+    conferirCabecalho()
+  })
+  it('Novo lançamento: o botão do guia continua na linha própria (sem Histórico)', LENTO, () => {
+    render(<TransactionForm initial={{ type: 'expense' }} onClose={() => {}} onToast={() => {}} preLancamentos={[]} />)
+    expect(screen.getByTestId('botao-preencher-guia')).toBeTruthy()
+    expect(screen.queryByTestId('botao-historico')).toBeNull()
   })
 })

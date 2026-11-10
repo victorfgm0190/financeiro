@@ -57,8 +57,10 @@ export default function TransferenciaPerfisCategorias({ fromAccount, toAccount, 
       <p className="text-xs font-medium text-texto-2 flex items-center gap-1.5">
         🔁 Transferência entre perfis — categorize a movimentação em cada perfil (opcional)
       </p>
+      {/* Computador (2 colunas): cada lado alinhado pela base — o rótulo pode quebrar acima e os dois
+          seletores ficam na mesma linha. Celular (1 coluna): nada muda. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div data-testid="lado-origem">
+        <div data-testid="lado-origem" className="flex flex-col sm:justify-end">
           <RotuloLado conta={fromAccount} profiles={profiles} testid="rotulo-origem" />
           <SearchableSelect
             options={catOptsOrigem}
@@ -71,7 +73,7 @@ export default function TransferenciaPerfisCategorias({ fromAccount, toAccount, 
             ungroupedLabel="Sem grupo"
           />
         </div>
-        <div data-testid="lado-destino">
+        <div data-testid="lado-destino" className="flex flex-col sm:justify-end">
           <RotuloLado conta={toAccount} profiles={profiles} testid="rotulo-destino" />
           <SearchableSelect
             options={catOptsDestino}
