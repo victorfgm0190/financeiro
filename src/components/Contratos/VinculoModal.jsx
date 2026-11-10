@@ -175,7 +175,7 @@ export default function VinculoModal({ contrato, candidatos, lancamentos = [], a
                     <span className="flex items-center gap-2">
                       <span className={mantido ? 'text-texto-3 line-through' : 'text-texto-1 font-medium'}>{fmt(l.valor)}</span>
                       <span className={mantido ? 'text-texto-1 font-medium' : 'text-texto-3'}>{fmt(c.schedule.amount)}</span>
-                      <input type="checkbox" className="accent-primary" checked={mantido} onChange={() => alternarManter(papel, l.competencia, r2(c.schedule.amount))} title="Manter o valor atual da série neste mês" />
+                      <input type="checkbox" className="accent-primary" checked={mantido} onChange={() => alternarManter(papel, l.competencia, r2(c.schedule.amount))} aria-label="Manter o valor atual da série neste mês" />
                     </span>
                   </label>
                 )

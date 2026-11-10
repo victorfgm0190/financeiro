@@ -127,7 +127,6 @@ export default function LancamentoFiltros({ filtros, setFiltros, fields, categor
             value={filtros.valorModo || 'exato'}
             onChange={e => set('valorModo', e.target.value)}
             aria-label="Modo do filtro de valor"
-            title="Exato: mesmo valor · Aproximado: mesma parte inteira (200,00 a 200,99)"
             className={`shrink-0 ${inputCls}`}
           >
             <option value="exato">Exato</option>

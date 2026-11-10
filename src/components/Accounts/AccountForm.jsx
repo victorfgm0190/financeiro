@@ -535,7 +535,7 @@ export default function AccountForm({ initial, onClose, tipoInicial = null }) {
               inputMode="numeric"
               value={form.cartaoFinais}
               onChange={e => { set('cartaoFinais', e.target.value); setFinaisErro('') }}
-              placeholder="Ex.: 4541, 1234 (titular e adicionais)"
+              placeholder="Últimos 4 dígitos de cada cartão, separados por vírgula"
             />
             {finaisErro
               ? <p className="text-xs text-perigo mt-0.5">{finaisErro}</p>

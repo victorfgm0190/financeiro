@@ -853,7 +853,7 @@ function ResumoTab({ functions, semVinculo, accounts, categories = [], accountBa
                       <th className="text-right px-4 py-2 text-xs text-receita font-medium w-28">Entradas (+)</th>
                       <th className="text-right px-4 py-2 text-xs text-despesa font-medium w-28">Saídas (−)</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-24">Ajuste</th>
-                      <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28" title="Parte do saldo a distribuir que vai para a função (grava um ajuste)">Distribuir<HelpCampo campo="reservaResumo.distribuir" /></th>
+                      <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Distribuir<HelpCampo campo="reservaResumo.distribuir" /></th>
                       <th className="text-right px-4 py-2 text-xs text-receita font-medium w-28" title="Parte da função nos rendimentos da conta (rateio automático pelo saldo)">Rendimentos</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Saldo</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Mov. Futuros</th>

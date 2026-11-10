@@ -480,7 +480,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           </Campo>
           <Campo ajuda="contrato.objeto" label="Objeto do contrato" className="sm:col-span-2">
             <input data-guia="contrato-form.objeto" autoComplete="off" className="input" value={f.objeto} onChange={e => set('objeto', e.target.value)} maxLength={200}
-              placeholder={aluguel ? 'Imóvel do contrato (ex.: Apto 302 — Ed. Sol)' : 'O que o contrato cobre (ex.: manutenção mensal, plano anual)'} />
+              placeholder={aluguel ? 'Imóvel do contrato' : 'O que o contrato cobre'} />
           </Campo>
           {aluguel && f.tipo === 'receber' && !semRepasse && (
             <Campo ajuda="contrato.modoRepasse" label="Como o aluguel chega" className="sm:col-span-2">
@@ -530,7 +530,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </label>
           </Campo>
           <Campo ajuda="contrato.linkAnexo" campo="link_anexo" label="Link do contrato (anexo)" className="sm:col-span-2">
-            <input autoComplete="off" className="input" value={f.link_anexo} onChange={e => set('link_anexo', e.target.value)} placeholder="https://drive.google.com/…" />
+            <input autoComplete="off" className="input" value={f.link_anexo} onChange={e => set('link_anexo', e.target.value)} placeholder="Endereço do arquivo do contrato" />
           </Campo>
           <Campo ajuda="contrato.observacao" label="Observação" className="sm:col-span-2">
             <textarea className="input min-h-[60px]" value={f.observacao} onChange={e => set('observacao', e.target.value)} maxLength={2000} />
@@ -625,7 +625,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           </Campo>
           {f.indice_reajuste === 'FIXO' && (
             <Campo ajuda="contrato.percentualFixo" campo="percentual_fixo" label="Percentual fixo ao ano (%)">
-              <input autoComplete="off" className="input" inputMode="decimal" value={f.percentual_fixo} onChange={e => set('percentual_fixo', e.target.value)} placeholder="Ex.: 5,00" />
+              <input autoComplete="off" className="input" inputMode="decimal" value={f.percentual_fixo} onChange={e => set('percentual_fixo', e.target.value)} placeholder="Percentual ao ano" />
             </Campo>
           )}
           {f.indice_reajuste !== 'NENHUM' && (
@@ -820,7 +820,7 @@ function CamposRepasse({ f, set, categories }) {
       </Campo>
       <Campo ajuda="contrato.taxaAdmPct" campo="taxa_adm_pct" label="Taxa de administração (%)">
         <input autoComplete="off" className="input" inputMode="decimal" data-guia="contrato-form.taxa-adm" value={f.taxa_adm_pct}
-          onChange={e => set('taxa_adm_pct', e.target.value)} placeholder="Ex.: 10" />
+          onChange={e => set('taxa_adm_pct', e.target.value)} placeholder="Percentual da taxa" />
       </Campo>
       <Campo ajuda="contrato.taxaAdmBase" label="Taxa calculada sobre">
         <select className="input" value={f.taxa_adm_base} onChange={e => set('taxa_adm_base', e.target.value)}>

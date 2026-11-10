@@ -14,7 +14,9 @@ import { navegarPara } from '../../lib/abrirTela'
 //   acompanha a troca de campo e o Esc fecha só ele (o modal de baixo continua aberto).
 //   Celular: bottom sheet (aberto pelo ⓘ; tocar no campo só abre o teclado).
 // Rodapé: "Ajuda da tela" (o "?" do cabeçalho) e "Preencher com guia" (formulário com roteiro na base).
-export default function HelpCampoPainel() {
+// semLogin (Login, Esqueci a senha, Definir/Trocar senha, Pedido de cadastro): sem "Ajuda da tela" nem
+// Central de Ajuda, que exigem login — só a ajuda dos campos desta tela.
+export default function HelpCampoPainel({ semLogin = false }) {
   const estado = useSyncExternalStore(assinarHelpCampo, lerHelpCampo, lerHelpCampo)
   const celular = useIsMobile()
 
@@ -69,6 +71,8 @@ export default function HelpCampoPainel() {
           <Bloco titulo="Ao salvar">{form.resumoAoSalvar}</Bloco>
           <p className="text-xs text-texto-3">Com o foco num campo, {dicaTecla} mostra a ajuda dele.</p>
         </>
+      ) : semLogin ? (
+        <p data-testid="ajuda-sem-login">Toque no ⓘ ao lado de um campo, ou use {dicaTecla} com o foco nele, para ver a ajuda daquele campo.</p>
       ) : (
         <>
           <p>Esta tela não tem o botão de ajuda ligado agora.</p>
@@ -82,10 +86,12 @@ export default function HelpCampoPainel() {
 
   const rodape = (
     <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-borda">
-      <button type="button" className="btn-secondary text-xs py-1 flex items-center gap-1"
-        onClick={() => { if (pedirAjudaDaTela()) fecharHelpCampo(); else { fecharHelpCampo(); navegarPara('ajuda') } }}>
-        <BookOpen size={12} /> Ajuda da tela
-      </button>
+      {!semLogin && (
+        <button type="button" className="btn-secondary text-xs py-1 flex items-center gap-1"
+          onClick={() => { if (pedirAjudaDaTela()) fecharHelpCampo(); else { fecharHelpCampo(); navegarPara('ajuda') } }}>
+          <BookOpen size={12} /> Ajuda da tela
+        </button>
+      )}
       {/* Só em formulário com roteiro; o botão do próprio formulário atende (BotaoPreencherGuia). */}
       {estado.form && helpDoFormulario(estado.form)?.ordemCampos?.length > 0 && (
         <button type="button" className="btn-secondary text-xs py-1 flex items-center gap-1" title="Percorre os campos do formulário com explicação"

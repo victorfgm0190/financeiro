@@ -112,7 +112,7 @@ export default function PlanoVendaConsorcio({ bemId, consorcio, resumo, pagasPor
               {real
                 ? <p className="text-[11px] text-texto-3 pb-2" data-testid={`plano-venda-real-${c.numero}`}>Vendida em {fmtDate(c.vendida_em)}</p>
                 : (
-                  <label data-help-id="planoVenda.vendidaAntes" className="flex items-center gap-1.5 text-[11px] text-texto-2 pb-2" title="Só para cota vendida antes da venda por cota existir: não gera lançamento. Para vender agora, use Vender cota.">
+                  <label data-help-id="planoVenda.vendidaAntes" className="flex items-center gap-1.5 text-[11px] text-texto-2 pb-2">
                     <input type="checkbox" className="accent-primary" disabled={!podeEditar || vendido} checked={fora} onChange={e => alterar(c.numero, 'vendida', e.target.checked)} /> Vendida antes (sem lançamento)<HelpCampo campo="planoVenda.vendidaAntes" />
                   </label>
                 )}

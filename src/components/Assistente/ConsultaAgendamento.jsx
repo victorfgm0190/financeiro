@@ -208,7 +208,7 @@ export default function ConsultaAgendamento({ parametros, textoOriginal, onClose
         <>
           <Titulo>Não achei agendamento com “{citado}” na descrição ou no favorecido{(profileSchedules || []).length ? '' : ' (nenhum agendamento neste perfil)'}. Pode dar mais um detalhe — outra palavra da descrição ou o nome de quem recebe/paga?</Titulo>
           <form className="flex items-center gap-2" onSubmit={refinar} data-help-form="consultaAssistente">
-            <input data-help-id="consultaAssistente.detalhe" className="input flex-1 min-w-0" value={detalhe} onChange={e => setDetalhe(e.target.value.slice(0, 80))} placeholder="Ex.: parte do nome ou o favorecido" aria-label="Detalhe do agendamento" />
+            <input data-help-id="consultaAssistente.detalhe" className="input flex-1 min-w-0" value={detalhe} onChange={e => setDetalhe(e.target.value.slice(0, 80))} placeholder="Parte da descrição ou o favorecido" aria-label="Detalhe do agendamento" />
             <HelpCampo campo="consultaAssistente.detalhe" />
             <button className="btn-primary px-3 shrink-0" aria-label="Procurar" disabled={!detalhe.trim()}><Search size={15} /></button>
           </form>

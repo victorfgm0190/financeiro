@@ -1,13 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Info } from 'lucide-react'
-import { textoHelpCampo } from '../../lib/helpCampos'
-import { helpDoCampo } from '../../help/index.js'
+import { helpDoCampo, textoCurtoDoCampo } from '../../help/index.js'
 import { abrirHelpCampo } from '../../help/helpCampoEstado'
 import { assinarBoasVindas, estadoBoasVindas } from '../../lib/boasVindasApi'
 
 // ── Help de campo: ícone ⓘ discreto ao lado do rótulo ───────────────────────────────────────────
-//   <HelpCampo campo="cartao.fechamento" />   (texto em src/lib/helpCampos.js)
+//   <HelpCampo campo="cartao.fechamento" />   (texto em src/help/<tela>.js)
 //   <HelpCampo texto="..." />                 (texto direto, quando não há chave)
 // Desktop: abre ao passar o mouse (e ao chegar nele pelo Tab — nunca por foco programático). Mobile: abre ao tocar e fecha ao tocar
 // fora ou em Esc. O balão vai num portal com posição fixa — não é cortado por modal com rolagem.
@@ -31,7 +30,7 @@ function useAjudaCamposLigada() {
 
 export default function HelpCampo({ campo, texto }) {
   const ligada = useAjudaCamposLigada()
-  const conteudo = texto || textoHelpCampo(campo)
+  const conteudo = texto || textoCurtoDoCampo(campo)
   const [aberto, setAberto] = useState(false)
   const [pos, setPos] = useState(null)
   const fixoRef = useRef(false) // aberto por toque/clique: não fecha ao tirar o mouse
@@ -82,7 +81,9 @@ export default function HelpCampo({ campo, texto }) {
   return (
     <>
       {/* span (e não <button>): dentro de um <label>, um botão viraria o "controle" do rótulo —
-          o rótulo deixaria de apontar para o campo e clicar no texto acionaria a ajuda. */}
+          o rótulo deixaria de apontar para o campo e clicar no texto acionaria a ajuda.
+          Inline (não inline-flex) + .help-campo-cola: o ⓘ fica preso à última palavra do rótulo e nunca
+          quebra sozinho para a linha de baixo (Etapa 4, revisão no celular). */}
       <span
         ref={btnRef}
         role="button"
@@ -92,7 +93,7 @@ export default function HelpCampo({ campo, texto }) {
         aria-expanded={completo ? undefined : aberto}
         aria-haspopup={completo ? 'dialog' : undefined}
         data-testid="help-campo"
-        className="help-campo-alvo ml-1 inline-flex items-center justify-center align-middle rounded-full text-texto-3 hover:text-texto-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-help p-1 -m-1"
+        className="help-campo-alvo help-campo-cola ml-1 whitespace-nowrap rounded-full text-texto-3 hover:text-texto-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-help p-1 -m-1"
         onMouseEnter={abrir}
         onMouseLeave={() => { if (!fixoRef.current) setAberto(false) }}
         onFocus={() => { if (focoPorTeclado()) abrir() }}
@@ -109,7 +110,7 @@ export default function HelpCampo({ campo, texto }) {
           acionar()
         }}
       >
-        <Info size={12} aria-hidden="true" />
+        <Info size={12} aria-hidden="true" className="inline align-middle" />
       </span>
       {aberto && pos && createPortal(
         <span

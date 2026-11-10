@@ -140,7 +140,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
           )}
         </div>
       ) : (
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 items-end">
         <div data-guia="envelope-form.limite" data-help-id="envelope.limite">
           <label className="label">Limite Mensal (R$)<HelpCampo campo="envelope.limite" /></label>
           <InputMoeda
@@ -150,7 +150,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
           />
         </div>
         <div data-guia="envelope-form.dia" data-help-id="envelope.diaVencimento">
-          <label className="label">Dia de Vencimento (1–28)<HelpCampo campo="envelope.diaVencimento" /></label>
+          <label className="label">Dia de Vencimento <span className="whitespace-nowrap">(1–28)<HelpCampo campo="envelope.diaVencimento" /></span></label>
           <input
             className="input" type="number" min="1" max="28"
             value={dueDay} onChange={e => setDueDay(e.target.value)}

@@ -10,7 +10,8 @@ Camada de ajuda por **campo**, ao lado do help de tela (`src/lib/ajudaTelas.js`,
   - `relacaoComTela` é o principal: como o campo mexe nos outros e no resultado.
   - `pendente`: conteúdo só migrado, falta completar.
 - Formulário: `{ objetivo, preRequisitos: [{ id, texto }], ordemCampos, resumoAoSalvar }`.
-- `src/lib/helpCampos.js` é só um adaptador (`HELP_CAMPOS`, `textoHelpCampo`) que lê de `src/help`.
+- O texto curto do ⓘ vem de `textoCurtoDoCampo(id)` (`src/help/index.js`), que devolve o `paraQueServe`.
+  O adaptador antigo `src/lib/helpCampos.js` foi removido na Etapa 4.
 
 ## Marcação na tela
 
@@ -317,3 +318,20 @@ de mensagem e os anexos do Assistente.
   nas páginas públicas (`src/App.jsx`).
 - Teste: `src/components/Ajuda/camposBloco5b.test.jsx`.
 
+## Etapa 4 do pacote pós-help — limpeza e revisão (09/11/2026)
+
+- **title × ⓘ:** saiu o `title` (balão nativo) que repetia o texto do ⓘ do mesmo campo. Onde o campo não
+  tinha outro nome acessível, o texto virou `aria-label`; em `<label>`/`<th>` com texto visível, só saiu.
+  O `title` continua em botões só de ícone e onde explica um estado da linha (ex.: "Tirar este evento do
+  cálculo"), que o ⓘ não diz.
+- **Adaptador removido:** `src/lib/helpCampos.js` saiu. O texto curto do ⓘ vem de
+  `textoCurtoDoCampo(id)` em `src/help/index.js`.
+- **Placeholders:** descrevem a função do campo, sem exemplo nem dado regional (sem DDD fixo, sem
+  "000.000.000-00"). Máscaras de formato digitado (DD/MM/AAAA, 0,00) continuam.
+- **Telas sem login** (Login, Esqueci minha senha, Definir senha, Trocar senha, Pedido de cadastro): o
+  painel é montado com `<HelpCampoPainel semLogin />` — sem "Ajuda da tela" nem Central de Ajuda (exigem
+  login). F1 fora de campo mostra só a dica de usar o ⓘ/F1 nos campos.
+- **Celular:** o ⓘ é inline e "colado" à última palavra do rótulo (`.help-campo-cola`, word joiner
+  gerado por CSS em `src/index.css`): nunca fica sozinho na linha de baixo. O texto do rótulo não muda.
+  Revisão feita no Chrome em 375 e 414 px (app com dados fictícios e `/api` simulada), sem rolagem
+  lateral, ⓘ sobre campo ou botão de salvar fora da tela.

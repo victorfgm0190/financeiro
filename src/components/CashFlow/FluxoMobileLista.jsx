@@ -178,7 +178,7 @@ export default function FluxoMobileLista({
       {atraso.length > 0 && (
         <div className={`border-b border-borda bg-perigo/5 ${atrasoAtivas === 0 ? 'opacity-60' : ''}`}>
           <div className="flex items-center gap-1 pl-2 pr-4">
-            <label data-help-id="opcoesFluxo.atraso" className="w-11 h-11 flex items-center justify-center cursor-pointer" title={atrasoAtivas > 0 ? 'Tirar as pendências em atraso do cálculo' : 'Voltar a considerar as pendências em atraso'}>
+            <label data-help-id="opcoesFluxo.atraso" className="w-11 h-11 flex items-center justify-center cursor-pointer">
               <input
                 type="checkbox"
                 className="accent-primary w-4 h-4"

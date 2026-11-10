@@ -3032,7 +3032,6 @@ Importar mesmo assim no mês selecionado?`)) return
               aria-label="Função de reserva"
               value={row._reservaFuncaoId || ''}
               onChange={e => editarLinhaDoAgendamento(row, { _reservaFuncaoId: e.target.value || null, _suggestedReserva: false, _manualEdit: true, _gerEdit: true })}
-              title="Função de reserva do resgate"
             >
               <option value="">— Selecionar —</option>
               {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
@@ -3929,7 +3928,6 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                                 aria-label="Função de reserva"
                                 value={item._reservaFuncaoId || ''}
                                 onChange={e => setItauField(item._id, { _reservaFuncaoId: e.target.value || null })}
-                                title="Função de reserva do resgate"
                               >
                                 <option value="">— Selecionar —</option>
                                 {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}

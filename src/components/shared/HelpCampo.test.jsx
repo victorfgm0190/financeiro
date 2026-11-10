@@ -10,7 +10,7 @@ vi.mock('../../lib/boasVindasApi', () => ({
   assinarBoasVindas: (fn) => { boas.ouvintes.add(fn); return () => boas.ouvintes.delete(fn) },
 }))
 const { default: HelpCampo } = await import('./HelpCampo.jsx')
-const { HELP_CAMPOS, textoHelpCampo } = await import('../../lib/helpCampos.js')
+const { CAMPOS, textoCurtoDoCampo } = await import('../../help/index.js')
 const { lerHelpCampo, fecharHelpCampo } = await import('../../help/helpCampoEstado.js')
 
 afterEach(() => { cleanup(); boas.estado = null; fecharHelpCampo() })
@@ -22,7 +22,7 @@ describe('HelpCampo', () => {
     const icone = screen.getByTestId('help-campo')
     expect(balao()).toBeNull()
     fireEvent.mouseEnter(icone)
-    expect(balao().textContent).toBe(HELP_CAMPOS.cartao.fechamento)
+    expect(balao().textContent).toBe(CAMPOS['cartao.fechamento'].paraQueServe)
     fireEvent.mouseLeave(icone)
     expect(balao()).toBeNull()
   })
@@ -66,14 +66,11 @@ describe('HelpCampo', () => {
 
 describe('textos centralizados', () => {
   it('curtos (até 2 frases), descrevem a função e não trazem exemplos', () => {
-    for (const [tela, campos] of Object.entries(HELP_CAMPOS)) {
-      for (const [campo, texto] of Object.entries(campos)) {
-        const chave = `${tela}.${campo}`
-        expect(textoHelpCampo(chave), chave).toBe(texto)
-        expect(texto.length, chave).toBeLessThanOrEqual(160)
-        expect(texto.split(/[.!?](\s|$)/).filter(t => t && t.trim()).length, chave).toBeLessThanOrEqual(2)
-        expect(texto, chave).not.toMatch(/\bEx[.:]|exemplo/i)
-      }
+    for (const [chave, { paraQueServe: texto }] of Object.entries(CAMPOS)) {
+      expect(textoCurtoDoCampo(chave), chave).toBe(texto)
+      expect(texto.length, chave).toBeLessThanOrEqual(160)
+      expect(texto.split(/[.!?](\s|$)/).filter(t => t && t.trim()).length, chave).toBeLessThanOrEqual(2)
+      expect(texto, chave).not.toMatch(/\bEx[.:]|exemplo/i)
     }
   })
 })
@@ -84,5 +81,19 @@ describe('acessibilidade dentro de rótulos', () => {
     expect(screen.getByLabelText(/Vínculo/).tagName).toBe('SELECT')
     fireEvent.keyDown(screen.getByTestId('help-campo'), { key: 'Enter' })
     expect(lerHelpCampo()).toMatchObject({ aberto: true, id: 'conta.vinculo' })
+  })
+})
+
+describe('celular: o ⓘ não quebra sozinho para a linha de baixo (Etapa 4)', () => {
+  it('ícone inline e "colado" à última palavra (word joiner gerado por CSS, fora do texto do rótulo)', async () => {
+    render(<label>Dia de vencimento <HelpCampo campo="cartao.fechamento" /></label>)
+    const icone = screen.getByTestId('help-campo')
+    expect(icone.classList.contains('help-campo-cola')).toBe(true)
+    expect([...icone.classList].some(c => c === 'inline-flex' || c === 'inline-block')).toBe(false)
+    expect(icone.closest('label').textContent).toBe('Dia de vencimento ')
+    const fs = await import('node:fs')
+    const { cwd } = await import('node:process')
+    const css = fs.readFileSync(cwd() + '/src/index.css', 'utf8')
+    expect(css).toContain(".help-campo-cola::before { content: '\\2060'; }")
   })
 })

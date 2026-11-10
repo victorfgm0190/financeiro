@@ -151,7 +151,7 @@ export default function CadastroCliente() {
           </Campo>
           <Campo label="Telefone / WhatsApp" ajuda="Celular com DDD." help="pedidoCadastro.telefone">
             <input className="input" type="tel" inputMode="tel" autoComplete="tel" value={f.telefone}
-              onChange={e => set('telefone', mascararTelefone(e.target.value))} placeholder="(43) 99999-9999" />
+              onChange={e => set('telefone', mascararTelefone(e.target.value))} placeholder="Celular com DDD" />
             <label className="flex items-center gap-2 text-xs text-texto-3 mt-1.5 cursor-pointer" data-help-id="pedidoCadastro.naoWhatsapp">
               <input type="checkbox" className="w-3.5 h-3.5 accent-primary" checked={f.nao_whatsapp} onChange={e => set('nao_whatsapp', e.target.checked)} />
               Não é WhatsApp (telefone fixo)<HelpCampo campo="pedidoCadastro.naoWhatsapp" />
@@ -171,7 +171,7 @@ export default function CadastroCliente() {
           <Campo label={f.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'} help="pedidoCadastro.documento">
             <input className="input" inputMode={f.tipo_pessoa === 'PJ' ? 'text' : 'numeric'} autoCapitalize="characters" value={f.documento}
               onChange={e => set('documento', f.tipo_pessoa === 'PJ' ? e.target.value.toUpperCase() : e.target.value)}
-              placeholder={f.tipo_pessoa === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00'} />
+              placeholder={f.tipo_pessoa === 'PJ' ? 'CNPJ da empresa' : 'CPF da pessoa'} />
           </Campo>
           {f.tipo_pessoa === 'PJ' && (
             <Campo label="Empresa" help="pedidoCadastro.empresa">

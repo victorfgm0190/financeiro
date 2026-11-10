@@ -246,7 +246,7 @@ function ComposicaoBoletoCondominio({
                       <span className="min-w-0 truncate">Lembrar para os próximos{padraoDaRegra(it.desc) ? <> (itens que começam com "<span data-testid="padrao-regra">{padraoDaRegra(it.desc)}</span>")</> : null}</span>
                     </label>
                   )}
-                  <label data-help-id="composicaoBoleto.soNesteBoleto" className="flex items-center gap-1.5 text-[11px] text-texto-2 mt-1" title="Item eventual: fica fora da previsão dos próximos condomínios. Não muda o crédito nem o valor do lançamento">
+                  <label data-help-id="composicaoBoleto.soNesteBoleto" className="flex items-center gap-1.5 text-[11px] text-texto-2 mt-1">
                     <input type="checkbox" className="accent-primary" checked={!!linhas[i].so_neste_boleto} onChange={e => setLinha(i, { so_neste_boleto: e.target.checked })} />
                     Só neste boleto
                   </label>

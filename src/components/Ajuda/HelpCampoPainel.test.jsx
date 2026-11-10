@@ -116,3 +116,18 @@ describe('ícone ⓘ', () => {
     expect(screen.getByRole('dialog', { name: CAMPOS['agendamento.amount'].titulo })).toBeTruthy()
   })
 })
+
+describe('telas sem login (semLogin)', () => {
+  it('sem "Ajuda da tela" no campo; F1 fora de campo mostra só a dica dos campos, sem levar à Central', () => {
+    render(<><HelpCampoPainel semLogin /><div data-help-form="login"><div data-help-id="acesso.usuario"><label>Usuário<HelpCampo campo="acesso.usuario" /></label><input aria-label="Usuário" /></div><button type="button">Entrar</button></div></>)
+    screen.getByLabelText('Usuário').focus()
+    f1()
+    expect(painel().textContent).toContain(CAMPOS['acesso.usuario'].relacaoComTela)
+    expect(screen.queryByRole('button', { name: /Ajuda da tela/ })).toBeNull()
+    act(() => fecharHelpCampo())
+    screen.getByRole('button', { name: 'Entrar' }).focus()
+    f1()
+    expect(screen.getByTestId('ajuda-sem-login')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Ajuda da tela|Central de Ajuda/ })).toBeNull()
+  })
+})

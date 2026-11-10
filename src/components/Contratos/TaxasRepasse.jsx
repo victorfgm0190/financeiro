@@ -77,7 +77,7 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
             {aberto && (
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <input autoComplete="off" className="input py-1.5 text-sm col-span-2" placeholder={unica ? 'Ex.: Taxa de intermediação' : 'Ex.: Tarifa bancária'}
+                  <input autoComplete="off" className="input py-1.5 text-sm col-span-2" placeholder={unica ? 'Descrição da taxa única' : 'Descrição da taxa'}
                     aria-label="Descrição da taxa" data-help-id="contratoTaxa.descricao" value={l.descricao} onChange={e => setL(i, { descricao: e.target.value })} maxLength={200} />
                   <div className={`min-w-0 ${unica ? 'flex items-center gap-1' : ''}`}>
                     <CampoValor className="input py-1.5 text-sm min-w-0" placeholder={unica ? 'Total' : 'Valor por mês'} aria-label={unica ? 'Valor total da taxa' : 'Valor da tarifa'} helpId="contratoTaxa.valor"
@@ -118,7 +118,7 @@ export default function TaxasRepasse({ linhas, onChange, categories, perfilId, i
                         {formaDoForm(l) === 'valores' && (
                           <div className="flex-1 min-w-[12rem]">
                             <label htmlFor={`taxa-parcelas-${i}`}>Valor de cada parcela — separe com ";"<HelpCampo campo="contratoTaxa.valoresParcelas" /></label>
-                            <input id={`taxa-parcelas-${i}`} autoComplete="off" className="input py-1 text-sm" placeholder="Ex.: 470,00; 865,00; 865,00" aria-label="Valores das parcelas" data-help-id="contratoTaxa.valoresParcelas"
+                            <input id={`taxa-parcelas-${i}`} autoComplete="off" className="input py-1 text-sm" placeholder="Valores separados por ;" aria-label="Valores das parcelas" data-help-id="contratoTaxa.valoresParcelas"
                               value={l.parcelas ?? ''} onChange={e => setL(i, { parcelas: e.target.value })}
                               onBlur={e => { const v = parcelasDoTexto(e.target.value); if (v?.length) setL(i, { parcelas: v.map(valorBRFormatado).join('; ') }) }} />
                           </div>

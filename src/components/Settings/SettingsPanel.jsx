@@ -453,7 +453,6 @@ export default function SettingsPanel() {
           aria-label={`Grupo de ${cat.name}`}
           data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-grupo' : undefined}
           className="input w-auto text-xs py-1 max-w-[140px]"
-          title="Grupo da categoria — reclassifica para outro grupo (não altera lançamentos)"
           value={cat.group || ''}
           onChange={e => updateCategory(cat.id, { group: e.target.value || null })}
         >
@@ -465,7 +464,6 @@ export default function SettingsPanel() {
           aria-label={`Grupo gerencial de ${cat.name}`}
           data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-gerencial' : undefined}
           className="input w-auto text-xs py-1 max-w-[150px]"
-          title="Grupo Gerencial Padrão — pré-seleciona este grupo ao lançar/importar nesta categoria (regra por descrição tem prioridade)"
           value={cat.defaultGerencialGroup || ''}
           onChange={e => updateCategory(cat.id, { defaultGerencialGroup: e.target.value || null })}
         >
@@ -482,7 +480,6 @@ export default function SettingsPanel() {
             aria-label={`Conta de investimento de ${cat.name}`}
             data-guia={cat.id === catsByGroup[0]?.cats[0]?.id ? 'settings:categorias.cat-investimento' : undefined}
             className="input w-auto text-xs py-1 max-w-[150px]"
-            title="Conta de Investimento — despesas de cartão nesta categoria geram um aporte automático nesta conta"
             value={cat.investmentAccountId || ''}
             onChange={e => updateCategory(cat.id, { investmentAccountId: e.target.value || null })}
           >
@@ -513,7 +510,6 @@ export default function SettingsPanel() {
             data-help-id="categoriaLista.contaEspelho"
             aria-label={`Conta do espelho de ${cat.name}`}
             className="input w-auto text-xs py-1 max-w-[150px]"
-            title="Conta vinculada (Empréstimos) — o lançamento espelho é criado nesta conta"
             value={cat.contaEspelhoId || ''}
             onChange={e => updateCategory(cat.id, { contaEspelhoId: e.target.value || null })}
           >
@@ -952,7 +948,7 @@ export default function SettingsPanel() {
                 className="input"
                 value={maskDoc(profileForm.document, profileForm.type)}
                 onChange={e => setProfileField('document', e.target.value.replace(/\D/g, ''))}
-                placeholder={profileForm.type === 'pf' ? '000.000.000-00' : '00.000.000/0001-00'}
+                placeholder={profileForm.type === 'pf' ? 'CPF da pessoa' : 'CNPJ da empresa'}
                 maxLength={profileForm.type === 'pf' ? 14 : 18}
               />
             </div>
@@ -1445,7 +1441,6 @@ export default function SettingsPanel() {
                     className="input py-1 text-xs w-36 shrink-0"
                     value={agEditAnchorId}
                     onChange={e => setAgEditAnchorId(e.target.value)}
-                    title="Conta âncora para ajuste de saldo"
                   >
                     <option value="">— Âncora —</option>
                     {accounts.filter(a => a.accountGroupId === g.id && a.type !== 'credit' && a.type !== 'asset' && a.type !== 'liability').map(a => (

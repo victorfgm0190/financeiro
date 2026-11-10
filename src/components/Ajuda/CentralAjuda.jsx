@@ -175,7 +175,7 @@ export default function CentralAjuda() {
         <div className="relative mt-2">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" aria-hidden="true" />
           <input id="busca-ajuda" type="search" className="input pl-9" value={busca} onChange={e => setBusca(e.target.value)}
-            placeholder="Ex.: parcela, fatura, provisão, transferência" autoComplete="off" />
+            placeholder="Digite uma palavra do assunto" autoComplete="off" />
         </div>
         {busca.trim().length >= 2 && (
           <div className="mt-3" aria-live="polite">

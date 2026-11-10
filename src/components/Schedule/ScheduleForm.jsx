@@ -69,7 +69,7 @@ const FREQUENCIES = [
 
 const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
 
-// Textos do ⓘ de cada campo: src/lib/helpCampos.js (help de campo, centralizado).
+// Textos do ⓘ de cada campo: base src/help/ (help de campo, centralizado).
 
 // Ícone ⓘ do campo: componente único do app (src/components/shared/HelpCampo.jsx).
 const Tooltip = ({ text, campo }) => <HelpCampo texto={text} campo={campo} />

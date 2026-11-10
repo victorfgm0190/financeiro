@@ -302,6 +302,11 @@
   }
 }
 
+/* Ícone ⓘ do help de campo (HelpCampo): "word joiner" gerado antes do ícone — ele não se separa da
+   última palavra do rótulo (nunca fica sozinho na linha de baixo). Gerado por CSS: o texto do
+   rótulo (textContent) e o nome acessível não mudam. */
+.help-campo-cola::before { content: '\2060'; }
+
 /* Ícone ⓘ do help de campo (HelpCampo): no toque, área de 44px sem mudar o layout. */
 @media (pointer: coarse) {
   .help-campo-alvo { position: relative; }

@@ -2515,7 +2515,6 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
                 onChange={e => setTipoMassa(e.target.value)}
                 data-help-id="agendamentoLote.tipoDocumento"
                 aria-label="Definir tipo de documento"
-                title="Definir tipo de documento"
               >
                 <option value="">Definir tipo de documento…</option>
                 {tiposDocumento.filter(t => t.ativo !== false).map(t => (
@@ -2533,7 +2532,6 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
                   placeholder="Digite o motivo (opcional)"
                   data-help-id="agendamentoLote.motivo"
                   aria-label="Motivo da alteração"
-                  title="Motivo da alteração (opcional) — vai para o histórico"
                 />
               )}
               <button

@@ -472,7 +472,7 @@ export const campos = {
   'conferenciaExtrato.total': {
     titulo: 'Total do extrato',
     paraQueServe: 'Total líquido do extrato, com sinal (− quando você fica devendo).',
-    relacaoComTela: 'Sem repasse no mês, é com ele que os itens conferidos são comparados.',
+    relacaoComTela: 'Passa para o extrato do mês seguinte. Sem repasse no mês, é com ele que os itens conferidos são comparados.',
     obrigatorio: false,
   },
   'conferenciaExtrato.repasse': {

@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { CAMPOS, FORMULARIOS, ID_CAMPO, helpDoCampo, helpDoFormulario, telaDoCampo } from './index.js'
-import { HELP_CAMPOS, textoHelpCampo } from '../lib/helpCampos.js'
+import { CAMPOS, FORMULARIOS, ID_CAMPO, helpDoCampo, helpDoFormulario, telaDoCampo, textoCurtoDoCampo } from './index.js'
 
 // Base do help de campo (Etapa 1): estrutura, conteúdo completo de Contratos e Agendamentos e o
-// adaptador antigo (src/lib/helpCampos.js) lendo daqui, sem texto duplicado.
+// texto curto do ⓘ (textoCurtoDoCampo) lido daqui; o adaptador antigo saiu na Etapa 4.
 // Etapa 6: todas as telas completas (npm run help:check limpo).
 const COMPLETAS = ['contratos', 'agendamentos', 'contas', 'lancamentos', 'categorias', 'favorecidos', 'perfis', 'reservas', 'cadastros', 'patrimonio', 'fluxo', 'contratosAcoes', 'configuracoes', 'importar', 'operacoes', 'lancamentosModais', 'filtros', 'assistente', 'acesso']
 const texto = (v) => typeof v === 'string' && v.trim().length > 0
@@ -48,11 +47,11 @@ describe('base do help de campo', () => {
     expect(Object.keys(FORMULARIOS).length).toBeGreaterThanOrEqual(6)
   })
 
-  it('adaptador antigo lê da base nova: o texto do ⓘ é o paraQueServe', () => {
-    expect(textoHelpCampo('contrato.modalidade')).toBe(CAMPOS['contrato.modalidade'].paraQueServe)
-    expect(HELP_CAMPOS.agendamento.amount).toBe(CAMPOS['agendamento.amount'].paraQueServe)
-    expect(HELP_CAMPOS.cartao.fechamento).toBe(CAMPOS['cartao.fechamento'].paraQueServe)
-    expect(textoHelpCampo('nada.disso')).toBe('')
-    expect(Object.values(HELP_CAMPOS).reduce((s, o) => s + Object.keys(o).length, 0)).toBe(Object.keys(CAMPOS).length)
+  it('texto do ⓘ vem da base: textoCurtoDoCampo devolve o paraQueServe', () => {
+    expect(textoCurtoDoCampo('contrato.modalidade')).toBe(CAMPOS['contrato.modalidade'].paraQueServe)
+    expect(textoCurtoDoCampo('agendamento.amount')).toBe(CAMPOS['agendamento.amount'].paraQueServe)
+    expect(textoCurtoDoCampo('cartao.fechamento')).toBe(CAMPOS['cartao.fechamento'].paraQueServe)
+    expect(textoCurtoDoCampo('nada.disso')).toBe('')
+    for (const id of Object.keys(CAMPOS)) expect(textoCurtoDoCampo(id), id).toBe(CAMPOS[id].paraQueServe)
   })
 })

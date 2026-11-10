@@ -695,7 +695,7 @@ export default function FluxoCaixaPorConta() {
             <table className="w-full text-sm" style={{ minWidth: 920 }}>
               <thead>
                 <tr className="border-b border-borda">
-                  <th data-guia="reports:fluxo-conta.caixinha" className="w-9 px-2 py-2.5" title="Desmarque uma linha para tirá-la do cálculo"><HelpCampo campo="filtroFluxoConta.linha" /></th>
+                  <th data-guia="reports:fluxo-conta.caixinha" className="w-9 px-2 py-2.5"><HelpCampo campo="filtroFluxoConta.linha" /></th>
                   <th data-guia="reports:fluxo-conta.data" className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-24">Data<HelpCampo campo="filtroFluxoConta.dataLinha" /></th>
                   <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
                   <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Movimentação</th>

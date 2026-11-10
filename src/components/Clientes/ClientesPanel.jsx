@@ -121,7 +121,7 @@ function ClienteForm({ inicial, onSalvo, onCancelar }) {
         <Campo label="Nome" span={2}>{input('nome', { autoFocus: novo })}</Campo>
         <Campo label="E-mail">{input('email', { type: 'email' })}</Campo>
         <Campo label="Telefone / WhatsApp">
-          <input className="input" type="tel" value={f.telefone} placeholder="(43) 99999-9999"
+          <input className="input" type="tel" value={f.telefone} placeholder="Celular com DDD"
             onChange={e => set('telefone', mascararTelefone(e.target.value))} />
           <label className="flex items-center gap-2 text-xs text-texto-3 mt-1.5 cursor-pointer">
             <input type="checkbox" className="w-3.5 h-3.5 accent-primary" checked={f.nao_whatsapp} onChange={e => set('nao_whatsapp', e.target.checked)} />

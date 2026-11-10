@@ -198,7 +198,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
           <div>
             <span>Saldo anterior no extrato<HelpCampo campo="conferenciaExtrato.saldoAnterior" /></span>
             <div className="flex gap-1">
-              <select className="input py-1 text-xs w-14 px-1" value={cab.saldoSinal} onChange={e => setCab(c => ({ ...c, saldoSinal: Number(e.target.value) }))} aria-label="Sinal do saldo anterior" data-help-id="conferenciaExtrato.saldoAnterior" title="+ a administradora me devia · − eu devia">
+              <select className="input py-1 text-xs w-14 px-1" value={cab.saldoSinal} onChange={e => setCab(c => ({ ...c, saldoSinal: Number(e.target.value) }))} aria-label="Sinal do saldo anterior" data-help-id="conferenciaExtrato.saldoAnterior">
                 <option value={1}>+</option><option value={-1}>−</option>
               </select>
               <CampoValor className="input py-1 text-sm min-w-0" value={cab.saldoTexto} onChange={v => setCab(c => ({ ...c, saldoTexto: v }))} aria-label="Saldo anterior do extrato" helpId="conferenciaExtrato.saldoAnterior" placeholder="Opcional" />
@@ -207,7 +207,7 @@ export default function ConferirExtratoModal({ contrato, competencia, onClose, l
           <div>
             <span>Total do extrato<HelpCampo campo="conferenciaExtrato.total" /></span>
             <div className="flex gap-1">
-              <select className="input py-1 text-xs w-14 px-1" value={cab.totalSinal} onChange={e => setCab(c => ({ ...c, totalSinal: Number(e.target.value) }))} aria-label="Sinal do total do extrato" data-help-id="conferenciaExtrato.total" title="+ a administradora me deve · − eu devo (passa para o mês seguinte)">
+              <select className="input py-1 text-xs w-14 px-1" value={cab.totalSinal} onChange={e => setCab(c => ({ ...c, totalSinal: Number(e.target.value) }))} aria-label="Sinal do total do extrato" data-help-id="conferenciaExtrato.total">
                 <option value={1}>+</option><option value={-1}>−</option>
               </select>
               <CampoValor className="input py-1 text-sm min-w-0" value={cab.total} onChange={v => { setTotalRecalculado(false); setCab(c => ({ ...c, total: v })) }} aria-label="Total do extrato" helpId="conferenciaExtrato.total" placeholder="Opcional" />
