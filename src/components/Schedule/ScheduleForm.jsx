@@ -23,7 +23,7 @@ import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import PerguntaFluxoPrincipal from '../shared/PerguntaFluxoPrincipal'
 import TipoDocumentoSelect from '../shared/TipoDocumentoSelect'
 import TransferenciaPerfisCategorias from '../shared/TransferenciaPerfisCategorias'
-import { isTransferenciaEntrePerfis, categoriasEntrePerfis } from '../../lib/transferenciaPerfis'
+import { isTransferenciaEntrePerfis, categoriasEntrePerfis, categoriasDosLados } from '../../lib/transferenciaPerfis'
 import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
 import EscopoSerieDialog from '../shared/EscopoSerieDialog'
 import OcorrenciasRegistradas from './OcorrenciasRegistradas'
@@ -135,7 +135,7 @@ function buildCatOpts(categories, type) {
 
 // Prévia do Assistente IA: `destaques` (chaves do form) e `onSalvo(form, id)` ao criar — mesma gravação.
 export default function ScheduleForm({ initial, onClose, onAviso, destaques = null, onSalvo = null }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId, registrarEventoContrato, settings } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId, registrarEventoContrato, settings, profiles } = useApp()
   // Controle gerencial do ambiente: desligado, o bloco some, agendamento novo não ganha grupo e a
   // edição mantém o gravado; com grupo gerencial, valor, data e conta ficam travados.
   const gerencialLigado = controleGerencialAtivo(settings)
@@ -249,9 +249,13 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     reservaFuncaoId: ini?.reservaFuncaoId || '',
     amount: (occInicial ? occInicial.amount : ini?.amount) ?? '',
     categoryId: (occInicial ? occInicial.categoryId : ini?.categoryId) || '',
-    // Transferência entre perfis: categoria na visão do CNPJ e na do CPF (campos da parcela).
-    categoriaCnpjId: (occInicial ? occInicial.categoriaCnpjId : ini?.categoriaCnpjId) || '',
-    categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : ini?.categoriaCpfId) || '',
+    // Transferência entre perfis: categoria no perfil da origem e no do destino (campos da parcela).
+    // Agendamento antigo (só as colunas por tipo CNPJ/CPF): lidas pelo tipo do perfil de cada lado.
+    ...(() => {
+      const fonte = occInicial || ini
+      const l = categoriasDosLados(fonte, accounts.find(a => a.id === fonte?.accountId), accounts.find(a => a.id === (ini?.toAccountId || fonte?.toAccountId)), profiles)
+      return { categoriaOrigemId: l.origem || '', categoriaDestinoId: l.destino || '' }
+    })(),
     payee: ini?.payee || '',
     costCenter: (occInicial ? occInicial.costCenter : ini?.costCenter) || '',
     // Única em N parcelas: gravada como Anual + 1 ocorrência; aqui é sempre "Única".
@@ -345,12 +349,13 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   const entrePerfis = (f) => f.transactionType === 'transfer' && isTransferenciaEntrePerfis(accById(f.accountId), accById(f.toAccountId))
   const setContas = (patch) => setForm(f => {
     const n = { ...f, ...patch }
-    return entrePerfis(n) ? n : { ...n, categoriaCnpjId: '', categoriaCpfId: '' }
+    return entrePerfis(n) ? n : { ...n, categoriaOrigemId: '', categoriaDestinoId: '' }
   })
-  // O que se grava: as duas só valem em transferência entre perfis (senão null).
-  const categoriasPerfisDe = (f) => f.transactionType === 'transfer'
-    ? categoriasEntrePerfis(accById(f.accountId), accById(f.toAccountId), f)
-    : { categoriaCnpjId: null, categoriaCpfId: null }
+  // O que se grava: por lado (e as antigas por tipo, quando os tipos diferem) — só em transferência
+  // entre perfis (senão null). Regra em lib/transferenciaPerfis.js.
+  const categoriasPerfisDe = (f) => (f.transactionType === 'transfer'
+    ? categoriasEntrePerfis(accById(f.accountId), accById(f.toAccountId), { categoriaOrigemId: f.categoriaOrigemId, categoriaDestinoId: f.categoriaDestinoId }, profiles)
+    : { categoriaOrigemId: null, categoriaDestinoId: null, categoriaCnpjId: null, categoriaCpfId: null })
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
   // Parcelamento: só em Despesa e Receita, em frequência maior que mensal ou Única; nunca em parcela
@@ -552,6 +557,12 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     categoryId: (occInicial ? occInicial.categoryId : serieBase.categoryId) || null,
     categoriaCnpjId: (occInicial ? occInicial.categoriaCnpjId : serieBase.categoriaCnpjId) || null,
     categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : serieBase.categoriaCpfId) || null,
+    // Por lado: como a tela mostrou (antigo → lido das colunas por tipo), para não acusar mudança falsa.
+    ...(() => {
+      const fonte = occInicial || serieBase
+      const l = categoriasDosLados(fonte, accById(fonte.accountId || serieBase.accountId), accById(serieBase.toAccountId), profiles)
+      return { categoriaOrigemId: l.origem || null, categoriaDestinoId: l.destino || null }
+    })(),
     description: (occInicial ? occInicial.description : serieBase.description) || null,
     accountId: (occInicial ? occInicial.accountId : serieBase.accountId) || null,
     costCenter: (occInicial ? occInicial.costCenter : serieBase.costCenter) || null,
@@ -621,6 +632,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         registered: atual.registered, registeredMeta: atual.registeredMeta,
         amount: serieBase.amount, categoryId: serieBase.categoryId, description: serieBase.description,
         categoriaCnpjId: serieBase.categoriaCnpjId || null, categoriaCpfId: serieBase.categoriaCpfId || null,
+        categoriaOrigemId: serieBase.categoriaOrigemId || null, categoriaDestinoId: serieBase.categoriaDestinoId || null,
         accountId: serieBase.accountId, accountType: serieBase.accountType, costCenter: serieBase.costCenter,
         grupoGerencial: serieBase.grupoGerencial, payee: serieBase.payee, tipoDocumentoId: serieBase.tipoDocumentoId,
         numeroContrato: serieBase.numeroContrato || null,
@@ -1136,16 +1148,16 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           </div>
         )}
 
-        {/* Transferência entre perfis (CPF↔CNPJ): categoria em cada visão. Mesmo bloco do Novo Lançamento. */}
+        {/* Transferência entre perfis: categoria no perfil da origem e no do destino. Mesmo bloco do Novo Lançamento. */}
         {entrePerfis(form) && (
           <div className="sm:col-span-2" data-help-id="agendamento.categoriasPerfis">
             <TransferenciaPerfisCategorias
               fromAccount={schFromAcc}
               toAccount={schToAcc}
-              categoriaCnpjId={form.categoriaCnpjId}
-              categoriaCpfId={form.categoriaCpfId}
-              onChangeCnpj={id => set('categoriaCnpjId', id || '')}
-              onChangeCpf={id => set('categoriaCpfId', id || '')}
+              categoriaOrigemId={form.categoriaOrigemId}
+              categoriaDestinoId={form.categoriaDestinoId}
+              onChangeOrigem={id => set('categoriaOrigemId', id || '')}
+              onChangeDestino={id => set('categoriaDestinoId', id || '')}
             />
           </div>
         )}

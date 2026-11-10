@@ -605,6 +605,8 @@ export const txToRow = (tx) => ({
   }),
   categoria_cnpj_id: tx.categoriaCnpjId || null,
   categoria_cpf_id: tx.categoriaCpfId || null,
+  categoria_origem_id: tx.categoriaOrigemId || null,
+  categoria_destino_id: tx.categoriaDestinoId || null,
   // Bem do lançamento. NULL nunca apaga o vínculo gravado (api/_db.js CAMPOS_PRESERVADOS_SE_NULO).
   bem_id: tx.bemId || null,
   // Tipo de documento (tipos_documento.id). NULL = sem tipo; o fallback de exibição (CC/ENV/RES)
@@ -680,6 +682,8 @@ export const rowToTx = (r) => ({
   serieId: r.serie_id || null,
   categoriaCnpjId: r.categoria_cnpj_id || null,
   categoriaCpfId: r.categoria_cpf_id || null,
+  categoriaOrigemId: r.categoria_origem_id || null,
+  categoriaDestinoId: r.categoria_destino_id || null,
   tipoDocumentoId: r.tipo_documento_id || null,
   numeroContrato: r.numero_contrato || null,
   importacaoId: r.importacao_id || null,
@@ -746,6 +750,8 @@ export const scheduleToRow = (s) => ({
   // Transferência entre perfis: categoria na visão do CNPJ e na do CPF (herdadas pelo lançamento).
   categoria_cnpj_id: s.categoriaCnpjId || null,
   categoria_cpf_id: s.categoriaCpfId || null,
+  categoria_origem_id: s.categoriaOrigemId || null,
+  categoria_destino_id: s.categoriaDestinoId || null,
   // Agenda no celular: false = fica fora do feed .ics (o calendário do app mostra todos).
   sincronizar_agenda: s.sincronizarAgenda !== false,
   // Contratos (src/lib/contratos): parcela = agendamento com contrato_id + papel; valor_status
@@ -803,6 +809,8 @@ export const rowToSchedule = (r) => ({
   numeroContrato: r.numero_contrato || null,
   categoriaCnpjId: r.categoria_cnpj_id || null,
   categoriaCpfId: r.categoria_cpf_id || null,
+  categoriaOrigemId: r.categoria_origem_id || null,
+  categoriaDestinoId: r.categoria_destino_id || null,
   sincronizarAgenda: r.sincronizar_agenda !== false,
   contratoId: r.contrato_id || null,
   contratoPapel: r.contrato_papel || null,

@@ -151,8 +151,8 @@ export const campos = {
   },
   'lancamento.categoriasPerfis': {
     titulo: 'Categorias de cada perfil',
-    paraQueServe: 'Na transferência entre contas de perfis diferentes (CPF e CNPJ), a categoria em cada lado.',
-    relacaoComTela: 'Para cada perfil a transferência vira saída ou entrada na categoria escolhida, e aparece nos relatórios daquele perfil.',
+    paraQueServe: 'Na transferência entre contas de perfis diferentes, a categoria no perfil de origem e no perfil de destino.',
+    relacaoComTela: 'No perfil de origem a transferência vira saída, e no perfil de destino vira entrada, cada uma na categoria escolhida do seu lado.',
     obrigatorio: false,
   },
   'lancamento.classificacaoGerencial': {

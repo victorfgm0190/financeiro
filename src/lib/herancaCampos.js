@@ -59,6 +59,11 @@ export function txToScheduleInitial(tx) {
     reservaFuncaoId: tx.reservaFuncaoId || '',
     grupoGerencial: tx.grupoGerencial || null,
     tipoDocumentoId: tx.tipoDocumentoId || null,
+    // Transferência entre perfis: a categoria de cada lado (e as antigas, por tipo) vão junto.
+    categoriaOrigemId: tx.categoriaOrigemId || null,
+    categoriaDestinoId: tx.categoriaDestinoId || null,
+    categoriaCnpjId: tx.categoriaCnpjId || null,
+    categoriaCpfId: tx.categoriaCpfId || null,
   }
 }
 

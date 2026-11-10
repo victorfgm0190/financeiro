@@ -239,10 +239,12 @@ export async function desligarFlagsUnicasAntes(client, rows) {
 // banco; "ausente" é conferido de novo a cada minuto (a migração pode rodar com a instância quente).
 export const COLUNAS_OPCIONAIS = {
   lancamentos: ['importacao_id', 'fitid', 'data_ocorrencia', 'contrato_id', 'composicao', 'numero_contrato',
-    'moeda', 'valor_original', 'cotacao', 'data_cotacao', 'spread', 'estimado', 'compra_iof_id', 'bem_id'],
+    'moeda', 'valor_original', 'cotacao', 'data_cotacao', 'spread', 'estimado', 'compra_iof_id', 'bem_id',
+    'categoria_origem_id', 'categoria_destino_id'],
   contas: ['spread_cambio', 'iof_linha_separada'],
   configuracoes: ['iof_compra_internacional', 'reserva_perguntar_virada', 'reserva_dias_caixa'],
-  agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato', 'efetivacoes', 'parcelas_por_ocorrencia'],
+  agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato', 'efetivacoes', 'parcelas_por_ocorrencia',
+    'categoria_origem_id', 'categoria_destino_id'],
   envelopes: ['tipo_orcamento', 'valor_dia', 'dias_semana', 'descontar_feriados'],
 }
 // Coluna opcional ausente só sai do upsert quando o valor dela é NEUTRO (o mesmo que o banco sem a

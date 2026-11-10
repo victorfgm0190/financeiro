@@ -62,8 +62,8 @@ export const campos = {
   },
   'agendamento.categoriasPerfis': {
     titulo: 'Categorias em cada perfil',
-    paraQueServe: 'Na transferência entre CPF e CNPJ, a categoria do valor na visão de cada perfil.',
-    relacaoComTela: 'Para a empresa o valor sai como despesa (ex.: pró-labore) e para a pessoa entra como receita; cada perfil vê a sua categoria nos relatórios.',
+    paraQueServe: 'Na transferência entre perfis diferentes, a categoria no perfil de origem e no perfil de destino.',
+    relacaoComTela: 'No perfil de origem o valor sai como despesa e no perfil de destino entra como receita; cada perfil vê a sua categoria nos relatórios.',
     obrigatorio: false,
   },
   'agendamento.fluxoPrincipal': {

@@ -443,3 +443,57 @@ de mensagem e os anexos do Assistente.
   destino bloqueada (completo e "+" do celular); edição antiga sem destino salva com o aviso; guia avisa
   sem segurar; destino agrupado por perfil, com o atual primeiro e a origem só do perfil atual; usuário
   restrito não vê outro perfil; baixa individual e em lote pedem o destino.
+
+### Transferência entre perfis — categoria por lado (10/11/2026)
+
+- **Problema:** o quadro tinha os rótulos fixos "Categoria no CNPJ" (esquerda) e "Categoria no CPF"
+  (direita). A gravação também era por TIPO de perfil (`categoria_cnpj_id` / `categoria_cpf_id`), e a
+  leitura pegava a coluna do tipo do perfil selecionado. Entre perfis de tipos diferentes os dados já
+  ficavam certos; o erro era só de rótulo e de ordem. Entre perfis do mesmo tipo (CPF→CPF, CNPJ→CNPJ),
+  um lado perdia a categoria e o outro lia a categoria errada.
+- **Agora** (`src/lib/transferenciaPerfis.js`):
+  - **Gravação por lado:** `categoria_origem_id` (perfil da conta de origem) e `categoria_destino_id`
+    (perfil da conta de destino), em `lancamentos` e `agendamentos`. Migração aditiva
+    `supabase/migrations/2026-11-10_transferencia_categoria_por_lado.sql`.
+  - **Colunas antigas:** continuam sendo gravadas quando os tipos são diferentes (compatibilidade). No
+    mesmo tipo ficam como estão: não se inventa valor.
+  - **Leitura** (`categoriasDosLados`): as colunas novas; sem nenhuma delas (lançamento antigo), as
+    antigas pelo tipo do perfil de cada lado, como antes. Ajuste antigo de uma ocorrência do agendamento
+    (`overrides`) só com CNPJ/CPF vale sobre as colunas novas do agendamento.
+  - **Quadro:** esquerda = perfil da ORIGEM, direita = perfil do DESTINO. O rótulo é "Categoria em
+    <perfil> (CPF|CNPJ)", com o selo do perfil, e cada lado lista só as categorias do seu perfil.
+    Vale para o formulário completo, o "+" do celular, a prévia do Assistente, o agendamento e a baixa.
+  - **Textos e ajuda:** falam em "perfil de origem" e "perfil de destino"
+    (`lancamento.categoriasPerfis`, `agendamento.categoriasPerfis`).
+  - **Edição de transferência antiga:** mostra as categorias lidas das colunas antigas e, ao salvar,
+    grava nas novas (e nas antigas quando os tipos são diferentes).
+- **Caminhos de dados:**
+  - `src/lib/db.js`: mapeamento de leitura e gravação de lançamentos e agendamentos. Cobre o
+    `/api/load`, o `/api/sync`, o backup e a restauração.
+  - `api/_db.js › COLUNAS_OPCIONAIS`: banco sem a migração recusa valor de verdade com aviso, em vez
+    de descartar calado. O `/api/sync` não tem lista fixa de campos aceitos: confere cada coluna
+    contra as colunas reais da tabela.
+  - `AppContext`: o registro automático e a baixa do motor (`registerScheduleOccurrence`) geram o
+    lançamento com a categoria de cada lado.
+  - `camposSerie.js`: campos da parcela, edição em série, ajustes por ocorrência e rótulos do
+    histórico. `historico.js` formata os campos novos.
+  - `herancaCampos.js › txToScheduleInitial` (Duplicar como agendamento): passa a levar as quatro
+    colunas. Duplicar como lançamento já copiava tudo.
+  - Relatórios: KPIs com perfil selecionado (`transferenciaNaVisaoDoPerfil`) e Demonstrativo no modo
+    Todos (`pernasEntrePerfis`).
+  - `api/_sqlEmbutido.js`, regenerado com a migração nova (provisionamento de cliente novo).
+- **Backfill** (`supabase/backfill/2026-11-10_transferencia_categoria_por_lado.sql`):
+  - Só transferências entre tipos diferentes, com as duas colunas novas vazias: cada lado recebe a
+    coluna do tipo do seu perfil.
+  - Mesmo tipo: não preenche; o bloco 3 lista essas linhas para revisão.
+  - Ordem: prévia (1 e 3) → UPDATE (2) com o app fechado.
+- **Ambientes:**
+  - teste1: migração aplicada (versão 49) e backfill aplicado (prévia 0 e 0; nenhuma de mesmo tipo).
+  - vm, cv e ggsm: pendente do OK. Antes do merge: `node --env-file=.env.local
+    scripts/migrar-ambientes.js --ambiente <sigla>` e depois o backfill com prévia.
+  - Contagem feita no `neondb` antes da mudança (só SELECT): lançamentos PJ→PF 42 (24 com
+    categoria) e PF→PJ 1; agendamentos PJ→PF 14 (8 com categoria); nenhuma de mesmo tipo.
+- **Testes:** `src/lib/transferenciaPerfis.test.js` (quatro combinações: gravação, leitura dos KPIs
+  com cada perfil e Demonstrativo; lançamento antigo; ajuste antigo de ocorrência) e
+  `src/components/shared/TransferenciaPerfisCategorias.test.jsx` (quatro combinações no formulário:
+  rótulos, categorias de cada lado e gravação; edição de transferência antiga; baixa CPF→CPF).

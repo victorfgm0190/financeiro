@@ -18,6 +18,7 @@ import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 import SeletorModoValor from '../Contratos/SeletorModoValor'
 import { lancamentosNoModo, CATEGORIA_ADMINISTRADORA } from '../../lib/contratos/despesaReal'
 import HelpCampo from '../shared/HelpCampo'
+import { pernasEntrePerfis } from '../../lib/transferenciaPerfis'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -57,31 +58,6 @@ function loadFilters() {
 }
 function saveFilters(f) {
   try { localStorage.setItem(FILTERS_KEY, JSON.stringify(f)) } catch { /* ignora quota/serialização */ }
-}
-
-// Expande transferências ENTRE PERFIS (CPF↔CNPJ) em DUAS pernas income/expense, cada uma com a
-// categoria do seu lado: lado PJ → categoria_cnpj_id, lado PF → categoria_cpf_id. A perna da conta
-// de ORIGEM vira despesa (saiu dinheiro); a da conta de DESTINO vira receita. Usado quando o toggle
-// "Incluir transferências entre perfis" está ligado (efetivo só no modo "Todos", sem perfil ativo).
-// As pernas levam a flag _interProfile para passarem pelos filtros de conta/categoria do relatório.
-function expandInterProfileTransfers(transactions, accounts, profiles) {
-  const accById = new Map(accounts.map(a => [a.id, a]))
-  const ptype = new Map((profiles || []).map(p => [p.id, p.type]))
-  const catFor = (pid, tx) => ((ptype.get(pid) === 'pj' ? tx.categoriaCnpjId : tx.categoriaCpfId) || '')
-  const out = []
-  for (const tx of transactions) {
-    if (tx.type === 'transfer') {
-      const fromP = accById.get(tx.accountId)?.profileId || null
-      const toP = accById.get(tx.toAccountId)?.profileId || null
-      if (fromP && toP && fromP !== toP) {
-        out.push({ ...tx, id: `${tx.id}:ipout`, type: 'expense', categoryId: catFor(fromP, tx), _interProfile: true })
-        out.push({ ...tx, id: `${tx.id}:ipin`, type: 'income', categoryId: catFor(toP, tx), accountId: tx.toAccountId, _interProfile: true })
-        continue
-      }
-    }
-    out.push(tx)
-  }
-  return out
 }
 
 export function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reservaAccSet, reserveFunctions, activeProfile, profileAccountIds, modo = 'liquido') {
@@ -497,7 +473,7 @@ export default function DemonstrativoFinanceiro() {
   // contexto já converte a perna do perfil (comportamento inalterado) → não expande.
   const reportTransactions = useMemo(() => {
     const base = porComposicao && abridorDeRepasse ? lancamentosNoModo(transactions, 'pago', { abrirRepasse: abridorDeRepasse() }) : transactions
-    return (includeInterProfile && !activeProfile) ? expandInterProfileTransfers(base, accounts, profiles) : base
+    return (includeInterProfile && !activeProfile) ? pernasEntrePerfis(base, accounts, profiles) : base
   // contratos: a composição muda quando o contrato muda.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [includeInterProfile, activeProfile, transactions, accounts, profiles, porComposicao, abridorDeRepasse, contratos])

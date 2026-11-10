@@ -1766,8 +1766,8 @@ export function AppProvider({ children }) {
             reservaFuncaoId: schedule.reservaFuncaoId || null,
             // O lançamento efetivado herda o tipo de documento do agendamento.
             tipoDocumentoId: schedule.tipoDocumentoId || null,
-            // ...e as categorias por visão da transferência entre perfis (null fora dela).
-            ...categoriasEntrePerfis(accounts.find(a => a.id === schedule.accountId), accounts.find(a => a.id === schedule.toAccountId), schedule),
+            // ...e as categorias de cada lado da transferência entre perfis (null fora dela).
+            ...categoriasEntrePerfis(accounts.find(a => a.id === schedule.accountId), accounts.find(a => a.id === schedule.toAccountId), schedule, prev.profiles),
             bemId: bemDoAgendamento(schedule, accounts),
             origin: ORIGIN.AGENDAMENTO_AUTO,
             createdAt: new Date().toISOString(),
@@ -3151,9 +3151,9 @@ export function AppProvider({ children }) {
       const gerTrace = ['gerencial_devolucao', 'resgate_reserva', 'pagamento_fatura'].includes(schedule.tipo)
         ? { cardId: schedule.cardId || null, faturaRef: schedule.faturaRef || null, sourceScheduleId: scheduleId }
         : {}
-      // Transferência entre perfis: o lançamento herda as categorias por visão da ocorrência.
+      // Transferência entre perfis: o lançamento herda as categorias de cada lado da ocorrência.
       const categoriasPerfis = categoriasEntrePerfis(
-        d.accounts.find(a => a.id === schedule.accountId), d.accounts.find(a => a.id === schedule.toAccountId), schedule,
+        d.accounts.find(a => a.id === schedule.accountId), d.accounts.find(a => a.id === schedule.toAccountId), schedule, d.profiles,
       )
 
       // Resgate com detalhamento por função (Etapa B): gera UMA transferência por FUNÇÃO

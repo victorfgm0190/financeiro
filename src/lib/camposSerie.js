@@ -23,12 +23,13 @@ import { faturaEstaFechada } from './faturasFechadas.js'
 import { valorBaseDaChave } from './parcelasOcorrencia.js'
 
 export const CAMPOS_SERIE = ['payee', 'tipoDocumentoId', 'numeroContrato']
-export const CAMPOS_PARCELA = ['amount', 'date', 'categoryId', 'categoriaCnpjId', 'categoriaCpfId', 'description', 'accountId', 'costCenter', 'grupoGerencial']
+export const CAMPOS_PARCELA = ['amount', 'date', 'categoryId', 'categoriaOrigemId', 'categoriaDestinoId', 'categoriaCnpjId', 'categoriaCpfId', 'description', 'accountId', 'costCenter', 'grupoGerencial']
 export const CAMPOS_EDITAVEIS = [...CAMPOS_PARCELA, ...CAMPOS_SERIE]
 
 export const ROTULO_CAMPO = {
   amount: 'Valor', date: 'Data', categoryId: 'Categoria', categoriaCnpjId: 'Categoria no CNPJ',
-  categoriaCpfId: 'Categoria no CPF', description: 'Descrição', accountId: 'Conta',
+  categoriaCpfId: 'Categoria no CPF', categoriaOrigemId: 'Categoria no perfil de origem',
+  categoriaDestinoId: 'Categoria no perfil de destino', description: 'Descrição', accountId: 'Conta',
   costCenter: 'Centro de custo', grupoGerencial: 'Grupo gerencial', payee: 'Favorecido',
   valorTotalOcorrencia: 'Valor total da ocorrência', parcelasPorOcorrencia: 'Parcelas por ocorrência',
   tipoDocumentoId: 'Tipo de documento',
@@ -80,10 +81,16 @@ export function occCampos(schedule, dataOriginal) {
   const ov = s.overrides?.[dataOriginal]
   const o = ov && typeof ov === 'object' ? ov : {}
   const pick = (k) => (o[k] !== undefined ? o[k] : s[k])
+  // Ajuste antigo da ocorrência só com as categorias por tipo (CNPJ/CPF): as por lado do agendamento
+  // não valem para ela — a leitura usa as antigas da ocorrência (lib/transferenciaPerfis.js).
+  const ajusteSoAntigas = (o.categoriaCnpjId !== undefined || o.categoriaCpfId !== undefined)
+    && o.categoriaOrigemId === undefined && o.categoriaDestinoId === undefined
   return {
     date: o.date || dataOriginal,
     amount: o.amount != null ? Number(o.amount) : valorBaseDaChave(s, dataOriginal),
     categoryId: pick('categoryId'),
+    categoriaOrigemId: ajusteSoAntigas ? null : pick('categoriaOrigemId'),
+    categoriaDestinoId: ajusteSoAntigas ? null : pick('categoriaDestinoId'),
     categoriaCnpjId: pick('categoriaCnpjId'),
     categoriaCpfId: pick('categoriaCpfId'),
     description: pick('description'),
@@ -375,6 +382,7 @@ export function comCamposDaOcorrencia(schedule, dataOriginal, accounts = []) {
   const out = {
     ...schedule,
     categoryId: oc.categoryId, categoriaCnpjId: oc.categoriaCnpjId, categoriaCpfId: oc.categoriaCpfId,
+    categoriaOrigemId: oc.categoriaOrigemId, categoriaDestinoId: oc.categoriaDestinoId,
     description: oc.description, accountId: oc.accountId,
     costCenter: oc.costCenter, grupoGerencial: oc.grupoGerencial,
   }

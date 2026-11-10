@@ -29,7 +29,7 @@ import TipoDocumentoSelect from '../shared/TipoDocumentoSelect'
 import { useOpcoesDestino } from '../shared/useOpcoesDestino'
 import { contasDaOrigem } from '../../lib/contasPorPerfil'
 import TransferenciaPerfisCategorias from '../shared/TransferenciaPerfisCategorias'
-import { isTransferenciaEntrePerfis } from '../../lib/transferenciaPerfis'
+import { categoriasEntrePerfis, categoriasDosLados } from '../../lib/transferenciaPerfis'
 import { tipoDocumentoObrigatorio, mostrarNumeroContrato } from '../../lib/tiposDocumento'
 import { camposHerdadosParcelaFilha, novoIdAgendamento } from '../../lib/herancaCampos'
 import EscopoSerieDialog from '../shared/EscopoSerieDialog'
@@ -235,8 +235,12 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     faturaMonthYear: initial?.faturaMonthYear || faturaInicialDaEdicao(initial, accounts) || '',
     faturaRef: initial?.faturaRef || '',
     reservaFuncaoId: reservaIni.reservaFuncaoId,
-    categoriaCnpjId: initial?.categoriaCnpjId || '',
-    categoriaCpfId: initial?.categoriaCpfId || '',
+    // Transferência entre perfis: categoria do lado da origem e do destino. Lançamento antigo (só as
+    // colunas por tipo CNPJ/CPF): lidas pelo tipo do perfil de cada lado (lib/transferenciaPerfis.js).
+    ...(() => {
+      const l = categoriasDosLados(initial, accounts.find(a => a.id === initial?.accountId), accounts.find(a => a.id === initial?.toAccountId), profiles)
+      return { categoriaOrigemId: l.origem || '', categoriaDestinoId: l.destino || '' }
+    })(),
     tipoDocumentoId: initial?.tipoDocumentoId || '',
     // Nº do contrato (boleto/comprovante): campo próprio, não vai para descrição/observação.
     numeroContrato: initial?.numeroContrato || '',
@@ -524,7 +528,6 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   const isTransferDeBem = form.type === 'transfer' && !!initial?.bemId
 
   // Transferência entre perfis diferentes (CPF↔CNPJ): habilita categorias por visão (PARTE 1).
-  const isInterProfileTransfer = form.type === 'transfer' && isTransferenciaEntrePerfis(transferFromAcc, transferToAcc)
 
   // Resgate de reserva: Conta central do PERFIL DA RESERVA. Sem ela, o resgate fica bloqueado.
   const centralResgate = resgateInfo?.contaResgate
@@ -791,9 +794,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       txData.categoryId = null
     }
 
-    // Categorias de transferência entre perfis (visão CNPJ/CPF) — só em transferências cross-profile.
-    txData.categoriaCnpjId = isInterProfileTransfer ? (form.categoriaCnpjId || null) : null
-    txData.categoriaCpfId = isInterProfileTransfer ? (form.categoriaCpfId || null) : null
+    // Categorias de transferência entre perfis, por lado (origem/destino) — e as antigas por tipo
+    // quando os perfis são de tipos diferentes. Mesmo tipo: as antigas não mudam.
+    Object.assign(txData, categoriasEntrePerfis(transferFromAcc, transferToAcc,
+      { categoriaOrigemId: form.categoriaOrigemId, categoriaDestinoId: form.categoriaDestinoId }, profiles))
 
     if (initial?.id) {
       const mudancas = diffCampos(camposRastreados(initial), camposRastreados(txData))
@@ -1872,10 +1876,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           <div className="contents" data-help-id="lancamento.categoriasPerfis"><TransferenciaPerfisCategorias
             fromAccount={transferFromAcc}
             toAccount={transferToAcc}
-            categoriaCnpjId={form.categoriaCnpjId}
-            categoriaCpfId={form.categoriaCpfId}
-            onChangeCnpj={id => set('categoriaCnpjId', id)}
-            onChangeCpf={id => set('categoriaCpfId', id)}
+            categoriaOrigemId={form.categoriaOrigemId}
+            categoriaDestinoId={form.categoriaDestinoId}
+            onChangeOrigem={id => set('categoriaOrigemId', id)}
+            onChangeDestino={id => set('categoriaDestinoId', id)}
           /></div>
         </>
       )}

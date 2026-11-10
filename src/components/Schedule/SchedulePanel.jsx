@@ -61,7 +61,7 @@ import { espelharBaixaParcela } from '../../lib/baixaParcela'
 import ToastShared from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import TransferenciaPerfisCategorias from '../shared/TransferenciaPerfisCategorias'
-import { isTransferenciaEntrePerfis, categoriasEntrePerfis } from '../../lib/transferenciaPerfis'
+import { isTransferenciaEntrePerfis, categoriasEntrePerfis, categoriasDosLados } from '../../lib/transferenciaPerfis'
 import TipoDocumentoFiltro from '../shared/TipoDocumentoFiltro'
 import { resolverTipoDocumento, filtrarPorTipoDocumento, ehSintetico, SEM_TIPO } from '../../lib/tiposDocumento'
 import { camposHerdadosNoPagamento } from '../../lib/herancaCampos'
@@ -292,10 +292,12 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   const [trfAmount, setTrfAmount] = useState(occAmount)
   const [trfDate, setTrfDate] = useState(occDate)
   const [trfNotes, setTrfNotes] = useState(schedule.notes || '')
-  // Transferência entre perfis: categorias por visão pré-preenchidas com as da ocorrência.
-  // Editar aqui vale só para este lançamento — o agendamento não muda.
-  const [trfCatCnpj, setTrfCatCnpj] = useState(schedule.categoriaCnpjId || '')
-  const [trfCatCpf, setTrfCatCpf] = useState(schedule.categoriaCpfId || '')
+  // Transferência entre perfis: categoria do perfil da origem e do destino, pré-preenchidas com as da
+  // ocorrência (agendamento antigo: lidas das colunas por tipo). Editar aqui vale só para este
+  // lançamento — o agendamento não muda.
+  const [catsTrfIni] = useState(() => categoriasDosLados(schedule, contaPorId(schedule.accountId), contaPorId(schedule.toAccountId), profiles))
+  const [trfCatOrigem, setTrfCatOrigem] = useState(catsTrfIni.origem || '')
+  const [trfCatDestino, setTrfCatDestino] = useState(catsTrfIni.destino || '')
   const trfFromAcc = contaPorId(trfFromId)
   const trfToAcc = contaPorId(trfToId)
   // Transferência sem conta destino: a baixa pede o destino antes de confirmar.
@@ -306,8 +308,8 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
     setTrfToId(toId)
     if (toId) setErroDestinoTrf('')
     if (!isTransferenciaEntrePerfis(contaPorId(fromId), contaPorId(toId))) {
-      setTrfCatCnpj('')
-      setTrfCatCpf('')
+      setTrfCatOrigem('')
+      setTrfCatDestino('')
     }
   }
 
@@ -508,7 +510,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
         amount: valorAba, date: trfDate,
         description: schedule.description, notes: trfNotes,
         reservaFuncaoId: schedule.reservaFuncaoId || autoFuncId,
-        ...categoriasEntrePerfis(trfFromAcc, trfToAcc, { categoriaCnpjId: trfCatCnpj, categoriaCpfId: trfCatCpf }),
+        ...categoriasEntrePerfis(trfFromAcc, trfToAcc, { categoriaOrigemId: trfCatOrigem, categoriaDestinoId: trfCatDestino }, profiles),
         scheduleId: schedule.id,
         dataOcorrencia: regDate,
         origin: ORIGIN.AGENDAMENTO,
@@ -813,10 +815,10 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 <TransferenciaPerfisCategorias
                   fromAccount={trfFromAcc}
                   toAccount={trfToAcc}
-                  categoriaCnpjId={trfCatCnpj}
-                  categoriaCpfId={trfCatCpf}
-                  onChangeCnpj={id => setTrfCatCnpj(id || '')}
-                  onChangeCpf={id => setTrfCatCpf(id || '')}
+                  categoriaOrigemId={trfCatOrigem}
+                  categoriaDestinoId={trfCatDestino}
+                  onChangeOrigem={id => setTrfCatOrigem(id || '')}
+                  onChangeDestino={id => setTrfCatDestino(id || '')}
                 />
                 </div>
               )}
