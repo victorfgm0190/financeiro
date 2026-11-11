@@ -19,20 +19,29 @@ export function detectInstallment(description) {
 // Parcela escrita por extenso na descrição: "Parc7", "Parc 07", "PARC 3/10", "Parcela 2 de 5". O
 // Itaú manda alguns parcelados assim, com a coluna Parcelamento vazia — sem isto a linha entrava
 // como à vista. O total é opcional ("Yelumseg Parc7" não traz): quem chama infere da série gravada.
-const PARC_TOKEN_RE = /\bParc(?:ela)?\.?\s*0*(\d{1,2})(?:\s*(?:de|\/)\s*0*(\d{1,2}))?\b/i
+//
+// Número COLADO a letras ("Yelumseg Parc8sao Paulobra"): o banco junta o número à cidade quando o
+// campo do estabelecimento perde os espaços. Vale como parcela se o que vem colado é uma palavra
+// (3+ letras); a base é só o que vem ANTES ("Yelumseg") — a cidade colada não entra no nome da série.
+// Não é parcela: "Parceria", "Parcial", "Parcelado" (sem número logo depois de "Parc"/"Parcela"),
+// número seguido de mais dígitos ("Parc 2000") e número colado a uma ou duas letras ("Parc24h",
+// "Parc2go" — parte do nome da loja).
+const PARC_TOKEN_RE = /\bParc(?:ela)?\.?\s*0*(\d{1,2})(?:\s*(?:de|\/)\s*0*(\d{1,2}))?(?![\p{L}\d])/iu
+const PARC_COLADO_RE = /\bParc(?:ela)?\.?\s*0*(\d{1,2})(?=\p{L}{3})/iu
 
 export function detectParcelaToken(description) {
   const s = description || ''
   const m = s.match(PARC_TOKEN_RE)
-  if (!m) return null
-  const num = parseInt(m[1], 10)
-  const total = m[2] ? parseInt(m[2], 10) : null
+  const c = m ? null : s.match(PARC_COLADO_RE)
+  if (!m && !c) return null
+  const num = parseInt((m || c)[1], 10)
+  const total = m?.[2] ? parseInt(m[2], 10) : null
   if (num < 1) return null
   if (total != null && (total < 2 || num > total)) return null
   return {
     num, total,
-    base: (s.slice(0, m.index) + s.slice(m.index + m[0].length)).trim().replace(/\s+/g, ' '),
-    matchStr: m[0],
+    base: (m ? s.slice(0, m.index) + s.slice(m.index + m[0].length) : s.slice(0, c.index)).trim().replace(/\s+/g, ' '),
+    matchStr: (m || c)[0],
   }
 }
 

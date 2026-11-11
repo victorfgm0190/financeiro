@@ -27,6 +27,14 @@ deixaram livre:
   - A regra da data vale para qualquer origem, não só `importacao_fatura`: o lançamento manual que
     virou "Já lançado" na 1ª importação recebeu a data do cartão da fatura e está conciliado — sem
     isso, a reimportação o duplicaria.
+  - Linha **sem número de parcela legível** × conciliado com parcela: mesma descrição (normalizada:
+    sem acento, minúscula, espaços únicos), mesma data do cartão e valor ±0,01 → "Já existe". Sempre
+    1:1 (duas compras iguais no mesmo dia = 2 linhas × 2 lançamentos; com 1 lançamento, a outra linha
+    segue as regras normais). Caso real: "Yelumseg Parc8sao Paulobra" (11/11/2026).
+- **Parcela colada à cidade** ("Parc8sao Paulobra"): o detector (`lib/installments.js`) lê a parcela 8
+  quando o número vem colado a uma palavra de 3+ letras; a base é só o nome antes ("Yelumseg") e o
+  total vem da série gravada, como no "Parc7". Não é parcela: "Parceria", "Parcial", "Parcelado",
+  "Parc 2000", "Parc24h", "Parc2go".
 
 ## Mesmo lançamento, automático (não pergunta)
 
@@ -103,3 +111,9 @@ favorecido que ela dava agora vem da irmã da série no **mesmo cartão** (`irma
 
 Reimportar hoje a mesma fatura (tudo conciliado): 227 linhas, 0 a importar, 0 decisões, antes e
 depois.
+
+**Correção de 11/11/2026.** A simulação acima montava as linhas a partir dos lançamentos do banco (com
+8/12 já gravado) e escondeu o caso "Yelumseg Parc8sao Paulobra". As simulações passam a montar as
+linhas a partir do TEXTO REAL do arquivo, com o mesmo código da tela (`lib/linhasFaturaImportada.js`:
+`parcelaDaLinha`, `linhasDaFaturaParaRevisao`). Com o arquivo real da fatura 11/2026 (227 linhas):
+antes 226 conciliados + 1 "Novo (com aviso)"; depois 227 conciliados, 0 a importar, 0 decisões.

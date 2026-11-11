@@ -210,6 +210,9 @@ const dataCartaoDaLinha = (r) => r._dateCartao || null
 // As duas datas do cartão conhecidas e diferentes: são duas compras distintas.
 const datasConflitam = (r, t) => !!dataCartaoDaLinha(r) && !!dataCartaoDoTx(t) && dataCartaoDaLinha(r) !== dataCartaoDoTx(t)
 const mesmaData = (r, t) => !!dataCartaoDaLinha(r) && dataCartaoDaLinha(r) === dataCartaoDoTx(t)
+// Mesma descrição: sem acento, minúscula, espaços únicos (nada de "parecida").
+const textoNormalizado = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+const mesmaDescricao = (r, t) => !!textoNormalizado(r.description) && textoNormalizado(r.description) === textoNormalizado(t.description)
 
 // Compara uma linha com um lançamento da MESMA fatura. 'existe' = mesmo tipo + valor ±0,01 +
 // base parecida + mesmo nº de parcela (e sem datas de compra diferentes); 'possivel' = mesmo tipo
@@ -340,8 +343,13 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
   // do cartão, e mesmo n/total + valor + fatura já é o mesmo exato.
   const mesmaDataConciliado = (r, t) => mesmaData(r, t) || (!dataCartaoDoTx(t) && !!dataCompraLinha(r) && dataCompraLinha(r) === String(t.date || '').slice(0, 10))
   for (const r of linhasLivres()) {
-    const exatos = candidatos(r).filter(t => t.reconciled && tipoDe(t) === tipoDe(r) && diffValor(r, t) <= TOL_MESMO_VALOR && parcelaIgual(r, t))
-    const tx = exatos.find(t => mesmaDataConciliado(r, t)) || (parcelaLinha(r) ? exatos[0] : null)
+    const conciliados = candidatos(r).filter(t => t.reconciled && tipoDe(t) === tipoDe(r) && diffValor(r, t) <= TOL_MESMO_VALOR)
+    const exatos = conciliados.filter(t => parcelaIgual(r, t))
+    // Linha SEM número de parcela legível (o texto do banco não traz, ou traz de um jeito que não
+    // dá para ler) × conciliado que tem parcela: é a reimportação se a descrição é a MESMA
+    // (normalizada) e a data do cartão também — o conciliado foi gravado com o texto desta linha.
+    const mesmoTexto = parcelaLinha(r) ? [] : conciliados.filter(t => !parcelaIgual(r, t) && mesmaData(r, t) && mesmaDescricao(r, t))
+    const tx = exatos.find(t => mesmaDataConciliado(r, t)) || (parcelaLinha(r) ? exatos[0] : null) || mesmoTexto[0] || null
     if (tx) resolverExiste(r, tx)
   }
   const livres2 = linhasLivres()

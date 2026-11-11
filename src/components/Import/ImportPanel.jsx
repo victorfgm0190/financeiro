@@ -14,18 +14,19 @@ import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings, fetchTransactionHistory, fetchFaturaConferencia } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
-import { detectInstallment, detectParcela, installmentKey } from '../../lib/installments'
+import { detectInstallment, installmentKey } from '../../lib/installments'
 import { extractLearnKeyword } from '../../lib/descMatch'
 import { deOfx, paraLinhaCartao, paraLinhaConta, lerCsv, aplicarModelo, acharModelo } from '../../lib/importers/index.js'
 import { decodificarOfx } from '../../lib/importacaoPadrao/ofx'
 import { listarModelosImportacao, salvarModeloImportacao, migrarMapeamentosAntigos } from '../../lib/importLayoutsApi'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao, idsConciliacaoConferidos } from '../../lib/conciliacaoMatch'
-import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia } from '../../lib/revisaoImportacao'
+import { indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
-import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, irmaDaParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
+import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
 import { valorDeReferencia } from '../../lib/parcelasOcorrencia'
+import { calcFatura, applyReferenceFatura, alignInstallmentsToFatura, serieKeyFromFull, serieKeyOfExistingTx, indiceSeriesDoCartao, parcelaDaLinha } from '../../lib/linhasFaturaImportada'
 import { competenciasImplausiveis, mensagemCompetenciaImplausivel, divergenciaMesArquivo } from '../../lib/competenciaFatura'
 import { favorecidoDaImportacao, favorecidoPorAlias } from '../../lib/favorecidos'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
@@ -656,18 +657,6 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
   )
 }
 
-// Calcula o mês da fatura (YYYY-MM) de um lançamento dado o dia de fechamento do cartão.
-// dia <= closingDay → fatura do mês corrente; dia > closingDay → fatura do mês seguinte.
-function calcFatura(dateStr, closingDay = 14) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr + 'T00:00:00')
-  const day = d.getDate()
-  let m, y
-  if (day <= closingDay) { m = d.getMonth() + 1; y = d.getFullYear() }
-  else { const n = new Date(d.getFullYear(), d.getMonth() + 1, 1); m = n.getMonth() + 1; y = n.getFullYear() }
-  return `${y}-${String(m).padStart(2, '0')}`
-}
-
 // Item 4: a data (date_cartao) cai FORA da janela da fatura YYYY-MM para o closingDay dado?
 // Janela = (closingDay+1 do mês anterior) até (closingDay do mês da fatura). Usado só como
 // heurística de aviso ("dia de fechamento pode estar errado"), nunca para bloquear o import.
@@ -681,19 +670,6 @@ function isDateOutOfFatura(dateStr, faturaYYYYMM, closingDay) {
   const start = new Date(y, m - 2, closingDay + 1)   // (closingDay+1) do mês anterior
   const d = new Date(dateStr + 'T00:00:00')
   return d < start || d > end
-}
-
-// fatura_ref (YYYY-MM) a partir do DIA da data ORIGINAL do extrato (date_cartao),
-// relativa ao mês de referência selecionado. Correção do bug de desvio de mês:
-//   dia <= closingDay → fatura = mês de referência
-//   dia >  closingDay → fatura = mês ANTERIOR ao de referência
-// (gastos após o fechamento já entraram na fatura que está sendo importada por terem
-//  ocorrido depois do último fechamento, então pertencem à fatura anterior).
-function faturaRefFromReference(dateCartaoStr, referenceYYYYMM, closingDay) {
-  if (!referenceYYYYMM) return ''
-  if (!dateCartaoStr) return referenceYYYYMM
-  const day = parseInt((dateCartaoStr.split('-')[2] || '1'), 10)
-  return day <= (closingDay || 14) ? referenceYYYYMM : addMonthToFatura(referenceYYYYMM, -1)
 }
 
 // fatura_ref (MM/YYYY) persistido no lançamento, derivado do faturaMonthYear (YYYY-MM).
@@ -792,59 +768,6 @@ function buildInstallmentFromRow(fp, { accountId, defaultGrupoD, gerencialLigado
 // installmentSystemDate: regra de date (sistema) das parcelas — agora compartilhada em
 // lib/parcelas.js (reutilizada também por buildSeries e criarParcelasGerencial).
 
-// Reescreve cada linha base para o mês de referência. As parcelas geradas (siblings)
-// seguem ancoradas à fatura da linha base.
-//
-// Itaú CSV e XLS/XLSX (row._itau): fatura_ref = SEMPRE o mês de referência; a date de sistema
-// mantém a data original do arquivo quando ela está dentro do período válido da fatura
-// (início = closingDay+1 do mês anterior; fim = closingDay do mês de referência) e, se
-// estiver fora (parcelados antigos), clampa para o dia de fechamento do mês de referência.
-//
-// Dindin (demais): comportamento anterior — fatura_ref pela data original (dia vs
-// fechamento) e date no mês de referência mantendo o dia original.
-function applyReferenceFatura(rows, reference, closingDay, dueDay, financialStartDay = 1) {
-  if (!reference) return rows
-  const [fy, fm] = reference.split('-').map(Number)
-  const daysInMonth = new Date(fy, fm, 0).getDate()
-  const step1 = rows.map(row => {
-    if (row._generated) return row
-    const origDay = row._origDay ?? parseInt((row.date || '').split('-')[2] || '1', 10)
-    const clampedDay = String(Math.min(origDay, daysInMonth)).padStart(2, '0')
-    const dateCartao = row._dateCartao || row.date
-    const num = row._installment?.num || 1
-    if (row._itau) {
-      // Parcela 1 / à vista: date = date_cartao, SEM clamp. O clampDateToFatura que havia aqui
-      // jogava uma compra anterior à janela da fatura para o dia de FECHAMENTO — date_cartao
-      // 10/07 + fatura 2026-08 (closing 13) virava 13/08. Parcela >1 segue a regra do Finup
-      // (dia financeiro do mês anterior à fatura). date_cartao nunca é alterada.
-      return {
-        ...row,
-        faturaMonthYear: reference,
-        date: num <= 1 ? dateCartao : installmentSystemDate(reference, num, dateCartao, financialStartDay),
-      }
-    }
-    // Parcela 2..N: a date_cartao é a data da COMPRA ORIGINAL (fatura antiga) — NUNCA recalcula a
-    // fatura por ela. Todo o arquivo é o extrato de UMA fatura, então a parcela pertence ao mês de
-    // REFERÊNCIA selecionado. Sem isto, parcelas com compra após o fechamento driftam p/ o mês
-    // anterior (totalizador partido, mês "pula" ao reprocessar). À vista / parcela 1 mantêm a regra
-    // por data (dia da compra vs fechamento), que é legítima.
-    const fatura = num > 1 ? reference : faturaRefFromReference(dateCartao, reference, closingDay)
-    return {
-      ...row,
-      faturaMonthYear: fatura,
-      date: installmentSystemDate(fatura, num, `${reference}-${clampedDay}`, financialStartDay),
-    }
-  })
-  return step1.map(row => {
-    if (!row._generated) return row
-    const parent = step1.find(r => r._id === row._seriesId)
-    if (!parent) return row
-    const faturaI = addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1)
-    // Parcelas geradas (siblings) são sempre num > 1 → data no mês anterior à fatura da parcela.
-    return { ...row, faturaMonthYear: faturaI, date: installmentSystemDate(faturaI, row._installmentNum, faturaToDate(faturaI, dueDay) || row.date, financialStartDay) }
-  })
-}
-
 // Data corrigida (YYYY-MM-DD) de um lançamento no modo reedição: dia de fechamento
 // (closingDay) do mês/ano da fatura_ref. Ex.: '2026-05' + closingDay 20 → '2026-05-20'.
 function correctedDateForFatura(faturaYYYYMM, closingDay) {
@@ -872,29 +795,6 @@ function detectMainFatura(rows) {
   return tally(r => !r._installment) || tally(() => true)
 }
 
-// Um arquivo de cartão é o extrato de UMA fatura: toda parcela X/N nele pertence a esse mês.
-// Ancora a parcela base ao mês de referência (sem o offset que pode driftar) e recomputa
-// as parcelas geradas (siblings) a partir dela. À-vista não são tocadas.
-function alignInstallmentsToFatura(rows, fatura, dueDay) {
-  if (!fatura) return rows
-  const [fy, fm] = fatura.split('-').map(Number)
-  const maxDay = new Date(fy, fm, 0).getDate()
-  const step1 = rows.map(row => {
-    if (row._generated || !row._installment || row.faturaMonthYear === fatura) return row
-    const origDay = row._origDay ?? parseInt((row.date || '').split('-')[2] || '1', 10)
-    return { ...row, faturaMonthYear: fatura, date: `${fatura}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}` }
-  })
-  return step1.map(row => {
-    if (!row._generated) return row
-    const parent = step1.find(r => r._id === row._seriesId)
-    if (!parent) return row
-    const faturaI = addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1)
-    return { ...row, faturaMonthYear: faturaI, date: faturaToDate(faturaI, dueDay) || row.date }
-  })
-}
-
-// AJUSTE 2: modal "Preencher em Lote" — aplica categoria + gerencial aos itens cuja
-// descrição contém o texto informado.
 function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onApply, onClose, perfilId }) {
   const [contains, setContains] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -1042,18 +942,6 @@ function CatGerModal({ rows, categories, sortedGrupos, onChangeGrupo, onClose })
     </div>
   )
 }
-
-// Chave da SÉRIE de parcelas = installment_key SEM o número da parcela
-// (accountId | base | total | cents | serie_inicio). Parcelas irmãs (2/12, 3/12, …)
-// compartilham esta chave — usada para herdar o grupo gerencial de uma parcela anterior.
-function serieKeyFromFull(fullKey) {
-  if (!fullKey) return null
-  const parts = fullKey.split('|')
-  if (parts.length < 5) return null
-  const total = parts[2].split('/')[1] || parts[2]
-  return `${parts[0]}|${parts[1]}|${total}|${parts[3]}|${parts[4]}`
-}
-function serieKeyOfExistingTx(tx) { return serieKeyFromFull(keyOfExistingTx(tx)) }
 
 // serie_id das séries já gravadas no cartão, pela chave da série (installment_key sem o número).
 function serieIdsDoCartao(transactions, accountId) {
@@ -1572,65 +1460,22 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // já existentes no cartão. Casa por série (installment_key sem o número) porque a nova
       // parcela ainda não tem serie_id. serie_id é o elo robusto (propagado adiante); grupo herda
       // a classificação da irmã (ignora D — herdar D é no-op e não sobrepõe o default da categoria).
-      const serieInfoByKey = new Map()
-      if (resolvedAccountId) {
-        for (const t of transactions) {
-          if (t.accountId !== resolvedAccountId || t.type !== 'expense' || t.accountType !== 'credit') continue
-          const sk = serieKeyOfExistingTx(t)
-          if (!sk) continue
-          const cur = serieInfoByKey.get(sk) || { serieId: null, grupo: null, payee: null }
-          if (!cur.serieId && t.serieId) cur.serieId = t.serieId
-          if (!cur.payee && t.payee) cur.payee = t.payee
-          if (!cur.grupo && t.grupoGerencial && t.grupoGerencial !== grupoD) cur.grupo = t.grupoGerencial
-          serieInfoByKey.set(sk, cur)
-        }
-      }
+      const serieInfoByKey = indiceSeriesDoCartao(transactions, resolvedAccountId, grupoD)
       const processed = []
       let idCtr = 0
 
       parsed.forEach(row => {
         const rowDay = new Date(row.date + 'T00:00:00').getDate()
-        // Parcela "N/Total" ou por extenso ("Yelumseg Parc7", coluna Parcelamento vazia). Por
-        // extenso, a série é a já gravada no cartão: dela vêm o total (quando o arquivo não traz),
-        // o serie_id e a classificação. "ParcN" sem total e sem série conhecida segue à vista.
-        const parcDet = detectParcela(row.description)
-        const porExtenso = !!parcDet && !detectInstallment(row.description)
-        const serieInferida = (porExtenso && resolvedAccountId && (row.type || 'expense') === 'expense')
-          ? inferirSerieParcela({ base: parcDet.base, num: parcDet.num, total: parcDet.total, amount: row.amount, accountId: resolvedAccountId }, transactions)
-          : null
-        const anchor = serieInferida?.anchor || null
-        const installInfo = !parcDet ? null
-          : !porExtenso ? parcDet
-          : (parcDet.total || anchor) ? { num: parcDet.num, total: parcDet.total || serieInferida.total, base: parcDet.base, matchStr: null, _porExtenso: true }
-          : null
+        // Parcela, série e fatura da linha (lib/linhasFaturaImportada — o mesmo código das simulações).
+        const parc = parcelaDaLinha(row, { accountId: resolvedAccountId, transactions, closingDay: resolvedClosingDay, series: serieInfoByKey })
+        const { installInfo, anchor, irma, serieInfo } = parc
         const isParcelado = !!installInfo
-        // Parcela N > 1 sem série inferida: categoria e favorecido sugeridos pela irmã do MESMO cartão
-        // (antes vinham da janela "Parcela correspondente encontrada", que procurava em todas as contas).
-        const irma = (!anchor && installInfo && installInfo.num > 1 && resolvedAccountId)
-          ? irmaDaParcela({ base: installInfo.base, total: installInfo.total, amount: row.amount, accountId: resolvedAccountId }, transactions)
-          : null
         const classified = classifyByRules(row.description, { dayOfMonth: rowDay, amountApprox: row.amount })
         const movCat = categories.find(c => c.name.toLowerCase() === row.movimentacao.toLowerCase())
         const categoryId = anchor?.categoryId || irma?.categoryId || classified?.categoryId || movCat?.id || ''
-        const faturaParc1 = calcFatura(row.date, resolvedClosingDay)
-        // Para parcelados X/N com X > 1: fatura = fatura da parcela 1 + (X-1) meses. Série
-        // inferida: a fatura sai da irmã gravada — a data do "ParcN" é a da cobrança, não a da compra.
-        const baseFatura = anchor?.faturaMonthYear
-          ? addMonthToFatura(anchor.faturaMonthYear, installInfo.num - Number(anchor.installmentNum))
-          : (installInfo && installInfo.num > 1)
-            ? addMonthToFatura(faturaParc1, installInfo.num - 1)
-            : faturaParc1
+        const baseFatura = parc.faturaMonthYear
         const grupoFromRules = classified?.grupoGerencial
           || classifyGerencialByRules(row.description, row.amount, isParcelado)
-        // Casa a linha à série existente no cartão (installment_key sem o número). Traz o
-        // serie_id (elo a propagar) e o grupo classificado numa parcela anterior.
-        const serieInfo = (isParcelado && resolvedAccountId)
-          ? (serieInfoByKey.get(serieKeyFromFull(installmentKey({
-              accountId: resolvedAccountId, description: row.description,
-              installmentNum: installInfo.num, installmentTotal: installInfo.total,
-              amount: row.amount, faturaMonthYear: baseFatura,
-            }))) || null)
-          : null
         // Herança de grupo: parcela cuja série já tem grupo != D no banco herda esse grupo.
         // Só quando não há regra de descrição (regra explícita prevalece).
         const grupoFromSerie = serieInfo?.grupo || null
@@ -1645,13 +1490,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         // Só a descrição base sobrou: a baixa de agendamento pode usar o favorecido dele.
         const payeePadrao = !classified?.payee && !payeeSerie && !row.payee
           && !favorecidoPorAlias(row.description, favorecidoAliases)
-        // serie_id da linha: junta a série já existente (usa o serie_id dela) ou gera um novo
-        // para uma compra parcelada NOVA. Série legada existente sem serie_id → null (fallback).
-        // Série legada já gravada SEM serie_id também ganha um: as irmãs antigas aparecem no Motor de
-        // Integridade (PARCELA_SEM_VINCULO) e são religadas a ele pelo "Corrigir".
-        const serieIdRow = isParcelado
-          ? (anchor?.serieId || serieInfo?.serieId || newSerieId())
-          : null
+        const serieIdRow = parc.serieId
         // Prioridade: série inferida > regra de descrição > série (parcela irmã) > default da categoria > D.
         const catDefaultGrupo = categoryId ? (categories.find(c => c.id === categoryId)?.defaultGerencialGroup || null) : null
         const grupoFinal = anchor?.grupoGerencial || grupoFromRules || grupoFromSerie || catDefaultGrupo || grupoD
@@ -1668,7 +1507,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           grupoGerencial: grupoFinal, _installment: installInfo, _generated: false,
           _reservaFuncaoId: reservaFuncaoFromRule, _serieId: serieIdRow,
           // Série JÁ gravada no cartão (âncora ou mesma chave): base da regra "mesma série" da revisão.
-          _serieExistente: (isParcelado && (anchor?.serieId || serieInfo?.serieId)) || null,
+          _serieExistente: parc.serieExistente,
           // Irmã gravada da série inferida — resolvedRows procura nela a parcela já existente.
           _serieAnchor: anchor,
           _payeePadrao: payeePadrao,
