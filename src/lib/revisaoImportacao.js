@@ -444,6 +444,27 @@ export function camposAlteradosColisao(patch, tx, row = null) {
   return out
 }
 
+// O que a confirmação GRAVARIA numa colisão ("No banco ↻"). Lançamento CONCILIADO reconhecido numa
+// reimportação nunca é alterado: nada a gravar (nem pré-marcado) — diferenças reais aparecem só como
+// informação (diferencasDoConciliado).
+export function mudancasDaColisao(row, tx, patch) {
+  if (!tx || tx.reconciled) return []
+  return camposAlteradosColisao(patch, tx, row)
+}
+
+// Diferenças REAIS entre a linha do arquivo e um lançamento conciliado: valor, data do cartão e
+// descrição. A data de sistema, a parcela e a classificação não contam (são do Finup, não do banco).
+// → [{ campo: 'valor' | 'dataCartao' | 'descricao', banco, arquivo }]
+export function diferencasDoConciliado(row, tx) {
+  if (!tx?.reconciled) return []
+  const out = []
+  if (Math.abs((Number(row.amount) || 0) - (Number(tx.amount) || 0)) > 0.005) out.push({ campo: 'valor', banco: Number(tx.amount), arquivo: Number(row.amount) })
+  const dcLinha = row._dateCartao || null, dcTx = tx.dateCartao || null
+  if (dcLinha && dcTx && dcLinha !== dcTx) out.push({ campo: 'dataCartao', banco: dcTx, arquivo: dcLinha })
+  if (row.description && textoNormalizado(row.description) !== textoNormalizado(tx.description)) out.push({ campo: 'descricao', banco: tx.description, arquivo: row.description })
+  return out
+}
+
 // Texto do resumo final da importação de fatura. `r` = { novos, existiam, atualizados, conciliados? }
 // ou, na reedição, { salvos }.
 export function textoResumoImportacao(r) {

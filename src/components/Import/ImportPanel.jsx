@@ -21,7 +21,7 @@ import { decodificarOfx } from '../../lib/importacaoPadrao/ofx'
 import { listarModelosImportacao, salvarModeloImportacao, migrarMapeamentosAntigos } from '../../lib/importLayoutsApi'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao, idsConciliacaoConferidos } from '../../lib/conciliacaoMatch'
-import { indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia } from '../../lib/revisaoImportacao'
+import { indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, mudancasDaColisao, diferencasDoConciliado, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
@@ -1332,13 +1332,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Campos que a colisão mudaria no lançamento do banco (patchColisao, o mesmo da gravação). Vazio
   // = o banco já está igual ao arquivo: a linha conta como "já existia" e NÃO é gravada — nenhum
   // updateTransaction, logo nenhum recálculo de fatura/gerencial é disparado por ela.
+  // Lançamento CONCILIADO nunca é alterado (mudancasDaColisao → []): diferença real vira informação.
   const mudancasColisao = (row) => {
     const tx = row._collisionTx
     if (!tx) return []
     const patch = patchColisao(row, tx, {
       saveDate: computeSaveDate(row), faturaRef: faturaRefFromMY(row.faturaMonthYear), serieId: tx.serieId || row._serieId,
     })
-    return camposAlteradosColisao(patch, tx, row)
+    return mudancasDaColisao(row, tx, patch)
   }
 
   // Equivalente para a CONCILIAÇÃO: os itens "Só no Itaú" são linhas CRUAS do CSV — não passam
@@ -2698,7 +2699,13 @@ Importar mesmo assim no mês selecionado?`)) return
     }
   }
   const colisoesComDiferenca = collisionRows.filter(r => mudancasColisao(r).length > 0).map(linhaColisao)
-  const colisoesIdenticas = collisionRows.filter(r => mudancasColisao(r).length === 0).map(linhaColisao)
+  // Conciliados com diferença REAL no arquivo (valor, data do cartão, descrição): só informação.
+  const conciliadosComDiferenca = collisionRows
+    .map(r => ({ r, dif: diferencasDoConciliado(r, r._collisionTx) }))
+    .filter(x => x.dif.length > 0)
+    .map(({ r, dif }) => ({ id: r._id, descricao: r._collisionTx.description, parcela: r._installment ? `${r._installment.num}/${r._installment.total}` : '—', valor: r._collisionTx.amount, diferencas: dif }))
+  const comInfo = new Set(conciliadosComDiferenca.map(c => c.id))
+  const colisoesIdenticas = collisionRows.filter(r => mudancasColisao(r).length === 0 && !comInfo.has(r._id)).map(linhaColisao)
 
   // Possível duplicata: "importar mesmo assim" (forcedDupSelect) ou "é o mesmo" (_mesmoQueId).
   const decidirPossivel = (row, escolha) => {
@@ -2954,6 +2961,10 @@ Importar mesmo assim no mês selecionado?`)) return
     } else if (row._collisionTx) {
       principal = row._mesmoConfirmado
         ? <Selo tom="aviso" title="Você confirmou que é o mesmo lançamento: ao confirmar, o registro do Finup recebe o nome e a parcela do arquivo — ver 'Parcelas já no banco — atualizar?'">É o mesmo ↻</Selo>
+        : row._collisionTx.reconciled
+          ? <Selo tom="ok" title={diferencasDoConciliado(row, row._collisionTx).length
+            ? 'Já conciliado no Finup: não é alterado. O arquivo traz alguma diferença — ver "Parcelas já no banco".'
+            : 'Já conciliado no Finup, igual ao arquivo — não é alterado'}>Conciliado ✓</Selo>
         : mudancasColisao(row).length === 0
           ? <Selo tom="ok" title="Mesma parcela, mesma fatura e mesmo valor já no Finup, sem nenhuma diferença — nada a atualizar">No banco ✓</Selo>
           : <Selo tom="aviso" title="Mesma parcela, mesma fatura e mesmo valor já no Finup — ver 'Parcelas já no banco — atualizar?'">No banco ↻</Selo>
@@ -4313,6 +4324,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           {/* 4. Rodapé */}
           <ParcelasJaNoBanco
             linhas={colisoesComDiferenca}
+            conciliadas={conciliadosComDiferenca}
             identicas={colisoesIdenticas}
             aplicar={collisionsToApplyCount}
             onToggle={toggleCollision}

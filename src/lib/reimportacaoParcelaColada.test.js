@@ -2,7 +2,7 @@
 // a parcela conciliada nunca pode virar "Novo" (duplicaria a fatura). Dados fictícios com a forma real.
 import { describe, it, expect } from 'vitest'
 import { detectParcela } from './installments'
-import { resolverLinhasRevisao } from './revisaoImportacao'
+import { resolverLinhasRevisao, patchColisao, camposAlteradosColisao, mudancasDaColisao, diferencasDoConciliado } from './revisaoImportacao'
 import { aplicarJaLancados } from './casamentoFatura'
 import { aplicarCorrespondencias } from './importacaoCorrespondencias'
 import { contarRevisaoFatura } from './contagemRevisaoFatura'
@@ -99,5 +99,37 @@ describe('1:1 com compras iguais no mesmo dia', () => {
     expect(out.filter(r => status(r) === 'ja_existe')).toHaveLength(1)
     expect(out.filter(r => r._dbTx?.id === 'a')).toHaveLength(1)
     expect(qtd(out).importar).toBe(1)
+  })
+})
+
+describe('conciliado reconhecido na reimportação nunca é alterado', () => {
+  // A data de sistema calculada para a parcela 8 na fatura 11 é 15/10 (série); a conciliada está em 31/10.
+  const rowP8 = { type: 'expense', description: 'Seguradora Parc8sao Paulobra', amount: 205.61, date: '2026-10-15', _dateCartao: '2026-10-31', faturaMonthYear: '2026-11', _installment: { num: 8, total: 12 }, categoryId: 'cat_x', grupoGerencial: 'g1' }
+  const patchDe = (row, t) => patchColisao(row, t, { saveDate: row.date, faturaRef: '11/2026', serieId: t.serieId })
+  it('conciliado: nada a gravar, mesmo com data de sistema, categoria e grupo diferentes', () => {
+    expect(camposAlteradosColisao(patchDe(rowP8, P8), P8)).toContain('date') // sem a regra, mudaria a data
+    expect(mudancasDaColisao(rowP8, P8, patchDe(rowP8, P8))).toEqual([])
+    expect(diferencasDoConciliado(rowP8, P8)).toEqual([]) // valor, data do cartão e descrição iguais
+  })
+  it('conciliado com diferença real (data do cartão, descrição, valor): vira informação, não mudança', () => {
+    const row = { ...rowP8, _dateCartao: '2026-10-30', description: 'Seguradora Parc8 Outra', amount: 205.62 }
+    expect(mudancasDaColisao(row, P8, patchDe(row, P8))).toEqual([])
+    expect(diferencasDoConciliado(row, P8).map(d => d.campo)).toEqual(['valor', 'dataCartao', 'descricao'])
+  })
+  it('NÃO conciliado (projeção): continua sendo atualizado pela colisão, como antes', () => {
+    const proj = { ...P8, id: 'proj', reconciled: false, dateCartao: null, date: '2026-10-15', description: 'Seguradora Parc2 08/12' }
+    const m = mudancasDaColisao(rowP8, proj, patchDe(rowP8, proj))
+    expect(m).toEqual(expect.arrayContaining(['dateCartao', 'description']))
+    expect(m).not.toContain('date') // a data de sistema da série já é a da projeção
+    expect(diferencasDoConciliado(rowP8, proj)).toEqual([])
+  })
+})
+
+describe('data das parcelas 2..N: a da série; a do cartão fica em date_cartao', () => {
+  it('"N/Total" do arquivo: data do cartão é a da compra original; a data gravada é a da série', () => {
+    const rows = linhasDaFaturaParaRevisao([doArquivo('Loja Nova 9/12', '2026-02-13', 100)], { accountId: CARD, transactions: [], closingDay: 13, reference: '2026-11', financialStartDay: 15 })
+    expect(rows[0]._installment).toMatchObject({ num: 9, total: 12 })
+    expect(rows[0]._dateCartao).toBe('2026-02-13')
+    expect(rows[0].date).toBe('2026-10-15')
   })
 })

@@ -117,3 +117,15 @@ depois.
 linhas a partir do TEXTO REAL do arquivo, com o mesmo código da tela (`lib/linhasFaturaImportada.js`:
 `parcelaDaLinha`, `linhasDaFaturaParaRevisao`). Com o arquivo real da fatura 11/2026 (227 linhas):
 antes 226 conciliados + 1 "Novo (com aviso)"; depois 227 conciliados, 0 a importar, 0 decisões.
+
+**Conciliado nunca é alterado pela reimportação (11/11/2026).** Colisão ("No banco ↻") com lançamento
+CONCILIADO não grava nada e nunca vem marcada para atualizar (`mudancasDaColisao` → vazio). Diferença
+REAL no arquivo (valor, data do cartão, descrição — `diferencasDoConciliado`) aparece só como
+informação, sem caixa de marcar; a data de sistema, a parcela e a classificação não contam. Caso real:
+a parcela 8/12 conciliada em 31/10 ia ser "atualizada" para 15/10 (data da série). Projeção NÃO
+conciliada continua sendo atualizada pela colisão.
+
+Data das parcelas 2..N: continua a da série (dia de início do mês financeiro, no mês anterior à
+fatura — `installmentSystemDate`). A data que veio do cartão fica em `date_cartao`. Nas parcelas
+"N/Total" do Itaú ela é a data da COMPRA ORIGINAL (ex.: 9/12 com data do cartão em fevereiro), por
+isso não pode virar a data do lançamento.

@@ -158,6 +158,16 @@ describe('4. Rodapé', () => {
     expect(screen.queryByText(/idêntico ao banco/)).toBeNull()
     expect(screen.getByText(/2 idênticas \(ocultas\)/)).toBeTruthy()
   })
+  it('conciliado com diferença no arquivo: só informação, sem caixa de marcar e sem tabela de atualizar', () => {
+    const conciliadas = [{ id: 'k', descricao: 'Seguradora Parc8sao Paulobra', parcela: '8/12', valor: 205.61,
+      diferencas: [{ campo: 'dataCartao', banco: '2026-10-31', arquivo: '2026-10-30' }] }]
+    render(<ParcelasJaNoBanco linhas={[]} conciliadas={conciliadas} identicas={[]} aplicar={0} onToggle={() => {}} />)
+    const nota = screen.getByRole('note')
+    expect(nota.textContent).toMatch(/1 lançamento já conciliado com diferença no arquivo — só informação/)
+    expect(nota.textContent).toMatch(/Data do cartão: no Finup 31\/10\/2026 · no arquivo 30\/10\/2026/)
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByText(/marcada/)).toBeNull()
+  })
   it('todas idênticas: uma linha recolhida "N parcelas já no banco, todas idênticas"', () => {
     render(<ParcelasJaNoBanco linhas={[]} identicas={[colisao('y', false), colisao('z', false)]} aplicar={0} onToggle={() => {}} />)
     expect(screen.getByRole('button', { name: /2 parcelas já no banco, todas idênticas/ }).getAttribute('aria-expanded')).toBe('false')

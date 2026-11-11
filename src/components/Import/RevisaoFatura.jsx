@@ -262,8 +262,39 @@ export function DecisaoSelect({ row, onEscolherCandidato, onPossivel }) {
 }
 
 // ── 4. Rodapé ────────────────────────────────────────────────────────────────────────────────────
-// Parcelas já no banco: só as que mudam algo; idênticas viram uma linha recolhida.
-export function ParcelasJaNoBanco({ linhas, identicas, aplicar, onToggle }) {
+// Parcelas já no banco: só as que mudam algo; idênticas viram uma linha recolhida. Conciliadas com
+// diferença no arquivo aparecem à parte, só como informação — nunca são alteradas nem marcadas.
+export function ParcelasJaNoBanco({ linhas, identicas, conciliadas = [], aplicar, onToggle }) {
+  const corpo = <ParcelasAtualizar linhas={linhas} identicas={identicas} aplicar={aplicar} onToggle={onToggle} />
+  if (!conciliadas.length) return corpo
+  return <div className="space-y-2"><ConciliadasComDiferenca itens={conciliadas} />{corpo}</div>
+}
+
+const ROTULO_DIFERENCA = { valor: 'Valor', dataCartao: 'Data do cartão', descricao: 'Descrição' }
+function ConciliadasComDiferenca({ itens }) {
+  return (
+    <div className="card py-2.5" role="note">
+      <h3 className="text-xs font-semibold text-texto-1">
+        {plural(itens.length, 'lançamento já conciliado com diferença no arquivo', 'lançamentos já conciliados com diferença no arquivo')} — só informação
+      </h3>
+      <p className="text-xs text-texto-2 mt-0.5">Conciliado não é alterado pela reimportação. Se o arquivo estiver certo, corrija o lançamento na tela de Lançamentos.</p>
+      <ul className="mt-2 text-xs text-texto-1 space-y-1">
+        {itens.map(it => (
+          <li key={it.id} className="break-words">
+            <span className="font-medium">{it.descricao}</span> · {it.parcela} · {fmt(it.valor)}
+            {it.diferencas.map(d => (
+              <span key={d.campo} className="block pl-3 text-texto-2">
+                {ROTULO_DIFERENCA[d.campo]}: no Finup {d.campo === 'valor' ? fmt(d.banco) : d.campo === 'dataCartao' ? fmtDate(d.banco) : d.banco} · no arquivo {d.campo === 'valor' ? fmt(d.arquivo) : d.campo === 'dataCartao' ? fmtDate(d.arquivo) : d.arquivo}
+              </span>
+            ))}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function ParcelasAtualizar({ linhas, identicas, aplicar, onToggle }) {
   const [verIdenticas, setVerIdenticas] = useState(false)
   if (!linhas.length && !identicas.length) return null
   if (!linhas.length) {
