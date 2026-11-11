@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import {
   FORA_DO_BACKUP, NO_BACKUP, tabelaNoBackup, validarArquivo, conferirIntegridade, compararVersao, impressaoDasLinhas,
   nomeDoArquivo, arquivosParaApagar, diasDesde, textoUltimoBackup, perfisDoArquivo, ERRO_FORMATO_ANTIGO, FORMATO,
+  ultimaMigracao, versaoDoManifesto,
 } from './backupFormato'
 import { montarBackup, dividirEmPartes, serializarBackup, ERRO_BANCO_MUDOU } from './backupMontagem'
 
@@ -96,6 +97,47 @@ describe('versão', () => {
     expect(compararVersao(m, { migracoes: ['m1', 'm2'], colunas: { contas: ['id'], perfis: ['id'] } }).recusar[0]).toMatch(/contas.*valor/)
     expect(compararVersao(m, { migracoes: ['m1', 'm2'], colunas: { contas: ['id', 'valor'] } }).recusar[0]).toMatch(/perfis.*não existe/)
   })
+  describe('última migração real (sem "_estrutura_base")', () => {
+    const REAIS = ['2026-10-14_usuarios.sql', '2026-11-10_transferencia_categoria_por_lado.sql', '2026-11-10b_backup_preparo.sql']
+    const TESTE1 = [...REAIS, '_estrutura_base'] // ordem do banco (C): o "_" vem depois dos números
+    const VM = REAIS.slice(0, -1) // sem a 2026-11-10b e sem a marca de provisionamento
+    const man = (migracoes, ultima = migracoes.at(-1)) => ({ schema: { ultima, migracoes }, tabelas: {} })
+    const dest = (migracoes) => ({ migracoes, colunas: {} })
+
+    it('"ultima" é a última migração real, mesmo com "_estrutura_base" na lista', () => {
+      expect(ultimaMigracao(TESTE1)).toBe('2026-11-10b_backup_preparo.sql')
+      expect(ultimaMigracao(['2026-11-10b_x.sql', '2026-11-10_y.sql'])).toBe('2026-11-10b_x.sql')
+      expect(ultimaMigracao(['_estrutura_base'])).toBeNull()
+      expect(ultimaMigracao([])).toBeNull()
+      expect(versaoDoManifesto(man(TESTE1, '_estrutura_base'))).toBe('2026-11-10b_backup_preparo.sql')
+    })
+    it('arquivo igual ao banco: aceita, nada faltando', () => {
+      const v = compararVersao(man(TESTE1), dest(TESTE1))
+      expect(v).toMatchObject({ recusar: [], semMigracoes: [], arquivo: '2026-11-10b_backup_preparo.sql', destino: '2026-11-10b_backup_preparo.sql' })
+    })
+    it('arquivo mais antigo: aceita e lista só migrações reais que ele não tinha', () => {
+      const v = compararVersao(man(VM), dest(TESTE1))
+      expect(v.recusar).toEqual([])
+      expect(v.semMigracoes).toEqual(['2026-11-10b_backup_preparo.sql'])
+    })
+    it('arquivo mais novo: recusa citando só migrações reais (a marca não conta)', () => {
+      const v = compararVersao(man(TESTE1), dest(VM))
+      expect(v.recusar).toHaveLength(1)
+      expect(v.recusar[0]).toMatch(/versão mais nova.*2026-11-10b_backup_preparo\.sql\.$/)
+      expect(v.recusar[0]).not.toMatch(/_estrutura_base/)
+    })
+    it('mesma versão, só a marca de provisionamento diferente: aceita nos dois sentidos', () => {
+      expect(compararVersao(man(REAIS.concat('_estrutura_base')), dest(REAIS)).recusar).toEqual([])
+      expect(compararVersao(man(REAIS), dest(REAIS.concat('_estrutura_base'))).semMigracoes).toEqual([])
+    })
+    it('arquivo antigo com "ultima" errado ("_estrutura_base"): o campo é ignorado, decide a lista', () => {
+      const errado = man(TESTE1, '_estrutura_base')
+      expect(compararVersao(errado, dest(TESTE1)).recusar).toEqual([])
+      expect(compararVersao(errado, dest(VM)).recusar[0]).toMatch(/2026-11-10b_backup_preparo/)
+      expect(compararVersao(man(VM, '_estrutura_base'), dest(TESTE1)).recusar).toEqual([])
+    })
+  })
+
   it('identidade do ambiente (rodapé) não conta como coluna que falta', () => {
     const m = { schema: { migracoes: [] }, tabelas: { configuracoes: { linhas: 1, colunas: ['id'] } } }
     expect(compararVersao(m, { migracoes: [], colunas: { configuracoes: ['id', 'rodape_titulo', 'rodape_frase'] } }).colunasPadrao).toEqual([])
@@ -119,6 +161,21 @@ describe('montagem em lotes e partes', () => {
     expect(prog.at(-1)).toBe(5)
     expect(validarArquivo(arq).ok).toBe(true)
     expect(JSON.parse(serializarBackup(arq))).toEqual(arq)
+  })
+  it('várias tabelas por chamada (obterPaginas): mesmo arquivo, uma pausa por resposta, não por tabela', async () => {
+    const respostas = [
+      { blocos: [{ tabela: 'a', linhas: ['1', '2', '3'] }], proximo: { tabela: 'a', offset: 3 } },
+      { blocos: [{ tabela: 'a', linhas: ['4', '5'] }, { tabela: 'b', linhas: [] }], proximo: null },
+    ]
+    const pedidos = []
+    const obterPaginas = (de, offset) => { pedidos.push([de, offset]); return respostas[pedidos.length - 1] }
+    const arq = await montarBackup({ obterManifesto: MAN, obterPaginas })
+    expect(arq.tabelas).toEqual({ a: ['1', '2', '3', '4', '5'], b: [] })
+    expect(pedidos).toEqual([[null, 0], ['a', 3]])
+  })
+  it('obterPaginas trazendo tabela que o manifesto não tem: "o banco mudou"', async () => {
+    const obterPaginas = () => ({ blocos: [{ tabela: 'a', linhas: ['1', '2', '3', '4', '5'] }, { tabela: 'nova', linhas: ['x'] }], proximo: null })
+    await expect(montarBackup({ obterManifesto: MAN, obterPaginas, tentativas: 1 })).rejects.toThrow(/banco mudou.*nova/)
   })
   it('banco mudou no meio (página não bate com o manifesto): tenta de novo e depois falha', async () => {
     let chamadas = 0

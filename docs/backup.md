@@ -7,7 +7,8 @@ Configurações → Dados → Backup. Só administrador com acesso a todos os pe
 `finup-backup-<ambiente>-AAAA-MM-DD-HHMM.json` com:
 
 - `manifesto`: formato, versão do formato, ambiente de origem, data/hora, hash do app, versão do banco
-  (lista de migrações aplicadas e a última) e, por tabela, quantidade de linhas, impressão digital e
+  (lista de migrações aplicadas e a última migração real — `_estrutura_base`, marca do provisionamento,
+  fica na lista mas nunca é a "última") e, por tabela, quantidade de linhas, impressão digital e
   colunas;
 - `tabelas`: cada linha é o texto que o Postgres gera (`to_jsonb(linha)::text`), guardado como string.
   Volta ao banco com `jsonb_populate_recordset`, sem passar pelos números do JavaScript: numeric com as
@@ -32,8 +33,11 @@ Identidade do ambiente (configuracoes.rodape_titulo / rodape_frase) não viaja e
 
 ## Exportar
 
-`GET /api/backup?acao=manifesto` (uma transação REPEATABLE READ) e `?acao=pagina` (até ~2 MB por
-resposta). O navegador junta as páginas, recalcula a impressão digital de cada tabela e compara com o
+`GET /api/backup?acao=manifesto` (uma transação REPEATABLE READ; impressões de todas as tabelas numa
+consulta só) e `?acao=paginas&de=<tabela>&offset=<n>` (várias tabelas por resposta, até ~2 MB: as que
+cabem vêm numa consulta UNION ALL, a tabela grande vem em páginas). Assim o teste1 sai em 2 chamadas e o
+vm em ~9 (antes: uma chamada por tabela, 62, ~25 s no teste1). `?acao=pagina` (uma tabela) continua
+existindo. O navegador junta as páginas, recalcula a impressão digital de cada tabela e compara com o
 manifesto; se o banco mudou no meio, tenta de novo.
 
 Linha de comando (mesmo código, só leitura, uma transação):
@@ -55,7 +59,9 @@ Linha de comando (mesmo código, só leitura, uma transação):
 5. Tela de conferência "tabela | no arquivo | no banco | ok/diferente" e a lista de usuários para
    ajustar os perfis.
 
-Versão: arquivo com migração, tabela ou coluna que o destino não tem → recusa antes de tudo. Arquivo
+Versão: só a LISTA de migrações reais decide (nomes com `_` na frente, como `_estrutura_base`, não
+contam; o campo `schema.ultima` do arquivo é só informativo e nunca é usado — arquivos até 8741e16
+podem trazer `_estrutura_base` ali). Arquivo com migração, tabela ou coluna que o destino não tem → recusa antes de tudo. Arquivo
 mais antigo → aceita; colunas novas ficam no padrão e tabelas que ele não traz ficam vazias. Arquivo do
 formato antigo (sem manifesto) → recusa com explicação.
 

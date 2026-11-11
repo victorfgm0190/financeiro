@@ -5,13 +5,14 @@ import { parseBody, withTransaction } from './_db.js'
 import { centralQuery } from './_central.js'
 import { temTodosPerfis } from '../src/lib/permissoes.js'
 import {
-  ErroBackup, gerarManifesto, lerPagina, gravarParte, previa, aplicarRestauracao, conferirNoBanco, limparPreparo,
+  ErroBackup, gerarManifesto, lerPagina, lerPaginas, gravarParte, previa, aplicarRestauracao, conferirNoBanco, limparPreparo,
   usuariosComPerfisQueSomem,
 } from './_backup.js'
 
 // BACKUP COMPLETO DO AMBIENTE (Configurações → Backup). Só administrador com acesso a TODOS os perfis.
 //   GET  ?acao=manifesto                         → { manifesto }  (contagem + impressão digital por tabela)
-//   GET  ?acao=pagina&tabela=x&offset=n          → { linhas, proximo }  (até ~2 MB por resposta)
+//   GET  ?acao=paginas&de=x&offset=n             → { blocos: [{ tabela, linhas }], proximo }  (várias tabelas, até ~2 MB)
+//   GET  ?acao=pagina&tabela=x&offset=n          → { linhas, proximo }  (uma tabela, até ~2 MB)
 //   POST { acao: 'previa', manifesto, perfis }   → versão, quantidades atuais, perfis que somem, agenda
 //   POST { acao: 'parte', loteId, tabela, parte, linhas } → grava uma parte na área de preparo
 //   POST { acao: 'aplicar', loteId, manifesto, perfis }   → restaura tudo numa transação + conferência
@@ -41,6 +42,13 @@ async function handler(req, res) {
           return gerarManifesto(q, { ambiente: sigla, appHash: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || null })
         })
         return res.json({ manifesto })
+      }
+      if (acao === 'paginas') {
+        const r = await withTransaction(async (q) => {
+          await q('SET TRANSACTION READ ONLY')
+          return lerPaginas(q, req.query.de ? String(req.query.de) : null, Number(req.query.offset) || 0)
+        })
+        return res.json(r)
       }
       if (acao === 'pagina') {
         const r = await withTransaction(async (q) => {

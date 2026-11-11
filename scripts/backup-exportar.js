@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 import pg from 'pg'
 import { urlDoDatabase, configTlsVerificado } from '../api/_conexao.js'
-import { gerarManifesto, lerPagina, lerEstrutura } from '../api/_backup.js'
+import { gerarManifesto, lerPaginas, lerEstrutura } from '../api/_backup.js'
 import { montarBackup, serializarBackup } from '../src/lib/backupMontagem.js'
 import { nomeDoArquivo } from '../src/lib/backupFormato.js'
 
@@ -51,7 +51,7 @@ try {
   let ultimo = ''
   const arquivo = await montarBackup({
     obterManifesto: () => gerarManifesto(q, { ambiente: amb.sigla, appHash }),
-    obterPagina: (t, o) => lerPagina(q, t, o, { estrutura }),
+    obterPaginas: (de, o) => lerPaginas(q, de, o, { estrutura }),
     onProgresso: ({ tabela, tabelaIndice, totalTabelas }) => {
       if (tabela !== ultimo) { ultimo = tabela; process.stdout.write(`\r  ${tabelaIndice}/${totalTabelas} ${tabela.padEnd(32)}`) }
     },
@@ -65,7 +65,7 @@ try {
   const m = arquivo.manifesto
   const linhas = Object.values(m.tabelas).reduce((s, t) => s + t.linhas, 0)
   console.log(`\n✔ ${destino}`)
-  console.log(`  ambiente ${m.ambiente} · ${Object.keys(m.tabelas).length} tabelas · ${linhas} linhas · versão ${m.schema.ultima} · ${(statSync(destino).size / 1048576).toFixed(1)} MB · ${((Date.now() - t0) / 1000).toFixed(1)} s`)
+  console.log(`  ambiente ${m.ambiente} · ${Object.keys(m.tabelas).length} tabelas · ${linhas} linhas · versão ${m.schema.ultima || '—'} · ${(statSync(destino).size / 1048576).toFixed(1)} MB · ${((Date.now() - t0) / 1000).toFixed(1)} s`)
 } catch (err) {
   console.error('\n✖', err.message)
   process.exitCode = 1

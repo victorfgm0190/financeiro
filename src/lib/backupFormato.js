@@ -107,11 +107,22 @@ export async function conferirIntegridade(arq, subtle) {
 // ─── Versão ─────────────────────────────────────────────────────────────────────────────────────
 // manifesto do arquivo × destino { migracoes: [nomes aplicados], colunas: { tabela: [colunas] } }.
 // → { recusar: [motivos], semMigracoes: [do destino que o arquivo não tinha],
-//     colunasPadrao: [{ tabela, colunas }], tabelasVazias: [tabelas do destino que o arquivo não traz] }
+//     colunasPadrao: [{ tabela, colunas }], tabelasVazias: [tabelas do destino que o arquivo não traz],
+//     arquivo: última migração real do arquivo, destino: a do banco }
+//
+// Só migrações REAIS contam como versão. "_estrutura_base" (marca do provisionamento de ambiente
+// novo) e qualquer outra marca com "_" na frente ficam de fora: não são uma atualização do banco, um
+// ambiente antigo pode não ter a marca, e na ordem de caracteres o "_" vem depois dos números
+// ("_estrutura_base" virava a "última"). O campo schema.ultima gravado no arquivo NÃO decide nada —
+// arquivos gerados até 8741e16 podem ter "_estrutura_base" ali; tudo é recalculado da lista.
+export const migracoesReais = (lista) => (lista || []).filter(m => typeof m === 'string' && !m.startsWith('_')).sort()
+export const ultimaMigracao = (lista) => migracoesReais(lista).at(-1) || null
+export const versaoDoManifesto = (manifesto) => ultimaMigracao(manifesto?.schema?.migracoes)
+
 export function compararVersao(manifesto, destino) {
   const recusar = []
-  const migDestino = new Set(destino.migracoes || [])
-  const migArquivo = manifesto.schema?.migracoes || []
+  const migDestino = new Set(migracoesReais(destino.migracoes))
+  const migArquivo = migracoesReais(manifesto.schema?.migracoes)
   const maisNovas = migArquivo.filter(m => !migDestino.has(m))
   if (maisNovas.length) recusar.push(`O arquivo é de uma versão mais nova do banco: este ambiente ainda não tem ${maisNovas.length === 1 ? 'a atualização' : 'as atualizações'} ${maisNovas.join(', ')}.`)
   const colunasPadrao = []
@@ -128,7 +139,7 @@ export function compararVersao(manifesto, destino) {
   const tabelasVazias = Object.keys(destino.colunas || {}).filter(t => tabelaNoBackup(t) && !manifesto.tabelas?.[t])
   const migSet = new Set(migArquivo)
   const semMigracoes = [...migDestino].filter(m => !migSet.has(m)).sort()
-  return { recusar, semMigracoes, colunasPadrao, tabelasVazias }
+  return { recusar, semMigracoes, colunasPadrao, tabelasVazias, arquivo: ultimaMigracao(migArquivo), destino: ultimaMigracao([...migDestino]) }
 }
 
 // Ids dos perfis do arquivo (tabela perfis) — para avisar dos usuários com "perfis permitidos" que somem.

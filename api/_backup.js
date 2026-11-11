@@ -20,7 +20,7 @@
 // Usuários e acesso (FORA_DO_BACKUP) nunca são tocados.
 import { Buffer } from 'node:buffer'
 import {
-  FORMATO, VERSAO_FORMATO, LIMITE_BYTES_PARTE, FORA_DO_BACKUP, tabelaNoBackup, colunasMantidas, compararVersao,
+  FORMATO, VERSAO_FORMATO, LIMITE_BYTES_PARTE, FORA_DO_BACKUP, tabelaNoBackup, colunasMantidas, compararVersao, ultimaMigracao,
 } from '../src/lib/backupFormato.js'
 
 export class ErroBackup extends Error {
@@ -112,6 +112,17 @@ export async function impressaoNoBanco(q, tabela, { colsBanco, pk, colsArquivo =
   return { linhas: r.linhas, impressao: r.impressao }
 }
 
+// Várias tabelas numa consulta só (UNION ALL): o manifesto e a conferência faziam uma ida ao banco por
+// tabela (61 hoje). → { tabela: { linhas, impressao } }
+const literal = (s) => `'${String(s).replace(/'/g, "''")}'`
+export async function impressoesNoBanco(q, itens) {
+  if (!itens.length) return {}
+  const sql = itens.map(({ tabela, colsBanco, pk, colsArquivo = null }) => `(SELECT ${literal(tabela)}::text AS tabela, count(*)::int AS linhas,
+      encode(sha256(convert_to(coalesce(string_agg(x, E'\\n' ${ORDEM}), ''), 'UTF8')), 'hex') AS impressao
+    FROM (${subconsulta(tabela, colsBanco, pk, colsArquivo)}) s)`).join('\nUNION ALL\n')
+  return Object.fromEntries((await q(sql)).map(r => [r.tabela, { linhas: r.linhas, impressao: r.impressao }]))
+}
+
 // ─── Exportação ─────────────────────────────────────────────────────────────────────────────────
 export async function lerEstrutura(q) {
   const [colunas, pks, migracoes] = [await colunasDoBanco(q), await chavesPrimarias(q), await migracoesDoBanco(q)]
@@ -122,15 +133,13 @@ export async function lerEstrutura(q) {
 export async function gerarManifesto(q, { ambiente, appHash = null, agora = new Date() } = {}) {
   await prepararSessao(q)
   const { colunas, pks, migracoes, tabelas } = await lerEstrutura(q)
+  const imps = await impressoesNoBanco(q, tabelas.map(t => ({ tabela: t, colsBanco: colunas[t], pk: pks[t] })))
   const out = {}
-  for (const t of tabelas) {
-    const imp = await impressaoNoBanco(q, t, { colsBanco: colunas[t], pk: pks[t] })
-    out[t] = { ...imp, colunas: colunas[t].filter(c => !colunasMantidas(t).includes(c)) }
-  }
+  for (const t of tabelas) out[t] = { ...imps[t], colunas: colunas[t].filter(c => !colunasMantidas(t).includes(c)) }
   return {
     formato: FORMATO, versaoFormato: VERSAO_FORMATO,
     ambiente: ambiente || null, geradoEm: agora.toISOString(), appHash,
-    schema: { ultima: migracoes[migracoes.length - 1] || null, migracoes },
+    schema: { ultima: ultimaMigracao(migracoes), migracoes },
     tabelas: out,
   }
 }
@@ -138,9 +147,9 @@ export async function gerarManifesto(q, { ambiente, appHash = null, agora = new 
 // Uma página de linhas de uma tabela, a partir de `offset`, até LIMITE_BYTES_PARTE.
 // → { linhas: [texto], proximo: offset | null }
 // `estrutura` ({ colunas, pks }) evita reler o catálogo a cada página (script de linha de comando).
-export async function lerPagina(q, tabela, offset = 0, { limiteBytes = LIMITE_BYTES_PARTE, lote = 2000, estrutura = null } = {}) {
+export async function lerPagina(q, tabela, offset = 0, { limiteBytes = LIMITE_BYTES_PARTE, lote = 2000, estrutura = null, sessaoPronta = false } = {}) {
   if (!NOME_VALIDO.test(String(tabela)) || !tabelaNoBackup(tabela)) throw new ErroBackup('Tabela fora do backup.', 400)
-  await prepararSessao(q)
+  if (!sessaoPronta) await prepararSessao(q)
   const cols = (estrutura?.colunas || await colunasDoBanco(q))[tabela]
   if (!cols) throw new ErroBackup(`Tabela inexistente: ${tabela}`, 404)
   const pk = (estrutura?.pks || await chavesPrimarias(q))[tabela]
@@ -155,7 +164,69 @@ export async function lerPagina(q, tabela, offset = 0, { limiteBytes = LIMITE_BY
     bytes += b
   }
   const acabou = linhas.length === rows.length // não sobrou nada além do que coube
-  return { linhas, proximo: acabou ? null : ini + linhas.length }
+  return { linhas, proximo: acabou ? null : ini + linhas.length, bytes }
+}
+
+// VÁRIAS tabelas numa resposta só, na ordem do backup (alfabética), a partir de `de`/`offset`, até
+// `limiteBytes` no total. Uma chamada por tabela (61 hoje, quase todas pequenas, cada uma relendo o
+// catálogo) fazia a exportação pela tela levar ~25 s só em idas e voltas. Agora, por chamada: uma
+// consulta mede o tamanho das tabelas que faltam, uma consulta (UNION ALL) traz todas as que cabem, e
+// a tabela grande que não cabe é paginada sozinha (lerPagina). Mesma linha e mesma ordem de lerPagina.
+// → { blocos: [{ tabela, linhas }], proximo: { tabela, offset } | null }
+export async function lerPaginas(q, de = null, offset = 0, { limiteBytes = LIMITE_BYTES_PARTE, lote = 2000, estrutura = null } = {}) {
+  await prepararSessao(q)
+  const est = estrutura || { colunas: await colunasDoBanco(q), pks: await chavesPrimarias(q) }
+  const nomes = Object.keys(est.colunas).filter(tabelaNoBackup).sort()
+  let i = 0
+  if (de != null && de !== '') {
+    if (!NOME_VALIDO.test(String(de)) || !tabelaNoBackup(de)) throw new ErroBackup('Tabela fora do backup.', 400)
+    i = nomes.indexOf(de)
+    if (i < 0) throw new ErroBackup(`Tabela inexistente: ${de}`, 404)
+  }
+  const blocos = []
+  let resta = limiteBytes
+  const proxima = (j) => (j < nomes.length ? { tabela: nomes[j], offset: 0 } : null)
+  const paginar = async (j, ini) => {
+    const r = await lerPagina(q, nomes[j], ini, { limiteBytes: resta, lote, estrutura: est, sessaoPronta: true })
+    blocos.push({ tabela: nomes[j], linhas: r.linhas })
+    resta -= r.bytes
+    return r.proximo
+  }
+  const sub = (t) => subconsulta(t, est.colunas[t], est.pks[t], null)
+
+  // Continuação de uma tabela grande.
+  const ini = Math.max(0, Math.floor(Number(offset) || 0))
+  if (ini > 0) {
+    const p = await paginar(i, ini)
+    if (p != null) return { blocos, proximo: { tabela: nomes[i], offset: p } }
+    i++
+    if (resta <= 0) return { blocos, proximo: proxima(i) }
+  }
+  if (i >= nomes.length) return { blocos, proximo: null }
+
+  // Tamanho de cada tabela que falta (os mesmos bytes que lerPagina conta).
+  const resto = nomes.slice(i)
+  const tam = Object.fromEntries((await q(resto.map(t => `(SELECT ${literal(t)}::text AS tabela,
+      coalesce(sum(octet_length(x) + 4), 0)::bigint AS b FROM (${sub(t)}) s)`).join('\nUNION ALL\n'))).map(r => [r.tabela, Number(r.b)]))
+  const cabem = []
+  for (const t of resto) {
+    if (tam[t] > resta) break
+    cabem.push(t)
+    resta -= tam[t]
+  }
+  if (cabem.length) {
+    const linhas = Object.fromEntries(cabem.map(t => [t, []]))
+    const rows = await q(`SELECT tabela, x FROM (${cabem.map((t, n) => `(SELECT ${literal(t)}::text AS tabela, ${n}::int AS ord, x, k FROM (${sub(t)}) s)`).join('\nUNION ALL\n')}) u
+      ORDER BY ord, k COLLATE "C", x COLLATE "C"`)
+    for (const r of rows) linhas[r.tabela].push(r.x)
+    for (const t of cabem) blocos.push({ tabela: t, linhas: linhas[t] })
+  }
+  const j = i + cabem.length
+  if (j >= nomes.length) return { blocos, proximo: null }
+  if (cabem.length) return { blocos, proximo: proxima(j) }
+  // A próxima tabela sozinha passa do limite: vai em páginas.
+  const p = await paginar(j, 0)
+  return { blocos, proximo: p != null ? { tabela: nomes[j], offset: p } : proxima(j + 1) }
 }
 
 // ─── Restauração: área de preparo ──────────────────────────────────────────────────────────────
@@ -214,7 +285,7 @@ export async function previa(q, manifesto, perfisIds = []) {
   return {
     versao, atuais, preparo: await preparoExiste(q),
     perfisSomem: await usuariosComPerfisQueSomem(q, perfisIds),
-    destino: { ultima: migracoes[migracoes.length - 1] || null },
+    destino: { ultima: ultimaMigracao(migracoes) },
   }
 }
 
@@ -300,12 +371,15 @@ export async function conferirNoBanco(q, manifesto, estrutura = null) {
   await prepararSessao(q)
   const { colunas, pks } = estrutura || await lerEstrutura(q)
   const out = []
-  for (const [t, info] of Object.entries(manifesto.tabelas || {}).sort(([a], [b]) => a.localeCompare(b))) {
+  const doArquivo = Object.entries(manifesto.tabelas || {}).sort(([a], [b]) => a.localeCompare(b))
+  const comparaveis = doArquivo.filter(([t, info]) => colunas[t] && (info.colunas || []).every(c => colunas[t].includes(c)))
+  const imps = await impressoesNoBanco(q, comparaveis.map(([t, info]) => ({ tabela: t, colsBanco: colunas[t], pk: pks[t], colsArquivo: info.colunas })))
+  for (const [t, info] of doArquivo) {
     const arquivo = { linhas: Number(info.linhas), impressao: info.impressao }
     if (!colunas[t]) { out.push({ tabela: t, arquivo, banco: null, ok: false, motivo: 'tabela não existe neste banco' }); continue }
     const faltam = (info.colunas || []).filter(c => !colunas[t].includes(c))
     if (faltam.length) { out.push({ tabela: t, arquivo, banco: null, ok: false, motivo: `colunas que este banco não tem: ${faltam.join(', ')}` }); continue }
-    const banco = await impressaoNoBanco(q, t, { colsBanco: colunas[t], pk: pks[t], colsArquivo: info.colunas })
+    const banco = imps[t]
     out.push({ tabela: t, arquivo, banco, ok: banco.linhas === arquivo.linhas && banco.impressao === arquivo.impressao })
   }
   for (const t of Object.keys(colunas).filter(tabelaNoBackup).sort()) {

@@ -6,7 +6,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import { useBackupLocal, podeFazerBackup } from '../../hooks/useBackupLocal'
 import { exportarBackup, baixarArquivo, lerArquivoBackup, previaRestauracao, restaurarBackup, conferirComArquivo } from '../../lib/backupCliente'
 import { suportaPasta, escolherPasta, perguntarAoSair, MANTER_PADRAO } from '../../lib/backupPasta'
-import { diasDesde, DIAS_LEMBRETE, textoUltimoBackup } from '../../lib/backupFormato'
+import { diasDesde, DIAS_LEMBRETE, textoUltimoBackup, versaoDoManifesto } from '../../lib/backupFormato'
 
 // Configurações → Dados → Backup. Exportar (com progresso), Restaurar (arquivo → prévia → digitar
 // RESTAURAR → progresso → conferência), Conferir com um arquivo e, só no computador, o backup ao sair.
@@ -108,7 +108,7 @@ function Restaurar({ aberto, onFechar, arquivo, previa, aoTerminar }) {
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
               <dt className="text-texto-2">Origem</dt><dd className="text-texto-1">ambiente {String(m.ambiente || '—').toUpperCase()} · gerado em {fmtData(m.geradoEm)}{m.appHash ? ` · app ${m.appHash}` : ''}</dd>
               <dt className="text-texto-2">Destino</dt><dd className="text-texto-1">ambiente {String(previa.destino?.ambiente || '—').toUpperCase()} (este)</dd>
-              <dt className="text-texto-2">Versão</dt><dd className="text-texto-1 break-all">arquivo {m.schema?.ultima || '—'} · este banco {previa.destino?.ultima || '—'}</dd>
+              <dt className="text-texto-2">Versão</dt><dd className="text-texto-1 break-all">arquivo {versaoDoManifesto(m) || '—'} · este banco {previa.destino?.ultima || '—'}</dd>
             </dl>
             {recusa && (
               <div role="alert" className="text-xs rounded-lg border border-perigo/40 bg-perigo-bg px-3 py-2 text-perigo space-y-1">

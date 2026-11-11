@@ -7,7 +7,7 @@ import { abrirPGlite } from './_testes/bancoTeste.js'
 import { SQL_CENTRAL, usarBancos } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
 import {
-  gerarManifesto, lerPagina, gravarParte, aplicarRestauracao, conferirNoBanco, ordenarPorVinculos,
+  gerarManifesto, lerPagina, lerPaginas, gravarParte, aplicarRestauracao, conferirNoBanco, ordenarPorVinculos,
   usuariosComPerfisQueSomem, previa, lerEstrutura,
 } from './_backup.js'
 import { montarBackup, dividirEmPartes } from '../src/lib/backupMontagem.js'
@@ -111,6 +111,25 @@ describe('exportação em lotes', () => {
   })
 })
 
+describe('exportação em blocos (várias tabelas por chamada, como a tela)', () => {
+  it('mesmo arquivo da exportação tabela a tabela, em poucas chamadas', async () => {
+    const porTabela = await exportar(origem)
+    const pedidos = []
+    const emBlocos = await emTransacao(origem, async (q) => montarBackup({
+      obterManifesto: () => gerarManifesto(q, { ambiente: 'origem', appHash: 'abc1234' }),
+      obterPaginas: (de, o) => { pedidos.push([de, o]); return lerPaginas(q, de, o, { limiteBytes: 300 }) },
+    }))
+    expect(emBlocos.tabelas).toEqual(porTabela.tabelas)
+    expect(emBlocos.manifesto.tabelas).toEqual(porTabela.manifesto.tabelas)
+    expect(pedidos.length).toBeLessThan(Object.keys(porTabela.manifesto.tabelas).length / 2)
+    expect(pedidos.length).toBeGreaterThan(1) // o limite de bytes quebra em mais de uma resposta
+    // Limite grande: uma resposta só.
+    const uma = await emTransacao(origem, (q) => lerPaginas(q, null, 0))
+    expect(uma.proximo).toBeNull()
+    expect(uma.blocos.map(b => b.tabela)).toEqual(Object.keys(porTabela.manifesto.tabelas))
+  }, 60_000)
+})
+
 describe('restauração tudo-ou-nada', () => {
   let arq
   let destino
@@ -168,6 +187,27 @@ describe('restauração tudo-ou-nada', () => {
     await emTransacao(destino, (q) => gravarParte(q, { loteId: 'lote_incompleto', tabela: 'contas', parte: 0, linhas: arq.tabelas.contas }))
     await expect(emTransacao(destino, (q) => aplicarRestauracao(q, { loteId: 'lote_incompleto', manifesto: arq.manifesto }))).rejects.toThrow(/envio do arquivo não terminou/)
     expect(await fotografia(destino)).toEqual(antes)
+  }, 60_000)
+
+  it('"_estrutura_base" (ambiente provisionado) não vira a versão: ultima = última migração real; destino sem a marca aceita', async () => {
+    await origem.exec("INSERT INTO _migracoes (nome) VALUES ('_estrutura_base')")
+    try {
+      const comMarca = await exportar(origem)
+      expect(comMarca.manifesto.schema.migracoes).toContain('_estrutura_base')
+      expect(comMarca.manifesto.schema.ultima).toBe(MIGRACOES.at(-1))
+      // Destino igual em migrações reais, sem a marca: aceita e restaura.
+      const pv = await emTransacao(destino, (q) => previa(q, comMarca.manifesto, perfisDoArquivo(comMarca)))
+      expect(pv.versao.recusar).toEqual([])
+      expect(pv.versao.semMigracoes).toEqual([])
+      expect(pv.destino.ultima).toBe(MIGRACOES.at(-1))
+      // Arquivo gerado antes da correção ("ultima" = "_estrutura_base"): o campo é ignorado.
+      comMarca.manifesto.schema.ultima = '_estrutura_base'
+      await enviar(destino, comMarca, 'lote_marca')
+      const r = await emTransacao(destino, (q) => aplicarRestauracao(q, { loteId: 'lote_marca', manifesto: comMarca.manifesto }))
+      expect(r.conferencia.every(c => c.ok)).toBe(true)
+    } finally {
+      await origem.exec("DELETE FROM _migracoes WHERE nome = '_estrutura_base'")
+    }
   }, 60_000)
 
   it('arquivo de versão mais nova → recusa antes de tocar em qualquer coisa', async () => {
@@ -267,5 +307,11 @@ describe('rota /api/backup', () => {
     expect(ok.body.manifesto).toMatchObject({ formato: 'finup-backup', ambiente: 'vm' })
     const pag = await chamar(await token('admin'), { url: '/api/backup?acao=pagina&tabela=usuarios&offset=0' })
     expect(pag.statusCode).toBe(400) // tabela fora do backup nunca sai
+    const pags = await chamar(await token('admin'), { url: '/api/backup?acao=paginas&de=usuarios&offset=0' })
+    expect(pags.statusCode).toBe(400)
+    const tudo = await chamar(await token('admin'), { url: '/api/backup?acao=paginas&offset=0' })
+    expect(tudo.statusCode).toBe(200)
+    expect(tudo.body.proximo).toBeNull() // banco pequeno: tudo numa resposta só
+    expect(tudo.body.blocos.map(b => b.tabela)).not.toContain('usuarios')
   }, 60_000)
 })

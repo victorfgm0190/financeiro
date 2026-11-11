@@ -46,7 +46,7 @@ export async function exportarBackup({ onProgresso } = {}) {
   try {
     const arquivo = await montarBackup({
       obterManifesto: async () => (await chamar('/api/backup?acao=manifesto')).manifesto,
-      obterPagina: (t, o) => chamar(`/api/backup?acao=pagina&tabela=${encodeURIComponent(t)}&offset=${o}`),
+      obterPaginas: (de, o) => chamar(`/api/backup?acao=paginas${de ? `&de=${encodeURIComponent(de)}` : ''}&offset=${o}`),
       onProgresso,
     })
     return { arquivo, texto: serializarBackup(arquivo), nome: nomeDoArquivo(arquivo.manifesto.ambiente) }

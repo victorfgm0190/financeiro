@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 import pg from 'pg'
 import { urlDoDatabase, configTlsVerificado } from '../api/_conexao.js'
 import { conferirNoBanco } from '../api/_backup.js'
-import { validarArquivo, conferirIntegridade } from '../src/lib/backupFormato.js'
+import { validarArquivo, conferirIntegridade, versaoDoManifesto } from '../src/lib/backupFormato.js'
 
 const args = process.argv.slice(2)
 const arg = (n) => (args.includes(n) ? String(args[args.indexOf(n) + 1] || '') : null)
@@ -30,7 +30,7 @@ try {
   if (!v.ok) throw new Error(v.erro)
   const integ = await conferirIntegridade(arq)
   if (!integ.ok) throw new Error(`Arquivo alterado ou corrompido: ${integ.divergentes.join(', ')}`)
-  console.log(`Arquivo íntegro · origem ${arq.manifesto.ambiente} · gerado em ${arq.manifesto.geradoEm} · versão ${arq.manifesto.schema?.ultima}`)
+  console.log(`Arquivo íntegro · origem ${arq.manifesto.ambiente} · gerado em ${arq.manifesto.geradoEm} · versão ${versaoDoManifesto(arq.manifesto) || '—'}`)
 
   central = await conectar(process.env.CENTRAL_DATABASE_URL)
   const [amb] = (await central.query('SELECT sigla, database_name FROM ambientes WHERE sigla = $1', [sigla])).rows

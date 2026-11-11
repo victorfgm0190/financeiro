@@ -9,28 +9,47 @@ export const ERRO_BANCO_MUDOU = 'O banco mudou enquanto o backup era gerado (alg
 // → arquivo { formato, versaoFormato, manifesto, tabelas }. Confere quantidade e impressão digital de
 // cada tabela recebida contra o manifesto; diferença (o banco mudou no meio) → tenta de novo do zero
 // até `tentativas` vezes e depois falha com ERRO_BANCO_MUDOU.
-export async function montarBackup({ obterManifesto, obterPagina, onProgresso = () => {}, subtle, tentativas = 2 }) {
+// Leitura: `obterPaginas(de, offset)` → { blocos: [{ tabela, linhas }], proximo: { tabela, offset } | null }
+// (várias tabelas por chamada — a tela) ou `obterPagina(tabela, offset)` → { linhas, proximo } (uma
+// tabela por chamada — o script, que fala direto com o banco).
+export async function montarBackup({ obterManifesto, obterPagina, obterPaginas, onProgresso = () => {}, subtle, tentativas = 2 }) {
   let ultimoErro = null
   for (let tentativa = 1; tentativa <= tentativas; tentativa++) {
     const manifesto = await obterManifesto()
     const nomes = Object.keys(manifesto.tabelas).sort()
+    const indice = new Map(nomes.map((t, i) => [t, i + 1]))
     const totalLinhas = nomes.reduce((s, t) => s + Number(manifesto.tabelas[t].linhas || 0), 0)
     let feitas = 0
-    const tabelas = {}
-    let mudou = null
-    for (const [i, t] of nomes.entries()) {
-      const linhas = []
-      let offset = 0
-      while (offset != null) {
-        const r = await obterPagina(t, offset)
-        linhas.push(...r.linhas)
-        feitas += r.linhas.length
-        onProgresso({ tabela: t, tabelaIndice: i + 1, totalTabelas: nomes.length, linhas: feitas, totalLinhas })
-        offset = r.proximo
+    const recebidas = {}
+    const receber = (t, linhas) => {
+      ;(recebidas[t] ||= []).push(...linhas)
+      feitas += linhas.length
+      onProgresso({ tabela: t, tabelaIndice: indice.get(t) || nomes.length, totalTabelas: nomes.length, linhas: feitas, totalLinhas })
+    }
+    if (obterPaginas) {
+      let cursor = { tabela: null, offset: 0 }
+      while (cursor) {
+        const r = await obterPaginas(cursor.tabela, cursor.offset)
+        for (const b of r.blocos || []) receber(b.tabela, b.linhas)
+        cursor = r.proximo || null
+        await pausa() // devolve a vez à tela a cada resposta (a barra anda e os cliques respondem)
       }
+    } else {
+      for (const t of nomes) {
+        let offset = 0
+        while (offset != null) {
+          const r = await obterPagina(t, offset)
+          receber(t, r.linhas)
+          offset = r.proximo
+        }
+      }
+    }
+    // Tabela que o banco tem e o manifesto não (criada no meio) também é "o banco mudou".
+    let mudou = Object.keys(recebidas).find(t => !manifesto.tabelas[t]) || null
+    const tabelas = {}
+    for (const t of mudou ? [] : nomes) {
+      const linhas = recebidas[t] || []
       const info = manifesto.tabelas[t]
-      // Devolve a vez à tela entre as tabelas (a barra anda e os cliques respondem).
-      await pausa()
       if (linhas.length !== Number(info.linhas) || await impressaoDasLinhas(linhas, subtle) !== info.impressao) { mudou = t; break }
       tabelas[t] = linhas
     }
