@@ -3,6 +3,7 @@
 // scripts/backup-exportar.js. PURO: quem chama fornece obterManifesto/obterPagina.
 import { FORMATO, VERSAO_FORMATO, LIMITE_BYTES_PARTE, impressaoDasLinhas } from './backupFormato.js'
 
+const pausa = () => new Promise(r => setTimeout(r, 0))
 export const ERRO_BANCO_MUDOU = 'O banco mudou enquanto o backup era gerado (alguém gravou algo). Tente de novo.'
 
 // → arquivo { formato, versaoFormato, manifesto, tabelas }. Confere quantidade e impressão digital de
@@ -28,6 +29,8 @@ export async function montarBackup({ obterManifesto, obterPagina, onProgresso = 
         offset = r.proximo
       }
       const info = manifesto.tabelas[t]
+      // Devolve a vez à tela entre as tabelas (a barra anda e os cliques respondem).
+      await pausa()
       if (linhas.length !== Number(info.linhas) || await impressaoDasLinhas(linhas, subtle) !== info.impressao) { mudou = t; break }
       tabelas[t] = linhas
     }

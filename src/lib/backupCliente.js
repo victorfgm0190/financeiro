@@ -4,16 +4,26 @@ import { authHeaders } from './api.js'
 import { validarArquivo, conferirIntegridade, nomeDoArquivo, perfisDoArquivo } from './backupFormato.js'
 import { montarBackup, dividirEmPartes, serializarBackup } from './backupMontagem.js'
 
-async function chamar(path, { method = 'GET', body } = {}) {
+// Prazo de cada chamada: nada pode deixar a tela "em andamento" para sempre.
+export const PRAZO_CHAMADA_MS = 120_000
+export const PRAZO_APLICAR_MS = 330_000 // a restauração tem até 300 s no servidor
+
+async function chamar(path, { method = 'GET', body, prazoMs = PRAZO_CHAMADA_MS } = {}) {
   let res
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null
+  const t = ctrl ? setTimeout(() => ctrl.abort(), prazoMs) : null
   try {
     res = await fetch(path, {
       method,
       headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...authHeaders() },
       ...(body ? { body: JSON.stringify(body) } : {}),
+      ...(ctrl ? { signal: ctrl.signal } : {}),
     })
-  } catch {
-    throw new Error('Sem conexão com o servidor. Confira a internet e tente de novo.')
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error(`O servidor não respondeu em ${Math.round(prazoMs / 1000)} s. Tente de novo.`, { cause: err })
+    throw new Error('Sem conexão com o servidor. Confira a internet e tente de novo.', { cause: err })
+  } finally {
+    if (t) clearTimeout(t)
   }
   let dados = null
   try { dados = await res.json() } catch { /* corpo não-JSON */ }
@@ -26,14 +36,23 @@ async function chamar(path, { method = 'GET', body } = {}) {
   return dados
 }
 
-// Exporta o banco do ambiente. → { arquivo, texto, nome }
+// Exporta o banco do ambiente. → { arquivo, texto, nome }. Uma exportação por vez neste aparelho
+// (o botão e o "Sim" do backup ao sair não disputam): a segunda chamada é recusada na hora.
+let exportando = false
+export const exportandoAgora = () => exportando
 export async function exportarBackup({ onProgresso } = {}) {
-  const arquivo = await montarBackup({
-    obterManifesto: async () => (await chamar('/api/backup?acao=manifesto')).manifesto,
-    obterPagina: (t, o) => chamar(`/api/backup?acao=pagina&tabela=${encodeURIComponent(t)}&offset=${o}`),
-    onProgresso,
-  })
-  return { arquivo, texto: serializarBackup(arquivo), nome: nomeDoArquivo(arquivo.manifesto.ambiente) }
+  if (exportando) throw new Error('Já existe um backup sendo gerado. Aguarde ele terminar.')
+  exportando = true
+  try {
+    const arquivo = await montarBackup({
+      obterManifesto: async () => (await chamar('/api/backup?acao=manifesto')).manifesto,
+      obterPagina: (t, o) => chamar(`/api/backup?acao=pagina&tabela=${encodeURIComponent(t)}&offset=${o}`),
+      onProgresso,
+    })
+    return { arquivo, texto: serializarBackup(arquivo), nome: nomeDoArquivo(arquivo.manifesto.ambiente) }
+  } finally {
+    exportando = false
+  }
 }
 
 export function baixarArquivo(nome, texto, doc = globalThis.document) {
@@ -75,7 +94,7 @@ export async function restaurarBackup(arquivo, { onProgresso = () => {} } = {}) 
       await chamar('/api/backup', { method: 'POST', body: { acao: 'parte', loteId, ...p } })
     }
     onProgresso({ fase: 'aplicando', feitas: partes.length, total: partes.length })
-    return await chamar('/api/backup', { method: 'POST', body: { acao: 'aplicar', loteId, manifesto: arquivo.manifesto, perfis: perfisDoArquivo(arquivo) } })
+    return await chamar('/api/backup', { method: 'POST', prazoMs: PRAZO_APLICAR_MS, body: { acao: 'aplicar', loteId, manifesto: arquivo.manifesto, perfis: perfisDoArquivo(arquivo) } })
   } catch (err) {
     try { await chamar('/api/backup', { method: 'POST', body: { acao: 'limpar', loteId } }) } catch { /* fica para a limpeza automática */ }
     throw err

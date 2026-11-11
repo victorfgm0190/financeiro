@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
-  gravarNaPasta, permissaoDaPasta, tipoDeErroDaPasta, perguntarAoSair, lerConfig, salvarConfig, suportaPasta, nomeDoBancoBackup, MANTER_PADRAO,
+  gravarNaPasta, permissaoDaPasta, backendBackup, comPrazo, PRAZO_IDB_MS, tipoDeErroDaPasta, perguntarAoSair, lerConfig, salvarConfig, suportaPasta, nomeDoBancoBackup, MANTER_PADRAO,
 } from './backupPasta'
 
 // Pasta falsa com a mesma forma do FileSystemDirectoryHandle.
@@ -63,5 +63,28 @@ describe('preferências neste aparelho', () => {
   it('suporte à escolha de pasta só com showDirectoryPicker (Safari/Firefox não têm)', () => {
     expect(suportaPasta({ showDirectoryPicker: () => {} })).toBe(true)
     expect(suportaPasta({})).toBe(false)
+  })
+})
+
+// IndexedDB que nunca responde (o que travava a tela no teste do Chrome).
+const idbMudo = () => ({ open: () => ({}) })
+afterEach(() => { vi.useRealTimers() })
+
+describe('IndexedDB pendurado nunca prende a tela', () => {
+  it('lerConfig devolve as preferências vazias depois do prazo', async () => {
+    vi.useFakeTimers()
+    const p = lerConfig(backendBackup('finup_backup_x_u1', idbMudo()))
+    await vi.advanceTimersByTimeAsync(PRAZO_IDB_MS + 10)
+    await expect(p).resolves.toMatchObject({ pasta: null, ultimo: null, manter: MANTER_PADRAO })
+  })
+  it('salvarConfig termina (sem lançar) mesmo sem conseguir gravar', async () => {
+    vi.useFakeTimers()
+    const p = salvarConfig(backendBackup('finup_backup_x_u1', idbMudo()), { ultimo: 5 }, { manter: 3 })
+    await vi.advanceTimersByTimeAsync(PRAZO_IDB_MS + 10)
+    await expect(p).resolves.toMatchObject({ ultimo: 5, manter: 3 })
+  })
+  it('comPrazo: passa o resultado ou rejeita no prazo', async () => {
+    await expect(comPrazo(Promise.resolve(7), 50)).resolves.toBe(7)
+    await expect(comPrazo(new Promise(() => {}), 10, 'demorou')).rejects.toThrow('demorou')
   })
 })

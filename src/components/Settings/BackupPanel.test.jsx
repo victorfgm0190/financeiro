@@ -124,6 +124,46 @@ describe('Backup (Configurações)', () => {
     expect(cliente.restaurarBackup).not.toHaveBeenCalled()
   })
 
+  it('abrir e reabrir a tela (como recarregar) não exporta nada sozinho', async () => {
+    render(<BackupPanel />)
+    cleanup()
+    render(<BackupPanel />)
+    await new Promise(r => setTimeout(r, 50))
+    expect(cliente.exportarBackup).not.toHaveBeenCalled()
+    expect(cliente.lerArquivoBackup).not.toHaveBeenCalled()
+    expect(screen.getByText('Exportar backup completo').closest('button').disabled).toBe(false)
+  })
+
+  it('ao terminar, a barra some e os três botões voltam a ficar ligados', async () => {
+    cliente.exportarBackup.mockResolvedValue({ texto: '{}', nome: 'finup-backup-teste1-2026-11-10-1830.json' })
+    render(<BackupPanel />)
+    fireEvent.click(screen.getByText('Exportar backup completo'))
+    expect(await screen.findByText(/Backup baixado/)).toBeTruthy()
+    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(screen.getByText('Exportar backup completo').closest('button').disabled).toBe(false)
+    expect(screen.getByText('Restaurar backup').closest('label').className).not.toMatch(/pointer-events-none/)
+    expect(screen.getByText('Conferir com um arquivo').closest('label').className).not.toMatch(/pointer-events-none/)
+  })
+
+  it('erro no meio da exportação: mensagem clara e a tela liberada', async () => {
+    cliente.exportarBackup.mockImplementation(async ({ onProgresso }) => { onProgresso({ linhas: 1, totalLinhas: 10, tabela: 'contas' }); throw new Error('O servidor não respondeu em 120 s. Tente de novo.') })
+    render(<BackupPanel />)
+    fireEvent.click(screen.getByText('Exportar backup completo'))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/não respondeu em 120 s/)
+    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(screen.getByText('Exportar backup completo').closest('button').disabled).toBe(false)
+    expect(cliente.baixarArquivo).not.toHaveBeenCalled()
+  })
+
+  it('erro ao ler o arquivo de restaurar ou conferir também libera a tela', async () => {
+    cliente.lerArquivoBackup.mockRejectedValue(new Error('Arquivo inválido: não é um JSON.'))
+    render(<BackupPanel />)
+    escolher('Conferir com um arquivo')
+    expect((await screen.findByRole('alert')).textContent).toMatch(/não é um JSON/)
+    expect(screen.queryByText(/Lendo o arquivo/)).toBeNull()
+    expect(screen.getByText('Exportar backup completo').closest('button').disabled).toBe(false)
+  })
+
   it('exportar: progresso e download com o nome do arquivo', async () => {
     cliente.exportarBackup.mockImplementation(async ({ onProgresso }) => { onProgresso({ linhas: 5, totalLinhas: 10, tabela: 'lancamentos' }); return { texto: '{}', nome: 'finup-backup-teste1-2026-11-10-1830.json' } })
     render(<BackupPanel />)

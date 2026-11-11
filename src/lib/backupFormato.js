@@ -160,9 +160,10 @@ export function diasDesde(ts, agora = Date.now()) {
   return Math.max(0, Math.floor((agora - Number(ts)) / 86_400_000))
 }
 export const DIAS_LEMBRETE = 7
-export function textoUltimoBackup(ultimo, agora = Date.now()) {
+export function textoUltimoBackup(ultimo, agora = Date.now(), onde = 'computador') {
   const d = diasDesde(ultimo, agora)
-  if (d == null) return 'Nenhum backup feito neste aparelho.'
+  if (d == null) return `Nenhum backup feito neste ${onde}.`
+  if (agora - Number(ultimo) < 2 * 60_000) return 'Último backup: agora.'
   if (d === 0) return 'Último backup: hoje.'
   return `Último backup: há ${d} dia${d === 1 ? '' : 's'}.`
 }

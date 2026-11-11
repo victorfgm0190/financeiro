@@ -34,6 +34,8 @@ const servidor = () => vi.fn(async (url, opts = {}) => {
 })
 const recarregar = () => { cleanup(); _reiniciarTour(); _reiniciarBoasVindas() }
 beforeEach(() => {
+  // "Pular tour" fica guardado na sessão do navegador (boasVindasApi): cada teste começa de sessão nova.
+  sessionStorage.clear()
   recarregar()
   banco = { tourVistoEm: '2026-11-01T10:00:00Z', checklistOcultoEm: null, guiasOcultos: [], guiasLigados: true }
   vi.stubGlobal('fetch', servidor())
@@ -87,7 +89,12 @@ describe('tour da tela', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(tour()).toBeNull()
     await waitFor(() => expect(posts()).toEqual([{ guiaOculto: 'accounts' }]))
-    recarregar(); banco.guiasOcultos = []
+    // Mesma sessão do navegador: mesmo que o banco não tenha guardado, o tour pulado não volta.
+    cleanup(); recarregar(); banco.guiasOcultos = []
+    render(<Tela />)
+    await semTour()
+    // Sessão nova (e banco sem a marcação): volta a abrir; "Não mostrar mais" grava no banco.
+    cleanup(); recarregar(); sessionStorage.clear()
     render(<Tela />)
     await esperarTour()
     fireEvent.click(screen.getByRole('button', { name: 'Não mostrar mais nesta tela' }))

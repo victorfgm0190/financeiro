@@ -8,6 +8,18 @@ import { arquivosParaApagar } from './backupFormato.js'
 export const MANTER_PADRAO = 10
 const STORE = 'cfg'
 const CHAVE = 'config'
+// Nada do IndexedDB pode prender a tela: cada operação tem prazo. Passou do prazo → segue sem a
+// preferência guardada (a tela mostra "Nenhum backup feito neste computador").
+export const PRAZO_IDB_MS = 3000
+
+// Promessa com prazo: rejeita com Error('prazo') se não terminar em `ms`.
+export function comPrazo(promessa, ms, mensagem = 'Tempo esgotado') {
+  let t
+  return Promise.race([
+    promessa,
+    new Promise((_, erro) => { t = setTimeout(() => erro(Object.assign(new Error(mensagem), { prazo: true })), ms) }),
+  ]).finally(() => clearTimeout(t))
+}
 
 export const suportaPasta = (w = globalThis.window) => !!w && typeof w.showDirectoryPicker === 'function'
 
@@ -22,28 +34,36 @@ export function backendBackup(nome, idb = globalThis.indexedDB) {
   let conexao = null
   const abrir = () => {
     if (!idb || !nome) return Promise.reject(new Error('IndexedDB indisponível'))
-    conexao ??= new Promise((ok, erro) => {
+    conexao ??= comPrazo(new Promise((ok, erro) => {
       const r = idb.open(nome, 1)
       r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE) }
-      r.onsuccess = () => ok(r.result)
+      r.onsuccess = () => {
+        // Outra aba (ou outra versão) pedindo o banco: solta a conexão em vez de travar as duas.
+        r.result.onversionchange = () => { try { r.result.close() } catch { /* já fechada */ } conexao = null }
+        ok(r.result)
+      }
       r.onerror = () => erro(r.error)
-    })
+      r.onblocked = () => erro(new Error('IndexedDB bloqueado por outra aba'))
+    }), PRAZO_IDB_MS, 'IndexedDB não respondeu').catch((err) => { conexao = null; throw err })
     return conexao
   }
   return {
-    async get() { const db = await abrir(); return req(db.transaction(STORE).objectStore(STORE).get(CHAVE)) },
-    async set(v) { const db = await abrir(); return req(db.transaction(STORE, 'readwrite').objectStore(STORE).put(v, CHAVE)) },
+    async get() { const db = await abrir(); return comPrazo(req(db.transaction(STORE).objectStore(STORE).get(CHAVE)), PRAZO_IDB_MS) },
+    async set(v) { const db = await abrir(); return comPrazo(req(db.transaction(STORE, 'readwrite').objectStore(STORE).put(v, CHAVE)), PRAZO_IDB_MS) },
   }
 }
 
 const VAZIO = { pasta: null, nomePasta: '', perguntar: null, manter: MANTER_PADRAO, ultimo: null }
+// Nunca fica pendurada: sem IndexedDB, erro ou prazo esgotado → preferências vazias.
 export async function lerConfig(backend) {
-  try { return { ...VAZIO, ...((await backend?.get()) || {}) } } catch { return { ...VAZIO } }
+  try { return { ...VAZIO, ...((await comPrazo(Promise.resolve(backend?.get()), PRAZO_IDB_MS)) || {}) } } catch { return { ...VAZIO } }
 }
-export async function salvarConfig(backend, parcial) {
-  const atual = await lerConfig(backend)
+// Grava sobre `base` (o que a tela já tem) ou sobre o que estiver guardado. Falha/prazo: vale só até
+// recarregar — nunca lança, nunca prende quem chamou além do prazo.
+export async function salvarConfig(backend, parcial, base = null) {
+  const atual = base || await lerConfig(backend)
   const novo = { ...atual, ...parcial }
-  try { await backend?.set(novo) } catch { /* sem IndexedDB: vale só até recarregar */ }
+  try { await comPrazo(Promise.resolve(backend?.set(novo)), PRAZO_IDB_MS) } catch { /* sem IndexedDB */ }
   return novo
 }
 

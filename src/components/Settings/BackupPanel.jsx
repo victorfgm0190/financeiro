@@ -193,23 +193,34 @@ export default function BackupPanel({ avisoPendencias = () => false, aoRestaurar
   const inputConferir = useRef(null)
   const suporte = suportaPasta()
 
+  // Só pelo clique no botão (nada exporta ao abrir, recarregar ou seguir um link). Ao terminar —
+  // certo ou errado — a tela volta ao normal na hora; o "último backup" é gravado em segundo plano.
   const exportar = async () => {
+    if (exp || ocupado) return
     setMsg(null)
     setExp({ linhas: 0, totalLinhas: 1, tabela: '' })
+    let resultado = null
     try {
-      const { texto, nome } = await exportarBackup({ onProgresso: setExp })
-      baixarArquivo(nome, texto)
-      await atualizar({ ultimo: Date.now() })
-      setMsg({ tipo: 'ok', texto: `Backup baixado: ${nome}` })
+      resultado = await exportarBackup({ onProgresso: setExp })
     } catch (err) {
-      setMsg({ tipo: 'erro', texto: err.message })
-    } finally { setExp(null) }
+      setMsg({ tipo: 'erro', texto: err?.message || String(err) })
+    } finally {
+      setExp(null)
+    }
+    if (!resultado) return
+    try {
+      baixarArquivo(resultado.nome, resultado.texto)
+      atualizar({ ultimo: Date.now() })
+      setMsg({ tipo: 'ok', texto: `Backup baixado: ${resultado.nome}` })
+    } catch (err) {
+      setMsg({ tipo: 'erro', texto: `O backup foi gerado, mas o navegador não baixou o arquivo: ${err?.message || err}` })
+    }
   }
 
   const lerArquivo = async (e, para) => {
     const file = e.target.files?.[0]
     e.target.value = ''
-    if (!file) return
+    if (!file || exp || ocupado) return
     setMsg(null)
     if (para === 'restaurar' && avisoPendencias()) return
     setOcupado(para === 'restaurar' ? 'Lendo o arquivo e preparando a prévia…' : 'Lendo o arquivo e conferindo…')
@@ -253,7 +264,7 @@ export default function BackupPanel({ avisoPendencias = () => false, aoRestaurar
         <>
           <div data-guia="settings:backup.status" className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${dias == null || dias > DIAS_LEMBRETE ? 'text-aviso bg-aviso/5 border border-aviso/20' : 'text-texto-2 bg-surface-2/60'}`}>
             {dias == null || dias > DIAS_LEMBRETE ? <AlertTriangle size={12} className="shrink-0" /> : <Clock size={12} className="shrink-0 text-primary-fg" />}
-            <span>{cfg ? textoUltimoBackup(cfg.ultimo) : 'Carregando…'}{dias != null && dias > DIAS_LEMBRETE ? ' Faça um backup.' : ''}</span>
+            <span>{cfg ? textoUltimoBackup(cfg.ultimo, undefined, isMobile ? 'aparelho' : 'computador') : 'Carregando…'}{dias != null && dias > DIAS_LEMBRETE ? ' Faça um backup.' : ''}</span>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">

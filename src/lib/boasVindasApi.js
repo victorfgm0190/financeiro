@@ -24,10 +24,20 @@ const ouvintes = new Set()
 const avisar = () => { for (const f of ouvintes) f(estado ? { ...estado, tourAberto } : null) }
 export const EVENTO_ABRIR_TOUR = 'finup:abrir-tour'
 
+// Tour pulado/concluído NESTA sessão do navegador: vale na hora, mesmo que a gravação no banco não
+// chegue (sem internet, aba recarregada no meio). O banco continua sendo a memória entre sessões.
+const CHAVE_SESSAO = 'finup_guias_ocultos_sessao'
+export function guiasOcultosNaSessao(ss = globalThis.sessionStorage) {
+  try { const v = JSON.parse(ss?.getItem(CHAVE_SESSAO) || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
+}
+function guardarNaSessao(telas, ss = globalThis.sessionStorage) {
+  try { ss?.setItem(CHAVE_SESSAO, JSON.stringify([...new Set(telas)])) } catch { /* sem sessionStorage */ }
+}
+
 const doServidor = (r) => ({
   tourVistoEm: r.tourVistoEm || null,
   checklistOcultoEm: r.checklistOcultoEm || null,
-  guiasOcultos: Array.isArray(r.guiasOcultos) ? r.guiasOcultos : [],
+  guiasOcultos: [...new Set([...(Array.isArray(r.guiasOcultos) ? r.guiasOcultos : []), ...guiasOcultosNaSessao()])],
   guiasLigados: r.guiasLigados !== false,
   // Ícones ⓘ de ajuda nos campos (HelpCampo). Ligados por padrão.
   ajudaCampos: r.ajudaCampos !== false,
@@ -77,10 +87,10 @@ export const marcarEtapa = (etapa, estado) => gravar('POST', { etapa, estado: es
   return { progresso: { ...(e.progresso || {}), etapas } }
 })
 // Guia da Tela: "Não mostrar mais" (uma tela), "Desativar todos" e "Reativar todos".
-export const ocultarGuia = (tela) => gravar('POST', { guiaOculto: tela }, (e) => ({ guiasOcultos: [...new Set([...(e.guiasOcultos || []), tela])] }))
+export const ocultarGuia = (tela) => { guardarNaSessao([...guiasOcultosNaSessao(), tela]); return gravar('POST', { guiaOculto: tela }, (e) => ({ guiasOcultos: [...new Set([...(e.guiasOcultos || []), tela])] })) }
 export const ocultarTodosGuias = (telas = []) => gravar('POST', { guiasTodos: true }, () => ({ guiasOcultos: telas }))
-export const reativarTodosGuias = () => gravar('DELETE', null, () => ({ guiasOcultos: [] }))
-export const reativarGuia = (tela) => gravar('POST', { guiaReativar: tela }, (e) => ({ guiasOcultos: (e.guiasOcultos || []).filter(t => t !== tela) }))
+export const reativarTodosGuias = () => { guardarNaSessao([]); return gravar('DELETE', null, () => ({ guiasOcultos: [] })) }
+export const reativarGuia = (tela) => { guardarNaSessao(guiasOcultosNaSessao().filter(t => t !== tela)); return gravar('POST', { guiaReativar: tela }, (e) => ({ guiasOcultos: (e.guiasOcultos || []).filter(t => t !== tela) })) }
 // Preenchimento Guiado: resposta à oferta da 1ª abertura do formulário ('vista' | 'sim' | 'nao' | 'nunca').
 export const responderOfertaGuia = (form, resposta) => gravar('POST', { guiaOferta: { form, resposta } }, (e) => ({
   progresso: {

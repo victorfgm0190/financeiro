@@ -51,8 +51,9 @@ export function faixasFixas(win = globalThis.window) {
   return out
 }
 
-// Botão que dá para "Abrir" pelo guia (ação do bloco). Nada que apague, saia, grave ou pague.
-const PERIGOSO = /excluir|apagar|remover|sair|estorn|desfazer|salvar|gravar|confirmar|pagar|baixar|limpar|zerar|desligar/i
+// Botão que dá para "Abrir" pelo guia (ação do bloco). Nada que apague, saia, grave ou pague — nem
+// backup (exportar/restaurar/conferir só por clique de quem usa, nunca pelo guia).
+const PERIGOSO = /excluir|apagar|remover|sair|estorn|desfazer|salvar|gravar|confirmar|pagar|baixar|limpar|zerar|desligar|exportar|restaurar|backup/i
 export function itemAcionavel(item, el) {
   if (!el || PERIGOSO.test(`${item?.rotulo || ''}`)) return false
   if (el.matches?.('button:disabled, [aria-disabled="true"]')) return false
