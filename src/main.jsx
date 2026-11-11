@@ -5,7 +5,7 @@ import App from './App.jsx'
 import { capturarPedidoDeInstalacao } from './lib/instalacao'
 
 // O Chrome oferece a instalação (PWA) antes da página montar: guarda o pedido para a /instalar.
-capturarPedidoDeInstalacao()
+if (!window.__finupSemSuporte) capturarPedidoDeInstalacao()
 
 const iniciar = () => createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -13,7 +13,11 @@ const iniciar = () => createRoot(document.getElementById('root')).render(
   </StrictMode>,
 )
 
-if (import.meta.env.DEV) {
+// Navegador sem o mínimo (Internet Explorer ou muito antigo): o <script> do index.html já trocou a
+// página pela mensagem com Edge/Chrome (src/lib/ambienteNavegador.js) — o app não monta.
+if (window.__finupSemSuporte) {
+  // nada a fazer
+} else if (import.meta.env.DEV) {
   // Modo dev sem banco (src/dev/modoDev.js): instala ANTES do React montar, para bloquear /api e
   // servir dados fictícios desde o primeiro render. Só existe em desenvolvimento — o Vite remove
   // este ramo e o módulo do build de produção.

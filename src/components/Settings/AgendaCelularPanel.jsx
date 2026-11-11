@@ -135,7 +135,7 @@ export default function AgendaCelularPanel({ emJanela = false }) {
                 <Escolha ativo={mostrarValores} disabled={salvando} onClick={() => mudarOpcoes(tipos, true)}>Sim</Escolha>
                 <Escolha ativo={!mostrarValores} disabled={salvando} onClick={() => mudarOpcoes(tipos, false)}>Não</Escolha>
               </div>
-              <p className="text-[11px] text-texto-3 mt-1">{mostrarValores ? 'Ex.: "Aluguel — R$ 1.500,00"' : 'Ex.: "Aluguel" (sem o valor)'}</p>
+              <p className="text-[11px] text-texto-3 mt-1">{mostrarValores ? 'Cada compromisso aparece com a descrição e o valor.' : 'Cada compromisso aparece só com a descrição, sem o valor.'}</p>
             </div>
           </div>
 

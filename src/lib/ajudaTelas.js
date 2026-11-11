@@ -1235,6 +1235,26 @@ export const AJUDA_TELAS = {
       'Os compromissos demoram a mudar: o aplicativo de agenda do celular atualiza a assinatura de tempos em tempos, não na hora.',
     ],
   },
+  'settings:app-computador': {
+    titulo: 'Usar como aplicativo',
+    descricao: 'Mostra se o Finup está instalado como aplicativo neste computador e como instalar, ou qual navegador usar quando este não instala.',
+    itens: [
+      { chave: 'situacao', rotulo: 'Situação', texto: 'Diz se o Finup está instalado, aberto numa aba ou num navegador que não instala.',
+        detalhe: 'Mostra a situação deste computador: instalado (aberto na janela própria), não instalado (aberto numa aba) ou navegador que não instala o Finup como aplicativo.', exemplo: 'Exemplo: aberto numa aba do Chrome, aparece "Não instalado".' },
+      { chave: 'instalar', rotulo: 'Instalar o Finup', texto: 'Abre a instalação do próprio navegador.',
+        detalhe: 'Abre a janela de instalação do navegador. Instalado, o Finup abre na própria janela, com ícone na barra de tarefas (ou no Dock, no Mac), e abre mais rápido. O botão aparece quando o navegador oferece a instalação.', exemplo: 'Exemplo: clique em "Instalar o Finup" e confirme em "Instalar".' },
+      { chave: 'reativar', rotulo: 'Mostrar o aviso de novo', texto: 'Volta a mostrar o aviso "Use o Finup como aplicativo" neste computador.',
+        detalhe: 'Aparece quando você escolheu "Não mostrar mais" no aviso. Clicando, o aviso volta a aparecer neste computador.', exemplo: 'Exemplo: você dispensou o aviso e agora quer ver de novo como instalar.' },
+    ],
+    dicas: [
+      'Vale para este computador e este navegador.',
+      'O Microsoft Edge e o Google Chrome instalam o Finup e gravam o backup ao sair numa pasta. Em outros navegadores, o backup vai para a pasta Downloads.',
+      'No celular, use "Instalar no celular".',
+    ],
+    errosComuns: [
+      'Não aparece o botão "Instalar o Finup": o navegador ainda não ofereceu a instalação ou o Finup já está instalado. Procure o ícone de instalar na barra de endereço ou abra o Finup pelo ícone dele.',
+    ],
+  },
   'settings:apelidos-ia': {
     titulo: 'Apelidos da IA',
     descricao: 'Termos que o Assistente aprendeu quando você corrigiu uma sugestão dele; passam a valer nas próximas vezes.',

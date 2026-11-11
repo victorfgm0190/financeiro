@@ -28,6 +28,7 @@ import { mobileModules } from '../../mobile/modules'
 import { secoesConfigSoDesktop } from '../../mobile/navegacao'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import AgendaCelularPanel from './AgendaCelularPanel'
+import UsarComoAppPanel from './UsarComoAppPanel'
 import SairModal from '../Offline/SairModal'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
@@ -1964,6 +1965,7 @@ export default function SettingsPanel() {
       {secao === 'apelidos-ia' && <ApelidosIaPanel />}
       {secao === 'atalhos' && <AtalhosPanel />}
       {secao === 'agenda-celular' && <AgendaCelularPanel />}
+      {secao === 'app-computador' && <UsarComoAppPanel />}
       {secao === 'guias' && <GuiasTelasPanel />}
       {secao === 'usuarios' && ehAdmin && <UsuariosPanel />}
         </fieldset>

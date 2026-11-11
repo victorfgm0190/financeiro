@@ -155,6 +155,18 @@ export const campos = {
     relacaoComTela: 'Sempre: pergunta a cada Sair. Nunca: sai direto. Ao escolher a pasta de backup, passa para Sempre (se você ainda não tinha escolhido). No celular nunca pergunta.',
     obrigatorio: false,
   },
+  'aplicativo.usar': {
+    titulo: 'Usar como aplicativo',
+    paraQueServe: 'Mostra se o Finup está instalado como aplicativo neste computador e como instalar.',
+    relacaoComTela: 'Instalado, o Finup abre na própria janela, com ícone na barra de tarefas (ou no Dock, no Mac). O Microsoft Edge e o Google Chrome instalam e gravam o backup ao sair numa pasta; outros navegadores não instalam e mandam o backup para a pasta Downloads. "Mostrar o aviso de novo" desfaz o "Não mostrar mais" do aviso.',
+    obrigatorio: false,
+  },
+  'aplicativo.aviso': {
+    titulo: 'Aviso "Use o Finup como aplicativo"',
+    paraQueServe: 'Sugere instalar o Finup neste computador ou usar um navegador que tenha todos os recursos.',
+    relacaoComTela: 'Aparece no máximo uma vez a cada 7 dias, só no computador e fora do aplicativo instalado, e nunca por cima de um guia. "Agora não" fecha até a próxima vez; "Não mostrar mais" desliga (Configurações → Geral → Usar como aplicativo reativa). Depois de instalado, não aparece mais.',
+    obrigatorio: false,
+  },
   'backup.manter': {
     titulo: 'Backups a manter na pasta',
     paraQueServe: 'Quantos backups deste ambiente ficam guardados na pasta.',

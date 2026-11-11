@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { execSync } from 'node:child_process'
 import process from 'node:process'
+import { scriptNavegadorSemSuporte } from './src/lib/ambienteNavegador.js'
 
 // Hash curto do commit (rodapé do menu lateral). Vercel expõe VERCEL_GIT_COMMIT_SHA; local, git.
 const commitCurto = (() => {
@@ -52,6 +53,13 @@ export default defineConfig({
   },
   define: { 'import.meta.env.VITE_APP_COMMIT': JSON.stringify(commitCurto) },
   plugins: [
+    // Navegador sem o mínimo (Internet Explorer ou muito antigo): um <script> comum, o primeiro do
+    // <head>, troca a página pela mensagem com Edge/Chrome antes de o app carregar. O texto vem de
+    // src/lib/ambienteNavegador.js (fonte única, com testes) no lugar do marcador do index.html.
+    {
+      name: 'finup-navegador-sem-suporte',
+      transformIndexHtml: (html) => html.replace('<!-- finup:navegador-sem-suporte -->', `<script>${scriptNavegadorSemSuporte()}</script>`),
+    },
     react(),
     tailwindcss(),
     VitePWA({

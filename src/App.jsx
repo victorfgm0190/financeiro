@@ -60,6 +60,7 @@ import CadastroCliente from './pages/CadastroCliente'
 import PaginaLegal from './pages/PaginaLegal'
 import EntrarComCodigo from './pages/EntrarComCodigo'
 import Instalar from './pages/Instalar'
+import AvisoUsarComoApp from './components/Layout/UsarComoApp'
 import DefinirSenha from './pages/DefinirSenha'
 import { AMBIENTE_PRINCIPAL } from './lib/ambienteHost'
 import ClientesPanel from './components/Clientes/ClientesPanel'
@@ -301,6 +302,8 @@ function AppContent() {
         </main>
       </div>
       {overlays}
+      {/* Só no computador: "Use o Finup como aplicativo" (o celular tem "Instalar no celular"). */}
+      <AvisoUsarComoApp />
     </div>
   )
 }

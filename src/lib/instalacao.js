@@ -1,6 +1,8 @@
 // INSTALAR O FINUP (PWA) — detecção do aparelho e o pedido de instalação do Chrome/Android.
-// Usado pela página /instalar. O manifest é relativo ("/"), então instalar a partir de
+// Usado pela página /instalar e pelo aviso "Use como aplicativo" do computador. O manifest é relativo ("/"), então instalar a partir de
 // <sigla>.finup.app.br abre aquele ambiente.
+import { rodandoInstalado } from './ambienteNavegador.js'
+import { marcarAppInstalado } from './avisoAplicativo.js'
 
 // iPhone/iPad (inclusive iPad que se apresenta como Mac), Android ou computador. No iPhone, só o
 // Safari instala (Chrome/Firefox/Edge do iOS não têm "Adicionar à Tela de Início" confiável).
@@ -15,24 +17,27 @@ export function detectarAparelho(ua = '', { maxTouchPoints = 0 } = {}) {
   return { tipo: 'computador' }
 }
 
-// Já aberto como app instalado?
+// Já aberto como app instalado? (janela própria, inclusive window-controls-overlay no computador)
 export function estaInstalado(win = typeof window !== 'undefined' ? window : null) {
-  if (!win) return false
-  return !!(win.matchMedia?.('(display-mode: standalone)').matches || win.navigator?.standalone)
+  return rodandoInstalado(win)
 }
 
-// O Chrome dispara 'beforeinstallprompt' cedo (antes da página montar): guardamos o evento aqui
-// (chamado no src/main.jsx). Só na /instalar o padrão é adiado, para o botão "Instalar agora";
-// nas outras telas o navegador segue com o comportamento dele.
+// O Chrome/Edge dispara 'beforeinstallprompt' cedo (antes da página montar): guardamos o evento aqui
+// (chamado no src/main.jsx) para o botão "Instalar agora" (/instalar) e "Instalar o Finup" (aviso e
+// Configurações no computador). Na /instalar e no computador o padrão é adiado (o botão abre a
+// instalação); no celular, fora da /instalar, o navegador segue com o comportamento dele.
+// Instalou (appinstalled): o aviso "Use como aplicativo" não volta mais neste aparelho.
 let pedido = null
 const ouvintes = new Set()
 export function capturarPedidoDeInstalacao(win = window) {
   win.addEventListener('beforeinstallprompt', (e) => {
-    if (win.location.pathname.replace(/\/+$/, '') === '/instalar') e.preventDefault()
+    const naInstalar = win.location.pathname.replace(/\/+$/, '') === '/instalar'
+    const computador = detectarAparelho(win.navigator?.userAgent, { maxTouchPoints: win.navigator?.maxTouchPoints }).tipo === 'computador'
+    if (naInstalar || computador) e.preventDefault()
     pedido = e
     ouvintes.forEach(f => f(e))
   })
-  win.addEventListener('appinstalled', () => { pedido = null; ouvintes.forEach(f => f(null)) })
+  win.addEventListener('appinstalled', () => { pedido = null; marcarAppInstalado(); ouvintes.forEach(f => f(null)) })
 }
 export const pedidoDeInstalacao = () => pedido
 export function aoMudarPedido(f) {
