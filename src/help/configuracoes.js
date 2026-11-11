@@ -146,13 +146,13 @@ export const campos = {
   'backup.pasta': {
     titulo: 'Pasta de backup',
     paraQueServe: 'Pasta deste computador onde o backup ao sair é gravado.',
-    relacaoComTela: 'Fica guardada neste navegador, para o seu usuário. Se o navegador pedir permissão de novo, ela é pedida no clique do "Sim" ao sair.',
+    relacaoComTela: 'Fica guardada neste navegador, para o seu usuário. Se o navegador pedir permissão de novo, ela é pedida no clique do "Sim" ao sair. Se o navegador recusar a permissão de gravar na pasta (no Chrome: cadeado → Configurações do site → Edição de arquivos), a tela avisa e o backup ao sair vai para a pasta Downloads.',
     obrigatorio: false,
   },
   'backup.perguntarAoSair': {
     titulo: 'Perguntar ao sair',
     paraQueServe: 'Liga ou desliga a pergunta "Deseja fazer backup antes de sair?" no botão Sair deste computador.',
-    relacaoComTela: 'Sempre: pergunta a cada Sair. Nunca: sai direto. Sem escolha, pergunta depois que a pasta de backup é escolhida. No celular nunca pergunta.',
+    relacaoComTela: 'Sempre: pergunta a cada Sair. Nunca: sai direto. Ao escolher a pasta de backup, passa para Sempre (se você ainda não tinha escolhido). No celular nunca pergunta.',
     obrigatorio: false,
   },
   'backup.manter': {

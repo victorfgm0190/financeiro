@@ -110,6 +110,14 @@ describe('garantirCacheDoUsuario (login com outro usuário)', () => {
     expect(ls.m.get('finup_ultimo_ambiente')).toBe('vm')
   })
 
+  it('nunca apaga o banco do backup ao sair (pasta e preferências), nem o do próprio usuário nem o de outro', async () => {
+    const idb = idbFalso(['finup_vm_1', 'finup_vm_2', 'finup_backup_vm_2', 'finup_backup_vm_1', 'finup_backup_teste1_2'])
+    const ls = lsFalso({ finup_cache_dono: 'finup_vm_1' })
+    const apagados = await garantirCacheDoUsuario(sessao(2), { idb, ls })
+    expect(apagados).toEqual(['finup_vm_1'])
+    expect([...idb.bancos].sort()).toEqual(['finup_backup_teste1_2', 'finup_backup_vm_1', 'finup_backup_vm_2', 'finup_vm_2'])
+  })
+
   it('mesmo usuário: não apaga nada (a fila guardada segue para o envio)', async () => {
     const idb = idbFalso(['finup_vm_2'])
     const ls = lsFalso({ finup_cache_dono: 'finup_vm_2', finup_reserve_balances: '{"a":1}' })

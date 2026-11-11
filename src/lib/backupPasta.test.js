@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   gravarNaPasta, permissaoDaPasta, backendBackup, comPrazo, PRAZO_IDB_MS, tipoDeErroDaPasta, perguntarAoSair, lerConfig, salvarConfig, suportaPasta, nomeDoBancoBackup, MANTER_PADRAO,
+  escolherPastaDeBackup, mensagemDaEscolha, lerConfigDetalhado, salvarConfigDetalhado, chaveEspelho, motivoDoIdb, textoDoMotivo,
 } from './backupPasta'
 
 // Pasta falsa com a mesma forma do FileSystemDirectoryHandle.
@@ -86,5 +87,140 @@ describe('IndexedDB pendurado nunca prende a tela', () => {
   it('comPrazo: passa o resultado ou rejeita no prazo', async () => {
     await expect(comPrazo(Promise.resolve(7), 50)).resolves.toBe(7)
     await expect(comPrazo(new Promise(() => {}), 10, 'demorou')).rejects.toThrow('demorou')
+  })
+})
+
+// ── Escolha da pasta (defeito de 11/11: "Selecionar pasta" e a tela continuava "Nenhuma pasta") ──────
+const pastaEscolhida = ({ permissao = 'granted', pedido = 'granted', pedidoLanca = false } = {}) => ({
+  kind: 'directory', name: 'FINUP',
+  queryPermission: async () => permissao,
+  requestPermission: async () => { if (pedidoLanca) throw Object.assign(new Error('sem clique'), { name: 'SecurityError' }); return pedido },
+})
+const janela = (resultado) => ({ showDirectoryPicker: vi.fn(async () => { if (resultado instanceof Error) throw resultado; return resultado }) })
+const erro = (name, message = name) => Object.assign(new Error(message), { name })
+
+describe('escolherPastaDeBackup — nunca em silêncio', () => {
+  it('pede a pasta com permissão de gravar (readwrite)', async () => {
+    const w = janela(pastaEscolhida())
+    await escolherPastaDeBackup(w)
+    expect(w.showDirectoryPicker).toHaveBeenCalledWith({ id: 'finup-backup', mode: 'readwrite' })
+  })
+  it('pasta com permissão → ok', async () => {
+    const r = await escolherPastaDeBackup(janela(pastaEscolhida()))
+    expect(r).toMatchObject({ status: 'ok', permissao: 'granted' })
+    expect(r.pasta.name).toBe('FINUP')
+  })
+  it('permissão ainda não dada: pede; concedida → ok', async () => {
+    expect(await escolherPastaDeBackup(janela(pastaEscolhida({ permissao: 'prompt', pedido: 'granted' })))).toMatchObject({ status: 'ok', permissao: 'granted' })
+  })
+  it('permissão recusada → negada (com a pasta, para dizer o nome)', async () => {
+    const r = await escolherPastaDeBackup(janela(pastaEscolhida({ permissao: 'prompt', pedido: 'denied' })))
+    expect(r.status).toBe('negada')
+    expect(r.pasta.name).toBe('FINUP')
+  })
+  it('o navegador não deixa pedir agora (sem clique ativo) → ok, a permissão é pedida no Sair', async () => {
+    expect(await escolherPastaDeBackup(janela(pastaEscolhida({ permissao: 'prompt', pedidoLanca: true })))).toMatchObject({ status: 'ok', permissao: 'prompt' })
+  })
+  it('AbortError (fechou a janela OU o Chrome recusou a edição de arquivos sem perguntar) → cancelado', async () => {
+    expect(await escolherPastaDeBackup(janela(erro('AbortError', 'The user aborted a request.')))).toEqual({ status: 'cancelado' })
+  })
+  it('NotAllowedError/SecurityError → negada; outro erro → erro com a mensagem', async () => {
+    expect((await escolherPastaDeBackup(janela(erro('NotAllowedError')))).status).toBe('negada')
+    expect((await escolherPastaDeBackup(janela(erro('SecurityError')))).status).toBe('negada')
+    expect(await escolherPastaDeBackup(janela(erro('TypeError', 'quebrou')))).toEqual({ status: 'erro', mensagem: 'quebrou' })
+  })
+})
+
+describe('mensagemDaEscolha', () => {
+  const ok = { status: 'ok', pasta: { name: 'FINUP' }, permissao: 'granted' }
+  it('ok: nome da pasta', () => {
+    expect(mensagemDaEscolha(ok)).toEqual({ tipo: 'ok', texto: 'Pasta de backup: FINUP.' })
+  })
+  it('ok sem guardar no aparelho: aviso com o motivo e o que fazer', () => {
+    const m = mensagemDaEscolha(ok, { guardado: false, motivo: 'prazo' })
+    expect(m.tipo).toBe('aviso')
+    expect(m.texto).toMatch(/Pasta de backup: FINUP\..*vale só até fechar ou recarregar.*não respondeu.*Downloads/)
+  })
+  it('cancelado: explica a permissão de edição de arquivos e o destino Downloads', () => {
+    const m = mensagemDaEscolha({ status: 'cancelado' }, { perguntar: true })
+    expect(m.tipo).toBe('aviso')
+    expect(m.texto).toMatch(/Nenhuma pasta foi guardada.*Edição de arquivos.*backup ao sair vai para a pasta Downloads/)
+    expect(mensagemDaEscolha({ status: 'cancelado' }, { perguntar: false }).texto).toMatch(/se ligar "Perguntar ao sair"/)
+  })
+  it('negada: erro com o nome da pasta e como liberar', () => {
+    const m = mensagemDaEscolha({ status: 'negada', pasta: { name: 'FINUP' } })
+    expect(m.tipo).toBe('erro')
+    expect(m.texto).toMatch(/não deu permissão para o Finup gravar na pasta FINUP.*Edição de arquivos/)
+  })
+})
+
+// IndexedDB falso: lento, mudo, com erro ao abrir ou ao gravar.
+function idbFalso({ atraso = 0, mudo = false, erroAbrir = null, erroGravar = null } = {}) {
+  const dados = new Map()
+  const pedido = (fn) => { const r = {}; setTimeout(() => { try { r.result = fn(); r.onsuccess?.() } catch (e) { r.error = e; r.onerror?.() } }, 0); return r }
+  return {
+    dados,
+    open() {
+      const r = {}
+      if (mudo) return r
+      setTimeout(() => {
+        if (erroAbrir) { r.error = erroAbrir; r.onerror?.(); return }
+        r.result = {
+          objectStoreNames: { contains: () => true }, close() {},
+          transaction: () => ({ objectStore: () => ({
+            get: (k) => pedido(() => dados.get(k)),
+            put: (v, k) => pedido(() => { if (erroGravar) throw erroGravar; dados.set(k, v) }),
+          }) }),
+        }
+        r.onsuccess?.()
+      }, atraso)
+      return r
+    },
+  }
+}
+const lsFalso = () => { const m = new Map(); return { m, getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) } }
+
+describe('preferências: lento, sem resposta, com erro — e o espelho', () => {
+  const NOME = 'finup_backup_vm_u1'
+  it('IndexedDB lento (dentro do prazo): grava e lê de volta, guardado', async () => {
+    vi.useFakeTimers()
+    const be = backendBackup(NOME, idbFalso({ atraso: PRAZO_IDB_MS - 500 }))
+    const p = salvarConfigDetalhado(be, { nomePasta: 'FINUP', perguntar: 'sempre' }, { manter: 10 })
+    await vi.advanceTimersByTimeAsync(PRAZO_IDB_MS)
+    await expect(p).resolves.toMatchObject({ guardado: true, cfg: { nomePasta: 'FINUP', perguntar: 'sempre' } })
+    const l = lerConfigDetalhado(be)
+    await vi.advanceTimersByTimeAsync(10)
+    await expect(l).resolves.toMatchObject({ guardado: true, cfg: { nomePasta: 'FINUP' } })
+  })
+  it('sem resposta: grava no espelho, devolve guardado=false/prazo; a leitura usa o espelho', async () => {
+    vi.useFakeTimers()
+    const ls = lsFalso()
+    const esp = { ls, chave: chaveEspelho(NOME) }
+    const be = backendBackup(NOME, idbMudo())
+    const p = salvarConfigDetalhado(be, { pasta: { name: 'FINUP' }, nomePasta: 'FINUP', perguntar: 'sempre' }, { manter: 4 }, esp)
+    await vi.advanceTimersByTimeAsync(PRAZO_IDB_MS + 10)
+    await expect(p).resolves.toMatchObject({ guardado: false, motivo: 'prazo' })
+    expect(JSON.parse(ls.m.get('finup_backup_vm_u1_espelho'))).toEqual({ nomePasta: 'FINUP', perguntar: 'sempre', manter: 4, ultimo: null })
+    const l = lerConfigDetalhado(be, esp)
+    await vi.advanceTimersByTimeAsync(PRAZO_IDB_MS + 10)
+    await expect(l).resolves.toMatchObject({ guardado: false, motivo: 'prazo', cfg: { pasta: null, nomePasta: 'FINUP', perguntar: 'sempre', manter: 4 } })
+  })
+  it('erro ao abrir → motivo erro; pasta que não dá para guardar (DataCloneError) → motivo pasta', async () => {
+    vi.useFakeTimers()
+    const l = lerConfigDetalhado(backendBackup(NOME, idbFalso({ erroAbrir: erro('UnknownError') })))
+    await vi.advanceTimersByTimeAsync(10)
+    await expect(l).resolves.toMatchObject({ guardado: false, motivo: 'erro' })
+    const s = salvarConfigDetalhado(backendBackup(NOME, idbFalso({ erroGravar: erro('DataCloneError') })), { pasta: {} }, {})
+    await vi.advanceTimersByTimeAsync(10)
+    await expect(s).resolves.toMatchObject({ guardado: false, motivo: 'pasta' })
+  })
+  it('sem IndexedDB → indisponível', async () => {
+    await expect(lerConfigDetalhado(backendBackup(NOME, null))).resolves.toMatchObject({ guardado: false, motivo: 'indisponivel' })
+  })
+  it('motivoDoIdb e textoDoMotivo', () => {
+    expect(motivoDoIdb({ prazo: true })).toBe('prazo')
+    expect(motivoDoIdb(erro('QuotaExceededError'))).toBe('cota')
+    expect(textoDoMotivo('prazo')).toMatch(/não respondeu/)
+    expect(textoDoMotivo('xyz')).toMatch(/deu erro/)
   })
 })

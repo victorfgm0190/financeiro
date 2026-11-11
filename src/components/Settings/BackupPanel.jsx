@@ -5,7 +5,7 @@ import HelpCampo from '../shared/HelpCampo'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useBackupLocal, podeFazerBackup } from '../../hooks/useBackupLocal'
 import { exportarBackup, baixarArquivo, lerArquivoBackup, previaRestauracao, restaurarBackup, conferirComArquivo } from '../../lib/backupCliente'
-import { suportaPasta, escolherPasta, perguntarAoSair, MANTER_PADRAO } from '../../lib/backupPasta'
+import { suportaPasta, escolherPastaDeBackup, mensagemDaEscolha, perguntarAoSair, textoDoMotivo, MANTER_PADRAO } from '../../lib/backupPasta'
 import { diasDesde, DIAS_LEMBRETE, textoUltimoBackup, versaoDoManifesto } from '../../lib/backupFormato'
 
 // Configurações → Dados → Backup. Exportar (com progresso), Restaurar (arquivo → prévia → digitar
@@ -182,10 +182,11 @@ function Restaurar({ aberto, onFechar, arquivo, previa, aoTerminar }) {
 
 export default function BackupPanel({ avisoPendencias = () => false, aoRestaurar }) {
   const isMobile = useIsMobile()
-  const { cfg, atualizar, sessao } = useBackupLocal()
+  const { cfg, atualizar, sessao, guardado, motivo } = useBackupLocal()
   const pode = podeFazerBackup(sessao)
   const [exp, setExp] = useState(null) // { linhas, totalLinhas, tabela } | null
-  const [msg, setMsg] = useState(null) // { tipo: 'ok'|'erro', texto }
+  const [msg, setMsg] = useState(null) // { tipo: 'ok'|'aviso'|'erro', texto }
+  const [msgPasta, setMsgPasta] = useState(null) // mensagem da escolha da pasta (ao lado do botão)
   const [restauro, setRestauro] = useState(null) // { arquivo, previa }
   const [conf, setConf] = useState(null) // conferência sem restaurar
   const [ocupado, setOcupado] = useState('')
@@ -233,14 +234,23 @@ export default function BackupPanel({ avisoPendencias = () => false, aoRestaurar
     } finally { setOcupado('') }
   }
 
+  // Escolher a pasta nunca falha em silêncio: o nome aparece na hora; se o navegador recusar a permissão
+  // ou não deixar guardar a escolha neste computador, a tela diz por quê e o que fazer. Escolheu (ou tentou
+  // escolher e o navegador recusou) e ainda não mexeu em "Perguntar ao sair": passa para Sempre.
   const trocarPasta = async () => {
-    try {
-      const pasta = await escolherPasta()
-      await atualizar({ pasta, nomePasta: pasta.name })
-      setMsg({ tipo: 'ok', texto: `Pasta de backup: ${pasta.name}` })
-    } catch (err) {
-      if (err?.name !== 'AbortError') setMsg({ tipo: 'erro', texto: `Não foi possível usar a pasta: ${err.message}` })
+    setMsgPasta(null)
+    const r = await escolherPastaDeBackup()
+    const ligarPergunta = r.status !== 'cancelado' && r.status !== 'erro' && (cfg?.perguntar == null)
+    const perguntar = ligarPergunta || perguntarAoSair(cfg)
+    if (r.status !== 'ok') {
+      if (ligarPergunta) atualizar({ perguntar: 'sempre' })
+      setMsgPasta(mensagemDaEscolha(r, { perguntar }))
+      return
     }
+    const gravacao = atualizar({ pasta: r.pasta, nomePasta: r.pasta.name, ...(ligarPergunta ? { perguntar: 'sempre' } : {}) }, { esperar: true })
+    setMsgPasta(mensagemDaEscolha(r, { perguntar }))
+    const { guardado, motivo } = await gravacao
+    if (!guardado) setMsgPasta(mensagemDaEscolha(r, { guardado, motivo, perguntar }))
   }
 
   const ocupadoAgora = !!exp || !!ocupado
@@ -283,7 +293,7 @@ export default function BackupPanel({ avisoPendencias = () => false, aoRestaurar
 
           {exp && <Barra valor={exp.linhas} total={exp.totalLinhas} rotulo={exp.tabela ? `Exportando ${exp.tabela}` : 'Lendo o banco'} />}
           {ocupado && <p className="text-xs text-primary-fg">{ocupado}</p>}
-          {msg && <p role={msg.tipo === 'erro' ? 'alert' : 'status'} className={`text-xs break-words ${msg.tipo === 'erro' ? 'text-perigo' : 'text-primary-fg'}`}>{msg.texto}</p>}
+          {msg && <p role={msg.tipo === 'ok' ? 'status' : 'alert'} className={`text-xs break-words ${msg.tipo === 'erro' ? 'text-perigo' : msg.tipo === 'aviso' ? 'text-aviso' : 'text-primary-fg'}`}>{msg.texto}</p>}
 
           <p className="text-xs text-texto-2 leading-relaxed">
             Restaurar troca os dados deste ambiente pelos do arquivo, tudo ou nada, e mantém usuários, senhas, acessos e a identidade do ambiente (título e frase do rodapé). Antes de restaurar, exporte um backup atual. &quot;Conferir com um arquivo&quot; compara o arquivo com o banco sem mudar nada.
@@ -297,8 +307,15 @@ export default function BackupPanel({ avisoPendencias = () => false, aoRestaurar
                   <button type="button" className="btn-secondary flex items-center gap-2 min-h-[36px] text-xs" onClick={trocarPasta}>
                     <FolderOpen size={13} /> {cfg?.pasta ? 'Trocar pasta' : 'Escolher pasta de backup'}
                   </button>
-                  <span className="text-xs text-texto-2">{cfg?.pasta ? <>Pasta: <span className="text-texto-1 font-medium">{cfg.nomePasta || cfg.pasta.name}</span></> : 'Nenhuma pasta escolhida.'}</span>
+                  <span className="text-xs text-texto-2" data-testid="backup-pasta-atual">
+                    {cfg?.pasta
+                      ? <>Pasta: <span className="text-texto-1 font-medium">{cfg.pasta.name || cfg.nomePasta}</span></>
+                      : cfg?.nomePasta
+                        ? <>Pasta <span className="text-texto-1 font-medium">{cfg.nomePasta}</span>: este navegador não guardou o acesso a ela. Escolha a pasta de novo; enquanto isso, o backup ao sair vai para a pasta Downloads.</>
+                        : 'Nenhuma pasta escolhida.'}
+                  </span>
                   <HelpCampo campo="backup.pasta" />
+                  {msgPasta && <p role={msgPasta.tipo === 'ok' ? 'status' : 'alert'} data-testid="backup-pasta-msg" className={`basis-full text-xs break-words ${msgPasta.tipo === 'erro' ? 'text-perigo' : msgPasta.tipo === 'aviso' ? 'text-aviso' : 'text-primary-fg'}`}>{msgPasta.texto}</p>}
                 </div>
               ) : (
                 <p className="text-xs text-texto-2">Este navegador não permite escolher uma pasta: ao sair, se você pedir o backup, o arquivo é baixado para a pasta Downloads.</p>
@@ -320,6 +337,9 @@ export default function BackupPanel({ avisoPendencias = () => false, aoRestaurar
                   </label>
                 )}
               </div>
+              {guardado === false && (
+                <p role="status" className="text-xs text-aviso">As preferências do backup ao sair não ficam guardadas neste computador: {textoDoMotivo(motivo)}. O que você escolher aqui vale até fechar ou recarregar o Finup.</p>
+              )}
               <p className="text-xs text-texto-2">Ao clicar em Sair, o Finup pergunta se quer fazer o backup antes{suporte ? ' e grava o arquivo na pasta, apagando os mais antigos do Finup deste ambiente além da quantidade escolhida (nenhum outro arquivo da pasta é tocado)' : ' e baixa o arquivo para Downloads'}. No celular não há pergunta: use o botão Exportar.</p>
             </div>
           )}

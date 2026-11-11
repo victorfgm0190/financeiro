@@ -153,6 +153,12 @@ const apagarBanco = (idb, nome) => new Promise((ok) => {
 // em computador compartilhado, quem entra nunca abre com os dados (nem com a fila) de quem saiu.
 // Outro dono = o gravado em DONO_DO_CACHE_KEY ou qualquer banco finup_* que não seja o desta sessão
 // (indexedDB.databases(), onde houver). Grava o dono novo no fim. Nunca lança; no máximo `limite` ms.
+// NUNCA apaga os bancos finup_backup_* (src/lib/backupPasta.js): só guardam a pasta do backup ao sair e as
+// preferências dele, sem dado financeiro, e precisam sobreviver ao login. Apagar o do próprio usuário a
+// cada login sumia com a pasta escolhida — e o deleteDatabase bloqueado por outra aba deixava o
+// IndexedDB do backup sem responder (o "Carregando…" sem fim de 10/11).
+// finup_backup_<ambiente>_<usuário> (o cache de um ambiente de sigla "backup" seria finup_backup_<usuário>).
+export const BANCO_DE_BACKUP = /^finup_backup_[^_]+_.+$/
 export async function garantirCacheDoUsuario(sessao, { idb = globalThis.indexedDB, ls = globalThis.localStorage, limite = 3000 } = {}) {
   const atual = nomeDoBanco(sessao)
   if (!atual) return []
@@ -160,10 +166,10 @@ export async function garantirCacheDoUsuario(sessao, { idb = globalThis.indexedD
     const outros = new Set()
     let dono = null
     try { dono = ls?.getItem(DONO_DO_CACHE_KEY) ?? null } catch { /* indisponível */ }
-    if (dono && dono !== atual) outros.add(dono)
+    if (dono && dono !== atual && !BANCO_DE_BACKUP.test(dono)) outros.add(dono)
     try {
       for (const { name } of (await idb?.databases?.()) || []) {
-        if (name && name.startsWith('finup_') && name !== atual) outros.add(name)
+        if (name && name.startsWith('finup_') && name !== atual && !BANCO_DE_BACKUP.test(name)) outros.add(name)
       }
     } catch { /* databases() indisponível (Firefox antigo) — fica só o dono gravado */ }
     if (idb) await Promise.all([...outros].map(n => apagarBanco(idb, n)))

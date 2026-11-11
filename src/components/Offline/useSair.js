@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext'
 import { clearTokenAndRedirect } from '../../lib/api'
 import { MOBILE_MEDIA_QUERY } from '../../lib/breakpoints'
 import { useBackupLocal, podeFazerBackup } from '../../hooks/useBackupLocal'
-import { perguntarAoSair, suportaPasta, permissaoDaPasta, gravarNaPasta, escolherPasta, tipoDeErroDaPasta } from '../../lib/backupPasta'
+import { perguntarAoSair, suportaPasta, permissaoDaPasta, gravarNaPasta, escolherPastaDeBackup, tipoDeErroDaPasta } from '../../lib/backupPasta'
 import { exportarBackup, baixarArquivo } from '../../lib/backupCliente'
 
 // "Sair" (sidebar, topo, menu Mais). Sem pendências na fila: encerra a sessão DIRETO (antes tenta
@@ -68,14 +68,14 @@ export function useSair() {
     }
   }
 
+  // Cancelou a janela: o aviso de erro continua aberto com as outras saídas (Downloads, sair sem backup).
   const outraPasta = async () => {
-    try {
-      const p = await escolherPasta()
-      await atualizar({ pasta: p, nomePasta: p.name })
-      await fazerBackup(p)
-    } catch (err) {
-      if (err?.name !== 'AbortError') setBackup({ fase: 'erro', tipo: 'pasta', mensagem: err?.message || String(err) })
-    }
+    const r = await escolherPastaDeBackup()
+    if (r.status === 'cancelado') return
+    if (r.status === 'negada') { setBackup({ fase: 'erro', tipo: 'permissao' }); return }
+    if (r.status === 'erro') { setBackup({ fase: 'erro', tipo: 'pasta', mensagem: r.mensagem }); return }
+    atualizar({ pasta: r.pasta, nomePasta: r.pasta.name })
+    await fazerBackup(r.pasta)
   }
 
   const sincronizarESair = async () => {

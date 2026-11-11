@@ -73,3 +73,19 @@ IndexedDB `finup_backup_<ambiente>_<usuário>` com "Perguntar ao sair", quantos 
 Finup deste ambiente (só nomes no padrão). Sem suporte (Safari, Firefox): baixa para Downloads. Erro:
 outra pasta, Downloads, tentar de novo ou sair sem backup. Celular: nunca pergunta. Lembrete discreto
 na barra lateral depois de 7 dias.
+
+Escolha da pasta (correção de 11/11, `escolherPastaDeBackup` e `mensagemDaEscolha` em
+`src/lib/backupPasta.js`):
+- Nunca falha em silêncio. O Chrome devolve `AbortError` tanto quando a pessoa fecha a janela quanto quando
+  recusa a permissão "Edição de arquivos" depois da escolha, inclusive sem mostrar pedido nenhum (bloqueada
+  no site ou bloqueada automaticamente depois de recusas seguidas). A tela explica os dois casos e como
+  liberar: cadeado → Configurações do site → Edição de arquivos → Permitir.
+- O nome da pasta aparece na hora. A gravação no IndexedDB vai em segundo plano; se não der (prazo,
+  indisponível, cota, a pasta não pôde ser guardada), a tela avisa o motivo e diz que vale até recarregar.
+- Escolheu a pasta e "Perguntar ao sair" ainda não tinha sido mexido: passa para Sempre.
+- As preferências (menos a pasta em si, que só cabe no IndexedDB) têm espelho no localStorage
+  (`finup_backup_<ambiente>_<usuário>_espelho`).
+- Uma cópia só por usuário e ambiente (`useBackupLocal`), compartilhada pela tela e pelo Sair.
+- O login (`garantirCacheDoUsuario`) **não apaga** os bancos `finup_backup_*`. Antes ele apagava, a cada
+  login, o banco do próprio usuário: a pasta sumia, e o `deleteDatabase` bloqueado por outra aba aberta
+  deixava o IndexedDB do backup sem responder (o "Carregando…" sem fim de 10/11).
