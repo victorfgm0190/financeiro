@@ -46,7 +46,7 @@ import { linhasHistorico, novoLoteId } from '../../lib/historico'
 import { JaLancadoStatus } from './JaLancadoCelula'
 import { ConferenciaFatura, DataCelula, FaturaCelula, DescricaoCelula, Selo, ParcelasJaNoBanco, BlocoRecolhido, LinkRegrasClassificacao, BarraAcoesRevisao } from './RevisaoFatura'
 import { aplicarCorrespondencias } from '../../lib/importacaoCorrespondencias'
-import { respostaRecorrente, desfazerRespostaRecorrente } from '../../lib/recorrenteParecido'
+import { aplicarRecorrentesParecidos, respostaRecorrente, desfazerRespostaRecorrente, baixaDoRecorrenteConfirmado } from '../../lib/recorrenteParecido'
 import { montarBlocos, resumoDosBlocos, perguntasDeDecisao, blocoDaLinha, respostaDaLinha, ROTULO } from '../../lib/blocosConferencia'
 import { ResumoConferencia, CartoesDecisao, BlocoConferencia, ListaJaNoFinup, ListaJaConciliados, ListaNaoEntram, ListaAguardando, SugestaoAssistente } from './ConferenciaBlocos'
 import { hojeSP } from '../../lib/hoje'
@@ -1785,8 +1785,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const ja = aplicarJaLancados(base, { transactions, preLancamentos: preLancamentosIa, accountId: selectedAccount, closingDay, apelidos: apelidosIa, faturasFechadas: settings?.faturasFechadas })
     // Lançado à mão/Assistente com outro nome, parcela projetada com outra data, valor diferente ou
     // em fatura vizinha (lib/importacaoCorrespondencias): só nas linhas que ainda são novas.
-    return aplicarCorrespondencias(ja, { transactions, accounts, accountId: selectedAccount, apelidos: apelidosIa, faturasFechadas: settings?.faturasFechadas })
-  }, [rows, selectedAccount, selectedAcc, editingImport, existingParcelaByKey, forcedDupSelect, transactions, preLancamentosIa, apelidosIa, accounts, settings?.faturasFechadas])
+    const corr = aplicarCorrespondencias(ja, { transactions, accounts, accountId: selectedAccount, apelidos: apelidosIa, faturasFechadas: settings?.faturasFechadas })
+    // Cobrança recorrente com valor diferente do agendado em mais de R$ 0,50 (até ±50%): vira a
+    // pergunta "É este agendamento?" — sem resposta, nada é importado nem baixado (lib/recorrenteParecido).
+    return aplicarRecorrentesParecidos(corr, { schedules, accountId: selectedAccount, closingDay, excecoes: settings?.recurringMatchExceptions || [] })
+  }, [rows, selectedAccount, selectedAcc, editingImport, existingParcelaByKey, forcedDupSelect, transactions, preLancamentosIa, apelidosIa, accounts, settings?.faturasFechadas, schedules, settings?.recurringMatchExceptions])
   const resumoJa = useMemo(() => resumoJaLancados(resolvedRows), [resolvedRows])
 
   // Confirmação das linhas "Já lançado": UPDATE no lançamento existente (nunca delete+insert; origin,
@@ -1911,6 +1914,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const linhas = []
     for (const r of resolvedRows) {
       if (r._generated || (r.type || 'expense') !== 'expense') continue
+      if (r._recorrente?.escolha === 'sim') continue
       const existente = r._collisionTx || (r._isDuplicate ? r._dbTx : null)
       // Linha nova só concorre se for mesmo entrar (desmarcada / duplicata provável não importa).
       if (!existente && !r.selected) continue
@@ -2461,6 +2465,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const resumo = { novos: toImport.length, existiam: contarJaExistiam(resolvedRows), atualizados: collisionsToApply.length, conciliados: toImport.length + conferidosNoBanco.length }
     const pending = []
     toImport.forEach(row => {
+      // "É este agendamento?" respondido com Sim: baixa a ocorrência pelo valor do cartão (sem
+      // confirmação, baixaDoRecorrenteConfirmado devolve null e nada é baixado).
+      const recorrente = baixaDoRecorrenteConfirmado(row, schedules)
+      if (recorrente) {
+        const lancamentoId = rowTxId.get(row._id) || null
+        baixarCobrancaRecorrente({
+          schedule: recorrente, atualizarFuturas: false,
+          tx: { id: lancamentoId, type: 'expense', accountType: 'credit', accountId: selectedAccount, amount: row.amount, payee: row.payee, description: row.description, date: computeSaveDate(row), faturaMonthYear: row.faturaMonthYear || faturaMonthYear },
+          meta: lancamentoId ? { tipo: TIPO_BAIXA.IMPORTADO, lancamento_id: lancamentoId, import_id: importId || null } : null,
+        })
+        return
+      }
       // Já tratada pela baixa automática (aplicada ou recusada na prévia) — não pergunta de novo.
       if (baixasPorLinha.has(row._id)) return
       const saveDate = computeSaveDate(row)
