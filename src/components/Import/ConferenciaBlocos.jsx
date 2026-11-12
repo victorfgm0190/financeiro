@@ -4,7 +4,7 @@
 //   1. Resumo: três números (Novos · Já estão no Finup · Pedem sua decisão) + arquivo × fatura.
 //   2. "É este?": um cartão por pergunta ("1 de N"), lado a lado, diferenças realçadas, dois botões
 //      com a frase do que acontece; atalhos de teclado do motor do app (lib/atalhos/registry).
-//   3. Blocos recolhidos: Novos (a tabela de sempre, vem do ImportPanel), Já estão no Finup, Já
+//   3. Blocos recolhidos: Novos (a tabela de sempre, vem do ImportPanel), Juntados agora, Já
 //      conciliados antes, Não entram e Aguardando o banco (só informação).
 //   6. Lugar da sugestão do Assistente (Etapa 6c): <SugestaoAssistente> não mostra nada sem uma
 //      sugestão válida (lib/sugestaoAssistente).
@@ -37,7 +37,9 @@ export function ResumoConferencia({ resumo, onIr, children }) {
     <section aria-label="Resumo da fatura" className="space-y-2" data-guia="import.resumo">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <Numero testid="resumo-novos" titulo="Novos" qtd={r.novos.qtd} sub={`${fmt(r.novos.valor)} · serão importados`} onClick={onIr ? () => onIr('novos') : undefined} />
-        <Numero testid="resumo-ja" titulo="Já estão no Finup" qtd={r.ja.qtd} sub="nada novo é criado" tom="ok" onClick={onIr ? () => onIr('jaNoFinup') : undefined} />
+        <Numero testid="resumo-ja" titulo="Já estão no Finup" qtd={r.ja.qtd} tom="ok"
+          sub={`${r.ja.conciliadosAntes ?? 0} conciliados antes · ${r.ja.juntadosAgora ?? 0} juntados agora`}
+          onClick={onIr ? () => onIr((r.ja.juntadosAgora ?? 0) > 0 ? 'jaNoFinup' : 'jaConciliados') : undefined} />
         <Numero testid="resumo-decisao" titulo="Pedem sua decisão" qtd={r.decisao.qtd}
           sub={r.decisao.qtd > 0 ? `${fmt(Math.abs(r.decisao.valor))} ficam de fora até você responder` : 'nada pendente'}
           tom={r.decisao.qtd > 0 ? 'aviso' : 'neutro'} onClick={onIr && r.decisao.qtd > 0 ? () => onIr('decisao') : undefined} />
@@ -206,7 +208,7 @@ export function BlocoConferencia({ id, titulo, qtd, sub, aberto, onAlternar, chi
 
 const linhaBase = 'px-3 py-2 border-b border-borda/50 last:border-0 text-xs'
 
-// "Já estão no Finup": cada par numa linha, com o que foi juntado.
+// "Juntados agora (ficam conciliados)": cada par numa linha, com o que foi juntado.
 export function ListaJaNoFinup({ linhas, onAcao, detalhes, abertas, onDetalhes }) {
   return (
     <ul data-testid="lista-ja-no-finup">

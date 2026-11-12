@@ -32,12 +32,28 @@ describe('1. Resumo', () => {
     const onIr = vi.fn()
     render(<ResumoConferencia resumo={resumo} onIr={onIr} />)
     expect(screen.getByTestId('resumo-novos').textContent).toMatch(/^2Novos.*30,00/)
-    expect(screen.getByTestId('resumo-ja').textContent).toMatch(/^1Já estão no Finup/)
+    expect(screen.getByTestId('resumo-ja').textContent).toMatch(/^1Já estão no Finup0 conciliados antes · 1 juntados agora/)
     expect(screen.getByTestId('resumo-decisao').textContent).toMatch(/^1Pedem sua decisão.*10,00 ficam de fora/)
     expect(screen.getByTestId('resumo-decisao').className).toMatch(/aviso/)
     expect(screen.getByTestId('resumo-totais').textContent).toMatch(/Total do arquivo: R\$\s?50,00.*Fica na fatura do Finup depois de confirmar: R\$\s?50,00/)
     fireEvent.click(screen.getByTestId('resumo-decisao'))
     expect(onIr).toHaveBeenCalledWith('decisao')
+  })
+})
+
+describe('1b. Topo × blocos: o mesmo nome nunca com números diferentes', () => {
+  it('"Já estão no Finup" é o total; o bloco dos juntados agora tem outro nome', async () => {
+    const { BLOCOS } = await import('../../lib/blocosConferencia.js')
+    const rows = [
+      linha('c', { selected: false, _isDuplicate: true, _dbTx: tx('x1', { reconciled: true }) }),
+      linha('d', { selected: false, _isDuplicate: true, _dbTx: tx('x2', { reconciled: true }) }),
+      linha('j', { selected: false, _isDuplicate: true, _dbTx: tx('x3'), _jaLancado: { tx: tx('x3'), origem: 'regra_nova' } }),
+    ]
+    const resumo = resumoDosBlocos(montarBlocos(rows, null), null)
+    render(<ResumoConferencia resumo={resumo} />)
+    expect(screen.getByTestId('resumo-ja').textContent).toMatch(/^3Já estão no Finup2 conciliados antes · 1 juntados agora/)
+    expect(BLOCOS.map(b => b.titulo)).toEqual(['Pedem sua decisão', 'Novos', 'Juntados agora (ficam conciliados)', 'Já conciliados antes', 'Não entram', 'Aguardando o banco'])
+    expect(BLOCOS.filter(b => b.titulo === 'Já estão no Finup')).toHaveLength(0)
   })
 })
 

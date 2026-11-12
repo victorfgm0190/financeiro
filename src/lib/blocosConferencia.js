@@ -14,7 +14,7 @@ import { faturaDoLancamento } from './scheduleBaixa.js'
 export const BLOCOS = [
   { id: 'decisao', titulo: 'Pedem sua decisão' },
   { id: 'novos', titulo: 'Novos' },
-  { id: 'jaNoFinup', titulo: 'Já estão no Finup' },
+  { id: 'jaNoFinup', titulo: 'Juntados agora (ficam conciliados)' },
   { id: 'jaConciliados', titulo: 'Já conciliados antes' },
   { id: 'naoEntram', titulo: 'Não entram' },
   { id: 'aguardando', titulo: 'Aguardando o banco' },
@@ -68,7 +68,8 @@ export function resumoDosBlocos(blocos, projecao = null) {
   const todas = [...blocos.decisao, ...blocos.novos, ...ja, ...blocos.naoEntram]
   return {
     novos: soma(blocos.novos),
-    ja: soma(ja),
+    // "Já estão no Finup" (total) = conciliados antes + juntados agora.
+    ja: { ...soma(ja), conciliadosAntes: blocos.jaConciliados.length, juntadosAgora: blocos.jaNoFinup.length },
     decisao: soma(blocos.decisao),
     naoEntram: soma(blocos.naoEntram),
     aguardando: { qtd: blocos.aguardando.length, valor: r2(-blocos.aguardando.reduce((s, i) => s + (Number(i.valor) || 0), 0)) },
@@ -229,7 +230,7 @@ export function fraseNao(pergunta) {
 }
 
 // ── Itens dos blocos recolhidos ──────────────────────────────────────────────────────────────────
-// "Já estão no Finup": com o que a linha foi juntada e se dá para dizer "Não é este".
+// "Juntados agora (ficam conciliados)": com o que a linha foi juntada e se dá para dizer "Não é este".
 //   acao: 'novo' (importa como novo) | 'rever' (volta a ser pergunta) | null (não se aplica: mesma
 //   parcela da mesma compra, ou o mesmo lançamento da fatura importado antes)
 export function parJaNoFinup(r) {

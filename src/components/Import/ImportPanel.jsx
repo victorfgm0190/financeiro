@@ -2620,7 +2620,7 @@ Importar mesmo assim no mês selecionado?`)) return
   const comAbas = !editingImport && resolvedRows.length > 0
   const contagem = useMemo(() => contarRevisaoFatura(resolvedRows), [resolvedRows])
   // Tela nova da conferência (lib/blocosConferencia): cada linha em UM bloco — Pedem sua decisão
-  // (aberto, um cartão por pergunta), Novos, Já estão no Finup, Já conciliados antes, Não entram e
+  // (aberto, um cartão por pergunta), Novos, Juntados agora, Já conciliados antes, Não entram e
   // Aguardando o banco (recolhidos). A tabela editável é a dos Novos. Reedição: tabela de sempre.
   const [blocosAbertos, setBlocosAbertos] = useState(() => new Set())
   const aberturaRevisao = comAbas ? `${selectedAccount}|${faturaMonthYear}|${filename}` : null
@@ -4391,7 +4391,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                 aberto={blocosAbertos.has('novos')} onAlternar={() => alternarBloco('novos')}>
                 {renderTabelaRevisao()}
               </BlocoConferencia>
-              <BlocoConferencia id="jaNoFinup" titulo="Já estão no Finup" qtd={blocos.jaNoFinup.length} sub="nada novo é criado; ficam conciliados"
+              <BlocoConferencia id="jaNoFinup" titulo="Juntados agora (ficam conciliados)" qtd={blocos.jaNoFinup.length} sub="lançamentos do Finup que esta fatura confirma; nada novo é criado"
                 aberto={blocosAbertos.has('jaNoFinup')} onAlternar={() => alternarBloco('jaNoFinup')}>
                 <ListaJaNoFinup linhas={blocos.jaNoFinup} onAcao={acaoJaNoFinup} abertas={linhasAbertas} onDetalhes={alternarLinha}
                   detalhes={(r) => (r._jaLancado ? <JaLancadoStatus row={r} categories={categories} payees={payees} updateRow={updateRow} /> : null)} />
