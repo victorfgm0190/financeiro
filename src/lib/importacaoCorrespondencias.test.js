@@ -49,7 +49,7 @@ const confirmar = (out, transactions) => {
 
 describe('Importar Fatura × lançamentos que já existem', () => {
   const base = [PROJECAO, ASSISTENTE, FARMACIA, VIZINHA, CONCILIADO_OUTRO_MES]
-  // Etapa 6a: valor diferente (±5%) e fatura vizinha PERGUNTAM; `out` = depois das escolhas.
+  // Fatura vizinha PERGUNTA; valor diferente (±5%) deixou de perguntar (12/11/2026). `out` = depois das escolhas.
   const sugerido = Object.fromEntries(revisar(rows, base).map(r => [r._id, r]))
   const escolhas = { c: 'farm', e: 'viz' }
   const out = revisar(rows.map(r => ({ ...r, _jaLancadoEscolha: escolhas[r._id] })), base)
@@ -68,23 +68,21 @@ describe('Importar Fatura × lançamentos que já existem', () => {
     expect(mudancas).toContainEqual({ campo: 'payee', de: 'Padaria do Zé', para: 'PADARIA DO ZE LTDA' })
   })
 
-  it('c) R$ 2,00 de diferença (mesma loja, ±5%) → pergunta; escolhido, atualiza o existente de R$ 50,00 para R$ 52,00', () => {
-    expect(sugerido.c).toMatchObject({ _parecido: false, selected: false })
+  it('c) R$ 2,00 de diferença (mesma loja, ±5%) → NÃO é proposto (nem pergunta, nem aviso): entra como novo, mesmo com uma escolha antiga', () => {
+    expect(sugerido.c.selected).toBe(true)
     expect(sugerido.c._jaLancado).toBeUndefined()
-    expect(sugerido.c._jaLancadoOpcoes.map(t => t.id)).toEqual(['farm'])
-    expect(por.c._jaLancado).toMatchObject({ origem: 'match', tx: FARMACIA, divergente: { valor: { de: 50, para: 52 } } })
-    expect(por.c.selected).toBe(false)
-    const [{ changes, mudancas }] = patchesJaLancado(por.c, { saveDate: por.c.date, payee: favorecidoDaLinha(por.c) })
-    expect(changes.amount).toBe(52)
-    expect(mudancas).toContainEqual({ campo: 'amount', de: 50, para: 52 })
-    expect(changes.description).toBe('FARMACIA PAGUE MENOS')
+    expect(sugerido.c._jaLancadoOpcoes).toBeUndefined()
+    expect(sugerido.c._avisoParecido).toBeUndefined()
+    // Uma escolha que não está entre as opções permitidas não vincula nada.
+    expect(por.c._jaLancado).toBeUndefined()
+    expect(por.c.selected).toBe(true)
   })
 
   it('d) compra nova → Novo; conciliado de outra fatura (assinatura do mês passado) não casa', () => {
     expect(por.d._isDuplicate).toBeFalsy()
     expect(por.d._jaLancadoOpcoes).toBeUndefined()
     expect(por.f._isDuplicate).toBeFalsy()
-    expect(linhasAImportar(out).map(r => r._id).sort()).toEqual(['d', 'f'])
+    expect(linhasAImportar(out).map(r => r._id).sort()).toEqual(['c', 'd', 'f'])
   })
 
   it('lançado em fatura vizinha (data antes do fechamento) → pergunta; escolhido, vai para a fatura do arquivo', () => {
@@ -93,8 +91,8 @@ describe('Importar Fatura × lançamentos que já existem', () => {
   })
 
   it('resumo do topo e conciliação dos existentes', () => {
-    expect(resumoRevisao(out)).toEqual({ novos: 2, jaExistem: 2, valorDiferente: 2, parecidos: 0 })
-    expect(idsNoBancoConferidos(out).sort()).toEqual(['assist', 'farm', 'proj8', 'viz'])
+    expect(resumoRevisao(out)).toEqual({ novos: 3, jaExistem: 2, valorDiferente: 1, parecidos: 0 })
+    expect(idsNoBancoConferidos(out).sort()).toEqual(['assist', 'proj8', 'viz'])
   })
 
   it('só o nome parecido (valor longe) → novo direto, sem "Parecido" e sem aviso', () => {

@@ -16,6 +16,21 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.12',
+    data: '2026-11-12',
+    titulo: 'Importar Fatura: menos perguntas e só as que fazem sentido',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'O Finup só pergunta “é este?” quando o valor é o mesmo. Compra com valor diferente entra como nova.',
+      'Parcela já prevista no Finup com poucos centavos de diferença é ajustada sozinha para o valor da fatura, e a diferença aparece na conferência.',
+      'Compra igual lançada em outra fatura ainda não conciliada vira pergunta: se for a mesma, ela passa para a fatura certa.',
+      'Compra em dólar ou IOF estimados mostram “estimado × real”; confirmando, fica o valor real.',
+      'Na Conciliar Fatura, só dá para excluir compra à vista, não conciliada, de fatura já fechada. Parcelas previstas de fatura aberta nunca são excluídas, mesmo em arquivo sem cabeçalho.',
+      'Lançamentos já conciliados só são listados como diferentes quando o valor ou a data do cartão mudam; o nome que você escreveu não conta.',
+    ],
+  },
+  {
     id: '2026.11.11-3',
     data: '2026-11-11',
     titulo: 'Atualizações avisadas e “O que mudou”',

@@ -90,24 +90,40 @@ describe('casos reais da simulação (antes viravam "Parecido — é este?") →
     expect(status(r)).toBe('novo')
     expect(r._avisoParecido).toBeUndefined()
   })
-  it('Amazonmktplc 1/3 × Amazon 2/3, 3/6, 5/6 → novo (parcela diferente); mesma loja ±5% vira só o aviso', () => {
+  it('Amazonmktplc 1/3 × Amazon 2/3, 3/6, 5/6 → novo (parcela diferente) e SEM aviso: o aviso confere parcela e valor (12/11/2026)', () => {
     const r = um({ description: 'Amazonmktplc*amazon Brsao Paulobra 1/3', amount: 49.37, _installment: { num: 1, total: 3 } })
     expect(status(r)).toBe('novo')
-    expect(r._avisoParecido).toMatchObject({ tx: COMPRA_AMAZON, fatura: '2026-12' })
+    expect(r._avisoParecido).toBeUndefined()
     expect(linhasAImportar([r])).toHaveLength(1)
   })
 })
 
 describe('mesmo lançamento automático, perguntas e novos', () => {
-  it('valor digitado errado (16,28 × 16,82, mesma loja), parcela × à vista → novo com aviso', () => {
+  it('valor diferente (16,28 × 16,82, mesma loja) nunca é proposto: nem pergunta, nem aviso (12/11/2026)', () => {
     const manual = tx({ id: 'havan_manual', description: 'Havan', payee: 'Havan', amount: 16.28, date: '2026-10-31' })
     const [r] = revisar([linha({ _id: 'L', description: 'Havan Londrina 3londrinabra 1/5', amount: 16.82, date: '2026-10-31', _dateCartao: '2026-10-31', _installment: { num: 1, total: 5 } })], [manual])
     expect(status(r)).toBe('novo')
-    expect(r._avisoParecido).toMatchObject({ tx: manual, fatura: '2026-11' })
-    // À vista dos dois lados, mesma loja, ±5% e mesma semana: pergunta (nome forte).
+    expect(r._avisoParecido).toBeUndefined()
+    // À vista dos dois lados, mesma loja e mesma semana, mas ±5% de diferença: antes perguntava; agora novo.
     const [av] = revisar([linha({ _id: 'L', description: 'Havan Londrina 3londrinabra', amount: 16.82, date: '2026-10-31', _dateCartao: '2026-10-31' })], [manual])
-    expect(status(av)).toBe('escolher')
-    expect(av._jaLancadoOpcoes).toEqual([manual])
+    expect(status(av)).toBe('novo')
+    expect(av._jaLancadoOpcoes).toBeUndefined()
+    expect(av._avisoParecido).toBeUndefined()
+    // Mesmo valor e mesma loja: continua perguntando.
+    const [igual] = revisar([linha({ _id: 'L', description: 'Havan Londrina 3londrinabra', amount: 16.28, date: '2026-11-05', _dateCartao: '2026-11-05' })], [manual])
+    expect(status(igual)).toBe('escolher')
+    expect(igual._jaLancadoOpcoes).toEqual([manual])
+  })
+
+  it('aviso "parecido" só com a mesma parcela e o mesmo valor (fora da janela de pergunta)', () => {
+    const manual = tx({ id: 'loja', description: 'Loja Exemplo', payee: 'Loja Exemplo', amount: 80, date: '2026-10-20', faturaMonthYear: '2026-11' })
+    // Mesmo valor, à vista, 10 dias depois (fora dos 7 da pergunta): aviso.
+    const [r] = revisar([linha({ _id: 'L', description: 'LOJA EXEMPLO', amount: 80, date: '2026-10-30', _dateCartao: '2026-10-30' })], [manual])
+    expect(status(r)).toBe('novo')
+    expect(r._avisoParecido).toMatchObject({ tx: manual })
+    // Mesmo valor, mas parcela 1/3 × à vista: sem aviso.
+    const [p13] = revisar([linha({ _id: 'L', description: 'LOJA EXEMPLO 1/3', amount: 80, date: '2026-10-30', _dateCartao: '2026-10-30', _installment: { num: 1, total: 3 } })], [manual])
+    expect(p13._avisoParecido).toBeUndefined()
   })
 
   it('à vista, mesmo valor: até 3 dias e único → automático (descrição pode diferir); 4–7 dias → pergunta; > 7 → novo', () => {
@@ -146,11 +162,38 @@ describe('mesmo lançamento automático, perguntas e novos', () => {
     expect(status(revisar([{ ...row, _serieExistente: 'serie_outra' }], [a4])[0])).toBe('novo')
   })
 
-  it('parcela da mesma série, mesmo n/total, fatura e valor ±0,01 → automático; centavos (até ±0,50) → pergunta', () => {
+  it('parcela da mesma série, mesmo n/total, fatura e valor ±0,01 → automático; centavos (até ±0,50) → atualiza a previsão sozinha (12/11/2026)', () => {
     const p2 = tx({ id: 'nb2', description: 'Notebook 2/10', amount: 100, date: '2026-10-15', faturaMonthYear: '2026-11', ...p(2, 10), serieId: 'serie_nb' })
     const row = linha({ _id: 'L', description: 'MAGAZINE LUIZA 02/10', amount: 100, date: '2026-10-15', _dateCartao: '2026-09-02', _installment: { num: 2, total: 10 }, _serieExistente: 'serie_nb' })
     expect(status(revisar([row], [p2])[0])).toBe('no_banco')
-    expect(status(revisar([{ ...row, amount: 100.3 }], [p2])[0])).toBe('possivel')
+    const [cent] = revisar([{ ...row, amount: 100.3 }], [p2])
+    expect(status(cent)).toBe('no_banco')
+    expect(cent._ajustarValor).toBe(true)
+    expect(contarRevisaoFatura([cent]).decisao.qtd).toBe(0)
+    // A confirmação grava o valor do arquivo na previsão…
+    expect(patchColisao(cent, p2, { saveDate: '2026-10-15' })).toMatchObject({ amount: 100.3 })
+    // … e a diferença aparece na conferência como ajuste da previsão.
+    const conf = projetarTotalFatura([cent], { fatura: '2026-11', accountId: CARD, transactions: [p2], closingDay: 13 })
+    expect(conf.itens).toEqual([expect.objectContaining({ tipo: 'valor_diferente', motivo: expect.stringMatching(/^previsão ajustada de R\$\s100,00 para R\$\s100,30$/) })])
+    // Centavos contra parcela de OUTRA série ou além de R$ 0,50: não é candidato — novo.
+    expect(status(revisar([{ ...row, amount: 100.3, _serieExistente: 'serie_outra' }], [p2])[0])).toBe('novo')
+    expect(status(revisar([{ ...row, amount: 101 }], [p2])[0])).toBe('novo')
+  })
+
+  it('o mesmo lançamento NÃO conciliado em outra fatura vira pergunta; o conciliado não aparece (12/11/2026)', () => {
+    const outra = tx({ id: 'out', description: 'Clinica Exemplo', amount: 300, date: '2026-09-20', dateCartao: '2026-09-20', faturaMonthYear: '2026-09' })
+    const row = linha({ _id: 'L', description: 'CLINICA EXEMPLO', amount: 300, date: '2026-09-20', _dateCartao: '2026-09-20' })
+    const [r] = revisar([row], [outra])
+    expect(status(r)).toBe('escolher')
+    expect(r._jaLancadoOpcoes).toEqual([outra])
+    expect(r._tambemEm).toEqual([])
+    // Escolhido: casa e o existente vai para a fatura do arquivo.
+    const [esc] = revisar([{ ...row, _jaLancadoEscolha: 'out' }], [outra])
+    expect(esc._jaLancado).toMatchObject({ tx: outra, fatura: { de: '2026-09', para: '2026-11' } })
+    // Conciliado em outra fatura: nem pergunta, nem aviso.
+    const [c] = revisar([row], [{ ...outra, reconciled: true }])
+    expect(status(c)).toBe('novo')
+    expect(c._tambemEm).toEqual([])
   })
 })
 

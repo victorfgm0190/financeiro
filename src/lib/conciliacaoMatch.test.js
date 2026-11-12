@@ -140,3 +140,24 @@ describe('stripParcelaSuffix — parcela por extenso', () => {
     expect(soItau[0]._crossLevel).toBe('certeza')
   })
 })
+
+// ─── Regras de candidato (Etapa 6b-1, 12/11/2026): o cruzamento da Conciliar Fatura ─────────────────
+describe('crossMatchConciliacao — nunca conciliado, nunca valor diferente, nunca outra parcela', () => {
+  const item = (o) => ({ _id: 'c0', type: 'expense', acao: 'importar', ...o })
+  const sys = (o) => ({ id: 's', type: 'expense', acao: 'manter', ...o })
+  it('lançamento CONCILIADO do sistema não é proposto', () => {
+    const { soItau } = crossMatchConciliacao([item({ amount: 80, description: 'Loja Exemplo' })], [sys({ amount: 80, description: 'Loja Exemplo', reconciled: true })])
+    expect(soItau[0]._crossLevel).toBeUndefined()
+    expect(soItau[0].acao).toBe('importar')
+  })
+  it('valor diferente (até R$ 0,50) não é proposto; o mesmo valor (±0,01) é', () => {
+    expect(crossMatchConciliacao([item({ amount: 80.3, description: 'Loja Exemplo' })], [sys({ amount: 80, description: 'Loja Exemplo' })]).soItau[0]._crossLevel).toBeUndefined()
+    expect(crossMatchConciliacao([item({ amount: 80.01, description: 'Loja Exemplo' })], [sys({ amount: 80, description: 'Loja Exemplo' })]).soItau[0]._crossLevel).toBe('certeza')
+  })
+  it('parcela de outro número/total (1/5 × 5/8) não é proposta; a mesma parcela é', () => {
+    const r = crossMatchConciliacao([item({ amount: 64, description: 'Loja Exemplo 1/5' })], [sys({ amount: 64, description: 'Loja Exemplo 5/8' })])
+    expect(r.soItau[0]._crossLevel).toBeUndefined()
+    const m = crossMatchConciliacao([item({ amount: 64, description: 'Loja Exemplo 5/8' })], [sys({ amount: 64, description: 'Loja Exemplo 05/08', installmentNum: 5, installmentTotal: 8 })])
+    expect(m.soItau[0]._crossLevel).toBe('certeza')
+  })
+})

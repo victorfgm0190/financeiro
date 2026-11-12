@@ -6,10 +6,15 @@
 // que continuam valendo para a reimportação da mesma fatura) e só sobre as linhas que eles não
 // resolveram. Candidatos: lançamentos NÃO conciliados do MESMO cartão (account_id do cartão — a
 // maioria tem card_id NULL) e da MESMA fatura + pré-lançamentos pendentes desse cartão.
-// Critério (Etapa 6a — avaliarJaLancado): mesmo tipo, mesma fatura (aberta), e
+// Critério (Etapa 6a, regras de candidato de 12/11/2026 — avaliarJaLancado): mesmo tipo, mesma fatura
+// (aberta), e
 //   • à vista ou parcela 1 (mesmo n/total): valor ±R$ 0,01 e data da compra até 3 dias → AUTOMÁTICO;
-//   • parcela (mesmo n e mesmo total) com valor até ±R$ 0,50, ou parcela N > 1 que não é da série já
-//     conhecida da linha → PERGUNTA (a data de uma parcela N > 1 é a do dia financeiro, não da compra);
+//   • parcela da MESMA SÉRIE (mesmo n/total) com centavos de diferença (até ±R$ 0,50) → AUTOMÁTICO:
+//     é a previsão da mesma parcela e a confirmação grava o valor do arquivo (não é "parecido");
+//   • parcela N > 1 com o mesmo valor (±0,01) que não é da série já conhecida da linha → PERGUNTA (a
+//     data de uma parcela N > 1 é a do dia financeiro, não da compra);
+//   • parcela com valor diferente fora da mesma série → não é candidato (valor diferente nunca é
+//     proposto como "é este?");
 //   • parcela de OUTRA série conhecida, n/total diferente ou parcela × à vista → não é candidato;
 //   • estimado (dólar/IOF) pelas regras de casaEstimado → PERGUNTA.
 // Resultado por linha: 1 candidato automático (sem disputa) → 'casada'; compras gêmeas (k linhas com o
@@ -124,7 +129,8 @@ export function avaliarJaLancado(r, t, closingDay = 14) {
     if (!pr || !pt || pr.num !== pt.num || pr.total !== pt.total) return null
     if (outraSerie(r, t)) return null
     if (diff > TOL_PARCELA_PERGUNTA * 100) return null
-    if (!exato) return 'perguntar'
+    // Centavos: só a previsão da MESMA série (ajuste automático do valor); senão não é candidato.
+    if (!exato) return mesmaSerie(r, t) ? 'auto' : null
     // Parcela N > 1: a data é a do dia financeiro — sem data comparável, só a série dá certeza.
     if (pr.num > 1) return mesmaSerie(r, t) ? 'auto' : 'perguntar'
   } else if (!exato) return null
@@ -227,6 +233,9 @@ export function aplicarJaLancados(rows, { transactions, preLancamentos = [], acc
   for (const r of rows) for (const t of [r._dbTx, r._collisionTx, r._dupTx]) if (t?.id) usados.add(t.id)
   const marcar = (r, tx, origem) => {
     const sugerido = favorecidoSugerido(r.description, apelidos)
+    // Valor diferente casado (centavos da previsão da mesma série; estimado confirmado): a conferência
+    // da fatura descreve como ajuste da previsão.
+    if (!tx._pre && Math.abs(Math.round(Number(r.amount) * 100) - Math.round(Number(tx.amount) * 100)) > 0) r._ajustarValor = true
     // A fatura manda: favorecido diferente do existente → o da fatura (o atual vai para o histórico).
     const favModoPadrao = sugerido.nome && sugerido.nome !== (tx.payee || '') ? 'sugerido' : 'manter'
     r._jaLancado = { tx, origem, sugerido, favModoPadrao }

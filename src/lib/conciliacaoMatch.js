@@ -6,6 +6,8 @@
 // TIPO faz parte do casamento. Um estorno chega com o valor e a descrição da compra que ele
 // estorna — sem comparar o tipo, ele casa com a própria compra e é descartado como duplicata.
 
+import { detectParcela } from './installments.js'
+
 // ── Conciliação inteligente (Melhoria 1) ──────────────────────────────────────
 // Normaliza texto (maiúsculas, sem acentos) e mede similaridade: 1 = idêntico, 0.9 = um
 // contém o outro, senão Jaccard de palavras (% de palavras em comum). normText é o mesmo
@@ -58,8 +60,22 @@ export function normalizeDescForMatch(desc) {
   return normDescComparacao(stripParcelaSuffix(desc))
 }
 
+// Parcela (n/total, total > 1) de um item: os campos gravados, a parcela resolvida da linha ou o
+// "N/Total"/"ParcN" do texto. null = à vista.
+function parcelaDoItem(x) {
+  const det = detectParcela(x?.description || '')
+  const num = Number(x?.installmentNum ?? x?._installment?.num ?? det?.num) || null
+  const total = Number(x?.installmentTotal ?? x?._installment?.total ?? det?.total) || null
+  return total > 1 ? { num, total } : null
+}
+const mesmaParcelaItens = (a, b) => {
+  const pa = parcelaDoItem(a), pb = parcelaDoItem(b)
+  return (!pa && !pb) || !!(pa && pb && pa.num === pb.num && pa.total === pb.total)
+}
+
 // Cruzamento da reconciliação: casa cada item "Só no Itaú" com um "Só no sistema" (mesmo tipo
-// + valor ±0,50 + descrição), 1:1 guloso. Níveis: certeza (idêntica), provável (≥0,70),
+// + MESMO valor ±0,01 + MESMA parcela + descrição), 1:1 guloso. Regras de candidato de 12/11/2026:
+// lançamento CONCILIADO nunca é proposto; valor diferente e parcela de outro número/total também não. Níveis: certeza (idêntica), provável (≥0,70),
 // possível (≥0,50). Pré-marca a ação em certeza/provável (Itaú→Ignorar, sistema→Manter);
 // possível só recebe badge. Reusa descSimilarity/normText. Devolve cópias anotadas com
 // _crossLevel. O TIPO faz parte do casamento: um estorno chega com o valor e a descrição da
@@ -72,9 +88,10 @@ export function crossMatchConciliacao(soItau, soSistema) {
   for (const it of itauOut) {
     let best = null, bestRank = 0, bestSim = -1
     for (const s of sysOut) {
-      if (used.has(s.id)) continue
+      if (used.has(s.id) || s.reconciled) continue
       if ((s.type || 'expense') !== (it.type || 'expense')) continue
-      if (Math.abs((Number(it.amount) || 0) - (Number(s.amount) || 0)) > 0.50) continue
+      if (Math.round(Math.abs((Number(it.amount) || 0) - (Number(s.amount) || 0)) * 100) > 1) continue
+      if (!mesmaParcelaItens(it, s)) continue
       // Compara as descrições SEM o sufixo de parcela (sistema "01/03" vs Itaú "1/3").
       const sim = descSimilarity(stripParcelaSuffix(it.description), stripParcelaSuffix(s.description))
       const rank = normalizeDescForMatch(it.description) === normalizeDescForMatch(s.description) ? 3 : sim >= 0.7 ? 2 : sim >= 0.5 ? 1 : 0

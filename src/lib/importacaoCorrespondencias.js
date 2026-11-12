@@ -4,21 +4,24 @@
 //
 // Candidatos: lançamentos NÃO conciliados do MESMO cartão e do mesmo tipo, na fatura da linha ou nas
 // vizinhas (anterior e seguinte), todas abertas; um lançamento só casa com uma linha.
+// Regras de candidato (12/11/2026): nunca conciliado, nunca de outra série, nunca com valor diferente.
 // PERGUNTA ("Para escolher" — nada é marcado sozinho):
 //   • nome forte (lib/matchLancamento.similaridade ≥ 0,6, sem cidade e sem palavras genéricas, ou o
-//     apelido aprendido), mesma parcela (as duas à vista, ou mesmo n/total), valor até ±5% e compra
-//     até 5 dias (parcela N > 1 não compara a data);
-//   • à vista com o mesmo valor (±0,01) e a compra entre 4 e 7 dias, ou até 7 dias em outra fatura.
+//     apelido aprendido), mesma parcela (as duas à vista, ou mesmo n/total), MESMO valor (±0,01) e
+//     compra até 5 dias (parcela N > 1 não compara a data);
+//   • à vista com o mesmo valor (±0,01) e a compra entre 4 e 7 dias, ou até 7 dias em outra fatura;
+//   • o mesmo lançamento NÃO conciliado em outra fatura aberta (lib/revisaoImportacao, _tambemEm):
+//     "é o mesmo, lançado na fatura errada?" — escolhido, vai para a fatura do arquivo.
 // NOVO DIRETO: o resto. "Parecido" só pelo nome deixou de existir.
-// AVISO no novo (não muda o que é gravado): lançamento não conciliado da mesma loja (nome forte), valor
-// até ±5%, na mesma fatura ou vizinha → r._avisoParecido = { tx, fatura }.
+// AVISO no novo (não muda o que é gravado): lançamento não conciliado da mesma loja (nome forte), MESMO
+// valor e MESMA parcela, na mesma fatura ou vizinha, que não virou pergunta → r._avisoParecido.
 // Escolher um candidato grava pelo caminho "Já lançado" (lib/casamentoFatura gravarJaLancados): o
 // existente recebe valor/data/descrição/fatura da fatura e é conciliado. Nunca exclui nada. PURO.
 import { simNomes, apelidoLeva, somarMes, SIMILARIDADE_MINIMA } from './matchLancamento.js'
 import { favorecidoSugerido } from './casamentoFatura.js'
 import { faturaDoLancamento } from './scheduleBaixa.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
-import { numeroParcelaDoTx, totalParcelasDoTx } from './revisaoImportacao.js'
+import { numeroParcelaDoTx, totalParcelasDoTx, outraSerie } from './revisaoImportacao.js'
 
 export const TOL_NOME_FORTE = 0.05
 export const JANELA_DIAS_NOME_FORTE = 5
@@ -70,15 +73,26 @@ export function classificarLinhaLivre(r, { transactions = [], cartao, apelidos =
     ms.push(m)
   }
   const aVistaOuP1 = (m) => !m.pr || m.pr.num === 1
-  const perguntaNome = (m) => m.nomeForte && m.mesmaParcela && m.valor5
+  // Valor diferente (±5%) não é mais proposto: só o mesmo valor, a mesma parcela e nunca outra série.
+  const perguntaNome = (m) => m.nomeForte && m.mesmaParcela && m.valorIgual && !outraSerie(r, m.tx)
     && ((m.pr?.num || 0) > 1 || m.dias == null || m.dias <= JANELA_DIAS_NOME_FORTE)
   const perguntaValor = (m) => m.valorIgual && m.mesmaParcela && aVistaOuP1(m) && m.dias != null
     && m.dias <= JANELA_DIAS_MESMO_VALOR && (m.dias >= 4 || m.fatura !== ref)
   const score = (m) => (m.valorIgual ? 40 : 0) + m.simNome * 20 + (m.fatura === ref ? 5 : 0) - (m.dias ?? 0) * 0.5 - m.diff / 100
   const perguntar = ms.filter(m => perguntaNome(m) || perguntaValor(m)).sort((a, b) => score(b) - score(a)).slice(0, MAX_OPCOES)
   const aviso = perguntar.length ? null
-    : ms.filter(m => m.nomeForte && m.valor5).sort((a, b) => a.diff - b.diff || score(b) - score(a))[0] || null
+    : ms.filter(m => m.nomeForte && m.valorIgual && m.mesmaParcela && !outraSerie(r, m.tx)).sort((a, b) => score(b) - score(a))[0] || null
   return { perguntar, aviso }
+}
+
+// O mesmo lançamento NÃO conciliado gravado em OUTRA fatura (r._tambemEm, já filtrado pela regra em
+// lib/revisaoImportacao) vira opção da pergunta, com as mesmas métricas.
+export function opcoesTambemEm(r, { cartao, apelidos = [], usados = new Set() }) {
+  const closingDay = cartao.closingDay || 14
+  const nomes = [r.payee && r.payee !== r.description ? r.payee : '', r.description].filter(Boolean)
+  return (r._tambemEm || []).map(o => o.tx)
+    .filter(t => t && !t.reconciled && !usados.has(t.id) && !outraSerie(r, t))
+    .map(t => medir(r, t, { nomes, apelidos, closingDay }))
 }
 
 export function aplicarCorrespondencias(rows, { transactions = [], accounts = [], accountId, apelidos = [], faturasFechadas = null }) {
@@ -115,7 +129,12 @@ export function aplicarCorrespondencias(rows, { transactions = [], accounts = []
 
   for (const r of out) {
     if (!livre(r)) continue
-    const { perguntar, aviso } = classificarLinhaLivre(r, { transactions, cartao, apelidos, faturasFechadas, usados })
+    const classificado = classificarLinhaLivre(r, { transactions, cartao, apelidos, faturasFechadas, usados })
+    // "Também em outra fatura" (não conciliado): pergunta, não aviso solto (decisão de 12/11/2026).
+    const tambem = opcoesTambemEm(r, { cartao, apelidos, usados })
+    const perguntar = [...classificado.perguntar, ...tambem.filter(m => !classificado.perguntar.some(p => p.tx.id === m.tx.id))].slice(0, MAX_OPCOES)
+    const aviso = perguntar.length ? null : classificado.aviso
+    if (tambem.length) r._tambemEm = []
     const escolha = r._jaLancadoEscolha
     if (escolha === 'novo') {
       if (perguntar.length) r._jaLancadoOpcoes = perguntar.map(m => m.tx)

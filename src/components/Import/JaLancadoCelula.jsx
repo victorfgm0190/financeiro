@@ -95,7 +95,7 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
           <label key={tx.id} data-help-id="revisaoFatura.decidir" className="flex items-start gap-1 text-[10px] text-texto-2 cursor-pointer">
             <input type="radio" className="accent-primary mt-0.5" name={`ja-${row._id}`} checked={row._jaLancadoEscolha === tx.id}
               onChange={() => updateRow(row._id, { _jaLancadoEscolha: tx.id })} />
-            <span className="break-words">É {tx._pre ? 'o pré-lançamento' : 'este'}: {tx.description || '—'} · {fmtDate(tx.date)} · {fmt(tx.amount)}</span>
+            <span className="break-words">É {tx._pre ? 'o pré-lançamento' : 'este'}: {tx.description || '—'} · {fmtDate(tx.date)} · {tx.estimado ? <>estimado {fmt(tx.amount)} × real <b>{fmt(row.amount)}</b> (confirmando, fica o real)</> : fmt(tx.amount)}</span>
           </label>
         ))}
         <label data-help-id="revisaoFatura.decidir" className="flex items-center gap-1 text-[10px] text-texto-2 cursor-pointer">

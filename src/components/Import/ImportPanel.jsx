@@ -21,7 +21,7 @@ import { decodificarOfx } from '../../lib/importacaoPadrao/ofx'
 import { listarModelosImportacao, salvarModeloImportacao, migrarMapeamentosAntigos } from '../../lib/importLayoutsApi'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao, idsConciliacaoConferidos } from '../../lib/conciliacaoMatch'
-import { indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, mudancasDaColisao, diferencasDoConciliado, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia } from '../../lib/revisaoImportacao'
+import { indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, mudancasDaColisao, diferencasDoConciliado, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia, faturaEstaAberta, podeExcluirSoNoSistema } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
@@ -46,6 +46,7 @@ import { linhasHistorico, novoLoteId } from '../../lib/historico'
 import { JaLancadoStatus } from './JaLancadoCelula'
 import { ResumoRevisaoFatura, ConferenciaFatura, AbasRevisao, DataCelula, FaturaCelula, DescricaoCelula, Selo, DecisaoSelect, ParcelasJaNoBanco, BlocoRecolhido, LinkRegrasClassificacao, BarraAcoesRevisao } from './RevisaoFatura'
 import { aplicarCorrespondencias } from '../../lib/importacaoCorrespondencias'
+import { hojeSP } from '../../lib/hoje'
 import { aplicarJaLancados, resumoJaLancados, favorecidoDaLinha, patchesJaLancado, termoDescricaoFatura } from '../../lib/casamentoFatura'
 import { listarPreLancamentos, listarApelidos, aprenderApelidos, concluirPreLancamento } from '../../lib/assistenteApi'
 import { ESCOPO } from '../../lib/camposSerie'
@@ -1195,7 +1196,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // extractItauCabecalho); null quando o arquivo não é do Itaú.
   const [cabecalhoArquivo, setCabecalhoArquivo] = useState(null)
   // Fatura aberta (valor parcial): parcelas da série sem linha no arquivo estão só aguardando o banco.
-  const faturaAbertaArquivo = cabecalhoArquivo?.aberta === true
+  // Decidida por lib/revisaoImportacao faturaEstaAberta: cabeçalho do Itaú quando diz; senão a fatura
+  // marcada como fechada e o calendário do cartão (CSV e arquivos sem cabeçalho também ficam protegidos).
+  // Calculada mais abaixo, depois do cartão e do mês de referência.
   const [filename, setFilename] = useState('')
   const [rows, setRows] = useState([])
   const [cardInfo, setCardInfo] = useState({ cardName: '', faturaStr: '' })
@@ -1292,6 +1295,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
   const creditAccounts = accounts.filter(a => a.type === 'credit')
   const selectedAcc = accounts.find(a => a.id === selectedAccount)
+  const faturaAbertaArquivo = faturaEstaAberta({
+    cabecalhoAberta: typeof cabecalhoArquivo?.aberta === 'boolean' ? cabecalhoArquivo.aberta : null,
+    fatura: faturaMonthYear, closingDay: selectedAcc?.closingDay || 14, hoje: hojeSP(),
+    fechadaPeloUsuario: !!(selectedAccount && faturaMonthYear && isFaturaFechada?.(selectedAccount, faturaMonthYear)),
+  })
   // Categorias por perfil: o do cartão importado (undefined → chip do topo no CategorySelect).
   const perfilCategorias = selectedAcc?.profileId || undefined
 
@@ -2529,10 +2537,10 @@ Importar mesmo assim no mês selecionado?`)) return
       accountId, faturaMonthYear: faturaMY, arquivo,
       totalDeclarado: declarado ?? null,
       // Fatura ainda aberta: o arquivo é o PARCIAL de hoje, não o valor final.
-      faturaAberta: cabecalhoArquivo?.aberta === true,
+      faturaAberta: faturaAbertaArquivo,
       // Parcelas da série que o banco ainda não lançou (as mesmas do bloco âmbar da revisão): estão
       // gravadas, o arquivo não as traz — a conferência soma ao arquivo.
-      aguardando: (cabecalhoArquivo?.aberta === true && faturaMY === faturaMonthYear && projecao?.itensAguardando?.length)
+      aguardando: (faturaAbertaArquivo && faturaMY === faturaMonthYear && projecao?.itensAguardando?.length)
         ? { qtd: projecao.itensAguardando.length, total: projecao.aguardando }
         : null,
       banco: null, status: 'pendente', erro: '',
@@ -2654,8 +2662,8 @@ Importar mesmo assim no mês selecionado?`)) return
     ? null
     : projetarTotalFatura(resolvedRows, {
       fatura: faturaMonthYear, accountId: selectedAccount, transactions, closingDay: selectedAcc?.closingDay || 14,
-      aberta: cabecalhoArquivo?.aberta === true,
-    }), [resolvedRows, faturaMonthYear, selectedAccount, selectedAcc, transactions, editingImport, cabecalhoArquivo])
+      aberta: faturaAbertaArquivo,
+    }), [resolvedRows, faturaMonthYear, selectedAccount, selectedAcc, transactions, editingImport, faturaAbertaArquivo])
   // ── Revisão: APRESENTAÇÃO das linhas (components/Import/RevisaoFatura). As ações de cada controle
   // são as mesmas de antes (updateRow, toggleRow, toggleForcedDup, editarLinhaDoAgendamento…); só
   // mudou onde e como aparecem. Funções de render (e não componentes) de propósito: componente
@@ -2684,14 +2692,15 @@ Importar mesmo assim no mês selecionado?`)) return
     return {
       id: r._id, descricao: r.description || tx.description, parcela: parcRow, valor: tx.amount,
       aplicar: !collisionSkip.has(r._id) && mudancasColisao(r).length > 0,
-      // O UPDATE da colisão NÃO grava `amount` — o valor do banco é o mantido; o do extrato aparece à parte.
-      csv: Math.abs((Number(tx.amount) || 0) - (Number(r.amount) || 0)) > 0.005 ? fmt(r.amount) : null,
+      // O UPDATE da colisão só grava `amount` no ajuste de centavos da previsão (_ajustarValor); nas
+      // demais o valor do banco é o mantido e o do extrato aparece à parte.
+      csv: !r._ajustarValor && Math.abs((Number(tx.amount) || 0) - (Number(r.amount) || 0)) > 0.005 ? fmt(r.amount) : null,
       campos: {
         descricao: par(tx.description, r.description || tx.description),
         parcela: par(parcTx, parcRow),
         // computeSaveDate — a MESMA função da gravação.
         data: par(dataBr(tx.date), dataBr(computeSaveDate(r))),
-        valor: par(fmt(tx.amount), fmt(tx.amount)),
+        valor: par(fmt(tx.amount), fmt(r._ajustarValor && !tx.reconciled ? r.amount : tx.amount)),
         categoria: par(nomeDe(categories, tx.categoryId), nomeDe(categories, r.categoryId)),
         grupo: par(nomeDe(gerencialGroups, tx.grupoGerencial), nomeDe(gerencialGroups, r.grupoGerencial)),
         reserva: par(nomeDe(reserveFunctions, tx.reservaFuncaoId), nomeDe(reserveFunctions, r._reservaFuncaoId)),
@@ -3387,8 +3396,10 @@ Conciliar mesmo assim com o mês selecionado?`)) return
     // Controle gerencial desligado: os itens entram como D, sem função de reserva.
     const importar = concSoItau.filter(i => i.acao === 'importar')
       .map(i => (gerencialLigado ? i : { ...i, grupoGerencial: defaultGrupoD, _reservaFuncaoId: null }))
-    // Proteção: parcela prevista que o banco ainda não lançou (fatura aberta) nunca é apagada.
-    const excluir = concSoSistema.filter(i => i.acao === 'excluir' && !aguardandoLancamentoDoBanco(i, { aberta: faturaAbertaArquivo }))
+    // Excluir só à vista NÃO conciliado de fatura FECHADA (decisão de 12/11/2026): nunca conciliado,
+    // nunca parcela, nunca de fatura aberta — mesmo que algo tenha marcado "excluir".
+    const excluir = concSoSistema.filter(i => i.acao === 'excluir' && podeExcluirSoNoSistema(i, { aberta: faturaAbertaArquivo }))
+    if (excluir.length && !window.confirm(`Excluir ${excluir.length} lançamento${excluir.length !== 1 ? 's' : ''} do Finup que não ${excluir.length !== 1 ? 'vieram' : 'veio'} na fatura? Essa ação não pode ser desfeita.`)) return
 
     // Grupo numerado multi-função (Reservas Anuais): função obrigatória nos itens a importar.
     // Destaca as linhas pendentes (borda laranja no select) e rola até a 1ª, sem confirmar.
@@ -3565,7 +3576,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
   // ── Render: Modo Conciliação ───────────────────────────────────────────────
   if (conciliarMode) {
     const importarCount = concSoItau.filter(i => i.acao === 'importar').length
-    const excluirCount = concSoSistema.filter(i => i.acao === 'excluir').length
+    const excluirCount = concSoSistema.filter(i => i.acao === 'excluir' && podeExcluirSoNoSistema(i, { aberta: faturaAbertaArquivo })).length
     const diffZero = Math.abs(concTotais.diff) < 0.005
     // Toggle "Fatura encerrada": só é exibido se houver ≥1 parcela de série em "Só no sistema".
     const hasParcelaSistema = concSoSistema.some(i => Number(i.installmentNum) > 0 && Number(i.installmentTotal) > 1)
@@ -3846,7 +3857,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                               checked={item.acao === 'manter'} onChange={() => setSistemaAcao(item.id, 'manter')} />
                             <span className="text-texto-2">Manter</span>
                           </label>
-                          {!aguardandoLancamentoDoBanco(item, { aberta: faturaAbertaArquivo }) && (
+                          {podeExcluirSoNoSistema(item, { aberta: faturaAbertaArquivo }) && (
                             <label className="flex items-center gap-1 cursor-pointer">
                               <input type="radio" className="accent-perigo" name={`sys_${item.id}`}
                                 checked={item.acao === 'excluir'} onChange={() => setSistemaAcao(item.id, 'excluir')} />
@@ -4170,7 +4181,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                 ) : cardInfo.faturaStr && <div><p className="label">Fatura (arquivo)</p><p className="text-sm text-texto-1">{cardInfo.faturaStr}</p></div>}
               </div>
             </div>
-            {cabecalhoArquivo?.aberta === true && !editingImport && (
+            {faturaAbertaArquivo && !editingImport && (
               <div className="inline-flex items-center gap-1.5 mt-3 px-2.5 py-1 rounded-full border border-borda-forte bg-surface-2 text-texto-2 text-xs font-medium">
                 <Info size={12} /> Fatura aberta — valor parcial
               </div>

@@ -104,10 +104,19 @@ describe('resolverLinhasRevisao — casos da fatura 10/2026', () => {
     const projecao = tx({ id: 'p', description: 'Loja 2/3', amount: 33.34, faturaMonthYear: '2026-10', installmentNum: 2, installmentTotal: 3 })
     const row = linha({ _id: 0, description: 'Loja 2/3', amount: 33.34, _installment: { num: 2, total: 3, base: 'Loja', matchStr: '2/3' } })
     expect(resolver([row], [projecao])[0]._collisionTx).toBe(projecao)
-    // Centavos de arredondamento: possível duplicata, nunca "No banco".
+    // Centavos de arredondamento na previsão NÃO conciliada da mesma parcela: atualiza a previsão
+    // sozinha (decisão de 12/11/2026) — nunca pergunta ("possível duplicata").
     const arred = resolver([{ ...row, amount: 33.37 }], [projecao])[0]
-    expect(arred._collisionTx).toBeNull()
-    expect(arred._dupLevel).toBe('possivel')
+    expect(arred._collisionTx).toBe(projecao)
+    expect(arred._ajustarValor).toBe(true)
+    expect(arred._dupLevel).toBeNull()
+    expect(patchColisao(arred, projecao, { saveDate: '2026-10-05' }).amount).toBe(33.37)
+    // Colisão exata não mexe no valor.
+    expect(patchColisao(resolver([row], [projecao])[0], projecao, { saveDate: '2026-10-05' })).not.toHaveProperty('amount')
+    // Conciliada: nunca é alterada nem proposta.
+    const conc = resolver([{ ...row, amount: 33.37 }], [{ ...projecao, reconciled: true }])[0]
+    expect(conc._collisionTx).toBeNull()
+    expect(conc._dupLevel).toBeNull()
   })
 
   it('casa 1:1 — duas linhas idênticas e um só lançamento gravado: a segunda é nova', () => {
@@ -320,5 +329,55 @@ describe('avaliarConferencia (pós-importação)', () => {
     expect(avaliarConferencia(arquivo, { total: 8700, qtd: 90 }, { qtd: 2, total: 279.91 }).ok).toBe(false)
     expect(avaliarConferencia(arquivo, null, { qtd: 2, total: 279.91 })).toMatchObject({ ok: false, diff: null })
     expect(avaliarConferencia(arquivo, { ok: true }, { qtd: 2, total: 279.91 })).toMatchObject({ ok: false, diff: null })
+  })
+})
+
+// ─── Regras de candidato e proteção (Etapa 6b-1, decisões de 12/11/2026) ─────────────────────────
+import { faturaEstaAberta, podeExcluirSoNoSistema } from './revisaoImportacao'
+
+describe('fatura aberta: não depende só do cabeçalho do arquivo', () => {
+  it('cabeçalho do Itaú, quando diz, manda', () => {
+    expect(faturaEstaAberta({ cabecalhoAberta: true, fatura: '2026-01', closingDay: 13, hoje: '2026-11-12' })).toBe(true)
+    expect(faturaEstaAberta({ cabecalhoAberta: false, fatura: '2026-12', closingDay: 13, hoje: '2026-11-12' })).toBe(false)
+  })
+  it('CSV (sem cabeçalho): pelo calendário do cartão — aberta até o dia de fechamento, inclusive', () => {
+    expect(faturaEstaAberta({ fatura: '2026-11', closingDay: 13, hoje: '2026-11-12' })).toBe(true)
+    expect(faturaEstaAberta({ fatura: '2026-11', closingDay: 13, hoje: '2026-11-13' })).toBe(true)
+    expect(faturaEstaAberta({ fatura: '2026-11', closingDay: 13, hoje: '2026-11-14' })).toBe(false)
+    expect(faturaEstaAberta({ fatura: '2026-12', closingDay: 13, hoje: '2026-11-20' })).toBe(true)
+    // Fechamento no dia 31 num mês de 30 dias: o último dia do mês.
+    expect(faturaEstaAberta({ fatura: '2026-11', closingDay: 31, hoje: '2026-11-30' })).toBe(true)
+  })
+  it('fatura marcada como fechada pelo usuário está fechada', () => {
+    expect(faturaEstaAberta({ fatura: '2026-12', closingDay: 13, hoje: '2026-11-20', fechadaPeloUsuario: true })).toBe(false)
+  })
+  it('parcela prevista sem linha no arquivo de um CSV de fatura aberta = aguardando o banco (não sai)', () => {
+    const parcela = tx({ id: 'p', description: 'Loja 3/5', installmentNum: 3, installmentTotal: 5 })
+    const aberta = faturaEstaAberta({ fatura: '2026-11', closingDay: 13, hoje: '2026-11-12' })
+    expect(aguardandoLancamentoDoBanco(parcela, { aberta })).toBe(true)
+  })
+})
+
+describe('Conciliar Fatura — "Só no sistema": excluir só à vista não conciliado de fatura fechada', () => {
+  const avista = tx({ id: 'a', description: 'Padaria', amount: 10 })
+  it('à vista não conciliado de fatura fechada: pode', () => {
+    expect(podeExcluirSoNoSistema(avista, { aberta: false })).toBe(true)
+  })
+  it('nunca conciliado, nunca parcela, nunca fatura aberta', () => {
+    expect(podeExcluirSoNoSistema({ ...avista, reconciled: true }, { aberta: false })).toBe(false)
+    expect(podeExcluirSoNoSistema(tx({ id: 'p', description: 'Loja 3/5', installmentNum: 3, installmentTotal: 5 }), { aberta: false })).toBe(false)
+    expect(podeExcluirSoNoSistema(tx({ id: 'p1', description: 'Loja 5/5', installmentNum: 5, installmentTotal: 5 }), { aberta: false })).toBe(false)
+    expect(podeExcluirSoNoSistema(avista, { aberta: true })).toBe(false)
+  })
+})
+
+describe('"Também em outra fatura": só não conciliado e de fatura aberta', () => {
+  const linhaClinica = linha({ _id: 0, description: 'Clinica Exemplo', amount: 300, _dateCartao: '2026-09-20' })
+  it('conciliado ou de fatura fechada não aparece', () => {
+    const outra = tx({ id: 'o', description: 'Clinica Exemplo', amount: 300, faturaMonthYear: '2026-09', dateCartao: '2026-09-20' })
+    expect(resolver([linhaClinica], [outra])[0]._tambemEm.map(o => o.tx.id)).toEqual(['o'])
+    expect(resolver([linhaClinica], [{ ...outra, reconciled: true }])[0]._tambemEm).toEqual([])
+    const fechada = resolverLinhasRevisao([linhaClinica], { accountId: CARTAO, transactions: [outra], closingDay: 13, faturasFechadas: { [`${CARTAO}_2026-09`]: true } })
+    expect(fechada[0]._tambemEm).toEqual([])
   })
 })

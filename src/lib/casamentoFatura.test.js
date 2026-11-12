@@ -77,8 +77,10 @@ describe('casamento "Já lançado"', () => {
     const p3 = (serie) => linha({ _id: 'P3', description: 'MAGAZINE LUIZA 03/10', amount: 100, date: '2026-08-02', _installment: { num: 3, total: 10 }, _serieExistente: serie })
     expect(casarJaLancados([p3('serie_nb')], comSerie).get('P3')).toMatchObject({ status: 'casada' })
     expect(casarJaLancados([p3('serie_outra')], comSerie).get('P3').status).toBe('nova')
-    // Centavos de diferença na mesma parcela (até ±0,50): pergunta; além disso, nova.
-    expect(casarJaLancados([{ ...p3('serie_nb'), amount: 100.3 }], comSerie).get('P3').status).toBe('escolher')
+    // Centavos na mesma parcela da MESMA série (até ±0,50): casa sozinha e o valor da fatura é gravado
+    // (12/11/2026); sem a série conhecida, ou além de 0,50: não é candidata (valor diferente nunca é proposto).
+    expect(casarJaLancados([{ ...p3('serie_nb'), amount: 100.3 }], comSerie).get('P3')).toMatchObject({ status: 'casada' })
+    expect(casarJaLancados([{ ...p3(undefined), amount: 100.3 }], comSerie).get('P3').status).toBe('nova')
     expect(casarJaLancados([{ ...p3('serie_nb'), amount: 100.6 }], comSerie).get('P3').status).toBe('nova')
   })
   it('pré-lançamento pendente do Assistente é candidato; efetivado/descartado não', () => {

@@ -111,10 +111,12 @@ describe('conciliado reconhecido na reimportação nunca é alterado', () => {
     expect(mudancasDaColisao(rowP8, P8, patchDe(rowP8, P8))).toEqual([])
     expect(diferencasDoConciliado(rowP8, P8)).toEqual([]) // valor, data do cartão e descrição iguais
   })
-  it('conciliado com diferença real (data do cartão, descrição, valor): vira informação, não mudança', () => {
+  it('conciliado com diferença real (valor, data do cartão): vira informação, não mudança; descrição diferente não conta (12/11/2026)', () => {
     const row = { ...rowP8, _dateCartao: '2026-10-30', description: 'Seguradora Parc8 Outra', amount: 205.62 }
     expect(mudancasDaColisao(row, P8, patchDe(row, P8))).toEqual([])
-    expect(diferencasDoConciliado(row, P8).map(d => d.campo)).toEqual(['valor', 'dataCartao', 'descricao'])
+    expect(diferencasDoConciliado(row, P8).map(d => d.campo)).toEqual(['valor', 'dataCartao'])
+    // Só a descrição diferente (o Finup guarda o nome que o usuário escreveu): nenhuma diferença.
+    expect(diferencasDoConciliado({ ...rowP8, description: 'Nome escrito pelo usuario' }, P8)).toEqual([])
   })
   it('NÃO conciliado (projeção): continua sendo atualizado pela colisão, como antes', () => {
     const proj = { ...P8, id: 'proj', reconciled: false, dateCartao: null, date: '2026-10-15', description: 'Seguradora Parc2 08/12' }

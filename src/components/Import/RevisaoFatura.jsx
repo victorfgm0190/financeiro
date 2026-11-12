@@ -242,7 +242,7 @@ export function DecisaoSelect({ row, onEscolherCandidato, onPossivel }) {
         value={row._jaLancadoEscolha || ''} onChange={e => onEscolherCandidato(e.target.value)}>
         <option value="">⚠ {row._parecido ? 'Parecido — é este?' : 'Escolher…'}</option>
         {row._jaLancadoOpcoes.map(tx => (
-          <option key={tx.id} value={tx.id}>É {tx._pre ? 'o pré-lançamento' : 'este'}: {tx.description || '—'} · {fmtDate(tx.date)} · {fmt(tx.amount)}</option>
+          <option key={tx.id} value={tx.id}>É {tx._pre ? 'o pré-lançamento' : 'este'}: {tx.description || '—'} · {fmtDate(tx.date)} · {tx.estimado ? `estimado ${fmt(tx.amount)} × real ${fmt(row.amount)}` : fmt(tx.amount)}</option>
         ))}
         <option value="novo">É novo — importar</option>
       </select>

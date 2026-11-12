@@ -124,6 +124,28 @@ export function aguardandoLancamentoDoBanco(t, { aberta }) {
   return !!aberta && ehParcelaDeSerie(t)
 }
 
+// "Só no sistema" (Conciliar Fatura): pode excluir? Só à vista NÃO conciliado de fatura FECHADA
+// (decisão de 12/11/2026). Nunca conciliado, nunca parcela (de série ou não), nunca fatura aberta.
+export function podeExcluirSoNoSistema(t, { aberta }) {
+  if (!t || t.reconciled || aberta) return false
+  return !ehParcelaDeSerie(t)
+}
+
+// A fatura ainda está ABERTA? Não depende só do cabeçalho do arquivo (o CSV não tem): o cabeçalho do
+// Itaú, quando diz, manda; fatura marcada como fechada pelo usuário está fechada; senão vale o
+// calendário do cartão — a fatura MM/AAAA fecha no dia de fechamento do mês MM (calcFatura: compra
+// até o dia de fechamento cai na fatura do próprio mês), então está aberta até esse dia, inclusive.
+// fatura 'AAAA-MM'; hoje 'AAAA-MM-DD'.
+export function faturaEstaAberta({ cabecalhoAberta = null, fatura, closingDay = 14, hoje, fechadaPeloUsuario = false }) {
+  if (fechadaPeloUsuario) return false
+  if (cabecalhoAberta === true || cabecalhoAberta === false) return cabecalhoAberta
+  if (!/^\d{4}-\d{2}$/.test(String(fatura || '')) || !hoje) return false
+  const [y, m] = fatura.split('-').map(Number)
+  const ultimo = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const fechamento = `${fatura}-${String(Math.min(Number(closingDay) || 14, ultimo)).padStart(2, '0')}`
+  return String(hoje).slice(0, 10) <= fechamento
+}
+
 // Da linha: o _installment resolvido na carga (coluna Parcelamento, série inferida ou override
 // manual) e, sem ele, o "ParcN" do texto.
 export function numeroParcelaDaLinha(r) {
@@ -269,10 +291,13 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
   }))
   const resolvida = new Set()
 
-  const marcarColisao = (r, tx, mesmo = false) => {
+  const marcarColisao = (r, tx, mesmo = false, ajustarValor = false) => {
     usados.add(tx.id)
     resolvida.add(r._id)
     Object.assign(r, {
+      // Previsão da MESMA parcela (mesma série, mesmo n/total, mesma fatura) com centavos de diferença:
+      // a confirmação grava o valor do arquivo (decisão de 12/11/2026 — não é "parecido").
+      _ajustarValor: ajustarValor,
       categoryId: r._catEdit ? r.categoryId : (tx.categoryId || r.categoryId),
       grupoGerencial: r._gerEdit ? r.grupoGerencial : (tx.grupoGerencial || r.grupoGerencial),
       _reservaFuncaoId: r._gerEdit ? r._reservaFuncaoId : (tx.reservaFuncaoId || null),
@@ -304,8 +329,8 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
 
   // 1. Colisão de parcela, restrita à fatura da linha: mesma chave, série inferida (âncora) ou o
   //    serie_id da série já gravada — sempre com o mesmo n/total. ±0,01 → "No banco ↻" em silêncio
-  //    (conciliado ou não: é a reimportação); até ±0,50 → possível duplicata (só não conciliado).
-  const pendentesPossivel = new Map() // linha → candidato de arredondamento (mesma parcela, valor ≠)
+  //    (conciliado ou não: é a reimportação); até ±0,50, NÃO conciliada e de fatura aberta → é a
+  //    previsão da mesma parcela com centavos: "No banco ↻" que ajusta o valor (nunca pergunta).
   for (const r of out) {
     if (resolvida.has(r._id) || tipoDe(r) !== 'expense' || !r._installment) continue
     const naFatura = naFaturaDe(r)
@@ -323,7 +348,7 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
     }
     if (!tx) continue
     if (diffValor(tx, r) <= TOL_MESMO_VALOR) marcarColisao(r, tx)
-    else if (podePerguntar(tx)) pendentesPossivel.set(r._id, tx)
+    else if (podePerguntar(tx)) marcarColisao(r, tx, false, true)
   }
 
   // 2. Já existe, em silêncio. Primeiro os CONCILIADOS (reimportação da mesma fatura): mesmo tipo,
@@ -371,13 +396,13 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
   }
 
   // 3. Possível duplicata (pergunta), só contra NÃO conciliado de fatura aberta, na fatura da linha:
-  //    a parcela com centavos do passo 1, ou a MESMA SÉRIE com o mesmo valor e outro número de parcela.
+  //    a MESMA SÉRIE com o mesmo valor (±0,01) e outro número de parcela ("Aramis 4/4" × 3/4). Valor
+  //    diferente nunca é proposto (decisão de 12/11/2026).
   for (const r of out) {
     if (resolvida.has(r._id) || r._generated) continue
-    const arred = pendentesPossivel.get(r._id)
-    let tx = (arred && !usados.has(arred.id)) ? arred : null
+    let tx = null
     const pr = parcelaLinha(r)
-    if (!tx && pr) {
+    if (pr) {
       const baseLinha = baseDaChave(keyOfImportRow(r, accountId))
       tx = candidatos(r)
         .filter(t => podePerguntar(t) && tipoDe(t) === 'expense' && tipoDe(r) === 'expense' && diffValor(r, t) <= TOL_MESMO_VALOR)
@@ -394,7 +419,8 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
     Object.assign(r, { _dupLevel: 'possivel', _dupTx: tx, selected: forcedDupSelect.has(r._id) })
   }
 
-  // 4. O mesmo lançamento em OUTRA fatura: não é duplicata, só aviso. Parcela: mesmo número;
+  // 4. O mesmo lançamento em OUTRA fatura, NÃO conciliado e de fatura aberta: vira pergunta em
+  // lib/importacaoCorrespondencias ("é o mesmo, lançado na fatura errada?"). Parcela: mesmo número;
   // à vista: mesma data de compra (uma assinatura mensal repete valor e descrição todo mês).
   for (const r of out) {
     if (resolvida.has(r._id) || r._generated) continue
@@ -402,6 +428,9 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
     const iguais = doCartao.filter(t => {
       const f = faturaDe(t)
       if (!f || f === r.faturaMonthYear) return false
+      // Conciliado (ou de fatura fechada) nunca é proposto; só o que ainda pode ser o mesmo lançamento
+      // gravado na fatura errada.
+      if (!podePerguntar(t) || usados.has(t.id)) return false
       if (tipoDe(t) !== tipoDe(r) || diffValor(r, t) > TOL_MESMO_VALOR) return false
       if (similaridadeBase(r.description, t.description) < SIM_MESMA_BASE) return false
       return num != null ? numeroParcelaDoTx(t) === num : mesmaData(r, t)
@@ -412,9 +441,12 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
 }
 
 // Campos que a confirmação grava no lançamento do banco quando a linha colide com ele (UPDATE em
-// vez de INSERT). `amount` fica de fora de propósito: o valor do banco é o confirmado.
+// vez de INSERT). `amount` só entra no ajuste de centavos da previsão (_ajustarValor).
 export function patchColisao(row, tx, { saveDate, faturaRef, serieId }) {
   return {
+    // Só a previsão NÃO conciliada da mesma parcela com centavos (passo 1, _ajustarValor) recebe o
+    // valor do arquivo; nas demais colisões o valor do banco é o confirmado.
+    ...(row._ajustarValor && !tx.reconciled ? { amount: Math.round((Number(row.amount) || 0) * 100) / 100 } : {}),
     date: saveDate,
     dateCartao: row._dateCartao || tx.dateCartao || null,
     // Regra A: a descrição real é a do extrato (a gerada antes podia ser "Parc2 11/12").
@@ -452,16 +484,16 @@ export function mudancasDaColisao(row, tx, patch) {
   return camposAlteradosColisao(patch, tx, row)
 }
 
-// Diferenças REAIS entre a linha do arquivo e um lançamento conciliado: valor, data do cartão e
-// descrição. A data de sistema, a parcela e a classificação não contam (são do Finup, não do banco).
-// → [{ campo: 'valor' | 'dataCartao' | 'descricao', banco, arquivo }]
+// Diferenças REAIS entre a linha do arquivo e um lançamento conciliado: valor e data do cartão.
+// Descrição não conta (decisão de 12/11/2026: o Finup guarda o nome que o usuário escreveu); data de
+// sistema, parcela e classificação também não (são do Finup, não do banco).
+// → [{ campo: 'valor' | 'dataCartao', banco, arquivo }]
 export function diferencasDoConciliado(row, tx) {
   if (!tx?.reconciled) return []
   const out = []
   if (Math.abs((Number(row.amount) || 0) - (Number(tx.amount) || 0)) > 0.005) out.push({ campo: 'valor', banco: Number(tx.amount), arquivo: Number(row.amount) })
   const dcLinha = row._dateCartao || null, dcTx = tx.dateCartao || null
   if (dcLinha && dcTx && dcLinha !== dcTx) out.push({ campo: 'dataCartao', banco: dcTx, arquivo: dcLinha })
-  if (row.description && textoNormalizado(row.description) !== textoNormalizado(tx.description)) out.push({ campo: 'descricao', banco: tx.description, arquivo: row.description })
   return out
 }
 
@@ -549,7 +581,14 @@ export function projetarTotalFatura(resolvedRows, { fatura, accountId, transacti
     if (tx && faturaDoLancamento(tx, closingDay) === fatura) {
       representados.add(tx.id)
       const d = r2(v - valorComSinal(tx))
-      if (Math.abs(d) > 0.005) itens.push({ tipo: 'valor_diferente', linha: r, tx, valor: d, motivo: `no banco ${fmtValor(tx.amount)} × arquivo ${fmtValor(r.amount)}` })
+      if (Math.abs(d) > 0.005) {
+        itens.push({
+          tipo: 'valor_diferente', linha: r, tx, valor: d,
+          motivo: r._ajustarValor && !tx.reconciled
+            ? `previsão ajustada de ${fmtValor(tx.amount)} para ${fmtValor(r.amount)}`
+            : `no banco ${fmtValor(tx.amount)} × arquivo ${fmtValor(r.amount)}`,
+        })
+      }
       continue
     }
     itens.push({
