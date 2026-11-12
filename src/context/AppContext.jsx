@@ -36,7 +36,7 @@ import { categoriasEntrePerfis, transferenciaNaVisaoDoPerfil } from '../lib/tran
 import { nomeDoBanco, backendIndexedDb, criarArmazenamento, migrarDoLocalStorage, apagarCacheAntigo, apagarDadosLocalStorage } from '../lib/armazenamentoLocal'
 import { mudancasEntre, mesclarNaFila, removerEnviadas, aplicarFilaSobreDados, enviarFilaIsolando, entradaRateios, ehErroDeRede, tipoDeFalha, motivoDaRecusa, rotuloDaEntrada } from '../lib/filaOffline'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
-import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
+import { installmentSystemDate, faturaToDate, dataRegistroParcela } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
 import { computeOccurrences } from '../lib/occurrences'
 import { ehParcelado } from '../lib/parcelasOcorrencia'
@@ -5465,6 +5465,7 @@ export function AppProvider({ children }) {
     tipoDocumentoId = null,     // tipo de documento herdado da parcela base
     serieId = null,             // elo da série (gerado na base) — propagado às filhas
     amountUltima = null,        // valor da ÚLTIMA parcela (leva a diferença de centavos); null = amount
+    dataCompra = null,          // data da compra original (decisão 9); null = `date` quando a base é a parcela 1
   }) => {
     if (!installments || installments <= 1) return []
     if (startFromInstallment > installments) return []
@@ -5490,6 +5491,8 @@ export function AppProvider({ children }) {
     }
 
     const origDay = parseInt((date || '').split('-')[2] || '1', 10)
+    // Data da compra original: a informada ou, com a base sendo a parcela 1, a data dela.
+    const compra = dataCompra || (Number(baseInstallmentNum) === 1 ? date : null)
     // Mesma descrição da parcela base para TODAS as parcelas (o número da parcela vive nas
     // colunas installment_num/installment_total). Mantém a base da installment_key consistente
     // e permite que buildSeries agrupe as irmãs corretamente.
@@ -5514,9 +5517,10 @@ export function AppProvider({ children }) {
       const fm0 = fd.getMonth()
       const futureFatura = `${fy}-${String(fm0 + 1).padStart(2, '0')}`
       const maxDay = new Date(fy, fm0 + 1, 0).getDate()
-      // Parcelas 2..N (i sempre > 1 aqui) → dia financialMonthStartDay do mês ANTERIOR à fatura
-      // da parcela (regra do Finup). date_cartao não se aplica (parcela projetada).
-      const futureDate = installmentSystemDate(
+      // Parcelas 2..N (i sempre > 1 aqui) → mesmo dia da compra, i-1 meses depois (decisão 9,
+      // 12/11/2026 — lib/parcelas dataRegistroParcela). date_cartao não se aplica (parcela projetada).
+      // Sem a data da compra (base que não é a parcela 1 e sem data_compra): a regra antiga.
+      const futureDate = dataRegistroParcela(compra, i) || installmentSystemDate(
         futureFatura, i, `${futureFatura}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}`, financialStartDay
       )
       const valor = (i === installments && amountUltima != null) ? amountUltima : amount
@@ -5537,6 +5541,7 @@ export function AppProvider({ children }) {
         faturaRef: resolveFaturaRef({ faturaMonthYear: futureFatura }),
         reservaFuncaoId: reservaFuncaoId || null,
         installmentNum: i, installmentTotal: installments,
+        dataCompra: compra || null,
         serieId: serieId || null,
         origin: ORIGIN.PARCELA_GERADA, parentTxId: rootTxId,
         _fromImport: true, // pula o recálculo por-tx; recalculamos a fatura abaixo, uma vez

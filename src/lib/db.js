@@ -561,6 +561,8 @@ export const txToRow = (tx) => ({
   amount: Number(tx.amount),
   date: tx.date,
   date_cartao: tx.dateCartao || null,
+  // Data da compra original da parcela (migração 2026-11-12_data_compra). Só parcelas de cartão.
+  data_compra: tx.dataCompra || null,
   description: tx.description || null,
   category_id: tx.categoryId || null,
   payee: tx.payee || null,
@@ -646,6 +648,7 @@ export const rowToTx = (r) => ({
   amount: Number(r.amount),
   date: r.date,
   dateCartao: toDateStr(r.date_cartao),
+  dataCompra: r.data_compra ? String(r.data_compra).slice(0, 10) : null,
   description: r.description || '',
   categoryId: r.category_id || '',
   // Vínculo com o bem imobilizado (coluna criada por ensureBemSchema em api/_bem.js). Serve para o

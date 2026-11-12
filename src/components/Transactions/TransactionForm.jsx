@@ -19,7 +19,7 @@ import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { contaEhCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment } from '../../lib/installments'
-import { buildSeries, clampDateToFatura, faturaToDate, newSerieId, valoresDasParcelas } from '../../lib/parcelas'
+import { buildSeries, clampDateToFatura, faturaToDate, newSerieId, valoresDasParcelas, textoDataCompra } from '../../lib/parcelas'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
@@ -754,6 +754,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       // preserva o valor existente (ex.: etapa A tx_gerA_* já traz faturaRef própria).
       faturaRef: showFaturaRef ? ((form.faturaRef || '').trim() || null) : (initial?.faturaRef ?? null),
       dateCartao: form.dateCartao || null,
+      // Parcelado NOVO no cartão: a data da compra original fica em todas as parcelas (decisão 9).
+      ...(isParcelado && isCredit && form.type === 'expense' ? { dataCompra: form.date } : {}),
       // Escolha manual (inclusive "Sem tipo") é o que fica gravado — vence o fallback de exibição.
       tipoDocumentoId: form.tipoDocumentoId || null,
       numeroContrato: (form.numeroContrato || '').trim() || null,
@@ -1161,6 +1163,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         faturaMonthYear: p.faturaMonthYear,
         reservaFuncaoId: p.reservaFuncaoId || null,
         installmentNum: p.num, installmentTotal: p.total,
+        dataCompra: p.dataCompra || null,
         serieId,
         origin: ORIGIN.PARCELA_GERADA,
         _fromImport: true, // pula recálculo por-tx; recalculamos a fatura abaixo, uma vez
@@ -2028,6 +2031,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   <span className={`text-sm font-semibold ${parcelaSeries ? 'text-texto-1' : 'text-texto-2'}`}>
                     {parcelaSeries ? `Parcela ${effInstNum} de ${effInstTotal}` : 'À vista'}
                   </span>
+                  {/* Data da compra original da série (decisão 9): "compra em 12/11". */}
+                  {parcelaSeries && textoDataCompra(initial?.dataCompra || parcelaSeries.siblings.map(s => s.dataCompra).find(Boolean)) && (
+                    <span data-testid="parcela-compra-em" className="text-xs text-texto-2">· {textoDataCompra(initial?.dataCompra || parcelaSeries.siblings.map(s => s.dataCompra).find(Boolean))}</span>
+                  )}
                   <button type="button" onClick={openInstEditor} title={parcelaSeries ? 'Editar parcelamento' : 'Marcar como parcelado'} className="p-0.5 text-texto-3 hover:text-texto-1">
                     <Pencil size={12} />
                   </button>

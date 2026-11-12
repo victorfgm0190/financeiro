@@ -203,5 +203,9 @@ export const MIGRACOES = [
  {
   "nome": "2026-11-10b_backup_preparo.sql",
   "sql": "-- Backup completo do ambiente — área de preparo da restauração (api/_backup.js).\n-- O arquivo do backup chega em partes (a Vercel limita cada envio a ~4,5 MB); cada parte fica aqui até\n-- a restauração aplicar tudo numa transação só. A própria restauração apaga o lote; restos de uma\n-- restauração abandonada (mais de 1 dia) são apagados no próximo envio.\n-- ADITIVA: só cria a tabela. O código antigo não a usa. Fica FORA do backup (src/lib/backupFormato.js).\nCREATE TABLE IF NOT EXISTS backup_preparo (\n  id        TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,\n  lote_id   TEXT NOT NULL,\n  tabela    TEXT NOT NULL,\n  parte     INTEGER NOT NULL,\n  linhas    INTEGER NOT NULL,\n  dados     TEXT NOT NULL,\n  criado_em TIMESTAMPTZ NOT NULL DEFAULT now(),\n  UNIQUE (lote_id, tabela, parte)\n);\nCREATE INDEX IF NOT EXISTS idx_backup_preparo_criado ON backup_preparo (criado_em);\n"
+ },
+ {
+  "nome": "2026-11-12_data_compra.sql",
+  "sql": "-- Data da COMPRA original das parcelas de cartão (decisão 9 de docs/importar-fatura-6b-diagnostico.md,\n-- 12/11/2026). TEXT 'AAAA-MM-DD', gravada em TODAS as parcelas da série (vinda do date_cartao da parcela 1\n-- ou da linha do Itaú, que traz a data da compra). Serve para mostrar \"Parcela 2/3 · compra em 12/11\" e\n-- para calcular a data de registro das parcelas novas (mesmo dia da compra, N-1 meses depois).\n-- date_cartao continua sendo \"o que veio no arquivo\" e não muda de papel no casamento da importação.\n-- Aditiva e idempotente: nenhum dado existente é alterado (as parcelas antigas ficam com NULL).\nALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS data_compra TEXT;\n"
  }
 ]

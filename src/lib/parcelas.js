@@ -52,6 +52,61 @@ export function clampDateToFatura(dateStr, faturaYYYYMM, closingDay) {
 //                                       anterior ao ciclo da fatura). Ex.: fatura 2026-07 +
 //                                       financialStartDay 15 → 2026-06-15.
 // date_cartao (a data bruta do extrato) NUNCA é alterada por esta função.
+// ── Data de REGISTRO da parcela no cartão (decisão 9, 12/11/2026) — FONTE ÚNICA ────────────────
+// À vista e parcela 1 = data da compra; parcela N = MESMO DIA da compra, N-1 meses depois; mês sem o
+// dia → último dia do mês (31/01 → 28/02; 29/02 em ano bissexto). Vale para todos os grupos
+// (despesa, gerencial, reservas numeradas…). Substitui installmentSystemDate na data de registro das
+// parcelas CRIADAS daqui em diante (Importar Fatura, Conciliar Fatura, Novo Lançamento parcelado,
+// Corrigir Datas da reedição). A transferência gerencial (etapa A) e o resgate têm regras próprias.
+// dataCompra 'AAAA-MM-DD'; null se a data for inválida.
+export function dataRegistroParcela(dataCompra, num) {
+  const d = String(dataCompra || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null
+  const n = Math.max(1, Number(num) || 1)
+  if (n === 1) return d
+  const [y, m, dia] = d.split('-').map(Number)
+  const alvo = new Date(Date.UTC(y, m - 1 + (n - 1), 1))
+  const ano = alvo.getUTCFullYear()
+  const mes = alvo.getUTCMonth() + 1
+  const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate()
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(Math.min(dia, ultimo)).padStart(2, '0')}`
+}
+
+// Texto curto da data da compra para mostrar junto da parcela: "compra em 12/11" (ano só quando não é
+// o atual). null sem data válida.
+export function textoDataCompra(dataCompra, hoje = new Date()) {
+  const d = String(dataCompra || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null
+  const [y, m, dia] = d.split('-')
+  const anoAtual = String(hoje.getFullYear())
+  return `compra em ${dia}/${m}${y === anoAtual ? '' : `/${y}`}`
+}
+
+// Data da COMPRA de uma linha de parcela N (arquivo do banco). O Itaú traz na parcela N a data da compra
+// original; outro extrato pode trazer a data da cobrança (que já cai na fatura da própria parcela). Regra:
+// se a data, pelo fechamento do cartão, cai na MESMA fatura da parcela N (e N > 1), é a da cobrança →
+// recua N-1 meses; senão é a da compra. fatura = 'AAAA-MM' da parcela N.
+export function dataCompraDaParcela({ dateCartao, num, fatura, closingDay = 14 }) {
+  const d = String(dateCartao || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null
+  const n = Math.max(1, Number(num) || 1)
+  if (n === 1 || !fatura) return d
+  const [y, m, dia] = d.split('-').map(Number)
+  const faturaDaData = dia <= (Number(closingDay) || 14)
+    ? `${y}-${String(m).padStart(2, '0')}`
+    : addMonthToFatura(`${y}-${String(m).padStart(2, '0')}`, 1)
+  if (faturaDaData !== fatura) return d
+  // Data da cobrança: recua N-1 meses mantendo o dia (com o último dia do mês quando faltar).
+  const alvo = new Date(Date.UTC(y, m - 1 - (n - 1), 1))
+  const ano = alvo.getUTCFullYear()
+  const mes = alvo.getUTCMonth() + 1
+  const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate()
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(Math.min(dia, ultimo)).padStart(2, '0')}`
+}
+
+// REGRA ANTIGA (dia financialStartDay do mês anterior à fatura) — continua sendo a data da TRANSFERÊNCIA
+// GERENCIAL (etapa A) das parcelas 2..N (decisão 9, regra 2) e a da prévia dessa transferência no Resumo
+// da Importação. NÃO usar para a data de registro da parcela (ver dataRegistroParcela).
 export function installmentSystemDate(faturaYYYYMM, num, fallbackDate, financialStartDay) {
   if (!num || num <= 1 || !faturaYYYYMM) return fallbackDate
   return `${addMonthToFatura(faturaYYYYMM, -1)}-${String(financialStartDay || 1).padStart(2, '0')}`
@@ -170,10 +225,13 @@ export function buildSeries(tx, transactions, account, financialStartDay = 1) {
     const anchor = [...siblings].sort((a, b) => Math.abs(a._num - k) - Math.abs(b._num - k))[0]
     if (!anchor) continue
     const futFatura = addMonthToFatura(anchor.faturaMonthYear, k - anchor._num)
-    // Parcela 1 (se ausente) mantém a data efetiva da fatura; parcelas 2..N vão para o dia
-    // financialStartDay do mês ANTERIOR à fatura da parcela (regra do Finup).
+    // Data da compra da série (decisão 9): a gravada em alguma irmã; sem ela, a data do cartão da
+    // parcela 1. Com ela, a faltante vai para o mesmo dia da compra, k-1 meses depois; sem ela, a regra
+    // antiga (parcela 1 na data efetiva da fatura; 2..N no dia financialStartDay do mês anterior).
+    const compraDaSerie = siblings.map(s => s.dataCompra).find(Boolean)
+      || (siblings.find(s => s._num === 1)?.dateCartao ? String(siblings.find(s => s._num === 1).dateCartao).slice(0, 10) : null)
     const fallbackDate = clampDateToFatura(faturaToDate(futFatura, dueDay) || `${futFatura}-01`, futFatura, closingDay)
-    const futDate = installmentSystemDate(futFatura, k, fallbackDate, financialStartDay)
+    const futDate = dataRegistroParcela(compraDaSerie, k) || installmentSystemDate(futFatura, k, fallbackDate, financialStartDay)
     const description = buildSiblingDescription(anchor.description, anchor._num, k, total)
     // Guarda: se a descrição gerada já existe na conta, não oferece (cobre parcela
     // existente porém não-marcada no formato permissivo).
@@ -185,6 +243,7 @@ export function buildSeries(tx, transactions, account, financialStartDay = 1) {
       amount: anchor.amount,
       faturaMonthYear: futFatura,
       date: futDate,
+      dataCompra: compraDaSerie || null,
       categoryId: anchor.categoryId || '',
       grupoGerencial: anchor.grupoGerencial || null,
       payee: anchor.payee || '',

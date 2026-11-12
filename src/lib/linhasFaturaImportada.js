@@ -3,7 +3,7 @@
 // arquivo, nunca do banco). Só o que decide o casamento mora aqui; classificação (categoria, grupo,
 // favorecido, agendamento) continua na tela.
 import { installmentKey, detectInstallment, detectParcela } from './installments.js'
-import { addMonthToFatura, faturaToDate, installmentSystemDate, inferirSerieParcela, irmaDaParcela, newSerieId } from './parcelas.js'
+import { addMonthToFatura, faturaToDate, installmentSystemDate, inferirSerieParcela, irmaDaParcela, newSerieId, dataRegistroParcela, dataCompraDaParcela } from './parcelas.js'
 import { keyOfExistingTx } from './revisaoImportacao.js'
 
 // Calcula o mês da fatura (YYYY-MM) de um lançamento dado o dia de fechamento do cartão.
@@ -54,12 +54,15 @@ export function applyReferenceFatura(rows, reference, closingDay, dueDay, financ
     if (row._itau) {
       // Parcela 1 / à vista: date = date_cartao, SEM clamp. O clampDateToFatura que havia aqui
       // jogava uma compra anterior à janela da fatura para o dia de FECHAMENTO — date_cartao
-      // 10/07 + fatura 2026-08 (closing 13) virava 13/08. Parcela >1 segue a regra do Finup
-      // (dia financeiro do mês anterior à fatura). date_cartao nunca é alterada.
+      // 10/07 + fatura 2026-08 (closing 13) virava 13/08. Parcela N: no Itaú a date_cartao é a data
+      // da COMPRA original → registro = mesmo dia, N-1 meses depois (dataRegistroParcela, decisão 9
+      // de 12/11/2026). date_cartao nunca é alterada; a data da compra vai em _dataCompra.
+      const dataCompra = row._installment ? dataCompraDaParcela({ dateCartao, num, fatura: reference, closingDay }) : null
       return {
         ...row,
         faturaMonthYear: reference,
-        date: num <= 1 ? dateCartao : installmentSystemDate(reference, num, dateCartao, financialStartDay),
+        date: num <= 1 ? dateCartao : (dataRegistroParcela(dataCompra, num) || dateCartao),
+        _dataCompra: dataCompra,
       }
     }
     // Parcela 2..N: a date_cartao é a data da COMPRA ORIGINAL (fatura antiga) — NUNCA recalcula a
@@ -68,10 +71,16 @@ export function applyReferenceFatura(rows, reference, closingDay, dueDay, financ
     // anterior (totalizador partido, mês "pula" ao reprocessar). À vista / parcela 1 mantêm a regra
     // por data (dia da compra vs fechamento), que é legítima.
     const fatura = num > 1 ? reference : faturaRefFromReference(dateCartao, reference, closingDay)
+    // Parcela N > 1: data da compra (a do extrato, ou recuada N-1 meses se for a da cobrança) e o
+    // registro no mesmo dia, N-1 meses depois. À vista / parcela 1: como antes.
+    const dataCompra = row._installment ? dataCompraDaParcela({ dateCartao, num, fatura, closingDay }) : null
     return {
       ...row,
       faturaMonthYear: fatura,
-      date: installmentSystemDate(fatura, num, `${reference}-${clampedDay}`, financialStartDay),
+      date: num > 1
+        ? (dataRegistroParcela(dataCompra, num) || installmentSystemDate(fatura, num, `${reference}-${clampedDay}`, financialStartDay))
+        : `${reference}-${clampedDay}`,
+      _dataCompra: dataCompra,
     }
   })
   return step1.map(row => {
@@ -79,8 +88,13 @@ export function applyReferenceFatura(rows, reference, closingDay, dueDay, financ
     const parent = step1.find(r => r._id === row._seriesId)
     if (!parent) return row
     const faturaI = addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1)
-    // Parcelas geradas (siblings) são sempre num > 1 → data no mês anterior à fatura da parcela.
-    return { ...row, faturaMonthYear: faturaI, date: installmentSystemDate(faturaI, row._installmentNum, faturaToDate(faturaI, dueDay) || row.date, financialStartDay) }
+    // Parcelas geradas (siblings): mesmo dia da compra da parcela base, N-1 meses depois.
+    const dataCompra = parent._dataCompra || null
+    return {
+      ...row, faturaMonthYear: faturaI, _dataCompra: dataCompra,
+      date: dataRegistroParcela(dataCompra, row._installmentNum)
+        || installmentSystemDate(faturaI, row._installmentNum, faturaToDate(faturaI, dueDay) || row.date, financialStartDay),
+    }
   })
 }
 

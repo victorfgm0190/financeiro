@@ -125,7 +125,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
   // fatura/dateCartao. NÃO salva sozinho. Parcelados: só a parcela clicada.
   const handleDuplicate = (tx, newDate) => {
     // eslint-disable-next-line no-unused-vars
-    const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, dataOcorrencia, ...rest } = tx
+    const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, dataOcorrencia, dataCompra, ...rest } = tx
     setEditTx({ ...rest, date: newDate || tx.date, origin: ORIGIN.DUPLICADO })
     setShowEdit(true)
   }

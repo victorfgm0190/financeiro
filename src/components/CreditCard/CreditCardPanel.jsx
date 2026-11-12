@@ -18,7 +18,7 @@ import Modal from '../shared/Modal'
 import DataPagamentoField from '../shared/DataPagamentoField'
 import { dataPadraoPagamento, hojeSP } from '../../lib/dataPagamento'
 import { faturaDoCartao } from '../../lib/fatura'
-import { faturaToDate } from '../../lib/parcelas'
+import { faturaToDate, textoDataCompra } from '../../lib/parcelas'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
@@ -103,11 +103,13 @@ function CopyIdBadge({ id }) {
 
 // Badge amarelo de parcela ("3/12") — mesmo estilo do badge de parcela da importação.
 // Retorna null quando o lançamento não é parcelado (num nulo/0).
-function InstallmentBadge({ num, total }) {
+function InstallmentBadge({ num, total, dataCompra = null }) {
   if (!num || num <= 0) return null
+  const compra = textoDataCompra(dataCompra)
   return (
-    <span className="mt-0.5 mr-1.5 inline-block bg-surface-2 text-texto-2 text-xs px-1.5 py-0.5 rounded font-medium">
-      {num}/{total || '?'}
+    <span className="mt-0.5 mr-1.5 inline-block bg-surface-2 text-texto-2 text-xs px-1.5 py-0.5 rounded font-medium"
+      title={compra ? `Parcela ${num}/${total || '?'} · ${compra}` : undefined}>
+      {num}/{total || '?'}{compra && <span className="font-normal"> · {compra}</span>}
     </span>
   )
 }
@@ -1230,7 +1232,7 @@ export default function CreditCardPanel() {
                             )}
                           </div>
                           {tx.payee && <p className="text-xs text-texto-3">{tx.payee}</p>}
-                          <InstallmentBadge num={tx.installmentNum} total={tx.installmentTotal} />
+                          <InstallmentBadge num={tx.installmentNum} total={tx.installmentTotal} dataCompra={tx.dataCompra} />
                           <CopyIdBadge id={tx.id} />
                         </td>
                         <td className="px-4 py-3 hidden md:table-cell">

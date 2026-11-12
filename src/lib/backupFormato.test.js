@@ -213,3 +213,11 @@ describe('pasta de backup', () => {
     expect(textoUltimoBackup(agora - 3 * 3_600_000, agora)).toBe('Último backup: hoje.')
   })
 })
+
+describe('coluna data_compra (decisão 9, 12/11/2026) vai no backup', () => {
+  it('a migração cria lancamentos.data_compra e lancamentos está no backup (as colunas saem do catálogo do banco)', () => {
+    const sql = readFileSync(join(raiz, 'supabase/migrations/2026-11-12_data_compra.sql'), 'utf-8')
+    expect(sql).toMatch(/ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS data_compra TEXT/)
+    expect(tabelaNoBackup('lancamentos')).toBe(true)
+  })
+})

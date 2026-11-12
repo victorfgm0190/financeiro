@@ -23,7 +23,7 @@ import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao, idsConciliacaoConferidos } from '../../lib/conciliacaoMatch'
 import { indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, mudancasDaColisao, diferencasDoConciliado, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia, faturaEstaAberta, podeExcluirSoNoSistema } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
-import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
+import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante, dataRegistroParcela, dataCompraDaParcela } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
 import { valorDeReferencia } from '../../lib/parcelasOcorrencia'
 import { calcFatura, applyReferenceFatura, alignInstallmentsToFatura, serieKeyFromFull, serieKeyOfExistingTx, indiceSeriesDoCartao, parcelaDaLinha } from '../../lib/linhasFaturaImportada'
@@ -734,6 +734,8 @@ function buildTransactionFromRow(row, { accountId, defaultGrupoD, saveDate, gere
     tipoDocumentoId: row.tipoDocumentoId || null,
     installmentNum: row._installment?.num || null,
     installmentTotal: row._installment?.total || null,
+    // Data da compra original (decisão 9, 12/11/2026): em toda parcela da série.
+    dataCompra: row._installment ? (row._dataCompra || null) : null,
     // Ordinal entre gêmeas (2ª em diante) — sem ele a installment_key sai igual à da 1ª e o
     // índice único absorve esta linha na outra.
     installmentOccurrence: row._installmentOccurrence || null,
@@ -745,7 +747,7 @@ function buildTransactionFromRow(row, { accountId, defaultGrupoD, saveDate, gere
 }
 
 // Objeto de transação de uma parcela FUTURA ausente (projeção; date_cartao null). fp.date já é a
-// data de sistema correta (parcela >1 → mês anterior à fatura).
+// data de registro (dataRegistroParcela: mesmo dia da compra, N-1 meses depois).
 function buildInstallmentFromRow(fp, { accountId, defaultGrupoD, gerencialLigado = true }) {
   if (!gerencialLigado) fp = { ...fp, grupoGerencial: defaultGrupoD, _reservaFuncaoId: null }
   return {
@@ -758,6 +760,7 @@ function buildInstallmentFromRow(fp, { accountId, defaultGrupoD, gerencialLigado
     faturaRef: faturaRefFromMY(fp.faturaMonthYear),
     reservaFuncaoId: fp._reservaFuncaoId || null,
     installmentNum: fp.num, installmentTotal: fp.total,
+    dataCompra: fp._dataCompra || null,
     serieId: fp._serieId || null,
     costCenter: fp.costCenter || null,
     notes: fp.notes || null,
@@ -771,13 +774,16 @@ function buildInstallmentFromRow(fp, { accountId, defaultGrupoD, gerencialLigado
 
 // Data corrigida (YYYY-MM-DD) de um lançamento no modo reedição: dia de fechamento
 // (closingDay) do mês/ano da fatura_ref. Ex.: '2026-05' + closingDay 20 → '2026-05-20'.
-function correctedDateForFatura(faturaYYYYMM, closingDay) {
-  if (!faturaYYYYMM || !closingDay) return null
-  const [y, m] = faturaYYYYMM.split('-').map(Number)
-  if (!y || !m) return null
-  const lastDay = new Date(y, m, 0).getDate()
-  const day = Math.min(closingDay, lastDay)
-  return `${faturaYYYYMM}-${String(day).padStart(2, '0')}`
+// "Corrigir Datas" da reedição: a data de registro pela regra única (decisão 9, 12/11/2026). À vista e
+// parcela 1 → a data da compra (date_cartao); parcela N → mesmo dia da compra, N-1 meses depois. A data
+// da compra vem da coluna data_compra; sem ela, da date_cartao (Itaú: a compra original).
+function dataCorrigidaDoLote(t, closingDay) {
+  const num = Number(t.installmentNum) || 0
+  if (num > 1) {
+    const dc = t.dataCompra || dataCompraDaParcela({ dateCartao: t.dateCartao, num, fatura: t.faturaMonthYear, closingDay })
+    return dataRegistroParcela(dc, num)
+  }
+  return t.dateCartao ? String(t.dateCartao).slice(0, 10) : null
 }
 
 // Retorna o mês de fatura mais frequente entre os lançamentos base (não gerados).
@@ -1336,6 +1342,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     if (num === 1) return row._itau ? row.date : clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
     return row._dateCartao || row.date
   }
+  // Data gravada num lançamento JÁ EXISTENTE (colisão / já lançado). Parcela N > 1 mantém a data que
+  // já tem: a regra nova de registro (decisão 9) vale só para parcelas CRIADAS daqui em diante — as
+  // antigas serão recalculadas num lote próprio, com prévia e reversão.
+  const saveDateExistente = (row, tx) => (Number(row._installment?.num) > 1 && tx?.date ? tx.date : computeSaveDate(row))
 
   // Campos que a colisão mudaria no lançamento do banco (patchColisao, o mesmo da gravação). Vazio
   // = o banco já está igual ao arquivo: a linha conta como "já existia" e NÃO é gravada — nenhum
@@ -1345,7 +1355,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const tx = row._collisionTx
     if (!tx) return []
     const patch = patchColisao(row, tx, {
-      saveDate: computeSaveDate(row), faturaRef: faturaRefFromMY(row.faturaMonthYear), serieId: tx.serieId || row._serieId,
+      saveDate: saveDateExistente(row, tx), faturaRef: faturaRefFromMY(row.faturaMonthYear), serieId: tx.serieId || row._serieId,
     })
     return mudancasDaColisao(row, tx, patch)
   }
@@ -1358,11 +1368,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // O clampDateToFatura que havia no importConcItem jogava TODO parcelado para o dia de
   // fechamento da fatura — a parcela 1 pelo mesmo motivo do caminho Itaú (compra anterior à
   // janela) e a parcela N > 1 sempre, já que a date_cartao dela é a compra original, meses atrás.
+  const concDataCompra = (item) => (item._installment
+    ? dataCompraDaParcela({ dateCartao: item._dateCartao || item.date, num: item._installment.num, fatura: faturaMonthYear, closingDay: selectedAcc?.closingDay || 14 })
+    : null)
   const concSaveDate = (item) => {
     const num = item._installment?.num || 0
     const dateCartao = item._dateCartao || item.date
+    // Parcela N: mesmo dia da compra, N-1 meses depois (decisão 9, 12/11/2026).
     return num > 1
-      ? installmentSystemDate(faturaMonthYear, num, dateCartao, financialStartDay)
+      ? (dataRegistroParcela(concDataCompra(item), num) || installmentSystemDate(faturaMonthYear, num, dateCartao, financialStartDay))
       : dateCartao
   }
 
@@ -1788,7 +1802,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     for (const row of linhas) {
       const payee = favorecidoDaLinha(row)
       // Um lançamento por linha; IOF agrupado pelo banco → os IOFs estimados do grupo (lib/casamentoFatura).
-      for (const { tx, changes, mudancas } of patchesJaLancado(row, { saveDate: computeSaveDate(row), payee })) {
+      for (const { tx, changes, mudancas } of patchesJaLancado(row, { saveDate: saveDateExistente(row, row._jaLancado?.tx), payee })) {
         if (Object.keys(changes).length) updateTransaction(tx.id, changes)
         finais.push({ ...tx, ...changes, reconciled: true })
         itens.push({ id: tx.id, mudancas: [...mudancas, ...(tx.reconciled ? [] : [{ campo: 'reconciled', de: false, para: true }])] })
@@ -1841,8 +1855,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         if (principalKeys.has(key) || seen.has(key)) continue
         seen.add(key)
         const futFatura = addMonthToFatura(row.faturaMonthYear, k - inst.num)
-        // Parcela futura (k > 1): data de sistema = dia financialStartDay do mês anterior à fatura.
-        const futDate = installmentSystemDate(futFatura, k, faturaToDate(futFatura, dueDay) || `${futFatura}-01`, financialStartDay)
+        // Parcela futura (k > 1): mesmo dia da compra, k-1 meses depois (dataRegistroParcela). Sem a
+        // data da compra (linha sem data): a regra antiga.
+        const futDate = dataRegistroParcela(row._dataCompra, k)
+          || installmentSystemDate(futFatura, k, faturaToDate(futFatura, dueDay) || `${futFatura}-01`, financialStartDay)
         const futNumStr = String(k).padStart(numWidth, '0')
         // Sem N/Total na descrição (por extenso ou override manual): a futura fica "Yelumseg 8/12",
         // sem o "Parc7" do mês — a forma antiga, "Yelumseg Parc7 8/12", mudava de base a cada mês.
@@ -1859,7 +1875,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
             faturaMonthYear: futFatura, serieId: row._serieId,
           }, transactions)
         out.push({
-          _id: `fut_${row._id}_${k}`, parentId: row._id,
+          _id: `fut_${row._id}_${k}`, parentId: row._id, _dataCompra: row._dataCompra || null,
           date: futDate, faturaMonthYear: futFatura, description: futDesc, amount: row.amount,
           num: k, total: inst.total,
           categoryId: existing ? (existing.categoryId || '') : row.categoryId,
@@ -2325,7 +2341,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const reservasRenomeadas = new Map()
     collisionsToApply.forEach(row => {
       const tx = row._collisionTx
-      const saveDate = computeSaveDate(row)
+      const saveDate = saveDateExistente(row, tx)
       addFaturaAfetada(row.faturaMonthYear, saveDate)
       const novaDescricao = row.description || tx.description
       updateTransaction(tx.id, patchColisao(row, tx, {
@@ -2610,7 +2626,7 @@ Importar mesmo assim no mês selecionado?`)) return
 
   // ── Corrigir Datas (modo reedição) ───────────────────────────────────────
   // Para cada lançamento do lote (tx_ids da importação) com date_cartao preenchida,
-  // calcula a data corrigida = dia de fechamento do mês/ano da fatura_ref. Lançamentos
+  // calcula a data corrigida pela regra única de registro (dataCorrigidaDoLote). Lançamentos
   // manuais (date_cartao = null) são ignorados; date_cartao nunca é alterada.
   const corrigirPreview = useMemo(() => {
     if (!editingImport) return []
@@ -2619,7 +2635,7 @@ Importar mesmo assim no mês selecionado?`)) return
     return transactions
       .filter(t => idSet.has(t.id) && t.type !== 'transfer' && t.dateCartao)
       .map(t => {
-        const corrected = correctedDateForFatura(t.faturaMonthYear, closingDay)
+        const corrected = dataCorrigidaDoLote(t, closingDay)
         return {
           id: t.id,
           description: t.description || '',
@@ -2699,7 +2715,7 @@ Importar mesmo assim no mês selecionado?`)) return
         descricao: par(tx.description, r.description || tx.description),
         parcela: par(parcTx, parcRow),
         // computeSaveDate — a MESMA função da gravação.
-        data: par(dataBr(tx.date), dataBr(computeSaveDate(r))),
+        data: par(dataBr(tx.date), dataBr(saveDateExistente(r, tx))),
         valor: par(fmt(tx.amount), fmt(r._ajustarValor && !tx.reconciled ? r.amount : tx.amount)),
         categoria: par(nomeDe(categories, tx.categoryId), nomeDe(categories, r.categoryId)),
         grupo: par(nomeDe(gerencialGroups, tx.grupoGerencial), nomeDe(gerencialGroups, r.grupoGerencial)),
@@ -3382,6 +3398,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
       installmentNum: item._installment?.num || null,
       installmentTotal: item._installment?.total || null,
       installmentOccurrence: item._installmentOccurrence || null,
+      dataCompra: concDataCompra(item),
       serieId: item._serieId || null,
       faturaMonthYear: faturaMonthYear || null,
       faturaRef: faturaRefFromMY(faturaMonthYear),
@@ -3481,9 +3498,11 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           : `${item.description} ${futNumStr}/${inst.total}`
         if (findExistingParcela(inst, k, item.amount, selectedAccount, transactions)) continue
         if (isDuplicateInstallment({ description: futDesc, amount: item.amount }, transactions, selectedAccount)) continue
-        // Parcela futura (k > 1): data de sistema = dia financialStartDay do mês ANTERIOR à fatura
-        // (regra do Finup) — idêntico ao fluxo de importação normal (não clampar ao mês da fatura).
-        const futDate = installmentSystemDate(futFatura, k, faturaToDate(futFatura, dueDay) || `${futFatura}-01`, financialStartDay)
+        // Parcela futura (k > 1): mesmo dia da compra, k-1 meses depois — idêntico ao fluxo de
+        // importação normal (dataRegistroParcela); sem data da compra, a regra antiga.
+        const dcFut = concDataCompra(item)
+        const futDate = dataRegistroParcela(dcFut, k)
+          || installmentSystemDate(futFatura, k, faturaToDate(futFatura, dueDay) || `${futFatura}-01`, financialStartDay)
         if (item.payee && !payees.includes(item.payee)) addPayee(item.payee)
         const fId = addTransaction({
           origin: ORIGIN.RECONCILIACAO_FATURA,
@@ -3495,6 +3514,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           faturaMonthYear: futFatura,
           faturaRef: faturaRefFromMY(futFatura),
           installmentNum: k, installmentTotal: inst.total,
+          dataCompra: dcFut,
           serieId: item._serieId || null,
           _fromImport: true,
         })
@@ -4002,7 +4022,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                 Correção de datas — {corrigirPreview.length} lançamento{corrigirPreview.length !== 1 ? 's' : ''}
               </h3>
               <p className="text-xs text-texto-3 mt-1">
-                A data de cada lançamento vai para o dia de fechamento ({selectedAcc?.closingDay || '—'}) do mês da fatura. A data original do banco é preservada.
+                À vista e 1ª parcela ficam na data da compra; as demais parcelas, no mesmo dia da compra nos meses seguintes (último dia do mês quando ele não tiver esse dia). A data original do banco é preservada.
               </p>
             </div>
             <div className="overflow-y-auto flex-1">

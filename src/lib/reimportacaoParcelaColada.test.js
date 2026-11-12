@@ -127,11 +127,12 @@ describe('conciliado reconhecido na reimportação nunca é alterado', () => {
   })
 })
 
-describe('data das parcelas 2..N: a da série; a do cartão fica em date_cartao', () => {
-  it('"N/Total" do arquivo: data do cartão é a da compra original; a data gravada é a da série', () => {
+describe('data das parcelas 2..N: mesmo dia da compra, N-1 meses depois (decisão 9, 12/11/2026); a do cartão fica em date_cartao', () => {
+  it('"N/Total" do arquivo: data do cartão é a da compra original; a data gravada é o dia da compra 8 meses depois', () => {
     const rows = linhasDaFaturaParaRevisao([doArquivo('Loja Nova 9/12', '2026-02-13', 100)], { accountId: CARD, transactions: [], closingDay: 13, reference: '2026-11', financialStartDay: 15 })
     expect(rows[0]._installment).toMatchObject({ num: 9, total: 12 })
     expect(rows[0]._dateCartao).toBe('2026-02-13')
-    expect(rows[0].date).toBe('2026-10-15')
+    expect(rows[0].date).toBe('2026-10-13')
+    expect(rows[0]._dataCompra).toBe('2026-02-13')
   })
 })

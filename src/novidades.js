@@ -16,6 +16,18 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.12-2',
+    data: '2026-11-12',
+    titulo: 'Parcelas do cartão na data da compra',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'Compras parceladas no cartão lançadas ou importadas a partir de agora: cada parcela fica no mesmo dia da compra, nos meses seguintes (compra em 12/11 em 3x → 12/11, 12/12 e 12/01). Se o mês não tiver esse dia, vai para o último dia do mês.',
+      'O lançamento parcelado mostra a data da compra original, por exemplo “Parcela 2 de 3 · compra em 12/11”.',
+      'As parcelas que já existiam continuam com a data que têm.',
+    ],
+  },
+  {
     id: '2026.11.12',
     data: '2026-11-12',
     titulo: 'Importar Fatura: menos perguntas e só as que fazem sentido',
