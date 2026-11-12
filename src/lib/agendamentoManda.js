@@ -25,6 +25,14 @@ export function casaAgendamento(tx, schedule) {
   if (!tx || !schedule) return false
   if (schedule.transactionType !== (tx.type || 'expense')) return false
   if (Math.abs(Number(valorDeReferencia(schedule)) - Number(tx.amount)) > 0.50) return false
+  return casaFavorecido(tx, schedule)
+}
+
+// Só a parte do favorecido/loja da heurística (sem o valor): o mesmo favorecido, ou — sem favorecido
+// — a 1ª palavra significativa da descrição do agendamento na do lançamento. Base também do
+// recorrente com valor diferente (lib/recorrenteParecido).
+export function casaFavorecido(tx, schedule) {
+  if (!tx || !schedule) return false
   const txPayee = (tx.payee || '').toLowerCase().trim()
   const sPayee = (schedule.payee || '').toLowerCase().trim()
   const txDesc = (tx.description || '').toLowerCase()

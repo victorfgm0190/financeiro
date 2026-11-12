@@ -536,9 +536,12 @@ export function linhasAImportar(rows) {
 
 // Pede escolha do usuário e, sem ela, NÃO é gravada (nem importa, nem concilia):
 //   • "Para escolher" (candidatos do cartão, sem escolha);
-//   • possível duplicata ainda desmarcada (nem "importar mesmo assim", nem "é o mesmo").
+//   • possível duplicata ainda desmarcada (nem "importar mesmo assim", nem "é o mesmo");
+//   • cobrança recorrente com valor diferente do agendado, ainda sem resposta.
 export function precisaDecisao(r) {
   if (r._jaLancadoOpcoes && !r._jaLancadoEscolha) return true
+  // Cobrança recorrente com valor diferente do agendado (lib/recorrenteParecido): "É este agendamento?".
+  if (r._recorrentePergunta && !r._recorrenteEscolha) return true
   return r._dupLevel === 'possivel' && !r.selected && !r._mesmoConfirmado && !r._collisionTx
 }
 
