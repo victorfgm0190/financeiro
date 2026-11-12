@@ -2,6 +2,7 @@ import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { exigirDonoDoRateio } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 async function ensureTable() {
   await query(`CREATE TABLE IF NOT EXISTS lancamento_rateios (
@@ -57,8 +58,7 @@ async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message })
-    console.error('[api/lancamento-rateios]', err.message)
-    return res.status(500).json({ error: err.message })
+    return responderErro(res, err, 'api/lancamento-rateios')
   }
 }
 

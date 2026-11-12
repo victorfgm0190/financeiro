@@ -4,6 +4,7 @@ import { comAmbiente } from './_ambiente.js'
 import { queryParam } from './_plataforma.js'
 import { exigirModulo, contratoVisivel, normalizarCompetencia, colunasDe, MSG_SEM_COMPOSICAO } from './_contratos.js'
 import { sincronizarBenfeitorias, bensDoMapa } from './_benfeitoriasContrato.js'
+import { responderErro } from './_erro.js'
 
 // COMPOSIÇÃO DO REPASSE por competência (contrato a receber por administradora) — tabela
 // contrato_competencias, a ÚNICA fonte da verdade da composição (a cópia no agendamento é só para
@@ -90,8 +91,7 @@ async function handler(req, res) {
     }
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/contrato-competencias]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/contrato-competencias')
   }
 }
 

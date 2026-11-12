@@ -3,6 +3,7 @@ import { parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { ensureIaSchema, registrarUso } from './_ia.js'
+import { responderErro } from './_erro.js'
 
 // TRANSCRIÇÃO DE ÁUDIO do Assistente — "plano B" do microfone: navegador sem reconhecimento de voz
 // (Firefox, Safari sem Ditado, alguns Chromium) grava o áudio e manda para cá. O texto volta para o
@@ -91,8 +92,7 @@ async function handler(req, res) {
     if (!texto) return res.status(422).json({ error: 'Não entendi o áudio. Fale mais perto do microfone ou digite a mensagem.' })
     return res.json({ texto })
   } catch (err) {
-    console.error('[api/transcrever-audio]', err.message)
-    res.status(err.status || 500).json({ error: err.message })
+    responderErro(res, err, 'api/transcrever-audio')
   }
 }
 

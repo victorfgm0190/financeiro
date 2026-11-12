@@ -4,6 +4,7 @@ import { comAmbiente } from './_ambiente.js'
 import { parseBody, withTransaction } from './_db.js'
 import { centralQuery } from './_central.js'
 import { temTodosPerfis } from '../src/lib/permissoes.js'
+import { novaReferencia, registrarErro } from './_erro.js'
 import {
   ErroBackup, gerarManifesto, lerPagina, lerPaginas, gravarParte, previa, aplicarRestauracao, conferirNoBanco, limparPreparo,
   usuariosComPerfisQueSomem,
@@ -86,8 +87,9 @@ async function handler(req, res) {
     }
   } catch (err) {
     if (err instanceof ErroBackup) return res.status(err.status).json({ error: err.message, versao: err.versao, conferencia: err.conferencia })
-    console.error('[api/backup]', err.message)
-    return res.status(500).json({ error: `Falha no backup: ${err.message}. Nada foi alterado.` })
+    const ref = novaReferencia()
+    registrarErro('api/backup', err, ref)
+    return res.status(500).json({ error: `Falha no backup. Nada foi alterado. (código ${ref})`, ref })
   }
 }
 

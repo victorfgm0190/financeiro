@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { exigirLinhasPermitidas } from './_permissoesApi.js'
 import { conferirExclusaoEmMassa, logRecusa } from './_syncTrava.js'
+import { responderErro } from './_erro.js'
 
 // Endpoint dedicado ao detalhamento por lançamento (schedule_reserva_funcoes) de UM agendamento
 // (gerencial_devolucao / resgate_reserva). Fica FORA do /api/sync genérico porque uma fatura
@@ -47,8 +48,7 @@ async function handler(req, res) {
     res.json({ success: true, count })
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message })
-    console.error('[api/sync-srf]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/sync-srf')
   }
 }
 

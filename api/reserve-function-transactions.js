@@ -2,6 +2,7 @@ import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { funcaoPermitida, recortarLancamentos } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // Lançamentos vinculados a uma função de reserva (reserva_funcao_id) num período.
 // Recebe { functionId, startDate, endDate }. JOIN em contas para resolver os nomes das
@@ -46,8 +47,7 @@ async function handler(req, res) {
     )
     res.json({ transactions: await recortarLancamentos(query, req.user, rows) })
   } catch (err) {
-    console.error('[api/reserve-function-transactions]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/reserve-function-transactions')
   }
 }
 

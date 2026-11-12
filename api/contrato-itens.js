@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { queryParam } from './_plataforma.js'
 import { normalizarItem, exigirModulo, contratoVisivel, substituirItens, comNumeros } from './_contratos.js'
+import { responderErro } from './_erro.js'
 
 // ITENS PREVISTOS DO CONTRATO (IPTU, seguro, itens fixos do condomínio, com o responsável).
 //   GET ?contrato_id=x                → { itens }
@@ -35,8 +36,7 @@ async function handler(req, res) {
     return res.status(405).end()
   } catch (err) {
     if (err?.codigo === 'banco_desatualizado') return res.status(409).json({ error: err.message, codigo: err.codigo })
-    console.error('[api/contrato-itens]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/contrato-itens')
   }
 }
 

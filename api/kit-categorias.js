@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { centralQuery } from './_central.js'
 import { capitalFaltante } from '../src/lib/kitCategorias.js'
+import { responderErro } from './_erro.js'
 
 // Kit de categorias do ambiente (lista em src/lib/kitCategorias.js).
 //   GET                    → { tipo: 'PF' | 'PJ' } — tipo do cliente, no central (sem cliente → PF).
@@ -33,8 +34,7 @@ async function handler(req, res) {
     })
     return res.json({ criadas })
   } catch (err) {
-    console.error('[api/kit-categorias]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/kit-categorias')
   }
 }
 

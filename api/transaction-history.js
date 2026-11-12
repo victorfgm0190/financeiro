@@ -2,6 +2,7 @@ import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { recortarLancamentos } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // Histórico do fornecedor: últimas ocorrências de um lançamento cuja descrição CORRESPONDA
 // (busca por similaridade — mesma ideia do front: normaliza e checa correspondência parcial).
@@ -65,8 +66,7 @@ async function handler(req, res) {
         ({ id, date, amount, description, type, categoria_nome, grupo_nome, reserva_funcao_nome }))
     res.json({ transactions: matched })
   } catch (err) {
-    console.error('[api/transaction-history]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/transaction-history')
   }
 }
 

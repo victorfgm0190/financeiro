@@ -2,6 +2,7 @@ import { query } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { recortarLancamentos } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // Lançamentos de transferência já gravados no Neon para uma lista de agendamentos num intervalo
 // de datas. Usado pelo modal "Transferências do início do mês": antes de mostrar e de novo antes
@@ -40,8 +41,7 @@ async function handler(req, res) {
     // Perfis permitidos: só transferências das contas deles.
     res.json({ lancamentos: await recortarLancamentos(query, req.user, rows) })
   } catch (err) {
-    console.error('[api/transferencias-executadas]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/transferencias-executadas')
   }
 }
 

@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { queryParam } from './_plataforma.js'
 import { normalizarRegra, exigirModulo, contratoVisivel, perfisDoUsuario } from './_contratos.js'
+import { responderErro } from './_erro.js'
 
 // REGRAS DE ITENS DO BOLETO (quem paga cada item do condomínio: inquilino × proprietário).
 // contrato_id NULL = regra global do ambiente; a do contrato vence a global.
@@ -69,8 +70,7 @@ async function handler(req, res) {
     }
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/contrato-regras]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/contrato-regras')
   }
 }
 

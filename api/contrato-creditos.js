@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { queryParam } from './_plataforma.js'
 import { normalizarCredito, exigirModulo, contratoVisivel, perfisDoUsuario, comNumeros, colunasDe, valorColuna } from './_contratos.js'
+import { responderErro } from './_erro.js'
 
 // CRÉDITOS A ABATER ("do proprietário" no aluguel): itens do boleto do condomínio que são do dono,
 // ou créditos manuais, abatidos na cobrança principal. Só controle — nunca gera lançamento (o
@@ -85,8 +86,7 @@ async function handler(req, res) {
     if (err?.code === '23514' && err.constraint === 'contrato_creditos_status_check') {
       return res.status(409).json({ error: MSG_SEM_PREVISTO, codigo: 'banco_desatualizado' })
     }
-    console.error('[api/contrato-creditos]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/contrato-creditos')
   }
 }
 

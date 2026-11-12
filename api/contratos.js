@@ -9,6 +9,7 @@ import {
   repasseSemColuna, MSG_SEM_REPASSE,
 } from './_contratos.js'
 import { sincronizarBenfeitoriasDoContrato, removerBenfeitoriasDoContrato, bensDoMapa } from './_benfeitoriasContrato.js'
+import { responderErro } from './_erro.js'
 
 // CONTRATOS (módulo opcional do plano). As parcelas são agendamentos com contrato_id — gravados pelo
 // app no /api/sync como qualquer agendamento; esta rota cuida só da ficha.
@@ -177,8 +178,7 @@ async function handler(req, res) {
     return res.status(405).end()
   } catch (err) {
     if (err?.codigo === 'banco_desatualizado') return res.status(409).json({ error: err.message, codigo: err.codigo })
-    console.error('[api/contratos]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/contratos')
   }
 }
 

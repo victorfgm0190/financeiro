@@ -2,6 +2,7 @@ import { query } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
+import { responderErro } from './_erro.js'
 
 // De-para DINDIN → Finup: só existe no ambiente principal ('vm'). Nos clientes a lista é sempre vazia.
 
@@ -18,7 +19,7 @@ async function handler(req, res) {
       return res.json(rows)
     } catch (err) {
       if (err.message?.includes('does not exist')) return res.json([])
-      return res.status(500).json({ error: err.message })
+      return responderErro(res, err, 'api/account-mapping')
     }
   }
   res.status(405).json({ error: 'Method not allowed' })

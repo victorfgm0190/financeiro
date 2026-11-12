@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { queryParam } from './_plataforma.js'
 import { FERIADOS_AUTOMATICOS } from '../src/lib/feriados.js'
+import { responderErro } from './_erro.js'
 
 // CADASTRO DE FERIADOS (Configurações → Cadastros → Feriados), por cliente (banco do ambiente).
 // Os nacionais/opcionais são gerados pelo app; aqui só o que o usuário mudou ou acrescentou.
@@ -103,8 +104,7 @@ async function handler(req, res) {
     return res.status(405).end()
   } catch (err) {
     if (tabelaAusente(err)) return res.status(409).json({ error: 'O cadastro de feriados ainda não foi criado neste ambiente (migração 2026-11-04b).' })
-    console.error('[api/feriados]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/feriados')
   }
 }
 

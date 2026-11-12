@@ -7,6 +7,7 @@ import { comAmbiente } from './_ambiente.js'
 import { sincronizarEntradasDoBem, apagarEntradasDoBem } from './_bem.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 import { filtrarConfiguracoes, conferirExclusaoEmMassa, logRecusa, TABELAS_DO_SYNC } from './_syncTrava.js'
+import { responderErro } from './_erro.js'
 
 // POST /api/sync — único caminho de escrita do app para o Neon. O cliente manda uma "section"
 // (tabela + linhas a inserir/atualizar + ids a apagar) e este endpoint aplica.
@@ -146,10 +147,10 @@ async function handler(req, res) {
     // Banco do ambiente sem a migração e a alteração usa a coluna nova: recusa (o app marca a
     // alteração com erro e mostra o motivo; nunca "Tudo sincronizado").
     if (err instanceof ErroBancoDesatualizado) return res.status(err.status).json({ error: err.message, codigo: err.codigo, colunas: err.colunas })
-    console.error('[api/sync]', err.message)
     // codigoBanco/coluna: o app traduz a recusa do banco para o usuário (lib/filaOffline
-    // motivoDaRecusa) e para de reenviar a alteração — repetir não adianta.
-    res.status(500).json({ error: err.message, codigoBanco: err.code || null, coluna: err.column || null })
+    // motivoDaRecusa) e para de reenviar a alteração — repetir não adianta. A mensagem crua do
+    // banco fica só no log (api/_erro.js).
+    responderErro(res, err, 'api/sync', { extra: { codigoBanco: err.code || null, coluna: err.column || null } })
   }
 }
 

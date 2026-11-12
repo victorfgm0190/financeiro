@@ -6,6 +6,7 @@ import {
 } from './_historico.js'
 import { comAmbiente } from './_ambiente.js'
 import { autorizarEdicaoComHistorico, recortarHistorico } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // HISTÓRICO DE ALTERAÇÕES
 //   GET ?entidade=agendamento&entidade_id=x   → linhas do registro
@@ -79,8 +80,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/historico]', err.message)
-    res.status(err.status || 500).json({ error: err.message })
+    responderErro(res, err, 'api/historico')
   }
 }
 

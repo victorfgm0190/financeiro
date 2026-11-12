@@ -4,6 +4,7 @@ import { buscarAmbientePorSigla, ambienteAtivo } from './_central.js'
 import { rodarNoAmbiente } from './_conexao.js'
 import { query } from './_db.js'
 import { sessaoValida } from './_sessao.js'
+import { protegerRespostasDeErro } from './_erro.js'
 import { ambienteDoHost, AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 
 // AMBIENTE DA REQUISIÇÃO. Toda rota protegida exporta `export default comAmbiente(handler)`:
@@ -34,8 +35,15 @@ export const siglaDoToken = (p) => (p?.amb ? String(p.amb_sigla || '').toLowerCa
 // confere o do central a cada requisição).
 export const comAmbienteNoPayload = (payload, amb) => ({ ...payload, amb: amb.id, amb_sigla: amb.sigla, modulos: amb.modulos || {} })
 
+// Caminho da rota para o log (sem query string: pode trazer ids).
+function rotaDoReq(req) {
+  try { return new URL(req.url || '', 'http://x').pathname.replace(/^\//, '') } catch { return 'api' }
+}
+
 export function comAmbiente(handler) {
   const envolvido = async function rotaComAmbiente(req, res) {
+    // Nenhuma resposta 5xx leva ao navegador a mensagem crua de uma falha interna (api/_erro.js).
+    protegerRespostasDeErro(res, rotaDoReq(req))
     const payload = verifyToken(req)
     if (!payload) return res.status(401).json({ error: 'Unauthorized' })
     const doEndereco = ambienteDoReq(req)

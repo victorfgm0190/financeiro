@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { queryParam } from './_plataforma.js'
 import { normalizarEvento, exigirModulo, contratoVisivel, inserirEvento, comNumeros } from './_contratos.js'
+import { responderErro } from './_erro.js'
 
 // LINHA DO TEMPO DO CONTRATO (reajuste, vínculo, aditivo, renovação, rescisão, edição de parcela…).
 //   GET ?contrato_id=x                         → { eventos } (mais recente primeiro)
@@ -30,8 +31,7 @@ async function handler(req, res) {
     }
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/contrato-eventos]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/contrato-eventos')
   }
 }
 

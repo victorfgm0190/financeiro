@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { contextoPerfis, recortarLeitura, comBemVendido, sqlBemVendido } from './_permissoesApi.js'
 import { comAmbiente } from './_ambiente.js'
 import { faixaValorCentavos, modoValor } from '../src/lib/buscaGlobal.js'
+import { responderErro } from './_erro.js'
 
 // Busca Global combinada: lançamentos (lancamentos) + agendamentos (agendamentos).
 // Filtros: value + valueMode ('exato' = mesmo valor; 'aproximado' = mesma parte inteira), em
@@ -72,8 +73,7 @@ async function handler(req, res) {
     const ctx = await contextoPerfis(query, req.user)
     res.json({ transactions: recortarLeitura('lancamentos', txRows, ctx), schedules: recortarLeitura('agendamentos', scRows, ctx) })
   } catch (err) {
-    console.error('[api/search]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/search')
   }
 }
 

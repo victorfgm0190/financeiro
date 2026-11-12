@@ -8,6 +8,7 @@ import { comAmbiente } from './_ambiente.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 import { pode, SECOES_DO_LOAD_POR_MODULO } from '../src/lib/permissoes.js'
 import { lerAssinatura } from './last-change.js'
+import { responderErro } from './_erro.js'
 
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -542,7 +543,8 @@ async function handler(req, res) {
       err.code === '42P01' ||
       (err.message || '').includes('does not exist') ||
       (err.message || '').includes('relation')
-    res.status(isTableMissing ? 404 : 500).json({ error: err.message, code: err.code })
+    // 404 = banco sem as tabelas (o app mostra "schema-missing"); a mensagem crua fica só no log.
+    responderErro(res, err, 'api/load', { status: isTableMissing ? 404 : 500, extra: { code: err.code || null } })
   }
 }
 

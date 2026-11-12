@@ -2,6 +2,7 @@ import { query, upsertRows, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { recortarPorConta } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // Garante a tabela de staging (idempotente) — não depende da ordem de /api/load.
 async function ensureTable() {
@@ -115,8 +116,7 @@ async function handler(req, res) {
 
     return res.status(405).json({ error: 'Method not allowed' })
   } catch (err) {
-    console.error('[api/importacoes-pendentes]', err.message)
-    return res.status(500).json({ error: err.message })
+    return responderErro(res, err, 'api/importacoes-pendentes')
   }
 }
 

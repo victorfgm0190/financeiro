@@ -2,6 +2,7 @@ import { query, parseBody, withTransaction } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { ensureTiposDocumentoSchema, normalizarTipoBody, SQL_USOS_TIPO } from './_tiposDocumento.js'
 import { comAmbiente } from './_ambiente.js'
+import { responderErro } from './_erro.js'
 
 // Cadastro de TIPOS DE DOCUMENTO.
 //   GET                       → lista todos (ativos e inativos), por ordem
@@ -83,8 +84,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/tipos-documento]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/tipos-documento')
   }
 }
 

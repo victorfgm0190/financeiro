@@ -4,6 +4,7 @@ import { ensureHistoricoSchema, inserirHistorico } from './_historico.js'
 import { comAmbiente } from './_ambiente.js'
 import { exigirLinhasPermitidas } from './_permissoesApi.js'
 import { comGuardaVirada } from './_guardaVirada.js'
+import { responderErro } from './_erro.js'
 
 // Atualização em lote de lançamentos: altera date e/ou category_id de vários
 // registros (id = ANY) numa única transação, junto com o histórico de alterações
@@ -58,8 +59,7 @@ async function handler(req, res) {
     res.json({ ok: true, ...r, lote_id: loteId })
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message })
-    console.error('[api/transactions-bulk-update]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/transactions-bulk-update')
   }
 }
 

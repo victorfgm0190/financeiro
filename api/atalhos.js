@@ -4,6 +4,7 @@ import { requireAuth } from './_auth.js'
 import { acaoPorId, acoesEmConflito, mapaEfetivo } from '../src/lib/atalhos/registry.js'
 import { normalizarCombinacao, validarCombinacao, textoCombinacao } from '../src/lib/atalhos/combinacao.js'
 import { comAmbiente } from './_ambiente.js'
+import { responderErro } from './_erro.js'
 
 // ATALHOS DE TECLADO do usuário logado (as ações são fixas em src/lib/atalhos/registry.js).
 // Só o que o usuário ALTEROU fica gravado; ação sem linha usa o padrão do registry.
@@ -109,8 +110,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/atalhos]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/atalhos')
   }
 }
 

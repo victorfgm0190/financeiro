@@ -3,6 +3,7 @@ import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { exigirContasPermitidas, recortarPorConta } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // Lançamentos PROVISÓRIOS do relatório "Fluxo de Caixa por Conta": entradas/saídas de
 // SIMULAÇÃO, gravadas à parte de agendamentos/lancamentos.
@@ -194,8 +195,7 @@ async function handler(req, res) {
     return res.status(405).end()
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message })
-    console.error('[api/fluxo-provisorios]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/fluxo-provisorios')
   }
 }
 

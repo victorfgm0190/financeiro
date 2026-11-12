@@ -2,6 +2,7 @@ import { query, parseBody, withTransaction } from './_db.js'
 import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { responderErro } from './_erro.js'
 
 // CONSULTAS salvas da tela "Fluxo de Caixa Futuro": nome + conjunto de contas (por conta / por
 // grupo / contas principais) + opções do cálculo + horizonte padrão.
@@ -132,8 +133,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/fluxo-consultas]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/fluxo-consultas')
   }
 }
 

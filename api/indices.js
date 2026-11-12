@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { queryParam } from './_plataforma.js'
 import { exigirModulo } from './_contratos.js'
+import { responderErro } from './_erro.js'
 
 // ÍNDICES DE REAJUSTE (IPCA e IGP-M) da API pública SGS do Banco Central, com cache em indices_cache.
 //   GET ?indice=IPCA|IGPM → { indice, competencia, valor_mensal, acumulado_12m, atualizado_em, fonte, aviso? }
@@ -96,8 +97,7 @@ async function handler(req, res) {
   try {
     return res.json(await indiceAtual(indice))
   } catch (err) {
-    console.error('[api/indices]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/indices')
   }
 }
 

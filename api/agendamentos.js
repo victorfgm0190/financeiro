@@ -4,6 +4,7 @@ import { ensureTiposDocumentoSchema, SQL_TIPO_EM_MASSA_AGENDAMENTOS } from './_t
 import { ensureHistoricoSchema, inserirHistorico } from './_historico.js'
 import { comAmbiente } from './_ambiente.js'
 import { exigirLinhasPermitidas } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // Escritas em massa de agendamentos que não passam pelo /api/sync.
 //   PUT { ids: [...], tipo_documento_id, lote_id?, motivo? }
@@ -45,8 +46,7 @@ async function handler(req, res) {
     res.json({ ok: true, ...r, lote_id: loteId })
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message })
-    console.error('[api/agendamentos]', err.message)
-    res.status(err.status || 500).json({ error: err.message })
+    responderErro(res, err, 'api/agendamentos')
   }
 }
 

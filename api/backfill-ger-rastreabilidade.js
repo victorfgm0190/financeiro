@@ -1,6 +1,7 @@
 import { query } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { responderErro } from './_erro.js'
 
 // Backfill de rastreabilidade dos tx_ger_* históricos (provisões gerenciais criadas antes do
 // commit 661a4f16, 12/07/2026, quando executarProvisoesGerenciais passou a gravar
@@ -65,8 +66,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/backfill-ger-rastreabilidade]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/backfill-ger-rastreabilidade')
   }
 }
 

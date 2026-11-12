@@ -2,6 +2,7 @@ import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { ensureIaSchema, normalizarTermo, TIPOS_APELIDO, TIPOS_PREFERENCIA } from './_ia.js'
+import { responderErro } from './_erro.js'
 
 // APELIDOS DA IA: termo do usuário → cadastro (categoria/conta: id; favorecido: nome). O assistente
 // os usa com prioridade sobre o palpite; apelido que aponta para cadastro apagado/renomeado é
@@ -86,8 +87,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/ia-apelidos]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/ia-apelidos')
   }
 }
 

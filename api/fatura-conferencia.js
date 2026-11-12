@@ -2,6 +2,7 @@ import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { exigirContaPermitida } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // Conferência pós-importação de uma fatura de cartão: soma o que REALMENTE está gravado no
 // Neon para (cartão, fatura) e devolve despesas, estornos, total e quantidades. O frontend
@@ -56,8 +57,7 @@ async function handler(req, res) {
     })
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message })
-    console.error('[api/fatura-conferencia]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/fatura-conferencia')
   }
 }
 

@@ -6,6 +6,7 @@ import { planejarVarredura, POR_FATURA_FECHADA } from '../src/lib/integridade/mo
 import { dadosDeLinhas } from '../src/lib/integridade/dbRows.js'
 import { comAmbiente } from './_ambiente.js'
 import { exigirContasPermitidas, exigirLinhasPermitidas, contextoPerfis, recortarPendencias } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // Motor de Integridade — pendências de dados (ver src/lib/integridade/regras.js).
 //   GET                         → lista (filtros: status, regra, conta_id, fatura_ref); ?resumo=1 → só contagens
@@ -308,8 +309,7 @@ async function handler(req, res) {
     return res.status(405).end()
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message })
-    console.error('[api/integridade]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/integridade')
   }
 }
 

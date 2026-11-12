@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { recortarPorFuncao } from './_permissoesApi.js'
 import { recalcularRazaoNoBanco } from './_viradaReservaServidor.js'
+import { responderErro } from './_erro.js'
 
 // Razão diário das funções de reserva — uma linha por função por dia.
 //
@@ -108,8 +109,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/reserve-daily-ledger]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/reserve-daily-ledger')
   }
 }
 

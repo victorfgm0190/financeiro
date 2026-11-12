@@ -2,6 +2,7 @@ import { parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { temTodosPerfis } from '../src/lib/permissoes.js'
+import { responderErro } from './_erro.js'
 import {
   ErroVirada, statusVirada, previaVirada, confirmarVirada, desfazerVirada, marcarRecalculosVistos, refazerRecalculo,
 } from './_viradaReservaServidor.js'
@@ -47,8 +48,7 @@ async function handler(req, res) {
     if (err instanceof ErroVirada) return res.status(err.status).json({ error: err.message, codigo: err.codigo, ...err.extra })
     // Duas sessões ao mesmo tempo: o índice único segura a segunda.
     if (err?.code === '23505') return res.status(409).json({ error: 'Este mês acabou de ser fechado por outra sessão. Recarregue a tela de Reservas.', codigo: 'mes_ja_fechado' })
-    console.error('[api/reserve-virada]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/reserve-virada')
   }
 }
 

@@ -3,6 +3,7 @@ import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { recortarPorAgendamento } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // Datas PROVISÓRIAS de ocorrências de agendamento no relatório "Fluxo de Caixa": "acho que este
 // recebimento do dia 20 só entra dia 25, mas não tenho certeza". Só o relatório lê esta tabela —
@@ -98,8 +99,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/fluxo-datas-provisorias]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/fluxo-datas-provisorias')
   }
 }
 

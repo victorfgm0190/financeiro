@@ -1,6 +1,7 @@
 import { query } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { responderErro } from './_erro.js'
 
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -8,7 +9,7 @@ async function handler(req, res) {
     await query('SELECT 1')
     res.json({ ok: true })
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message })
+    responderErro(res, err, 'api/ping', { extra: { ok: false } })
   }
 }
 

@@ -3,6 +3,7 @@ import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { queryParam } from './_plataforma.js'
+import { responderErro } from './_erro.js'
 
 // MODELOS DE IMPORTAÇÃO do usuário logado (planilha de banco não reconhecida → mapeamento salvo).
 // Por ambiente (banco do cliente) e por usuário. Os modelos PRONTOS de bancos ficam no código
@@ -98,8 +99,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/import-layouts]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/import-layouts')
   }
 }
 

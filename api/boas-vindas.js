@@ -6,6 +6,7 @@ import { TELAS_COM_GUIA, ETAPAS_CHECKLIST } from '../src/lib/ajudaTelas.js'
 import { TODAS_AS_TAREFAS } from '../src/lib/tarefasGuiadas.js'
 import { ETAPAS_JORNADA, ETAPAS_REFAZER_JORNADA, IDS_OBJETIVOS } from '../src/lib/onboardingSteps.js'
 import { normalizarPreferenciaPeriodo } from '../src/lib/fluxoPeriodo.js'
+import { responderErro } from './_erro.js'
 
 // Etapas que aceitam estado: as do checklist e as da jornada guiada (src/lib/onboardingSteps.js).
 const ETAPAS_ACEITAS = new Set([...ETAPAS_CHECKLIST, ...ETAPAS_JORNADA])
@@ -343,8 +344,7 @@ async function handler(req, res) {
     }
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/boas-vindas]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/boas-vindas')
   }
 }
 

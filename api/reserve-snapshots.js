@@ -2,6 +2,7 @@ import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { exigirFuncoesPermitidas, recortarPorFuncao } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // Snapshots das viradas de saldo (histórico de períodos fechados por função).
 //   GET  → lista todos os snapshots (data_fim DESC)
@@ -63,8 +64,7 @@ async function handler(req, res) {
     return res.status(405).end()
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message })
-    console.error('[api/reserve-snapshots]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/reserve-snapshots')
   }
 }
 

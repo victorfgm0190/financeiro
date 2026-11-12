@@ -2,6 +2,7 @@ import { withTransaction } from './_db.js'
 import { bancoAtual } from './_conexao.js'
 import { inserirHistorico } from './_historico.js'
 import { hojeSP } from '../src/lib/hoje.js'
+import { novaReferencia, registrarErro, MENSAGEM_GENERICA, comCodigo } from './_erro.js'
 
 // Helpers compartilhados pelos endpoints de Bem Imobilizado / Financiamento.
 //
@@ -846,7 +847,14 @@ export async function withFavorecido(q, fin) {
   return { banco_favorecido_id: id, banco_favorecido_nome: c?.name ?? null }
 }
 
-export const fail = (res, status, error) => res.status(status).json({ success: false, error })
+// Falha interna (5xx): o texto (que pode ser a mensagem crua do banco) vai só para o log; o navegador
+// recebe a frase genérica + código de referência (api/_erro.js). 4xx: mensagem nossa, passa como está.
+export function fail(res, status, error) {
+  if (status < 500) return res.status(status).json({ success: false, error })
+  const ref = novaReferencia()
+  registrarErro('api/bem', { message: error }, ref)
+  return res.status(status).json({ success: false, error: comCodigo(MENSAGEM_GENERICA, ref), ref })
+}
 
 // 22P02 = invalid_text_representation. Dentro deste módulo isso significa, na prática, uma
 // coluna de id ainda tipada como uuid recebendo um id do app ('cat_1786063187890'). Quem

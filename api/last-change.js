@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { query } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { responderErro } from './_erro.js'
 
 // GET /api/last-change — assinatura leve do estado do banco, para o app saber se vale recarregar ao
 // voltar para a aba/app. Nenhum registro sai daqui: só um hash de MAX(updated_at) + COUNT(*) das
@@ -39,8 +40,7 @@ async function handler(req, res) {
   try {
     res.json({ assinatura: await lerAssinatura() })
   } catch (err) {
-    console.error('[api/last-change]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/last-change')
   }
 }
 

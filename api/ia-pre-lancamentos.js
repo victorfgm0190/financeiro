@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { contextoPerfis } from './_permissoesApi.js'
 import { ensureIaSchema } from './_ia.js'
+import { responderErro } from './_erro.js'
 
 // PRÉ-LANÇAMENTOS do Assistente IA: prévia fechada sem confirmar. Ficam só nesta tabela — não entram
 // em saldo, fatura, grupos gerenciais nem relatórios (o /api/load não lê ia_pre_lancamentos).
@@ -64,8 +65,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
-    console.error('[api/ia-pre-lancamentos]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/ia-pre-lancamentos')
   }
 }
 

@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { comGuardaVirada } from './_guardaVirada.js'
 import { exigirFuncoesPermitidas, recortarPorFuncao } from './_permissoesApi.js'
+import { responderErro } from './_erro.js'
 
 // Histórico de ajustes por função de reserva (data + valor ± + observação).
 //   GET    → lista todos os ajustes (todas as funções)
@@ -115,8 +116,7 @@ async function handler(req, res) {
     return res.status(405).end()
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message })
-    console.error('[api/reserve-adjustments]', err.message)
-    res.status(500).json({ error: err.message })
+    responderErro(res, err, 'api/reserve-adjustments')
   }
 }
 
