@@ -2,6 +2,7 @@ import { query, parseBody, withTransaction } from './_db.js'
 import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { exigirContasPermitidas } from './_permissoesApi.js'
 
 // Lançamentos PROVISÓRIOS do relatório "Fluxo de Caixa por Conta": entradas/saídas de
 // SIMULAÇÃO, gravadas à parte de agendamentos/lancamentos.
@@ -35,6 +36,17 @@ export async function ensureSchema() {
   await query(`CREATE INDEX IF NOT EXISTS idx_fluxo_provisorios_date ON fluxo_provisorios (date)`)
   await query(`CREATE INDEX IF NOT EXISTS idx_fluxo_provisorios_account ON fluxo_provisorios (account_id)`)
   schemaPronto.marcar()
+}
+
+// Perfis permitidos: a conta GRAVADA do provisório (nunca a que o navegador diz) e, ao gravar, a
+// conta nova também. Provisório inexistente: só a conta nova conta (a rota devolve 404 depois).
+async function exigirProvisorioPermitido(user, id, contaNova) {
+  const contas = contaNova === undefined ? [] : [contaNova]
+  if (id) {
+    const [atual] = await query('SELECT account_id FROM fluxo_provisorios WHERE id = $1', [id])
+    if (atual) contas.push(atual.account_id)
+  }
+  await exigirContasPermitidas(query, user, contas)
 }
 
 // id / acao do query string, com fallback via URL (robusto entre runtimes da Vercel).
@@ -135,6 +147,7 @@ async function handler(req, res) {
       if (queryParam(req, 'acao') === 'efetivar') {
         const { id } = await parseBody(req)
         if (!id) return res.status(400).json({ error: 'id é obrigatório' })
+        await exigirProvisorioPermitido(req.user, id)
         const r = await efetivar(id)
         if (r.erro === 404) return res.status(404).json({ error: 'Provisório não encontrado' })
         return res.json({ ok: true, id, schedule: r.schedule })
@@ -143,6 +156,7 @@ async function handler(req, res) {
       const body = await parseBody(req)
       const { erro, dados } = normalizar(body)
       if (erro) return res.status(400).json({ error: erro })
+      await exigirProvisorioPermitido(req.user, body?.id || null, dados.account_id)
       const [row] = await query(
         `INSERT INTO fluxo_provisorios (id, date, description, amount, type, account_id, category_id)
               VALUES (COALESCE($1, gen_random_uuid()::text), $2, $3, $4, $5, $6, $7)
@@ -157,6 +171,7 @@ async function handler(req, res) {
       if (!body?.id) return res.status(400).json({ error: 'id é obrigatório' })
       const { erro, dados } = normalizar(body)
       if (erro) return res.status(400).json({ error: erro })
+      await exigirProvisorioPermitido(req.user, body.id, dados.account_id)
       const [row] = await query(
         `UPDATE fluxo_provisorios
             SET date = $2, description = $3, amount = $4, type = $5, account_id = $6, category_id = $7
@@ -171,12 +186,14 @@ async function handler(req, res) {
     if (req.method === 'DELETE') {
       const id = queryParam(req, 'id')
       if (!id) return res.status(400).json({ error: 'id é obrigatório' })
+      await exigirProvisorioPermitido(req.user, id)
       await query('DELETE FROM fluxo_provisorios WHERE id = $1', [id])
       return res.json({ ok: true, id })
     }
 
     return res.status(405).end()
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
     console.error('[api/fluxo-provisorios]', err.message)
     res.status(500).json({ error: err.message })
   }

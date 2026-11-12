@@ -217,6 +217,27 @@ export async function exigirContaPermitida(q, user, accountId) {
   if (ctx && !ctx.contas.has(accountId)) throw new ErroHttp(403, 'Sem permissão para esta conta')
 }
 
+// Gravação por conta (provisórios do fluxo, marco de saldo da integridade): TODAS as contas
+// informadas precisam ser dos perfis permitidos. Conta vazia/desconhecida não é de perfil nenhum →
+// só quem tem "todos". Usuário com "todos" passa sem consulta extra.
+export async function exigirContasPermitidas(q, user, contas) {
+  const ctx = await contextoPerfis(q, user)
+  if (!ctx) return
+  if ((contas || []).some(c => !c || !ctx.contas.has(String(c)))) {
+    throw new ErroHttp(403, 'Sem permissão para esta conta')
+  }
+}
+
+// Gravação por função de reserva (reserve-adjustments/periods/snapshots): TODAS as funções
+// informadas precisam ser de contas dos perfis permitidos.
+export async function exigirFuncoesPermitidas(q, user, funcoes) {
+  const ctx = await contextoPerfis(q, user)
+  if (!ctx) return
+  if ((funcoes || []).some(f => !f || !ctx.funcoes.has(String(f)))) {
+    throw new ErroHttp(403, 'Sem permissão para esta função de reserva')
+  }
+}
+
 // Leitura por função de reserva: função de conta fora dos perfis → false.
 export async function funcaoPermitida(q, user, funcaoId) {
   const ctx = await contextoPerfis(q, user)

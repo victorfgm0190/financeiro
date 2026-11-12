@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { temViradaAssistida } from './_viradaReservaServidor.js'
 import { comGuardaVirada } from './_guardaVirada.js'
+import { exigirFuncoesPermitidas } from './_permissoesApi.js'
 
 // Histórico de períodos de saldo inicial por função de reserva.
 //   GET    → lista todos os períodos (todas as funções)
@@ -10,6 +11,16 @@ import { comGuardaVirada } from './_guardaVirada.js'
 //   DELETE → remove por id (?id=xxx)
 // O período ativo de uma função é o de data_inicio mais recente (ver ReservasPanel).
 // Neon nunca é acessado direto do browser — sempre via este endpoint.
+
+// Perfis permitidos: a função GRAVADA da linha (nunca a que o navegador diz) e, ao gravar, a nova.
+async function exigirLinhaPermitida(user, id, funcaoNova) {
+  const funcoes = funcaoNova === undefined ? [] : [funcaoNova]
+  if (id) {
+    const [atual] = await query('SELECT function_id FROM reserve_periods WHERE id = $1', [id])
+    if (atual) funcoes.push(atual.function_id)
+  }
+  await exigirFuncoesPermitidas(query, user, funcoes)
+}
 
 // id do query string, com fallback via URL (robusto entre runtimes da Vercel).
 function queryId(req) {
@@ -37,6 +48,7 @@ async function handler(req, res) {
       if (!id || !function_id || !data_inicio) {
         return res.status(400).json({ error: 'id, function_id e data_inicio são obrigatórios' })
       }
+      await exigirLinhaPermitida(req.user, id, function_id)
       await query(
         `INSERT INTO reserve_periods (id, function_id, data_inicio, saldo_inicial)
               VALUES ($1, $2, $3, $4)
@@ -52,6 +64,7 @@ async function handler(req, res) {
     if (req.method === 'DELETE') {
       const id = queryId(req)
       if (!id) return res.status(400).json({ error: 'id é obrigatório' })
+      await exigirLinhaPermitida(req.user, id)
       // Período aberto por uma virada assistida só sai com "Desfazer Virada" (que tira também o
       // snapshot): apagar só ele deixaria um fechamento fantasma no Histórico.
       // Banco sem a migração: não há período de virada. Com ela, a leitura não pode falhar calada.
@@ -66,6 +79,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
     console.error('[api/reserve-periods]', err.message)
     res.status(500).json({ error: err.message })
   }

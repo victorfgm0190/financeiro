@@ -1,6 +1,7 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { exigirFuncoesPermitidas } from './_permissoesApi.js'
 
 // Snapshots das viradas de saldo (histórico de períodos fechados por função).
 //   GET  → lista todos os snapshots (data_fim DESC)
@@ -34,6 +35,8 @@ async function handler(req, res) {
       if (!Array.isArray(snapshots) || snapshots.length === 0) {
         return res.json({ ok: true, inserted: 0 })
       }
+      // Perfis permitidos: todas as funções do lote (tudo ou nada).
+      await exigirFuncoesPermitidas(query, req.user, snapshots.filter(s => s?.function_id).map(s => s.function_id))
       // Um único INSERT com múltiplas linhas: monta os placeholders ($1..$N) por linha.
       const values = []
       const params = []
@@ -59,6 +62,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
     console.error('[api/reserve-snapshots]', err.message)
     res.status(500).json({ error: err.message })
   }

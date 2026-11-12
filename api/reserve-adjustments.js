@@ -2,6 +2,7 @@ import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { comGuardaVirada } from './_guardaVirada.js'
+import { exigirFuncoesPermitidas } from './_permissoesApi.js'
 
 // Histórico de ajustes por função de reserva (data + valor ± + observação).
 //   GET    → lista todos os ajustes (todas as funções)
@@ -12,6 +13,16 @@ import { comGuardaVirada } from './_guardaVirada.js'
 // rendimento da conta de reserva. Sem a coluna ainda (banco não migrado), segue sem ela.
 // Substitui o ajuste_override JSONB (mantido como fallback legado no ReservasPanel).
 // Neon nunca é acessado direto do browser — sempre via este endpoint.
+
+// Perfis permitidos: a função GRAVADA da linha (nunca a que o navegador diz) e, ao gravar, a nova.
+async function exigirLinhaPermitida(user, id, funcaoNova) {
+  const funcoes = funcaoNova === undefined ? [] : [funcaoNova]
+  if (id) {
+    const [atual] = await query('SELECT function_id FROM reserve_adjustments WHERE id = $1', [id])
+    if (atual) funcoes.push(atual.function_id)
+  }
+  await exigirFuncoesPermitidas(query, user, funcoes)
+}
 
 // id do query string, com fallback via URL (robusto entre runtimes da Vercel).
 function queryParam(req, nome) {
@@ -41,6 +52,7 @@ async function handler(req, res) {
       if (!id || !function_id || !data) {
         return res.status(400).json({ error: 'id, function_id e data são obrigatórios' })
       }
+      await exigirLinhaPermitida(req.user, id, function_id)
       const params = [id, function_id, data, Number(valor) || 0, observacao ?? null]
       try {
         await query(
@@ -75,6 +87,7 @@ async function handler(req, res) {
     if (req.method === 'PUT') {
       const { id, valor, observacao } = await parseBody(req)
       if (!id) return res.status(400).json({ error: 'id é obrigatório' })
+      await exigirLinhaPermitida(req.user, id)
       await query(
         `UPDATE reserve_adjustments SET valor = $2, observacao = $3 WHERE id = $1`,
         [id, Number(valor) || 0, observacao ?? null],
@@ -86,18 +99,22 @@ async function handler(req, res) {
       const lancamentoId = queryParam(req, 'lancamento_id')
       if (lancamentoId) {
         try {
+          const partes = await query('SELECT function_id FROM reserve_adjustments WHERE lancamento_id = $1', [lancamentoId])
+          await exigirFuncoesPermitidas(query, req.user, partes.map(p => p.function_id))
           await query(`DELETE FROM reserve_adjustments WHERE lancamento_id = $1`, [lancamentoId])
         } catch (err) { if (!semColuna(err)) throw err }
         return res.json({ ok: true, lancamento_id: lancamentoId })
       }
       const id = queryId(req)
       if (!id) return res.status(400).json({ error: 'id é obrigatório' })
+      await exigirLinhaPermitida(req.user, id)
       await query(`DELETE FROM reserve_adjustments WHERE id = $1`, [id])
       return res.json({ ok: true, id })
     }
 
     return res.status(405).end()
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
     console.error('[api/reserve-adjustments]', err.message)
     res.status(500).json({ error: err.message })
   }

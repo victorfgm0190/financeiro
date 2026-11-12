@@ -15,10 +15,18 @@ async function handler(req, res) {
 
   try {
     const body = await parseBody(req)
-    const { scheduleId, rows } = body
-    if (!scheduleId) return res.status(400).json({ error: 'scheduleId is required' })
-    // Perfis permitidos: detalhamento de agendamento de conta fora deles → 403.
-    await exigirLinhasPermitidas(query, req.user, 'agendamentos', [scheduleId])
+    const { scheduleId } = body
+    if (!scheduleId || typeof scheduleId !== 'string') return res.status(400).json({ error: 'scheduleId is required' })
+    // Toda linha é do agendamento da chamada: o schedule_id que vem em cada linha é ignorado (o app
+    // agrupa por agendamento, então é sempre o mesmo).
+    const rows = (Array.isArray(body.rows) ? body.rows : []).filter(Boolean).map(r => ({ ...r, schedule_id: scheduleId }))
+    // Perfis permitidos: o agendamento da chamada E os agendamentos a que as linhas enviadas já
+    // pertencem no banco (o upsert por id sobrescreveria linha de outro agendamento) → senão 403.
+    const idsLinhas = rows.map(r => r.id).filter(v => v != null)
+    const donos = idsLinhas.length
+      ? (await query('SELECT DISTINCT schedule_id FROM schedule_reserva_funcoes WHERE id = ANY($1)', [idsLinhas])).map(r => r.schedule_id)
+      : []
+    await exigirLinhasPermitidas(query, req.user, 'agendamentos', [scheduleId, ...donos])
 
     // Trava de exclusão em massa (a mesma do /api/sync): as linhas do agendamento que a troca vai
     // apagar não podem passar de 20% da tabela (e 5 linhas) sem confirmação explícita do usuário.

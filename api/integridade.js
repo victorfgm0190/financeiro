@@ -5,6 +5,7 @@ import { executarRegras, hojeSP, addMesesYM } from '../src/lib/integridade/regra
 import { planejarVarredura, POR_FATURA_FECHADA } from '../src/lib/integridade/motor.js'
 import { dadosDeLinhas } from '../src/lib/integridade/dbRows.js'
 import { comAmbiente } from './_ambiente.js'
+import { exigirContasPermitidas, exigirLinhasPermitidas, contextoPerfis } from './_permissoesApi.js'
 
 // Motor de Integridade — pendências de dados (ver src/lib/integridade/regras.js).
 //   GET                         → lista (filtros: status, regra, conta_id, fatura_ref); ?resumo=1 → só contagens
@@ -206,6 +207,18 @@ async function varrer(body) {
   })
 }
 
+// Perfis permitidos (auditoria 11/2026): a pendência GRAVADA aponta a conta (conta_id; no saldo de
+// subconta gerencial, a própria origem_id é a conta). Sem conta, vale o lançamento de origem.
+// Fora dos perfis → 403. Usuário com "todos" passa sem consulta extra.
+async function exigirPendenciaPermitida(user, id) {
+  if (!(await contextoPerfis(query, user))) return
+  const [p] = await query('SELECT regra, origem_id, conta_id FROM pendencias_integridade WHERE id = $1', [id])
+  if (!p) return
+  const conta = p.conta_id || (p.regra === 'GER_SALDO_SUBCONTA' ? p.origem_id : null)
+  if (conta) return exigirContasPermitidas(query, user, [conta])
+  return exigirLinhasPermitidas(query, user, 'lancamentos', [p.origem_id])
+}
+
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
@@ -240,6 +253,9 @@ async function handler(req, res) {
       const body = await parseBody(req)
       const action = param(req, 'action') || body?.action
       if (action === 'varrer') return res.json({ ok: true, ...(await varrer(body)) })
+      if (['aceitar_saldo', 'ignorar', 'reabrir', 'resolver'].includes(action) && body?.id) {
+        await exigirPendenciaPermitida(req.user, body.id)
+      }
       if (action === 'aceitar_saldo') {
         const r = await aceitarSaldo(body)
         return res.status(r.status).json(r.json)
@@ -279,6 +295,7 @@ async function handler(req, res) {
 
     return res.status(405).end()
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
     console.error('[api/integridade]', err.message)
     res.status(500).json({ error: err.message })
   }
