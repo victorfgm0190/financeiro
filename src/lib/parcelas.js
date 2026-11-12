@@ -82,20 +82,25 @@ export function textoDataCompra(dataCompra, hoje = new Date()) {
   return `compra em ${dia}/${m}${y === anoAtual ? '' : `/${y}`}`
 }
 
-// Data da COMPRA de uma linha de parcela N (arquivo do banco). O Itaú traz na parcela N a data da compra
-// original; outro extrato pode trazer a data da cobrança (que já cai na fatura da própria parcela). Regra:
-// se a data, pelo fechamento do cartão, cai na MESMA fatura da parcela N (e N > 1), é a da cobrança →
-// recua N-1 meses; senão é a da compra. fatura = 'AAAA-MM' da parcela N.
+// Data da COMPRA de uma linha de parcela N (arquivo do banco). O Itaú traz na parcela "N/Total" a data da
+// compra original; a parcela por extenso ("Seguradora Parc8"), a anuidade e outros extratos trazem a data
+// da COBRANÇA (perto da fatura da própria parcela). Regra: a data é lida como a da compra se a fatura dela
+// (pelo fechamento) está mais perto de "fatura da parcela − (N-1)" do que da fatura da parcela; senão é a da
+// cobrança → recua N-1 meses. Empate: compra. Fechamento real do banco um dia antes/depois do cadastrado
+// não muda a leitura (a distância é em meses). fatura = 'AAAA-MM' da parcela N.
 export function dataCompraDaParcela({ dateCartao, num, fatura, closingDay = 14 }) {
   const d = String(dateCartao || '').slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null
   const n = Math.max(1, Number(num) || 1)
-  if (n === 1 || !fatura) return d
+  if (n === 1 || !/^\d{4}-\d{2}$/.test(String(fatura || ''))) return d
   const [y, m, dia] = d.split('-').map(Number)
   const faturaDaData = dia <= (Number(closingDay) || 14)
     ? `${y}-${String(m).padStart(2, '0')}`
     : addMonthToFatura(`${y}-${String(m).padStart(2, '0')}`, 1)
-  if (faturaDaData !== fatura) return d
+  const faturaDaCompra = addMonthToFatura(fatura, -(n - 1))
+  const comoCompra = Math.abs(mesesEntre(faturaDaCompra, faturaDaData))
+  const comoCobranca = Math.abs(mesesEntre(fatura, faturaDaData))
+  if (comoCompra <= comoCobranca) return d
   // Data da cobrança: recua N-1 meses mantendo o dia (com o último dia do mês quando faltar).
   const alvo = new Date(Date.UTC(y, m - 1 - (n - 1), 1))
   const ano = alvo.getUTCFullYear()

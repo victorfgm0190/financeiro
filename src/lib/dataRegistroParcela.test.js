@@ -46,6 +46,19 @@ describe('dataCompraDaParcela — data da compra de uma linha do arquivo', () =>
   it('extrato que traz a data da COBRANÇA (já na fatura da parcela N) → recua N-1 meses', () => {
     expect(dataCompraDaParcela({ dateCartao: '2027-01-12', num: 3, fatura: '2027-01', closingDay: FECHA })).toBe('2026-11-12')
   })
+  it('parcela por extenso ("Seguradora Parc8") e anuidade: a data é a da cobrança → registro no mesmo dia dela', () => {
+    // Parc8 na fatura 11/2026, cobrada em 31/10 (fechamento 13): compra em 31/03 → parcela 8 em 31/10.
+    const parc8 = dataCompraDaParcela({ dateCartao: '2026-10-31', num: 8, fatura: '2026-11', closingDay: FECHA })
+    expect(parc8).toBe('2026-03-31')
+    expect(dataRegistroParcela(parc8, 8)).toBe('2026-10-31')
+    // Anuidade 6/12 na fatura 06/2026 cobrada em 14/05 (fechamento cadastrado 14, banco fechou antes).
+    const anuidade = dataCompraDaParcela({ dateCartao: '2026-05-14', num: 6, fatura: '2026-06', closingDay: 14 })
+    expect(anuidade).toBe('2025-12-14')
+    expect(dataRegistroParcela(anuidade, 6)).toBe('2026-05-14')
+  })
+  it('Itaú "9/12" com a data da compra original de fevereiro, na fatura 11/2026: fica a de fevereiro', () => {
+    expect(dataCompraDaParcela({ dateCartao: '2026-02-13', num: 9, fatura: '2026-11', closingDay: FECHA })).toBe('2026-02-13')
+  })
   it('parcela 1 / sem fatura: a própria data', () => {
     expect(dataCompraDaParcela({ dateCartao: '2026-11-12', num: 1, fatura: '2026-11', closingDay: FECHA })).toBe('2026-11-12')
   })

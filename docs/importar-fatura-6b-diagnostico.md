@@ -488,6 +488,35 @@ O teste1 recebeu o backup do vm: os números dos dois são iguais.
 | … conciliadas | 18 | 18 |
 | … não conciliadas | 133 | 133 |
 
+**Correção (12/11/2026, implementação da regra):** a contagem acima tomou a `date_cartao` de toda
+parcela como data da compra. Na parcela por extenso ("Seguradora Parc8"), na anuidade e em outros
+extratos ela é a data da **cobrança**; a regra implementada (`dataCompraDaParcela`) lê a data como
+compra ou como cobrança pela distância à fatura da parcela. Com essa leitura, a prévia do lote (vm,
+só SELECT, só NÃO conciliadas) fica:
+
+| Tipo | Não conciliadas | Mudam de dia | Mudam de mês financeiro |
+|---|---:|---:|---:|
+| Despesa | 12 | 9 | 7 |
+| Gerencial | 338 | 261 | 49 |
+| Contas Anuais | 83 | 56 | 0 |
+| Pharma | 94 | 69 | 8 |
+| **Total** | **527** | **395** | **64** |
+
+Conciliadas (fora do lote): 82. Sem como saber a data da compra: 15. A maior parte de quem muda de
+mês é compra feita no dia 14 (entre o fechamento, dia 13, e o início do mês financeiro, dia 15): hoje
+as parcelas dela ficam no dia 15 (mês financeiro seguinte); na regra nova, no dia 14.
+
+### Regra 2 (transferência gerencial) — sem mudança em função protegida
+
+A etapa A das parcelas **2 em diante** já não usa a data do lançamento: é criada por
+`reconcileFaturaState` (`AppContext.jsx`, linha da `aDate`) e pelo "Executar Gerenciais"
+(`provisaoGerencial.js`) com `prevMonthScheduleDate(fatura)` — dia de início do mês financeiro do mês
+anterior à fatura. `applyEnsureGerencial` só cria a etapa A da **parcela 1 / à vista**, com a data do
+lançamento, que é a data da compra. A regra 2 já vale hoje; nenhuma função protegida precisa mudar
+para as parcelas criadas daqui em diante. Para o **lote das antigas**: a parcela 1 re-datada não teria
+a etapa A acompanhando (`applyEnsureGerencial` só atualiza a etapa A quando o valor muda) — a decidir
+na etapa do lote.
+
 ### Recomendação
 
 1. **Aplicar só nas importações e parcelamentos novos** primeiro (regra numa função única que
