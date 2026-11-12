@@ -169,6 +169,35 @@ export async function exigirLinhasPermitidas(q, user, tabela, ids) {
   }
 }
 
+// ─── POST /api/historico (edição + histórico na mesma transação) ─────────────────────────────────
+// Tudo ou nada: cada linha enviada passa pela mesma regra do /api/sync (módulo da tabela + perfis
+// permitidos, conferidos pela versão GRAVADA no banco e pela enviada); qualquer linha recusada → 403
+// e nada é gravado. As linhas de histórico também: o registro (entidade_id) gravado no banco precisa
+// ser de um perfil permitido, e o usuário precisa poder gravar no módulo daquela entidade.
+const TABELA_DA_ENTIDADE = { agendamento: ['agendamentos', 'agendamentos'], lancamento: ['lancamentos', 'lancamentos'] }
+
+export async function autorizarEdicaoComHistorico(q, user, body) {
+  for (const [tabela, modulo] of Object.values(TABELA_DA_ENTIDADE)) {
+    const linhas = Array.isArray(body?.[tabela]) ? body[tabela] : []
+    if (!linhas.length) continue
+    const r = await filtrarGravacao(q, user, { tabela, modulo, upsert: linhas })
+    if (r.filtradas > 0) throw new ErroHttp(403, 'Sem permissão para gravar registros de um perfil não permitido')
+  }
+  const idsPorEntidade = new Map()
+  for (const l of Array.isArray(body?.historico) ? body.historico : []) {
+    if (!TABELA_DA_ENTIDADE[l?.entidade] || l?.entidade_id == null) continue
+    if (!idsPorEntidade.has(l.entidade)) idsPorEntidade.set(l.entidade, [])
+    idsPorEntidade.get(l.entidade).push(String(l.entidade_id))
+  }
+  for (const [entidade, ids] of idsPorEntidade) {
+    const [tabela, modulo] = TABELA_DA_ENTIDADE[entidade]
+    if (!pode(user, modulo, 'incluir') && !pode(user, modulo, 'editar') && !pode(user, modulo, 'excluir')) {
+      throw new ErroHttp(403, `Sem permissão para gravar em ${modulo}`)
+    }
+    await exigirLinhasPermitidas(q, user, tabela, ids)
+  }
+}
+
 // Rateio: o lancamento_id do rateio é um lançamento OU um agendamento (rateio do agendamento).
 export async function exigirDonoDoRateio(q, user, id) {
   await exigirLinhasPermitidas(q, user, 'lancamentos', [id])

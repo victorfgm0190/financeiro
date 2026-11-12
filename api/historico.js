@@ -5,6 +5,7 @@ import {
   ensureHistoricoSchema, normalizarLinhaHistorico, inserirHistorico, SQL_HISTORICO_COLS,
 } from './_historico.js'
 import { comAmbiente } from './_ambiente.js'
+import { autorizarEdicaoComHistorico } from './_permissoesApi.js'
 
 // HISTÓRICO DE ALTERAÇÕES
 //   GET ?entidade=agendamento&entidade_id=x   → linhas do registro
@@ -68,6 +69,9 @@ async function handler(req, res) {
       const body = await parseBody(req)
       // tipo_documento_id vai nas rows do sync: a coluna precisa existir antes do upsert.
       await ensureTiposDocumentoSchema()
+      // Módulo de cada tabela + perfis permitidos, pelo que está GRAVADO no banco (nunca pelo que o
+      // navegador diz): qualquer linha recusada → 403 e nada é gravado.
+      await autorizarEdicaoComHistorico(query, req.user, body)
       const r = await withTransaction((q, client) => aplicarEdicao(q, client, body))
       return res.json({ ok: true, ...r })
     }
