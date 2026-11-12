@@ -9,7 +9,7 @@ import { parseFile, fuzzyMatchAccount, parseDindinCC, parseDindinCartao } from '
 import { useApp } from '../../context/AppContext'
 import { tipoVisual, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import { noAmbientePrincipal, getSessao } from '../../lib/api'
-import { contarRevisaoFatura, abaInicial, linhasDaAba, agruparEstornosCentavos, conferenciaDaFatura, rotuloFatura } from '../../lib/contagemRevisaoFatura'
+import { contarRevisaoFatura, agruparEstornosCentavos, conferenciaDaFatura, rotuloFatura } from '../../lib/contagemRevisaoFatura'
 import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings, fetchTransactionHistory, fetchFaturaConferencia } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
@@ -21,7 +21,7 @@ import { decodificarOfx } from '../../lib/importacaoPadrao/ofx'
 import { listarModelosImportacao, salvarModeloImportacao, migrarMapeamentosAntigos } from '../../lib/importLayoutsApi'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao, idsConciliacaoConferidos } from '../../lib/conciliacaoMatch'
-import { indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, mudancasDaColisao, diferencasDoConciliado, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia, faturaEstaAberta, podeExcluirSoNoSistema } from '../../lib/revisaoImportacao'
+import { indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, mudancasDaColisao, diferencasDoConciliado, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, precisaDecisao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia, faturaEstaAberta, podeExcluirSoNoSistema } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante, dataRegistroParcela, dataCompraDaParcela } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
@@ -44,8 +44,11 @@ import { camposHerdadosProjecao } from '../../lib/herancaCampos'
 import { agendamentoQueManda, aplicarAgendamentoNaLinha, divergenciasDaEdicao, mudancasNoAgendamento, patchLancamentoDoAgendamento, CAMPOS_DO_AGENDAMENTO } from '../../lib/agendamentoManda'
 import { linhasHistorico, novoLoteId } from '../../lib/historico'
 import { JaLancadoStatus } from './JaLancadoCelula'
-import { ResumoRevisaoFatura, ConferenciaFatura, AbasRevisao, DataCelula, FaturaCelula, DescricaoCelula, Selo, DecisaoSelect, ParcelasJaNoBanco, BlocoRecolhido, LinkRegrasClassificacao, BarraAcoesRevisao } from './RevisaoFatura'
+import { ConferenciaFatura, DataCelula, FaturaCelula, DescricaoCelula, Selo, ParcelasJaNoBanco, BlocoRecolhido, LinkRegrasClassificacao, BarraAcoesRevisao } from './RevisaoFatura'
 import { aplicarCorrespondencias } from '../../lib/importacaoCorrespondencias'
+import { respostaRecorrente, desfazerRespostaRecorrente } from '../../lib/recorrenteParecido'
+import { montarBlocos, resumoDosBlocos, perguntasDeDecisao, blocoDaLinha, respostaDaLinha, ROTULO } from '../../lib/blocosConferencia'
+import { ResumoConferencia, CartoesDecisao, BlocoConferencia, ListaJaNoFinup, ListaJaConciliados, ListaNaoEntram, ListaAguardando, SugestaoAssistente } from './ConferenciaBlocos'
 import { hojeSP } from '../../lib/hoje'
 import { aplicarJaLancados, resumoJaLancados, favorecidoDaLinha, patchesJaLancado, termoDescricaoFatura } from '../../lib/casamentoFatura'
 import { listarPreLancamentos, listarApelidos, aprenderApelidos, concluirPreLancamento } from '../../lib/assistenteApi'
@@ -2600,28 +2603,35 @@ Importar mesmo assim no mês selecionado?`)) return
   // continuam sobre TODAS as linhas; a aba só recorta a tabela. Reedição de importação: sem abas.
   const comAbas = !editingImport && resolvedRows.length > 0
   const contagem = useMemo(() => contarRevisaoFatura(resolvedRows), [resolvedRows])
-  const [abaRevisao, setAbaRevisao] = useState('importar')
-  // Ao abrir uma fatura (arquivo carregado, cartão ou fatura trocados): "Precisam de decisão" se
-  // houver; senão "Para importar". Depois, a aba é do usuário.
+  // Tela nova da conferência (lib/blocosConferencia): cada linha em UM bloco — Pedem sua decisão
+  // (aberto, um cartão por pergunta), Novos, Já estão no Finup, Já conciliados antes, Não entram e
+  // Aguardando o banco (recolhidos). A tabela editável é a dos Novos. Reedição: tabela de sempre.
+  const [blocosAbertos, setBlocosAbertos] = useState(() => new Set())
   const aberturaRevisao = comAbas ? `${selectedAccount}|${faturaMonthYear}|${filename}` : null
   useEffect(() => {
     if (!aberturaRevisao) return
-    setAbaRevisao(abaInicial(contagem))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    setBlocosAbertos(new Set())
   }, [aberturaRevisao])
-  const { linhas: linhasDaAbaAtual, desmarcadas: desmarcadasDaAba } = comAbas
-    ? linhasDaAba(resolvedRows, abaRevisao)
-    : { linhas: resolvedRows, desmarcadas: [] }
-  const linhasVisiveis = [...linhasDaAbaAtual, ...desmarcadasDaAba]
-  // Linha citada fora da aba atual (ex.: conferência da fatura): mostra todas e rola até ela.
+  const alternarBloco = (id) => setBlocosAbertos(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const linhasDaAbaAtual = comAbas ? resolvedRows.filter(r => !r._generated && blocoDaLinha(r) === 'novos') : resolvedRows
+  const desmarcadasDaAba = []
+  const linhasVisiveis = linhasDaAbaAtual
+  // Linha citada em outro ponto (ex.: conferência do total): abre o bloco dela e rola até ela.
   const irParaLinha = (id) => {
-    if (comAbas && !linhasVisiveis.some(r => r._id === id)) setAbaRevisao('todos')
     const row = resolvedRows.find(r => r._id === id)
-    if (row) setGruposAbertos(prev => new Set([...prev, `centavos:${row.categoryId || ''}`]))
+    if (!row) return
+    const bloco = comAbas ? blocoDaLinha(row) : 'novos'
+    if (bloco !== 'decisao') setBlocosAbertos(prev => new Set([...prev, bloco]))
+    setGruposAbertos(prev => new Set([...prev, `centavos:${row.categoryId || ''}`]))
     setTimeout(() => {
-      const el = [document.getElementById(`ccrow-${id}`), document.getElementById(`cccard-${id}`)].find(e => e && e.offsetParent)
+      const ids = [`ccrow-${id}`, `cccard-${id}`, `jn-${id}`, `jc-${id}`, `ne-${id}`]
+      const el = bloco === 'decisao' ? document.getElementById('bloco-decisao') : ids.map(x => document.getElementById(x)).find(e => e && e.offsetParent)
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 0)
+  }
+  const irParaBloco = (bloco) => {
+    if (bloco !== 'decisao') setBlocosAbertos(prev => new Set([...prev, bloco]))
+    setTimeout(() => document.getElementById(`bloco-${bloco}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
   }
 
   // ── Corrigir Datas (modo reedição) ───────────────────────────────────────
@@ -2685,6 +2695,41 @@ Importar mesmo assim no mês selecionado?`)) return
   // mudou onde e como aparecem. Funções de render (e não componentes) de propósito: componente
   // declarado aqui dentro remontaria a cada render e perderia a edição em curso.
   const conferenciaRevisao = useMemo(() => conferenciaDaFatura(projecao), [projecao])
+  const blocos = useMemo(() => montarBlocos(resolvedRows, projecao), [resolvedRows, projecao])
+  const resumoBlocos = useMemo(() => resumoDosBlocos(blocos, projecao), [blocos, projecao])
+  const perguntas = useMemo(() => perguntasDeDecisao(resolvedRows), [resolvedRows])
+  // Etapa 6c: sugestões do Assistente por linha ({ [linhaId]: sugestão validada } — lib/sugestaoAssistente).
+  // Nesta etapa ninguém preenche: o lugar existe no cartão "É este?" e ao lado da categoria dos Novos.
+  const [sugestoesIa] = useState(() => ({}))
+  const ctxComparacao = { categorias: categories, grupos: gerencialGroups, mostrarGrupo: gerencialLigado, closingDay: importClosingDay, schedules }
+  // Respostas do cartão "É este?" — os mesmos efeitos dos controles de antes.
+  const responderSim = (p, cand) => {
+    const row = p.row
+    if (p.tipo === 'recorrente') {
+      const s = schedules.find(x => x.id === cand.id)
+      if (s) updateRow(row._id, respostaRecorrente(row, s, true))
+    } else if (p.tipo === 'duplicata') decidirPossivel(row, 'mesmo')
+    else updateRow(row._id, { _jaLancadoEscolha: cand.id })
+  }
+  const responderNao = (p) => {
+    const row = p.row
+    if (p.tipo === 'recorrente') {
+      const s = schedules.find(x => x.id === p.candidatos[0]?.id)
+      updateRow(row._id, s ? respostaRecorrente(row, s, false) : { _recorrenteEscolha: 'nao', selected: true })
+    } else if (p.tipo === 'duplicata') decidirPossivel(row, 'importar')
+    else updateRow(row._id, { _jaLancadoEscolha: 'novo', selected: true })
+  }
+  // Volta a linha a ser pergunta (resposta dada antes).
+  const reverResposta = (row) => {
+    if (row._recorrente) updateRow(row._id, desfazerRespostaRecorrente(row))
+    else if (row._jaLancadoOpcoes) updateRow(row._id, { _jaLancadoEscolha: null, selected: false })
+    else if (row._mesmoConfirmado) updateRow(row._id, { _mesmoQueId: null })
+    else if (row._dupLevel === 'possivel') decidirPossivel(row, null)
+  }
+  const acaoJaNoFinup = (row, acao) => {
+    if (acao === 'novo') updateRow(row._id, { _jaLancadoEscolha: 'novo', selected: true })
+    else reverResposta(row)
+  }
   const [linhasAbertas, setLinhasAbertas] = useState(() => new Set())
   const [gruposAbertos, setGruposAbertos] = useState(() => new Set())
   const alternarEm = (setter) => (k) => setter(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n })
@@ -2729,8 +2774,6 @@ Importar mesmo assim no mês selecionado?`)) return
     .map(r => ({ r, dif: diferencasDoConciliado(r, r._collisionTx) }))
     .filter(x => x.dif.length > 0)
     .map(({ r, dif }) => ({ id: r._id, descricao: r._collisionTx.description, parcela: r._installment ? `${r._installment.num}/${r._installment.total}` : '—', valor: r._collisionTx.amount, diferencas: dif }))
-  const comInfo = new Set(conciliadosComDiferenca.map(c => c.id))
-  const colisoesIdenticas = collisionRows.filter(r => mudancasColisao(r).length === 0 && !comInfo.has(r._id)).map(linhaColisao)
 
   // Possível duplicata: "importar mesmo assim" (forcedDupSelect) ou "é o mesmo" (_mesmoQueId).
   const decidirPossivel = (row, escolha) => {
@@ -2814,6 +2857,8 @@ Importar mesmo assim no mês selecionado?`)) return
           searchable
         />
       )}
+      {/* Etapa 6c: categoria sugerida pelo Assistente (só aparece com sugestão válida). */}
+      <SugestaoAssistente compacto sugestao={sugestoesIa[row._id]?.categoriaId ? sugestoesIa[row._id] : null} />
       {row._suggestedCategory && (!row._dbTx || row._collisionTx) && (
         <button
           type="button"
@@ -2905,16 +2950,11 @@ Importar mesmo assim no mês selecionado?`)) return
         const tx = row._dupTx || row._collisionTx
         if (!tx) return null
         return (
-          <div>
-            <p className="break-words">
-              No Finup: <span className="font-medium">{tx.description}</span>
-              {' · '}parcela {numeroParcelaDoTx(tx) ? `${numeroParcelaDoTx(tx)}${totalParcelasDoTx(tx) ? `/${totalParcelasDoTx(tx)}` : ''}` : '—'}
-              {' · '}fatura {fmtFatura(faturaDoLancamento(tx, importClosingDay))} · {fmtDate(tx.date)} · {fmt(tx.amount)}
-            </p>
-            {row._mesmoConfirmado
-              ? <button type="button" className="text-primary-fg hover:underline" onClick={() => updateRow(row._id, { _mesmoQueId: null })}>Desfazer "é o mesmo"</button>
-              : <button type="button" className="text-primary-fg hover:underline text-left" onClick={() => decidirPossivel(row, 'mesmo')}>É o mesmo — atualizar nome/parcela do existente</button>}
-          </div>
+          <p className="break-words">
+            Parecido no Finup: <span className="font-medium">{tx.description}</span>
+            {' · '}parcela {numeroParcelaDoTx(tx) ? `${numeroParcelaDoTx(tx)}${totalParcelasDoTx(tx) ? `/${totalParcelasDoTx(tx)}` : ''}` : '—'}
+            {' · '}fatura {fmtFatura(faturaDoLancamento(tx, importClosingDay))} · {fmtDate(tx.date)} · {fmt(tx.amount)}
+          </p>
         )
       })()}
       {row._avisoParecido && (() => {
@@ -2969,45 +3009,33 @@ Importar mesmo assim no mês selecionado?`)) return
     </div>
   )
 
-  // Status compacto (uma linha): selo, ou o controle de decisão; "detalhes" abre o resto.
+  // Situação da linha em uma palavra (lib/blocosConferencia, ROTULO); "detalhes" abre o resto.
   const celStatus = (row) => {
     let principal
-    if (row._jaLancadoOpcoes && !row._jaLancado) {
-      principal = <DecisaoSelect row={row} onPossivel={() => {}}
-        onEscolherCandidato={v => updateRow(row._id, v === 'novo' ? { _jaLancadoEscolha: 'novo', selected: true } : { _jaLancadoEscolha: v || null })} />
-    } else if (row._dupLevel === 'possivel' && !row._collisionTx) {
-      principal = <DecisaoSelect row={row} onEscolherCandidato={() => {}} onPossivel={v => decidirPossivel(row, v)} />
-    } else if (row._jaLancado) {
-      const j = row._jaLancado
-      const divergente = j.origem === 'match' && !!(j.divergente?.valor || j.divergente?.data)
-      principal = <Selo tom={divergente ? 'aviso' : 'ok'} title="Já está no Finup: não cria outro lançamento; o existente é atualizado com o que a fatura diz e fica conciliado. Detalhes ao lado.">
-        ✔ {j.origem === 'pre' ? 'Pré-lançamento' : divergente ? 'Já existe — valor diferente' : j.origem === 'match' ? 'Já existe' : 'Já lançado'}
-      </Selo>
-    } else if (row._collisionTx) {
-      principal = row._mesmoConfirmado
-        ? <Selo tom="aviso" title="Você confirmou que é o mesmo lançamento: ao confirmar, o registro do Finup recebe o nome e a parcela do arquivo — ver 'Parcelas já no banco — atualizar?'">É o mesmo ↻</Selo>
-        : row._collisionTx.reconciled
-          ? <Selo tom="ok" title={diferencasDoConciliado(row, row._collisionTx).length
-            ? 'Já conciliado no Finup: não é alterado. O arquivo traz alguma diferença — ver "Parcelas já no banco".'
-            : 'Já conciliado no Finup, igual ao arquivo — não é alterado'}>Conciliado ✓</Selo>
-        : mudancasColisao(row).length === 0
-          ? <Selo tom="ok" title="Mesma parcela, mesma fatura e mesmo valor já no Finup, sem nenhuma diferença — nada a atualizar">No banco ✓</Selo>
-          : <Selo tom="aviso" title="Mesma parcela, mesma fatura e mesmo valor já no Finup — ver 'Parcelas já no banco — atualizar?'">No banco ↻</Selo>
-    } else if (row._dupLevel === 'certeza') {
-      principal = <Selo tom="ok" title="Mesma fatura, mesmo valor, mesma descrição-base e mesma parcela — já existe no Finup">✔ Já existe</Selo>
+    const resposta = comAbas ? respostaDaLinha(row) : null
+    if (row._jaLancado?.origem === 'pre') {
+      principal = <Selo tom="ok" title="Casa com um pré-lançamento do Assistente: é gravado pela importação com a classificação dele e sai da lista.">Pré-lançamento do Assistente</Selo>
+    } else if (row._jaLancado || row._collisionTx || row._dupLevel === 'certeza' || row._isDuplicate) {
+      principal = <Selo tom="ok" title="Já está no Finup: nada novo é criado.">{ROTULO.ja}</Selo>
+    } else if (precisaDecisao(row)) {
+      principal = <Selo tom="aviso" title="Responda em “Pedem sua decisão”. Sem resposta, a linha não entra.">{row._recorrentePergunta ? ROTULO.perguntaAgendamento : ROTULO.pergunta}</Selo>
     } else if (!row.selected) {
-      principal = <Selo title="Desmarcada: não será importada">Não será importada</Selo>
+      principal = <Selo title="Desmarcada: não entra nesta importação">{ROTULO.naoEntra}</Selo>
     } else if (row._estornoHerdado) {
-      principal = <Selo tom="receita" title={`Estorno — classificação herdada da compra "${row._estornoHerdado.description}" (${fmtDate(row._estornoHerdado.date)})`}>↩ Estorno herdado</Selo>
+      principal = <Selo tom="receita" title={`Estorno — classificação da compra "${row._estornoHerdado.description}" (${fmtDate(row._estornoHerdado.date)})`}>↩ Estorno</Selo>
     } else {
-      principal = <Selo tom="novo">Novo</Selo>
+      principal = <Selo tom="novo">{ROTULO.novo}</Selo>
     }
     const baixa = baixasPorLinha.get(row._id)
     const aviso = row._tambemEm?.length > 0 || !!row._avisoParecido
     return (
       <div className="flex items-center gap-1 min-w-0">
         <div className="min-w-0 flex-1">{principal}</div>
-        {baixa?.ativa && <Selo title="Ao confirmar, baixa a ocorrência do agendamento — ver detalhes">↧ baixa</Selo>}
+        {baixa?.ativa && <Selo title="Ao confirmar, baixa a ocorrência do agendamento — ver detalhes">baixa agendamento</Selo>}
+        {resposta && (
+          <button type="button" data-testid={`rever-${row._id}`} onClick={() => reverResposta(row)} title={`${resposta} — clique para responder de novo em “Pedem sua decisão”`}
+            className="shrink-0 text-[11px] text-primary-fg hover:underline">Rever</button>
+        )}
         {temDetalhes(row) && (
           <button type="button" onClick={() => alternarLinha(row._id)} aria-expanded={linhasAbertas.has(row._id)}
             aria-label="Detalhes da linha" title={aviso ? (row._avisoParecido ? 'Atenção: há uma compra parecida no Finup — ver detalhes' : 'Atenção: o mesmo lançamento aparece em outra fatura — ver detalhes') : 'Detalhes'}
@@ -3112,6 +3140,81 @@ Importar mesmo assim no mês selecionado?`)) return
       </Fragment>
     )
   }
+
+  // Tabela editável das linhas: na tela nova, só os Novos (dentro do bloco); na reedição, todas.
+  const renderTabelaRevisao = () => (
+    <div className="card p-0">
+      {editingImport && gerencialLigado && <GerencialTotalizer txs={totalizerRows} gerencialGroups={gerencialGroups} />}
+      {linhasVisiveis.length > 0 && (
+        <p data-testid="legenda-revisao-fatura" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3 px-3 py-1.5"><span>Importar<HelpCampo campo="revisaoFatura.importar" /></span><span>Data<HelpCampo campo="revisaoFatura.data" /></span><span>Fatura<HelpCampo campo="revisaoFatura.fatura" /></span><span>Descrição<HelpCampo campo="revisaoFatura.descricao" /></span><span>Parcelamento<HelpCampo campo="revisaoFatura.parcelamento" /></span><span>Categoria<HelpCampo campo="revisaoFatura.categoria" /></span>{gerencialLigado && <span>Grupo<HelpCampo campo="revisaoFatura.grupo" /></span>}{gerencialLigado && <span>Função<HelpCampo campo="revisaoFatura.funcao" /></span>}<span>Decidir<HelpCampo campo="revisaoFatura.decidir" /></span><span>Baixa<HelpCampo campo="revisaoFatura.baixa" /></span></p>
+      )}
+      {/* ≥ 1024px: tabela sem rolagem horizontal (Status fixa à direita). */}
+      {linhasVisiveis.length > 0 && (
+        <div className="hidden lg:block">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-8" />
+              <col className="w-[5.5rem]" />
+              <col className="w-[4.5rem]" />
+              <col />
+              <col className="w-[12.5rem]" />
+              {gerencialLigado && <col className="w-[7rem]" />}
+              <col className="w-[6rem]" />
+              <col className="w-[11.5rem]" />
+            </colgroup>
+            <thead>
+              <tr className="border-b border-borda text-left">
+                <th className="px-2 py-2">
+                  <input type="checkbox" className="accent-primary" data-help-id="revisaoFatura.importar" aria-label="Marcar todas"
+                    checked={(() => { const sel = resolvedRows.filter(r => !r._dupLevel && !r._collisionTx); return sel.length > 0 && sel.every(r => r.selected) })()}
+                    onChange={e => toggleAll(e.target.checked)} />
+                </th>
+                <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Data</th>
+                <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Fatura</th>
+                <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Descrição</th>
+                <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Categoria</th>
+                {gerencialLigado && <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Ger.</th>}
+                <th className="px-1.5 py-2 text-xs text-texto-2 font-medium text-right">Valor</th>
+                <th className="px-2 py-2 text-xs text-texto-2 font-medium sticky right-0 bg-surface">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itensTabela.map((item, i) => item.tipo === 'separador' ? (
+                <tr key="sep-desmarcadas" className="border-b border-borda bg-surface-2">
+                  <td colSpan={gerencialLigado ? 8 : 7} className="px-3 py-1.5 text-xs font-medium text-texto-2">
+                    Desmarcadas ({item.qtd}) — não serão importadas
+                  </td>
+                </tr>
+              ) : item.tipo === 'grupo' ? (
+                renderGrupoCentavosTabela(item, i % 2 === 1)
+              ) : (
+                renderLinhaTabela(item.row, i % 2 === 1)
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* < 1024px: lista de cartões (nunca rolagem horizontal). */}
+      {linhasVisiveis.length > 0 && (
+        <div className="lg:hidden">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-borda">
+            <input type="checkbox" className="accent-primary w-4 h-4" data-help-id="revisaoFatura.importar" aria-label="Marcar todas"
+              checked={(() => { const sel = resolvedRows.filter(r => !r._dupLevel && !r._collisionTx); return sel.length > 0 && sel.every(r => r.selected) })()}
+              onChange={e => toggleAll(e.target.checked)} />
+            <span className="text-xs text-texto-2">Marcar todas</span>
+          </div>
+          {itensTabela.map((item, i) => item.tipo === 'separador' ? (
+            <p key="sep-desmarcadas" className="px-3 py-1.5 text-xs font-medium text-texto-2 bg-surface-2 border-b border-borda">Desmarcadas ({item.qtd}) — não serão importadas</p>
+          ) : item.tipo === 'grupo' ? (
+            renderGrupoCentavosCartoes(item, i % 2 === 1)
+          ) : (
+            renderCartaoLinha(item.row, i % 2 === 1)
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   // Cobranças recorrentes que a importação vai detectar com valor DIFERENTE do agendado (acima da
   // tolerância da baixa automática): viram "Precisa de ação" no Resumo da Importação.
@@ -4252,114 +4355,58 @@ Conciliar mesmo assim com o mês selecionado?`)) return
             </div>
           )}
 
-          {/* 1. Resumo no topo — todos os números saem de `contagem` (lib/contagemRevisaoFatura). */}
+          {/* 1. Resumo: Novos · Já estão no Finup · Pedem sua decisão (lib/blocosConferencia). */}
           {!editingImport && (
-            <ResumoRevisaoFatura contagem={contagem} projecao={projecao} faturaLabel={fmtFatura(faturaMonthYear)}>
+            <ResumoConferencia resumo={resumoBlocos} onIr={irParaBloco}>
               {gerencialLigado && (
                 <div className="rounded-lg border border-borda overflow-hidden" aria-label="Totais por grupo gerencial">
                   <GerencialTotalizer txs={totalizerRows} gerencialGroups={gerencialGroups} />
                 </div>
               )}
-            </ResumoRevisaoFatura>
+            </ResumoConferencia>
           )}
 
-          {/* 2. Conferência da fatura — um painel, recolhido quando a diferença está explicada. */}
+          {/* Conferência do total — um painel, recolhido quando a diferença está explicada. */}
           {!editingImport && conferenciaRevisao && (
             <ConferenciaFatura key={`${selectedAccount}|${faturaMonthYear}|${filename}`} conferencia={conferenciaRevisao} sessao={getSessao()} onIrParaLinha={irParaLinha} />
           )}
 
           {error && <div className="flex items-center gap-2 text-perigo text-sm"><AlertCircle size={14} /> {error}</div>}
 
-          {/* 3. Tabela de lançamentos */}
-          <div className="card p-0">
-            {editingImport && gerencialLigado && <GerencialTotalizer txs={totalizerRows} gerencialGroups={gerencialGroups} />}
-            {comAbas && <AbasRevisao contagem={contagem} aba={abaRevisao} onAba={setAbaRevisao} />}
-            {comAbas && linhasVisiveis.length === 0 && (
-              <div className="flex flex-wrap items-center gap-2 px-3 py-4 text-sm text-texto-1">
-                <Check size={16} className="text-primary-fg shrink-0" />
-                <span>{abaRevisao === 'decisao' ? 'Nenhum item precisa de decisão.' : abaRevisao === 'importar' ? 'Nada novo para importar nesta fatura.' : 'Nenhuma linha aqui.'}</span>
-                <button type="button" className="text-xs text-primary-fg underline" onClick={() => setAbaRevisao('todos')}>Ver todas ({contagem.total})</button>
+          {comAbas ? (
+            <div className="space-y-2" data-guia="import.abas">
+              {/* 2. Pedem sua decisão — aberto, um cartão por pergunta. */}
+              <div id="bloco-decisao">
+                <CartoesDecisao key={aberturaRevisao} perguntas={perguntas} ctx={ctxComparacao} onSim={responderSim} onNao={responderNao} sugestoes={sugestoesIa} />
               </div>
-            )}
 
-            {linhasVisiveis.length > 0 && (
-              <p data-testid="legenda-revisao-fatura" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3 px-3 py-1.5"><span>Importar<HelpCampo campo="revisaoFatura.importar" /></span><span>Data<HelpCampo campo="revisaoFatura.data" /></span><span>Fatura<HelpCampo campo="revisaoFatura.fatura" /></span><span>Descrição<HelpCampo campo="revisaoFatura.descricao" /></span><span>Parcelamento<HelpCampo campo="revisaoFatura.parcelamento" /></span><span>Categoria<HelpCampo campo="revisaoFatura.categoria" /></span>{gerencialLigado && <span>Grupo<HelpCampo campo="revisaoFatura.grupo" /></span>}{gerencialLigado && <span>Função<HelpCampo campo="revisaoFatura.funcao" /></span>}<span>Decidir<HelpCampo campo="revisaoFatura.decidir" /></span><span>Baixa<HelpCampo campo="revisaoFatura.baixa" /></span></p>
-            )}
-            {/* ≥ 1024px: tabela sem rolagem horizontal (Status fixa à direita). */}
-            {linhasVisiveis.length > 0 && (
-              <div className="hidden lg:block">
-                <table className="w-full text-sm table-fixed">
-                  <colgroup>
-                    <col className="w-8" />
-                    <col className="w-[5.5rem]" />
-                    <col className="w-[4.5rem]" />
-                    <col />
-                    <col className="w-[12.5rem]" />
-                    {gerencialLigado && <col className="w-[7rem]" />}
-                    <col className="w-[6rem]" />
-                    <col className="w-[11.5rem]" />
-                  </colgroup>
-                  <thead>
-                    <tr className="border-b border-borda text-left">
-                      <th className="px-2 py-2">
-                        <input type="checkbox" className="accent-primary" data-help-id="revisaoFatura.importar" aria-label="Marcar todas"
-                          checked={(() => { const sel = resolvedRows.filter(r => !r._dupLevel && !r._collisionTx); return sel.length > 0 && sel.every(r => r.selected) })()}
-                          onChange={e => toggleAll(e.target.checked)} />
-                      </th>
-                      <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Data</th>
-                      <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Fatura</th>
-                      <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Descrição</th>
-                      <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Categoria</th>
-                      {gerencialLigado && <th className="px-1.5 py-2 text-xs text-texto-2 font-medium">Ger.</th>}
-                      <th className="px-1.5 py-2 text-xs text-texto-2 font-medium text-right">Valor</th>
-                      <th className="px-2 py-2 text-xs text-texto-2 font-medium sticky right-0 bg-surface">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {itensTabela.map((item, i) => item.tipo === 'separador' ? (
-                      <tr key="sep-desmarcadas" className="border-b border-borda bg-surface-2">
-                        <td colSpan={gerencialLigado ? 8 : 7} className="px-3 py-1.5 text-xs font-medium text-texto-2">
-                          Desmarcadas ({item.qtd}) — não serão importadas
-                        </td>
-                      </tr>
-                    ) : item.tipo === 'grupo' ? (
-                      renderGrupoCentavosTabela(item, i % 2 === 1)
-                    ) : (
-                      renderLinhaTabela(item.row, i % 2 === 1)
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* < 1024px: lista de cartões (nunca rolagem horizontal). */}
-            {linhasVisiveis.length > 0 && (
-              <div className="lg:hidden">
-                <div className="flex items-center gap-2 px-3 py-2 border-b border-borda">
-                  <input type="checkbox" className="accent-primary w-4 h-4" data-help-id="revisaoFatura.importar" aria-label="Marcar todas"
-                    checked={(() => { const sel = resolvedRows.filter(r => !r._dupLevel && !r._collisionTx); return sel.length > 0 && sel.every(r => r.selected) })()}
-                    onChange={e => toggleAll(e.target.checked)} />
-                  <span className="text-xs text-texto-2">Marcar todas</span>
-                </div>
-                {itensTabela.map((item, i) => item.tipo === 'separador' ? (
-                  <p key="sep-desmarcadas" className="px-3 py-1.5 text-xs font-medium text-texto-2 bg-surface-2 border-b border-borda">Desmarcadas ({item.qtd}) — não serão importadas</p>
-                ) : item.tipo === 'grupo' ? (
-                  renderGrupoCentavosCartoes(item, i % 2 === 1)
-                ) : (
-                  renderCartaoLinha(item.row, i % 2 === 1)
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 4. Rodapé */}
-          <ParcelasJaNoBanco
-            linhas={colisoesComDiferenca}
-            conciliadas={conciliadosComDiferenca}
-            identicas={colisoesIdenticas}
-            aplicar={collisionsToApplyCount}
-            onToggle={toggleCollision}
-          />
+              {/* 3. O resto, recolhido. */}
+              <BlocoConferencia id="novos" titulo="Novos" qtd={blocos.novos.length} sub={`${fmt(resumoBlocos.novos.valor)} · serão importados`}
+                aberto={blocosAbertos.has('novos')} onAlternar={() => alternarBloco('novos')}>
+                {renderTabelaRevisao()}
+              </BlocoConferencia>
+              <BlocoConferencia id="jaNoFinup" titulo="Já estão no Finup" qtd={blocos.jaNoFinup.length} sub="nada novo é criado; ficam conciliados"
+                aberto={blocosAbertos.has('jaNoFinup')} onAlternar={() => alternarBloco('jaNoFinup')}>
+                <ListaJaNoFinup linhas={blocos.jaNoFinup} onAcao={acaoJaNoFinup} abertas={linhasAbertas} onDetalhes={alternarLinha}
+                  detalhes={(r) => (r._jaLancado ? <JaLancadoStatus row={r} categories={categories} payees={payees} updateRow={updateRow} /> : null)} />
+                <div className="p-2"><ParcelasJaNoBanco linhas={colisoesComDiferenca} identicas={[]} aplicar={collisionsToApplyCount} onToggle={toggleCollision} /></div>
+              </BlocoConferencia>
+              <BlocoConferencia id="jaConciliados" titulo="Já conciliados antes" qtd={blocos.jaConciliados.length} info
+                sub={conciliadosComDiferenca.length ? `⚠ ${conciliadosComDiferenca.length} com diferença de valor ou data` : 'iguais ao arquivo'}
+                aberto={blocosAbertos.has('jaConciliados')} onAlternar={() => alternarBloco('jaConciliados')}>
+                <ListaJaConciliados linhas={blocos.jaConciliados} />
+              </BlocoConferencia>
+              <BlocoConferencia id="naoEntram" titulo="Não entram" qtd={blocos.naoEntram.length} sub="desmarcadas nesta importação"
+                aberto={blocosAbertos.has('naoEntram')} onAlternar={() => alternarBloco('naoEntram')}>
+                <ListaNaoEntram linhas={blocos.naoEntram} onIncluir={(r) => toggleRow(r._id)} />
+              </BlocoConferencia>
+              <BlocoConferencia id="aguardando" titulo="Aguardando o banco" qtd={blocos.aguardando.length} info
+                sub={blocos.aguardando.length ? fmt(resumoBlocos.aguardando.valor) : null}
+                aberto={blocosAbertos.has('aguardando')} onAlternar={() => alternarBloco('aguardando')}>
+                <ListaAguardando itens={blocos.aguardando} />
+              </BlocoConferencia>
+            </div>
+          ) : renderTabelaRevisao()}
 
           {futureParcelas.length > 0 && (
             <BlocoRecolhido

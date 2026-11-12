@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 // Peças de apresentação da revisão da fatura (Importar Fatura → etapa 2). Dados fictícios.
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import {
-  ResumoRevisaoFatura, ConferenciaFatura, AbasRevisao, DataCelula, FaturaCelula, DescricaoCelula,
-  DecisaoSelect, ParcelasJaNoBanco, BarraAcoesRevisao, BlocoRecolhido, LinkRegrasClassificacao,
+  ConferenciaFatura, DataCelula, FaturaCelula, DescricaoCelula,
+  ParcelasJaNoBanco, BarraAcoesRevisao, BlocoRecolhido, LinkRegrasClassificacao,
 } from './RevisaoFatura'
 import { contarRevisaoFatura } from '../../lib/contagemRevisaoFatura'
 
@@ -18,22 +18,6 @@ const ROWS = [
   linha('e', { selected: false, amount: 5 }),
 ]
 const contagem = contarRevisaoFatura(ROWS)
-const texto = (testid) => screen.getByTestId(testid).textContent
-
-describe('1. Resumo no topo', () => {
-  it('quatro cartões com os números da contagem única; "Precisam de decisão" em destaque só se > 0', () => {
-    render(<ResumoRevisaoFatura contagem={contagem} projecao={{ arquivo: 55, projetado: 40 }} faturaLabel="11/2026" />)
-    expect(texto('resumo-arquivo')).toMatch(/Total do arquivo.*55,00.*5 linhas/)
-    expect(texto('resumo-finup')).toMatch(/Já no Finup.*10,00.*1 lançamento/)
-    expect(texto('resumo-importar')).toMatch(/A importar.*30,00.*2 lançamentos/)
-    expect(texto('resumo-decisao')).toMatch(/Precisam de decisão\s*1/)
-    expect(screen.getByTestId('resumo-decisao').className).toMatch(/aviso/)
-    expect(screen.getByText(/Total projetado da fatura/).textContent).toMatch(/40,00/)
-    cleanup()
-    render(<ResumoRevisaoFatura contagem={contarRevisaoFatura(ROWS.filter(r => r._id !== 'd'))} projecao={null} faturaLabel="11/2026" />)
-    expect(screen.getByTestId('resumo-decisao').className).not.toMatch(/aviso/)
-  })
-})
 
 const conf = (extra = {}) => ({
   diferenca: -63, explicada: -63, semExplicacao: 0, qtdItens: 2, totalmenteExplicada: true, semDiferenca: false,
@@ -94,14 +78,6 @@ describe('2. Conferência da fatura', () => {
 })
 
 describe('3. Tabela', () => {
-  it('abas com as contagens da mesma função', () => {
-    const onAba = vi.fn()
-    render(<AbasRevisao contagem={contagem} aba="decisao" onAba={onAba} />)
-    const nomes = screen.getAllByRole('tab').map(t => t.textContent)
-    expect(nomes).toEqual(['Para importar (2)', 'Precisam de decisão (1)', 'Já conciliados (1)', 'Todos (5)'])
-    fireEvent.click(screen.getByRole('tab', { name: /Todos/ }))
-    expect(onAba).toHaveBeenCalledWith('todos')
-  })
   it('Data: só a do cartão; indicador quando a do sistema é outra; clique edita as duas', () => {
     const onChange = vi.fn()
     render(<DataCelula row={{ _dateCartao: '2026-10-05', date: '2026-10-14' }} onChange={onChange} />)
@@ -129,19 +105,6 @@ describe('3. Tabela', () => {
     expect(screen.getByRole('button', { name: 'PADARIA PAO QUENTE' })).toBeTruthy()
     expect(screen.getByText('SAO PAULO')).toBeTruthy()
     expect(screen.getByText('À vista')).toBeTruthy()
-  })
-  it('Decisão em UM controle: candidatos ("para escolher") e possível duplicata', () => {
-    const escolher = vi.fn()
-    const possivel = vi.fn()
-    render(<DecisaoSelect row={{ _jaLancadoOpcoes: [{ id: 't1', description: 'Mercado', date: '2026-11-01', amount: 10 }] }} onEscolherCandidato={escolher} onPossivel={possivel} />)
-    const sel = screen.getByRole('combobox', { name: 'Decidir' })
-    expect(within(sel).getAllByRole('option').map(o => o.textContent)).toEqual(['⚠ Escolher…', expect.stringMatching(/^É este: Mercado/), 'É novo — importar'])
-    fireEvent.change(sel, { target: { value: 'novo' } })
-    expect(escolher).toHaveBeenCalledWith('novo')
-    cleanup()
-    render(<DecisaoSelect row={{ _dupLevel: 'possivel', selected: false, _dupTx: { id: 't9', description: 'Loja', date: '2026-11-01', amount: 10 } }} onEscolherCandidato={escolher} onPossivel={possivel} />)
-    fireEvent.change(screen.getByRole('combobox', { name: 'Decidir' }), { target: { value: 'mesmo' } })
-    expect(possivel).toHaveBeenCalledWith('mesmo')
   })
 })
 

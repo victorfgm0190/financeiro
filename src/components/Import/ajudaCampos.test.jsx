@@ -16,7 +16,9 @@ const { controlesSemPasso } = await import('../../help/guiaPreenchimento.js')
 const base = await import('../../help/index.js')
 const { default: ImportPanel } = await import('./ImportPanel.jsx')
 const { default: CsvColumnMapperModal } = await import('./CsvColumnMapperModal.jsx')
-const { DataCelula, FaturaCelula, DescricaoCelula, DecisaoSelect, ParcelasJaNoBanco } = await import('./RevisaoFatura.jsx')
+const { DataCelula, FaturaCelula, DescricaoCelula, ParcelasJaNoBanco } = await import('./RevisaoFatura.jsx')
+const { CartoesDecisao } = await import('./ConferenciaBlocos.jsx')
+const { perguntasDeDecisao } = await import('../../lib/blocosConferencia.js')
 const { JaLancadoStatus } = await import('./JaLancadoCelula.jsx')
 const { default: ImportarLancamentosPanel } = await import('../ImportarLancamentos/ImportarLancamentosPanel.jsx')
 
@@ -64,7 +66,7 @@ describe('Importar: todo campo visível tem ajuda', () => {
         <DataCelula row={row} onChange={nada} />
         <FaturaCelula row={row} referencia="2026-11" opcoes={[{ value: '2026-11' }, { value: '2026-12' }]} onChange={nada} />
         <DescricaoCelula row={row} onChange={nada} />
-        <DecisaoSelect row={row} onEscolherCandidato={nada} onPossivel={nada} />
+        <CartoesDecisao perguntas={perguntasDeDecisao([row])} ctx={{}} onSim={nada} onNao={nada} />
         <ParcelasJaNoBanco linhas={[linhaBanco]} identicas={[]} aplicar={1} onToggle={nada} />
       </div>,
     )

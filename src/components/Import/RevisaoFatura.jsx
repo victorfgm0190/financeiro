@@ -1,51 +1,16 @@
-// Importar Fatura → Cartão de Crédito → etapa 2 "Revisar lançamentos": peças de APRESENTAÇÃO.
+// Importar Fatura → Cartão de Crédito → etapa 2 "Revisar lançamentos": peças de APRESENTAÇÃO (o resumo,
+// as perguntas "É este?" e os blocos da tela nova estão em ./ConferenciaBlocos).
 // Nenhuma regra de casamento, conciliação ou gravação mora aqui — os números vêm de
 // lib/contagemRevisaoFatura (contagem única) e de projetarTotalFatura (lib/revisaoImportacao).
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronRight, AlertCircle, Settings2 } from 'lucide-react'
 import { fmt, fmtDate } from '../shared/utils'
 import DateInput from '../shared/DateInput'
-import { ABAS_REVISAO, lerConferenciaAberta, lembrarConferenciaAberta, rotuloFatura, separarSufixo, textoSemDecisao } from '../../lib/contagemRevisaoFatura'
+import { lerConferenciaAberta, lembrarConferenciaAberta, rotuloFatura, separarSufixo, textoSemDecisao } from '../../lib/contagemRevisaoFatura'
 import { configHash } from '../../lib/configRota'
 import HelpCampo from '../shared/HelpCampo'
 
 const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`
-
-// ── 1. Resumo no topo ────────────────────────────────────────────────────────────────────────────
-function CartaoResumo({ titulo, valor, sub, destaque = false, testid }) {
-  return (
-    <div data-testid={testid} className={`rounded-xl border px-3 py-2.5 min-w-0 ${destaque ? 'border-aviso/50 bg-aviso/10' : 'border-borda bg-surface'}`}>
-      <p className={`text-xs ${destaque ? 'text-aviso font-medium' : 'text-texto-2'}`}>{titulo}</p>
-      <p className={`text-lg font-bold leading-tight mt-0.5 ${destaque ? 'text-aviso' : 'text-texto-1'}`}>{valor}</p>
-      {sub && <p className="text-xs text-texto-2 mt-0.5">{sub}</p>}
-    </div>
-  )
-}
-
-export function ResumoRevisaoFatura({ contagem, projecao, faturaLabel, children }) {
-  const c = contagem
-  const decisao = c.decisao.qtd
-  return (
-    <section aria-label="Resumo da revisão" className="space-y-2" data-guia="import.resumo">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-        <CartaoResumo testid="resumo-arquivo" titulo="Total do arquivo" valor={fmt(projecao ? projecao.arquivo : c.arquivo.valor)} sub={plural(c.total, 'linha', 'linhas')} />
-        <CartaoResumo testid="resumo-finup" titulo="Já no Finup" valor={fmt(c.conciliados.valor)} sub={plural(c.conciliados.qtd, 'lançamento', 'lançamentos')} />
-        <CartaoResumo testid="resumo-importar" titulo="A importar" valor={fmt(c.importar.valor)} sub={plural(c.importar.qtd, 'lançamento', 'lançamentos')} />
-        <CartaoResumo testid="resumo-decisao" titulo="Precisam de decisão" valor={String(decisao)}
-          sub={decisao > 0 ? 'ficam de fora até você escolher' : 'nada pendente'} destaque={decisao > 0} />
-      </div>
-      <p className="text-xs text-texto-2 flex flex-wrap gap-x-3 gap-y-0.5">
-        {projecao && (
-          <span title={`O que a fatura ${faturaLabel} terá no Finup depois da confirmação: o já gravado nela + as linhas que serão inseridas`}>
-            Total projetado da fatura: <span className="font-semibold text-texto-1">{fmt(projecao.projetado)}</span>
-          </span>
-        )}
-        {c.desmarcados.qtd > 0 && <span>{plural(c.desmarcados.qtd, 'linha desmarcada', 'linhas desmarcadas')} ({fmt(c.desmarcados.valor)}) não {c.desmarcados.qtd === 1 ? 'será importada' : 'serão importadas'}</span>}
-      </p>
-      {children}
-    </section>
-  )
-}
 
 // ── 2. Conferência da fatura ─────────────────────────────────────────────────────────────────────
 export function ConferenciaFatura({ conferencia, sessao, onIrParaLinha }) {
@@ -117,27 +82,6 @@ export function ConferenciaFatura({ conferencia, sessao, onIrParaLinha }) {
         </div>
       )}
     </section>
-  )
-}
-
-// ── 3. Abas da tabela ────────────────────────────────────────────────────────────────────────────
-export function AbasRevisao({ contagem, aba, onAba }) {
-  return (
-    <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-borda" role="tablist" aria-label="Linhas da fatura" data-guia="import.abas">
-      {ABAS_REVISAO.map(a => {
-        const n = a.conta(contagem)
-        const ativa = aba === a.id
-        const alerta = a.id === 'decisao' && n > 0
-        return (
-          <button key={a.id} type="button" role="tab" aria-selected={ativa} onClick={() => onAba(a.id)}
-            className={`text-xs px-3 min-h-[32px] rounded-full border transition-colors ${ativa
-              ? 'bg-primary/15 border-primary/40 text-primary-fg font-medium'
-              : alerta ? 'bg-aviso/10 border-aviso/40 text-aviso' : 'bg-surface-2 border-borda-campo text-texto-2 hover:text-texto-1'}`}>
-            {a.rotulo} ({n})
-          </button>
-        )
-      })}
-    </div>
   )
 }
 
@@ -230,35 +174,6 @@ const TOM = {
 }
 export function Selo({ tom = 'neutro', title, children }) {
   return <span title={title} className={`inline-block text-[11px] leading-5 px-1.5 rounded whitespace-nowrap ${TOM[tom] || TOM.neutro}`}>{children}</span>
-}
-
-// Linhas que precisam de decisão: um controle compacto no lugar dos radios empilhados.
-//   • "para escolher" (candidatos do cartão): um item por candidato + "É novo — importar";
-//   • possível duplicata: "É outra compra — importar" | "É a mesma — atualizar o existente".
-export function DecisaoSelect({ row, onEscolherCandidato, onPossivel }) {
-  if (row._jaLancadoOpcoes) {
-    return (
-      <select aria-label="Decidir" data-help-id="revisaoFatura.decidir" className="w-full max-w-[11rem] bg-surface-2 border border-aviso text-texto-1 rounded px-1 py-0.5 text-xs"
-        value={row._jaLancadoEscolha || ''} onChange={e => onEscolherCandidato(e.target.value)}>
-        <option value="">⚠ {row._parecido ? 'Parecido — é este?' : 'Escolher…'}</option>
-        {row._jaLancadoOpcoes.map(tx => (
-          <option key={tx.id} value={tx.id}>É {tx._pre ? 'o pré-lançamento' : 'este'}: {tx.description || '—'} · {fmtDate(tx.date)} · {tx.estimado ? `estimado ${fmt(tx.amount)} × real ${fmt(row.amount)}` : fmt(tx.amount)}</option>
-        ))}
-        <option value="novo">É novo — importar</option>
-      </select>
-    )
-  }
-  const tx = row._dupTx || row._collisionTx
-  const valor = row._mesmoConfirmado ? 'mesmo' : row.selected ? 'importar' : ''
-  return (
-    <select aria-label="Decidir" data-help-id="revisaoFatura.decidir" className={`w-full max-w-[11rem] bg-surface-2 border ${valor ? 'border-borda-campo' : 'border-aviso'} text-texto-1 rounded px-1 py-0.5 text-xs`}
-      title={tx ? `Possível duplicata de: ${tx.description} · ${fmtDate(tx.date)} · ${fmt(tx.amount)}` : undefined}
-      value={valor} onChange={e => onPossivel(e.target.value)}>
-      <option value="">⚠ Possível duplicata…</option>
-      <option value="importar">É outra compra — importar</option>
-      {tx && <option value="mesmo">É a mesma — atualizar o existente</option>}
-    </select>
-  )
 }
 
 // ── 4. Rodapé ────────────────────────────────────────────────────────────────────────────────────

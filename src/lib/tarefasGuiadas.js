@@ -545,8 +545,8 @@ export const TODAS_AS_TAREFAS = [
     passos: [
       { alvo: 'import.cartao', espera: 'preencher', texto: 'Escolha o cartão de crédito da fatura.' },
       { alvo: 'import.arquivo', espera: 'clique', texto: 'Clique aqui (ou arraste) e escolha o arquivo da fatura baixado do banco: Excel, CSV ou OFX.' },
-      { alvo: 'import.resumo', espera: 'nenhuma', texto: 'Veja o resumo: total do arquivo, o que já está no Finup e o que será importado.' },
-      { alvo: 'import.abas', espera: 'nenhuma', texto: 'Use as abas para revisar as novas e decidir as que pedem a sua decisão.' },
+      { alvo: 'import.resumo', espera: 'nenhuma', texto: 'Veja o resumo: quantos são novos, quantos já estão no Finup e quantos pedem a sua decisão.' },
+      { alvo: 'import.abas', espera: 'nenhuma', texto: 'Responda "É este?" nas que pedem a sua decisão; os outros blocos abrem ao clicar.' },
       { alvo: 'import.classificar-auto', espera: 'nenhuma', texto: 'Se quiser, clique em "Classificar Auto" para preencher as categorias sozinho.' },
       { alvo: 'import.confirmar', espera: 'clique', texto: 'Tudo certo? Clique em Confirmar.' },
       { alvo: 'importacao-previa.acoes', espera: 'salvar', texto: 'Confira a prévia final e clique em "Confirmar importação" (ou "Concluir").' },

@@ -20,6 +20,10 @@ export const ACOES = [
   { id: 'agend.executarGerenciais', label: 'Executar Gerenciais', contexto: 'tela:agendamentos', padrao: 'Alt+X' },
   { id: 'agend.lancarProvisao', label: 'Lançar Provisão', contexto: 'tela:agendamentos', padrao: 'Alt+V' },
   { id: 'agend.novoAgendamento', label: 'Novo Agendamento', contexto: 'tela:agendamentos', padrao: 'Alt+N' },
+  { id: 'importar.decisaoSim', label: 'É este? — Sim, é este', contexto: 'tela:importarFatura', padrao: 'Alt+S' },
+  { id: 'importar.decisaoNao', label: 'É este? — Não, é outro (importar como novo)', contexto: 'tela:importarFatura', padrao: 'Alt+O' },
+  { id: 'importar.decisaoProxima', label: 'É este? — próxima pergunta', contexto: 'tela:importarFatura', padrao: 'Alt+Period' },
+  { id: 'importar.decisaoAnterior', label: 'É este? — pergunta anterior', contexto: 'tela:importarFatura', padrao: 'Alt+Comma' },
 ]
 
 // Ordem de exibição dos grupos (Cadastros › Atalhos e a ajuda do Shift+?).
@@ -27,6 +31,7 @@ export const CONTEXTOS = [
   { id: 'global', label: 'Global' },
   { id: 'tela:contas', label: 'Contas' },
   { id: 'tela:agendamentos', label: 'Agendamentos' },
+  { id: 'tela:importarFatura', label: 'Importar Fatura' },
   { id: 'modal:lancamento', label: 'Modal Lançamento' },
 ]
 
