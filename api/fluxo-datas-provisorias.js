@@ -2,6 +2,7 @@ import { query, parseBody } from './_db.js'
 import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { recortarPorAgendamento } from './_permissoesApi.js'
 
 // Datas PROVISÓRIAS de ocorrências de agendamento no relatório "Fluxo de Caixa": "acho que este
 // recebimento do dia 20 só entra dia 25, mas não tenho certeza". Só o relatório lê esta tabela —
@@ -64,7 +65,7 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       const removidos = await limparOrfaos()
       const rows = await query(`SELECT ${COLS} FROM fluxo_datas_provisorias ORDER BY data_provisoria, created_at`)
-      return res.json({ datas: rows, orfaosRemovidos: removidos })
+      return res.json({ datas: await recortarPorAgendamento(query, req.user, rows), orfaosRemovidos: removidos })
     }
 
     if (req.method === 'POST') {

@@ -3,7 +3,7 @@ import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { temViradaAssistida } from './_viradaReservaServidor.js'
 import { comGuardaVirada } from './_guardaVirada.js'
-import { exigirFuncoesPermitidas } from './_permissoesApi.js'
+import { exigirFuncoesPermitidas, recortarPorFuncao } from './_permissoesApi.js'
 
 // Histórico de períodos de saldo inicial por função de reserva.
 //   GET    → lista todos os períodos (todas as funções)
@@ -40,7 +40,7 @@ async function handler(req, res) {
            FROM reserve_periods
           ORDER BY function_id, data_inicio DESC`,
       )
-      return res.json({ periods: rows })
+      return res.json({ periods: await recortarPorFuncao(query, req.user, rows) })
     }
 
     if (req.method === 'POST') {

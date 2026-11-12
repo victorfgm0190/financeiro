@@ -2,7 +2,7 @@ import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { comGuardaVirada } from './_guardaVirada.js'
-import { exigirFuncoesPermitidas } from './_permissoesApi.js'
+import { exigirFuncoesPermitidas, recortarPorFuncao } from './_permissoesApi.js'
 
 // Histórico de ajustes por função de reserva (data + valor ± + observação).
 //   GET    → lista todos os ajustes (todas as funções)
@@ -44,7 +44,7 @@ async function handler(req, res) {
           ORDER BY function_id, data DESC`
       let rows
       try { rows = await query(sql(true)) } catch (err) { if (!semColuna(err)) throw err; rows = await query(sql(false)) }
-      return res.json({ adjustments: rows })
+      return res.json({ adjustments: await recortarPorFuncao(query, req.user, rows) })
     }
 
     if (req.method === 'POST') {

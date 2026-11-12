@@ -1,6 +1,7 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { recortarPorFuncao } from './_permissoesApi.js'
 import { recalcularRazaoNoBanco } from './_viradaReservaServidor.js'
 
 // Razão diário das funções de reserva — uma linha por função por dia.
@@ -59,7 +60,7 @@ async function handler(req, res) {
             ORDER BY f.ordem, f.name`,
           [date],
         )
-        return res.json({ date, rows })
+        return res.json({ date, rows: await recortarPorFuncao(query, req.user, rows) })
       }
 
       // Sem parâmetros: resumo + as linhas dos últimos `days` dias COM registro (default 60,
@@ -93,7 +94,7 @@ async function handler(req, res) {
           ORDER BY l.snapshot_date DESC, f.ordem, f.name`,
         [wanted],
       )
-      return res.json({ ...(summary || { min_date: null, max_date: null, days: 0, total_rows: 0 }), rows })
+      return res.json({ ...(summary || { min_date: null, max_date: null, days: 0, total_rows: 0 }), rows: await recortarPorFuncao(query, req.user, rows) })
     }
 
     if (req.method === 'POST') {

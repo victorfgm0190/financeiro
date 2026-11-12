@@ -1,7 +1,7 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
-import { exigirFuncoesPermitidas } from './_permissoesApi.js'
+import { exigirFuncoesPermitidas, recortarPorFuncao } from './_permissoesApi.js'
 
 // Snapshots das viradas de saldo (histórico de períodos fechados por função).
 //   GET  → lista todos os snapshots (data_fim DESC)
@@ -23,7 +23,7 @@ async function handler(req, res) {
            FROM reserve_period_snapshots
           ORDER BY data_fim DESC, function_name`,
       )
-      return res.json({ snapshots: rows.map(({ _inicio, _fim, ...r }) => ({ ...r, data_inicio: _inicio, data_fim: _fim, rendimentos: r.rendimentos ?? null, virada_id: r.virada_id ?? null })) })
+      return res.json({ snapshots: (await recortarPorFuncao(query, req.user, rows)).map(({ _inicio, _fim, ...r }) => ({ ...r, data_inicio: _inicio, data_fim: _fim, rendimentos: r.rendimentos ?? null, virada_id: r.virada_id ?? null })) })
     }
 
     if (req.method === 'POST') {

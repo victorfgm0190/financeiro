@@ -196,6 +196,58 @@ export function regraDaRota(rota, metodo) {
 // Atende a regra? (null = livre)
 export const atendeRegra = (usuario, regra) => !regra || pode(usuario, regra.modulo, regra.acao)
 
+// ─── Leituras: "ver" por módulo (auditoria 11/2026, B2) ──────────────────────────────────────────
+// Fonte ÚNICA da regra de leitura, aplicada pelo requireAuth a toda leitura (GET/HEAD e as leituras
+// via POST): rota → módulos que USAM aquele dado; basta "ver" em UM deles. Os perfis permitidos são
+// recortados dentro de cada rota (api/_permissoesApi.js).
+// Fora da lista = leitura sem módulo próprio: preferência pessoal (atalhos, boas-vindas, agenda),
+// cadastro usado por todas as telas (tipos de documento, feriados, índices, cotação), o /api/load
+// (corta por perfil e por seção) e rotas com guarda própria (usuários, clientes, backup, contratos).
+// Dados que alimentam SALDOS em várias telas (histórico das reservas, patrimônio/financiamento) não
+// exigem um módulo só: cortar por módulo mudaria o saldo mostrado no Painel e o que as funções de
+// saldo recebem. Para eles vale o recorte por perfil.
+const LEITURAS_VIA_POST = new Set(['search', 'transaction-history', 'reserve-function-transactions', 'fatura-conferencia'])
+const LEITURAS = [
+  [/^search$/, ['lancamentos', 'cartao', 'importar']],
+  [/^transaction-history$/, ['lancamentos', 'importar', 'cartao']],
+  [/^transferencias-executadas$/, ['painel']],
+  [/^(lancamento-rateios)$/, ['lancamentos', 'agendamentos', 'cartao']],
+  [/^ia-pre-lancamentos$/, ['lancamentos']],
+  [/^importacoes-lancamentos$/, ['lancamentos']],
+  [/^(importacoes-pendentes|account-mapping)$/, ['importar', 'configuracoes']],
+  [/^(import-layouts)$/, ['importar', 'lancamentos']],
+  [/^fatura-conferencia$/, ['importar', 'cartao']],
+  [/^(reserve-function-transactions|reserve-daily-ledger|reserve-virada)$/, ['reservas']],
+  [/^(fluxo-provisorios|fluxo-datas-provisorias|fluxo-consultas)$/, ['fluxo', 'relatorios']],
+  [/^historico$/, ['lancamentos', 'agendamentos', 'cartao', 'importar']],
+  [/^integridade$/, ['alertas']],
+  [/^ia-apelidos$/, ['lancamentos', 'cadastros']],
+  [/^backfill-ger-rastreabilidade$/, ['configuracoes']],
+  [/^(bem|financiamento|consorcio|consorcio-eventos)(\/|$)/, ['patrimonio', 'contas', 'lancamentos', 'agendamentos']],
+]
+const rotaLimpa = (rota) => String(rota || '').replace(/^\/?api\//, '').replace(/^\//, '').split('?')[0].replace(/\/$/, '')
+
+// A chamada é uma LEITURA? (GET/HEAD, ou uma das leituras feitas por POST)
+export function ehLeitura(rota, metodo) {
+  const m = String(metodo || 'GET').toUpperCase()
+  return m === 'GET' || m === 'HEAD' || (m === 'POST' && LEITURAS_VIA_POST.has(rotaLimpa(rota)))
+}
+
+// Regra de leitura da rota: { modulos, acao: 'ver' } ou null (sem módulo próprio).
+export function regraDeLeitura(rota) {
+  const r = rotaLimpa(rota)
+  for (const [re, modulos] of LEITURAS) if (re.test(r)) return { modulos, acao: 'ver' }
+  return null
+}
+
+// Seções do /api/load cortadas por "ver": só as que nenhuma outra tela usa nem entram em cálculo de
+// saldo. Lançamentos, agendamentos, contas, reservas, envelopes, regras e cadastros alimentam o
+// Painel e os saldos (e as funções protegidas de saldo/fatura/gerencial): ficam, recortados por perfil.
+export const SECOES_DO_LOAD_POR_MODULO = { buds: ['orcamento'], imports: ['importar', 'cartao'] }
+
+// Pode ler? ("ver" em algum dos módulos da regra; null = livre)
+export const atendeLeitura = (usuario, regra) => !regra || regra.modulos.some(m => pode(usuario, m, 'ver'))
+
 // ─── Perfis permitidos ──────────────────────────────────────────────────────────────────────────
 // perfis_permitidos: "todos" | [ids de perfis]. Normaliza o que vier do banco/token.
 export const normalizarPerfis = (v) => (Array.isArray(v) ? v.filter(x => typeof x === 'string') : 'todos')

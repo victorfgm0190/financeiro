@@ -238,6 +238,65 @@ export async function exigirFuncoesPermitidas(q, user, funcoes) {
   }
 }
 
+// ─── Recorte de LEITURA por perfil (auditoria 11/2026, B2) ──────────────────────────────────────
+// Funções únicas usadas pelas rotas de leitura: o "ver" do módulo já foi conferido no requireAuth
+// (regraDeLeitura); aqui só os perfis. Usuário com "todos" recebe as linhas como vieram.
+
+// Linhas com uma ou mais colunas de conta: fica a linha com ALGUMA conta permitida.
+export async function recortarPorConta(q, user, rows, colunas = ['account_id']) {
+  const ctx = await contextoPerfis(q, user)
+  if (!ctx) return rows
+  return rows.filter(r => colunas.some(c => r[c] && ctx.contas.has(r[c])))
+}
+
+// Linhas de uma função de reserva (function_id).
+export async function recortarPorFuncao(q, user, rows, coluna = 'function_id') {
+  const ctx = await contextoPerfis(q, user)
+  if (!ctx) return rows
+  return rows.filter(r => ctx.funcoes.has(r[coluna]))
+}
+
+// Ids (lançamentos ou agendamentos) GRAVADOS e de perfil permitido. Id que não existe mais fica de
+// fora: sem o registro não há como saber de quem era.
+async function idsPermitidos(q, ctx, tabela, ids) {
+  const lista = [...new Set(ids.filter(v => v != null).map(String))]
+  if (!lista.length) return new Set()
+  const rows = await q(`SELECT id, account_id, to_account_id, reserva_funcao_id${COLUNAS_DO_BEM[tabela] || ''} FROM ${tabela} WHERE id = ANY($1)`, [lista])
+  if (tabela === 'lancamentos') await comBemVendido(q, rows)
+  return new Set(rows.filter(r => linhaPermitida(tabela, r, ctx.contas, ctx.funcoes, ctx.perfis)).map(r => r.id))
+}
+
+// Linhas ligadas a um agendamento (schedule_id).
+export async function recortarPorAgendamento(q, user, rows, coluna = 'schedule_id') {
+  const ctx = await contextoPerfis(q, user)
+  if (!ctx) return rows
+  const ok = await idsPermitidos(q, ctx, 'agendamentos', rows.map(r => r[coluna]))
+  return rows.filter(r => ok.has(String(r[coluna])))
+}
+
+// Histórico de alterações: cada linha precisa de "ver" no módulo da entidade e de um registro
+// (lançamento/agendamento) de perfil permitido.
+const MODULOS_DA_ENTIDADE = { lancamento: ['lancamentos', 'cartao', 'importar'], agendamento: ['agendamentos', 'fluxo', 'relatorios'] }
+export async function recortarHistorico(q, user, rows) {
+  const veEntidade = (e) => (MODULOS_DA_ENTIDADE[e] || []).some(m => pode(user, m, 'ver'))
+  const visiveis = rows.filter(r => veEntidade(r.entidade))
+  const ctx = await contextoPerfis(q, user)
+  if (!ctx) return visiveis
+  const okLanc = await idsPermitidos(q, ctx, 'lancamentos', visiveis.filter(r => r.entidade === 'lancamento').map(r => r.entidade_id))
+  const okAg = await idsPermitidos(q, ctx, 'agendamentos', visiveis.filter(r => r.entidade === 'agendamento').map(r => r.entidade_id))
+  return visiveis.filter(r => (r.entidade === 'lancamento' ? okLanc : okAg).has(String(r.entidade_id)))
+}
+
+// Pendências da integridade: a conta da pendência (conta_id; no saldo de subconta gerencial, a
+// origem é a conta); sem conta, o lançamento de origem.
+export async function recortarPendencias(q, user, rows) {
+  const ctx = await contextoPerfis(q, user)
+  if (!ctx) return rows
+  const contaDe = (p) => p.conta_id || (p.regra === 'GER_SALDO_SUBCONTA' ? p.origem_id : null)
+  const okLanc = await idsPermitidos(q, ctx, 'lancamentos', rows.filter(p => !contaDe(p)).map(p => p.origem_id))
+  return rows.filter(p => (contaDe(p) ? ctx.contas.has(contaDe(p)) : okLanc.has(String(p.origem_id))))
+}
+
 // Leitura por função de reserva: função de conta fora dos perfis → false.
 export async function funcaoPermitida(q, user, funcaoId) {
   const ctx = await contextoPerfis(q, user)

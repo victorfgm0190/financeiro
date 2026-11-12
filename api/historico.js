@@ -5,7 +5,7 @@ import {
   ensureHistoricoSchema, normalizarLinhaHistorico, inserirHistorico, SQL_HISTORICO_COLS,
 } from './_historico.js'
 import { comAmbiente } from './_ambiente.js'
-import { autorizarEdicaoComHistorico } from './_permissoesApi.js'
+import { autorizarEdicaoComHistorico, recortarHistorico } from './_permissoesApi.js'
 
 // HISTÓRICO DE ALTERAÇÕES
 //   GET ?entidade=agendamento&entidade_id=x   → linhas do registro
@@ -44,7 +44,8 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       if (queryParam(req, 'resumo')) {
         const rows = await query('SELECT DISTINCT entidade, entidade_id FROM historico_alteracoes')
-        return res.json({ itens: rows })
+        // Só os registros que o usuário vê (módulo da entidade + perfis permitidos).
+        return res.json({ itens: await recortarHistorico(query, req.user, rows) })
       }
       const loteId = queryParam(req, 'lote_id')
       const serieKey = queryParam(req, 'serie_key')
@@ -62,7 +63,7 @@ async function handler(req, res) {
       } else {
         return res.status(400).json({ error: 'informe entidade_id, serie_key ou lote_id' })
       }
-      return res.json({ historico: rows })
+      return res.json({ historico: await recortarHistorico(query, req.user, rows) })
     }
 
     if (req.method === 'POST') {

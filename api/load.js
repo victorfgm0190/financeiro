@@ -6,6 +6,7 @@ import { ensureHistoricoSchema } from './_historico.js'
 import { contextoPerfis, recortarLeitura, comBemVendido } from './_permissoesApi.js'
 import { comAmbiente } from './_ambiente.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
+import { pode, SECOES_DO_LOAD_POR_MODULO } from '../src/lib/permissoes.js'
 import { lerAssinatura } from './last-change.js'
 
 async function handler(req, res) {
@@ -516,6 +517,13 @@ async function handler(req, res) {
       rateios.splice(0, rateios.length, ...rateios.filter(r => txIds.has(r.lancamento_id) || schIds.has(r.lancamento_id)))
       srfs.splice(0, srfs.length, ...srfs.filter(r => schIds.has(r.schedule_id)))
       pays.splice(0, pays.length, ...pays.filter(p => !p.cartao_id || ctx.contas.has(p.cartao_id)))
+      imports.splice(0, imports.length, ...imports.filter(i => ctx.contas.has(i.account_id)))
+    }
+    // "Ver" por módulo (auditoria 11/2026, B2): seções que só a tela do módulo usa vêm vazias para
+    // quem não vê o módulo (src/lib/permissoes.js SECOES_DO_LOAD_POR_MODULO).
+    const secoes = { buds, imports }
+    for (const [secao, modulos] of Object.entries(SECOES_DO_LOAD_POR_MODULO)) {
+      if (!modulos.some(m => pode(req.user, m, 'ver'))) secoes[secao].splice(0)
     }
 
     res.json({

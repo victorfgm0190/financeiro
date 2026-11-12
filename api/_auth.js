@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken'
-import { regraDaRota, atendeRegra, normalizarPerfis } from '../src/lib/permissoes.js'
+import { regraDaRota, atendeRegra, normalizarPerfis, ehLeitura, regraDeLeitura, atendeLeitura } from '../src/lib/permissoes.js'
 import { nivelDoPapel } from './_usuarios.js'
 import { definirQuem } from './_quem.js'
 
@@ -58,7 +58,16 @@ export function requireAuth(req, res) {
   if (req.ambiente) req.user.modulos = req.ambiente.modulos || {}
   // Quem alterou (histórico): o usuário do token + o autor declarado pelo app.
   definirQuem(req)
-  const regra = regraDaRota(rotaDoReq(req), req.method)
+  const rota = rotaDoReq(req)
+  // Leitura: "ver" em algum módulo que usa o dado (src/lib/permissoes.js regraDeLeitura).
+  if (ehLeitura(rota, req.method)) {
+    const leitura = regraDeLeitura(rota)
+    if (!atendeLeitura(req.user, leitura)) {
+      res.status(403).json({ error: 'Sem permissão para ver estes dados', modulos: leitura.modulos, acao: 'ver' })
+      return false
+    }
+  }
+  const regra = regraDaRota(rota, req.method)
   if (!atendeRegra(req.user, regra)) {
     res.status(403).json({ error: 'Sem permissão para esta operação', modulo: regra.modulo, acao: regra.acao })
     return false

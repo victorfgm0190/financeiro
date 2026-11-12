@@ -5,7 +5,7 @@ import { executarRegras, hojeSP, addMesesYM } from '../src/lib/integridade/regra
 import { planejarVarredura, POR_FATURA_FECHADA } from '../src/lib/integridade/motor.js'
 import { dadosDeLinhas } from '../src/lib/integridade/dbRows.js'
 import { comAmbiente } from './_ambiente.js'
-import { exigirContasPermitidas, exigirLinhasPermitidas, contextoPerfis } from './_permissoesApi.js'
+import { exigirContasPermitidas, exigirLinhasPermitidas, contextoPerfis, recortarPendencias } from './_permissoesApi.js'
 
 // Motor de Integridade — pendências de dados (ver src/lib/integridade/regras.js).
 //   GET                         → lista (filtros: status, regra, conta_id, fatura_ref); ?resumo=1 → só contagens
@@ -227,6 +227,18 @@ async function handler(req, res) {
 
     if (req.method === 'GET') {
       if (param(req, 'resumo')) {
+        // Perfis restritos: o resumo conta só as pendências que o usuário vê.
+        if (await contextoPerfis(query, req.user)) {
+          const minhas = await recortarPendencias(query, req.user, await query('SELECT status, regra, severidade, origem_id, conta_id FROM pendencias_integridade'))
+          const grupos = new Map()
+          for (const p of minhas) {
+            const k = `${p.status}|${p.regra}|${p.severidade}`
+            if (!grupos.has(k)) grupos.set(k, { status: p.status, regra: p.regra, severidade: p.severidade, qtd: 0 })
+            grupos.get(k).qtd += 1
+          }
+          const lista = [...grupos.values()]
+          return res.json({ pendentes: lista.filter(g => g.status === 'pendente').reduce((t, g) => t + g.qtd, 0), grupos: lista })
+        }
         const rows = await query(
           `SELECT status, regra, severidade, COUNT(*)::int AS qtd
              FROM pendencias_integridade GROUP BY status, regra, severidade`,
@@ -246,7 +258,7 @@ async function handler(req, res) {
           ORDER BY regra, fatura_ref NULLS FIRST, origem_id`,
         params,
       )
-      return res.json({ pendencias: rows })
+      return res.json({ pendencias: await recortarPendencias(query, req.user, rows) })
     }
 
     if (req.method === 'POST') {

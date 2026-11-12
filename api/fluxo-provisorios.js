@@ -2,7 +2,7 @@ import { query, parseBody, withTransaction } from './_db.js'
 import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
-import { exigirContasPermitidas } from './_permissoesApi.js'
+import { exigirContasPermitidas, recortarPorConta } from './_permissoesApi.js'
 
 // Lançamentos PROVISÓRIOS do relatório "Fluxo de Caixa por Conta": entradas/saídas de
 // SIMULAÇÃO, gravadas à parte de agendamentos/lancamentos.
@@ -140,7 +140,7 @@ async function handler(req, res) {
            FROM fluxo_provisorios
           ORDER BY date, created_at`,
       )
-      return res.json({ provisorios: rows })
+      return res.json({ provisorios: await recortarPorConta(query, req.user, rows) })
     }
 
     if (req.method === 'POST') {

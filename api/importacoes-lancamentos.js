@@ -2,7 +2,7 @@ import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
 import { ErroHttp, ehTabelaInexistente } from './_usuarios.js'
-import { contasPermitidas } from './_permissoesApi.js'
+import { contasPermitidas, exigirContasPermitidas } from './_permissoesApi.js'
 import { pode, temTodosPerfis } from '../src/lib/permissoes.js'
 
 // IMPORTAÇÃO PADRÃO DE LANÇAMENTOS — registro dos lotes e de-para de categoria (banco do ambiente).
@@ -97,6 +97,7 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       if (acao === 'lote') {
         const lote = await buscarLote(queryParam(req, 'id'))
+        await exigirContasPermitidas(query, user, [lote.conta_id])
         return res.json({ lote, gravados: await gravadosDoLote(lote.id) })
       }
       if (acao === 'ofx-conta') {
@@ -126,6 +127,7 @@ async function handler(req, res) {
     if (acao === 'concluir') {
       exigir(user, 'incluir')
       const lote = await buscarLote(body.id)
+      await exigirContasPermitidas(query, user, [lote.conta_id])
       if (lote.status === 'desfeita') throw new ErroHttp(409, 'Importação já desfeita')
       const gravados = await gravadosDoLote(lote.id)
       if (gravados < lote.qtd) return res.status(409).json({ error: `Ainda faltam lançamentos no banco (${gravados} de ${lote.qtd})`, gravados, qtd: lote.qtd })

@@ -181,15 +181,18 @@ function AppContent() {
   // Pendências abertas do Motor de Integridade — somam no mesmo badge de Alertas. Recarrega quando
   // a aba Integridade varre/ignora/reabre (evento disparado pelos helpers de db.js).
   const [integridadePendentes, setIntegridadePendentes] = useState(0)
+  const veAlertas = pode('alertas', 'ver')
   useEffect(() => {
     let vivo = true
+    // Sem "ver" em Alertas o servidor recusa (403): nem pede.
+    if (!veAlertas) return undefined
     const atualizar = () => fetchResumoIntegridade()
       .then(r => { if (vivo) setIntegridadePendentes(Number(r?.pendentes) || 0) })
       .catch(() => {})
     atualizar()
     window.addEventListener(INTEGRIDADE_EVENTO, atualizar)
     return () => { vivo = false; window.removeEventListener(INTEGRIDADE_EVENTO, atualizar) }
-  }, [])
+  }, [veAlertas])
 
   // Administrador da PLATAFORMA (PLATAFORMA_ADMIN na API, não o nível admin): só ele vê "Clientes
   // Finup", e só no ambiente principal ('vm'). 403 da API = menu escondido.

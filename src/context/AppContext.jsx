@@ -879,6 +879,9 @@ export function AppProvider({ children }) {
   const [datasProvisorias, setDatasProvisorias] = useState([])
   useEffect(() => {
     if (!getToken()) return
+    // Só o Fluxo de Caixa e o relatório usam: sem "ver" em nenhum dos dois o servidor recusa (403).
+    const sessao = getSessao()
+    if (!podeNivel(sessao, 'fluxo', 'ver') && !podeNivel(sessao, 'relatorios', 'ver')) return
     let cancelled = false
     fetchDatasProvisorias()
       .then(lista => { if (!cancelled) setDatasProvisorias(lista) })
