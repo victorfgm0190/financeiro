@@ -20,6 +20,8 @@ const ETAPAS_ACEITAS = new Set([...ETAPAS_CHECKLIST, ...ETAPAS_JORNADA])
 //   POST { jornadaExpandida: true|false } → painel compacto ou com as fases (progresso.jornadaExpandida)
 //   POST { jornadaObjetivo: '<id>'|null } → atalho por objetivo (progresso.objetivo)
 //   POST { fluxoPeriodo: {de, meses}|{de, ate}|null } → período do Fluxo Futuro (progresso.fluxoPeriodo)
+//   POST { novidadeVista: '<id da versão>' } → "O que mudou": última versão de src/novidades.js já vista
+//                                           (progresso.novidadeVista — vale em todos os aparelhos)
 //   POST { guiaReativar: '<tela>' }      → o tour desta tela volta a abrir sozinho
 //   POST { etapa: '<id>', estado }        → checklist "Primeiros passos": 'pulada' | 'nao-se-aplica' |
 //                                           'feita' (etapas sem dado próprio, ex.: usou o Assistente) |
@@ -210,6 +212,20 @@ export async function gravarPeriodoFluxo(q, userId, pref) {
   return linhaParaJson(r)
 }
 
+// "O que mudou nesta versão": a última versão de src/novidades.js que a pessoa já viu
+// (progresso.novidadeVista). Id no formato AAAA.MM.DD ou AAAA.MM.DD-n; outro → null (400).
+export const ID_NOVIDADE = /^\d{4}\.\d{2}\.\d{2}(-\d{1,3})?$/
+export async function gravarNovidadeVista(q, userId, id) {
+  if (typeof id !== 'string' || !ID_NOVIDADE.test(id)) return null
+  const [r] = await q(
+    `INSERT INTO boas_vindas_usuario (user_id, progresso) VALUES ($1, jsonb_build_object('novidadeVista', $2::text))
+     ON CONFLICT (user_id) DO UPDATE SET progresso = COALESCE(boas_vindas_usuario.progresso, '{}'::jsonb) || jsonb_build_object('novidadeVista', $2::text), updated_at = now()
+     RETURNING tour_visto_em, checklist_oculto_em, guias_ligados, ajuda_campos, jornada_ligada, progresso`,
+    [userId, id],
+  )
+  return linhaParaJson(r)
+}
+
 export async function gravarAjudaCampos(q, userId, ligada) {
   const [r] = await q(
     `INSERT INTO boas_vindas_usuario (user_id, ajuda_campos) VALUES ($1, $2)
@@ -298,6 +314,10 @@ async function handler(req, res) {
       }
       if (body && 'fluxoPeriodo' in body) {
         if (!(await gravarPeriodoFluxo(query, userId, body.fluxoPeriodo))) return res.status(400).json({ error: 'Período do Fluxo Futuro inválido' })
+        fez = true
+      }
+      if (body && 'novidadeVista' in body) {
+        if (!(await gravarNovidadeVista(query, userId, body.novidadeVista))) return res.status(400).json({ error: 'Versão das novidades inválida' })
         fez = true
       }
       if (typeof body?.guiaOfertaLigada === 'boolean') { await gravarOfertaGuiaLigada(query, userId, body.guiaOfertaLigada); fez = true }

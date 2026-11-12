@@ -61,6 +61,8 @@ import PaginaLegal from './pages/PaginaLegal'
 import EntrarComCodigo from './pages/EntrarComCodigo'
 import Instalar from './pages/Instalar'
 import AvisoUsarComoApp from './components/Layout/UsarComoApp'
+import AvisoAtualizacao from './components/Layout/AvisoAtualizacao'
+import OQueMudou from './components/Ajuda/Novidades'
 import DefinirSenha from './pages/DefinirSenha'
 import { AMBIENTE_PRINCIPAL } from './lib/ambienteHost'
 import ClientesPanel from './components/Clientes/ClientesPanel'
@@ -266,6 +268,9 @@ function AppContent() {
       <GuiaInterativo />
       <HelpCampoPainel />
       <GuiaPreenchimento />
+      {/* Versão nova (computador: janelinha; celular: faixa) e "O que mudou" depois de atualizar. */}
+      <AvisoAtualizacao />
+      <OQueMudou />
     </>
   )
 

@@ -1,4 +1,5 @@
-// "USE O FINUP COMO APLICATIVO" (computador): a explicação (compartilhada com Configurações → Geral →
+// "USE O FINUP COMO APLICATIVO" (computador, canto inferior DIREITO — o esquerdo é o rodapé do menu
+// lateral, com o usuário e o Sair): a explicação (compartilhada com Configurações → Geral →
 // Usar como aplicativo) e o aviso discreto que aparece sozinho. Regras de quando aparece em
 // src/lib/avisoAplicativo.js; o que o navegador consegue fazer em src/lib/ambienteNavegador.js.
 import { useEffect, useState, useSyncExternalStore } from 'react'
@@ -13,6 +14,7 @@ import { useAtalhos } from '../../context/atalhosHooks'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useAmbienteNavegador } from '../../hooks/useAmbienteNavegador'
 import { podeFazerBackup } from '../../hooks/useBackupLocal'
+import { useVezDoAviso } from '../../hooks/useVezDoAviso'
 
 function LinksNavegadores() {
   return (
@@ -95,9 +97,11 @@ export default function AvisoUsarComoApp({ espera = ESPERA_AVISO_APP_MS }) {
   const bloqueado = !bv || !!bv.tourAberto || (!bv.tourVistoEm && bv.guiasLigados !== false)
     || !!tour || !!passo || !!atalhos?.avisoMigracao?.length
   const pode = deveMostrarAvisoApp({ prefs, situacao, computador, bloqueado })
+  // Um aviso de cada vez (src/lib/filaDeAvisos.js): atualização e "O que mudou" passam na frente.
+  const { naFrente } = useVezDoAviso('aplicativo', pode || visivel)
 
   useEffect(() => {
-    if (!pode || visivel) return
+    if (!pode || visivel || naFrente) return
     const t = setTimeout(() => {
       // Janela aberta (modal, início do mês…): fica para a próxima.
       if (document.querySelector('[role="dialog"]')) return
@@ -105,11 +109,11 @@ export default function AvisoUsarComoApp({ espera = ESPERA_AVISO_APP_MS }) {
       setVisivel(true)
     }, espera)
     return () => clearTimeout(t)
-  }, [pode, visivel, espera])
+  }, [pode, visivel, espera, naFrente])
 
   // Instalado (appinstalled / janela própria): some e não volta.
   const instalado = situacao.instalado || !!prefs.instaladoEm
-  if (!visivel || !computador || instalado || prefs.nunca || bloqueado) return null
+  if (!visivel || !computador || instalado || prefs.nunca || bloqueado || naFrente) return null
 
   const fechar = () => setVisivel(false)
   const naoMostrar = () => { naoMostrarMaisAvisoApp(); setVisivel(false) }
@@ -117,7 +121,7 @@ export default function AvisoUsarComoApp({ espera = ESPERA_AVISO_APP_MS }) {
 
   return (
     <div role="status" data-testid="aviso-usar-como-app" data-help-id="aplicativo.aviso"
-      className="fixed z-30 left-4 bottom-4 w-[22rem] max-w-[calc(100vw-2rem)] card shadow-2xl border border-borda-forte p-3 space-y-2">
+      className="fixed z-30 right-4 bottom-4 w-[22rem] max-w-[calc(100vw-2rem)] card shadow-2xl border border-borda-forte p-3 space-y-2">
       <div className="flex items-start gap-2">
         <AppWindow size={16} className="text-primary-fg shrink-0 mt-0.5" aria-hidden="true" />
         <p className="flex-1 text-sm font-medium text-texto-1">

@@ -1,6 +1,6 @@
 // /api/boas-vindas: gravação só dos campos pedidos (tour visto não volta a ficar vazio). Sem banco.
 import { describe, it, expect } from 'vitest'
-import { DDL_BOAS_VINDAS, DDL_AJUDA_CAMPOS, DDL_JORNADA, gravarBoasVindas, gravarAjudaCampos, gravarJornadaLigada, refazerJornada, gravarEtapa, gravarPreferenciaJornada, gravarPeriodoFluxo, gravarOfertaGuia } from './boas-vindas.js'
+import { DDL_BOAS_VINDAS, DDL_AJUDA_CAMPOS, DDL_JORNADA, gravarBoasVindas, gravarAjudaCampos, gravarJornadaLigada, refazerJornada, gravarEtapa, gravarPreferenciaJornada, gravarPeriodoFluxo, gravarOfertaGuia, gravarNovidadeVista } from './boas-vindas.js'
 import { ETAPAS_JORNADA } from '../src/lib/onboardingSteps.js'
 
 const fakeQ = () => {
@@ -10,6 +10,16 @@ const fakeQ = () => {
 }
 
 describe('/api/boas-vindas', () => {
+  it('"O que mudou": última versão vista em progresso.novidadeVista (todos os aparelhos); id inválido → null (400)', async () => {
+    const { q, chamadas } = fakeQ()
+    expect(await gravarNovidadeVista(q, 'u1', '2026.11.11-2')).not.toBeNull()
+    expect(chamadas[0].sql).toContain("jsonb_build_object('novidadeVista', $2::text)")
+    expect(chamadas[0].sql).toContain('COALESCE(boas_vindas_usuario.progresso')
+    expect(chamadas[0].params).toEqual(['u1', '2026.11.11-2'])
+    expect(await gravarNovidadeVista(q, 'u1', '2026.11.11')).not.toBeNull()
+    for (const ruim of ['x', "2026.11.11'; drop", null, 5, '2026-11-11']) expect(await gravarNovidadeVista(q, 'u1', ruim)).toBeNull()
+    expect(chamadas).toHaveLength(2)
+  })
   it('oferta do Preenchimento Guiado: resposta por formulário em progresso; "nunca" desliga todas; inválido → null', async () => {
     const { q, chamadas } = fakeQ()
     expect(await gravarOfertaGuia(q, 'u1', { form: 'agendamento', resposta: 'nao' })).not.toBeNull()

@@ -6,6 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { execSync } from 'node:child_process'
 import process from 'node:process'
 import { scriptNavegadorSemSuporte } from './src/lib/ambienteNavegador.js'
+import { NOVIDADES } from './src/novidades.js'
 
 // Hash curto do commit (rodapé do menu lateral). Vercel expõe VERCEL_GIT_COMMIT_SHA; local, git.
 const commitCurto = (() => {
@@ -60,13 +61,20 @@ export default defineConfig({
       name: 'finup-navegador-sem-suporte',
       transformIndexHtml: (html) => html.replace('<!-- finup:navegador-sem-suporte -->', `<script>${scriptNavegadorSemSuporte()}</script>`),
     },
+    // /versao.json: hash e novidades DESTA versão. A versão aberta busca o arquivo quando há um service
+    // worker novo em espera, para o aviso "Há uma atualização" dizer o que vem (src/lib/atualizacao.js).
+    {
+      name: 'finup-versao-json',
+      generateBundle() {
+        this.emitFile({ type: 'asset', fileName: 'versao.json', source: JSON.stringify({ commit: commitCurto, novidades: NOVIDADES }) })
+      },
+    },
     react(),
     tailwindcss(),
     VitePWA({
-      // Atualização automática: o SW novo assume na hora (skipWaiting + clientsClaim) e o
-      // registerSW de src/main.jsx recarrega a página quando ele toma o controle — a versão nova
-      // vale já no carregamento seguinte ao deploy, sem servir os assets antigos do precache.
-      registerType: 'autoUpdate',
+      // Atualização AVISADA (11/11/2026; antes era 'autoUpdate', que recarregava sozinho): o SW novo
+      // fica em espera e o app pergunta "Deseja atualizar agora?" (src/lib/atualizacao.js).
+      registerType: 'prompt',
       injectRegister: false,
       includeAssets: ['icons/*.{png,svg}'],
       manifest: {
@@ -97,8 +105,10 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         cleanupOutdatedCaches: true,
+        // Sem skipWaiting: o SW novo espera o "Atualizar agora" (mensagem SKIP_WAITING) — ver
+        // src/lib/atualizacao.js. clientsClaim vale quando ele assume.
         clientsClaim: true,
-        skipWaiting: true,
+        skipWaiting: false,
         // O bundle principal passou de 2 MiB, que é o teto PADRÃO do workbox para precache — e
         // o vite-plugin-pwa trata isso como ERRO de build, não como aviso: `npm run build`
         // passava a falhar com PLUGIN_ERROR por causa de alguns KB a mais.

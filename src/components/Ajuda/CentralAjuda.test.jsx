@@ -31,7 +31,7 @@ describe('conteúdo', () => {
     let itens = 0
     for (const [id, t] of Object.entries(AJUDA_TELAS)) {
       expect(t.titulo, id).toBeTruthy()
-      for (const i of t.itens) { itens++; expect(i.detalhe, `${id}.${i.chave}`).toBeTruthy(); expect(i.exemplo, `${id}.${i.chave}`).toBeTruthy() }
+      for (const i of t.itens) { itens++; expect(i.detalhe, `${id}.${i.chave}`).toBeTruthy(); expect(i.exemplo || i.semExemplo, `${id}.${i.chave}`).toBeTruthy() }
     }
     expect(itens).toBeGreaterThan(300)
   })

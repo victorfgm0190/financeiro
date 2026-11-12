@@ -167,6 +167,24 @@ export const campos = {
     relacaoComTela: 'Aparece no máximo uma vez a cada 7 dias, só no computador e fora do aplicativo instalado, e nunca por cima de um guia. "Agora não" fecha até a próxima vez; "Não mostrar mais" desliga (Configurações → Geral → Usar como aplicativo reativa). Depois de instalado, não aparece mais.',
     obrigatorio: false,
   },
+  'atualizacao.aviso': {
+    titulo: 'Aviso "Há uma atualização do Finup"',
+    paraQueServe: 'Avisa que há uma versão nova do Finup e pergunta se você quer atualizar agora.',
+    relacaoComTela: '"Atualizar agora" primeiro envia todas as suas alterações e só então atualiza; sem internet, não atualiza e explica, e nada se perde. "Mais tarde" lembra de novo em 4 horas ou na próxima vez que você abrir o Finup. Quando a atualização é necessária, não há "Mais tarde" e o aviso explica o motivo. O aviso espera você fechar um formulário aberto.',
+    obrigatorio: false,
+  },
+  'novidades.janela': {
+    titulo: 'O que mudou no Finup',
+    paraQueServe: 'Mostra as novidades das versões que você ainda não viu.',
+    relacaoComTela: 'Aparece depois de uma atualização, uma vez por versão, em qualquer aparelho em que você entrar. "Entendi" marca como vistas. O histórico completo fica em Ajuda → Novidades.',
+    obrigatorio: false,
+  },
+  'novidades.historico': {
+    titulo: 'Novidades',
+    paraQueServe: 'O que mudou em cada versão do Finup, da mais nova para a mais antiga.',
+    relacaoComTela: 'É a mesma lista da janela "O que mudou no Finup", completa. Itens marcados "para administradores" só aparecem para quem é administrador.',
+    obrigatorio: false,
+  },
   'backup.manter': {
     titulo: 'Backups a manter na pasta',
     paraQueServe: 'Quantos backups deste ambiente ficam guardados na pasta.',

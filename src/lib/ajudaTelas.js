@@ -1214,7 +1214,8 @@ export const AJUDA_TELAS = {
       { chave: 'mostrar', rotulo: 'Mostrar na agenda', texto: 'Escolha se a agenda mostra despesas, receitas ou as duas.',
         detalhe: 'Escolha o que vai para a agenda: só as contas a pagar, só as a receber, ou as duas. Com "Ambos", cada uma vira um calendário separado.', exemplo: 'Exemplo: escolha "Despesas" para lembrar só do que você tem que pagar.' },
       { chave: 'valores', rotulo: 'Mostrar valores', texto: 'Com "Não", cada compromisso aparece só com o nome, sem o valor.',
-        detalhe: 'Define se o valor aparece junto do nome do compromisso. Desligue se outras pessoas costumam ver a tela do seu celular.', exemplo: 'Exemplo: com "Sim" aparece "Aluguel — R$ 1.500,00"; com "Não", só "Aluguel".' },
+        // Sem exemplo de propósito (11/11/2026): a função descrita basta.
+        detalhe: 'Com "Sim", cada compromisso aparece na agenda com a descrição e o valor. Com "Não", só com a descrição. Use "Não" se outras pessoas costumam ver a tela do seu celular.', semExemplo: true },
       { chave: 'criar', rotulo: 'Criar minha agenda', texto: 'Gera o seu link de agenda pela primeira vez.',
         detalhe: 'Cria o seu link pessoal de agenda. Só precisa fazer uma vez; depois aparecem os botões para adicionar ao celular.', exemplo: 'Exemplo: clique em "Criar minha agenda" e, em seguida, em "Adicionar ao iPhone".' },
       { chave: 'iphone', rotulo: 'Adicionar ao iPhone', texto: 'Abre a agenda do iPhone para assinar o calendário.',

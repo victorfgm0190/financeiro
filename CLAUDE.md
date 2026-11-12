@@ -51,6 +51,14 @@ Invariantes que valem para qualquer mudança:
   - Não há Ignored Build Step: outras branches geram Preview e caem no teste1.
   - Vercel Authentication está desligada, porque bloqueava o `/api`.
 
+## Novidades ("O que mudou")
+
+- Todo commit que muda algo **visível** acrescenta (ou completa) a entrada da versão em
+  `src/novidades.js`: linguagem simples, sem jargão, nada específico de cliente, `publico` 'todos' ou
+  'admin', `obrigatoria: true` (com `motivo`) só quando a versão anterior não pode mais gravar.
+- O relatório final da entrega mostra o texto dessas novidades para o Victor revisar antes do
+  "libera no vm".
+
 ## Testes
 
 `npm test` roda a lógica (`test:logica`) e depois as telas (`test:telas`), em sequência. Use sempre

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { capturarPedidoDeInstalacao } from './lib/instalacao'
+import { iniciarServiceWorker, simularSePedido } from './lib/atualizacao'
 
 // O Chrome oferece a instalação (PWA) antes da página montar: guarda o pedido para a /instalar.
 if (!window.__finupSemSuporte) capturarPedidoDeInstalacao()
@@ -29,12 +30,11 @@ if (window.__finupSemSuporte) {
   import('./help/avisoDev.js').then(m => m.instalarAvisoHelpDev()).catch(() => {})
 } else {
   iniciar()
-  // Service worker em autoUpdate: registra já no load e, quando um SW novo assume, recarrega a
-  // página uma vez (versão nova sem assets antigos). Checa atualização a cada hora no app aberto.
+  // Service worker em modo 'prompt': versão nova fica em espera e vira o aviso "Há uma atualização"
+  // (src/lib/atualizacao.js) — nunca recarrega sozinho no meio do uso.
   import('virtual:pwa-register')
-    .then(({ registerSW }) => registerSW({
-      immediate: true,
-      onRegisteredSW(_url, reg) { if (reg) setInterval(() => reg.update(), 60 * 60 * 1000) },
-    }))
+    .then(({ registerSW }) => iniciarServiceWorker(registerSW))
     .catch(err => console.error('[pwa]', err))
 }
+// Teste no teste1 (e em dev): ?simular-atualizacao mostra o aviso sem precisar de um deploy novo.
+if (!window.__finupSemSuporte) simularSePedido()

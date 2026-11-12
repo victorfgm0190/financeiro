@@ -9,7 +9,7 @@
 // Fica no menu mesmo com os guias desligados. Textos: src/lib/ajudaTelas.js, tarefasGuiadas.js,
 // perguntasFrequentes.js — nada daqui é específico de um cliente.
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Search, ChevronDown, ChevronRight, Play, Hand, Lightbulb, AlertTriangle, HelpCircle, LifeBuoy } from 'lucide-react'
+import { Search, ChevronDown, ChevronRight, Play, Hand, Lightbulb, AlertTriangle, HelpCircle, LifeBuoy, Sparkles } from 'lucide-react'
 import { AJUDA_TELAS, guiaDaTela, passosVisiveis } from '../../lib/ajudaTelas'
 import { tarefasDaTela } from '../../lib/tarefasGuiadas'
 import { perguntasVisiveis } from '../../lib/perguntasFrequentes'
@@ -21,6 +21,7 @@ import PrimeirosPassos from '../BoasVindas/PrimeirosPassos'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { telaNaAjuda, telasDaAjuda, rotaDaTela, tarefaDaSecao, montarIndice, buscar, ESPERA_TOUR_MS } from './centralAjudaRegras'
 import HelpCampo from '../shared/HelpCampo'
+import { HistoricoNovidades } from './Novidades'
 
 const ROTULO_TIPO = { tela: 'Tela', funcao: 'Função', tarefa: 'Faça comigo', pergunta: 'Pergunta' }
 
@@ -62,6 +63,10 @@ export default function CentralAjuda() {
     setAberta(tela.split(':')[0])
     setAlvo({ tela, chave })
   }, [])
+  const irParaNovidades = () => {
+    try { window.history.replaceState(null, '', window.location.pathname + window.location.search + ajudaHash('novidades')) } catch { /* sem history */ }
+    setAlvo({ tela: 'novidades', chave: null })
+  }
   const mostrarNaTela = (tela, chave = null) => {
     const r = rotaDaTela(tela)
     if (!r) return
@@ -168,6 +173,15 @@ export default function CentralAjuda() {
     </section>
   )
 
+  // Novidades: o histórico do "O que mudou" (src/novidades.js). Âncora #ajuda/novidades.
+  const novidades = (
+    <section id={idAncora('novidades')} className="card space-y-2" data-testid="ajuda-novidades" data-help-id="novidades.historico">
+      <h2 className="text-base font-semibold text-texto-1 flex items-center gap-2"><Sparkles size={18} aria-hidden="true" /> Novidades</h2>
+      <p className="text-sm text-texto-2">O que mudou em cada versão do Finup, da mais nova para a mais antiga.</p>
+      <HistoricoNovidades />
+    </section>
+  )
+
   return (
     <div className="space-y-4" data-testid="central-ajuda">
       <div className="card" data-help-form="buscaAjuda" data-help-id="buscaAjuda.busca">
@@ -231,6 +245,8 @@ export default function CentralAjuda() {
             ))}
             <a href="#ajuda-faq" onClick={(e) => { e.preventDefault(); document.getElementById('ajuda-faq')?.scrollIntoView?.({ behavior: 'smooth' }) }}
               className="block rounded-lg px-3 py-1.5 text-sm text-texto-1 hover:bg-surface-hover">Perguntas frequentes</a>
+            <a href={ajudaHash('novidades')} onClick={(e) => { e.preventDefault(); irParaNovidades() }}
+              className={`block rounded-lg px-3 py-1.5 text-sm ${alvo.tela === 'novidades' ? 'bg-primary/15 text-primary-fg font-medium' : 'text-texto-1 hover:bg-surface-hover'}`}>Novidades</a>
           </nav>
           <div className="space-y-4 min-w-0">
             {topo.map(id => (
@@ -244,6 +260,7 @@ export default function CentralAjuda() {
       )}
 
       {faq}
+      {novidades}
     </div>
   )
 }
