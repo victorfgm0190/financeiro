@@ -16,6 +16,20 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.12-3',
+    data: '2026-11-12',
+    titulo: 'Importar Fatura: conferência mais simples',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'No topo, três números: quantos são novos, quantos já estão no Finup e quantos pedem a sua decisão.',
+      'Cada dúvida aparece num cartão “É este?”, com a linha da fatura e o lançamento do Finup lado a lado e as diferenças destacadas. Embaixo de cada botão, o que vai acontecer.',
+      'Cobrança de assinatura com valor diferente do agendado (por exemplo, reajuste) agora é reconhecida e vira pergunta: confirmando, o agendamento é baixado pelo valor do cartão.',
+      'O resto fica recolhido em blocos: Novos, Já estão no Finup, Já conciliados antes, Não entram e Aguardando o banco.',
+      'No computador, dá para responder pelo teclado: Alt+S (sim), Alt+O (não, é outro), Alt+. e Alt+, (próxima e anterior). As teclas podem ser trocadas em Configurações › Atalhos.',
+    ],
+  },
+  {
     id: '2026.11.12-2',
     data: '2026-11-12',
     titulo: 'Parcelas do cartão na data da compra',

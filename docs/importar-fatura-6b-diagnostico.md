@@ -529,3 +529,33 @@ na etapa do lote.
 4. As 16 sem data da compra ficam como estão e aparecem numa lista para revisão manual.
 5. Antes do passo 2: confirmar o comportamento da etapa A do gerencial ao mudar a data de uma parcela
    (sem alterar a função protegida) e rodar a guarda de período virado na prévia.
+
+---
+
+## Etapa 6b — tela nova da conferência (12/11/2026, teste1)
+
+| Item | O que ficou | Onde |
+|---|---|---|
+| 1. Resumo | Três números (Novos · Já estão no Finup · Pedem sua decisão) e total do arquivo × o que fica na fatura | `ConferenciaBlocos.jsx` (`ResumoConferencia`), `blocosConferencia.js` (`resumoDosBlocos`) |
+| 2. "É este?" | Um cartão por pergunta ("1 de N"), lado a lado com diferenças realçadas, "Sim, é este" / "Não, é outro — importar como novo" com a frase do que acontece; vários candidatos lado a lado; atalhos Alt+S, Alt+O, Alt+. e Alt+, (`tela:importarFatura`, trocáveis em Configurações › Atalhos) | `CartoesDecisao`, `perguntasDeDecisao`, `camposLadoALado`, `fraseSim`/`fraseNao` |
+| 3. Blocos | Novos (tabela editável de sempre) · Já estão no Finup (par numa linha, "Não é este" onde a regra deixa) · Já conciliados antes (só consulta) · Não entram · Aguardando o banco (só informação) | `BlocoConferencia` e listas |
+| 4. Recorrente > R$ 0,50 | Mesmo favorecido/loja, mesma conta, recorrente do usuário, até ±50% e ocorrência pendente na fatura da linha → "É este agendamento?". Sem resposta nada é importado nem baixado; "Sim" = classificação do agendamento + baixa pelo valor do cartão (`baixarCobrancaRecorrente`) | `recorrenteParecido.js` |
+| 5. Linguagem | 17 rótulos → 6 (`ROTULO`): Novo, Já está no Finup, Já conciliado antes, É este?, Não entra, Aguardando o banco | — |
+| 6. Etapa 6c | Lugar da sugestão no cartão (entre a comparação e os botões) e ao lado da categoria dos Novos; formato e validação em `sugestaoAssistente.js`; nada chama a IA | `SugestaoAssistente` |
+
+Nada do que é gravado mudou, exceto a regra do item 4. Nenhuma função protegida foi tocada (a baixa
+do item 4 chama `baixarCobrancaRecorrente`, que chama as protegidas como antes).
+
+**Simulação com o arquivo real** (Personalite, fatura 11/2026, 227 linhas, teste1, só leitura):
+
+| Bloco | A — reimportar hoje | B — antes da importação de 10/11 |
+|---|---:|---:|
+| Pedem sua decisão | 0 | 0 |
+| Novos | 0 | 33 |
+| Já estão no Finup | 0 | 80 |
+| Já conciliados antes | 227 | 114 |
+| Não entram | 0 | 0 |
+| Aguardando o banco (parcelas do Finup) | 3 | 3 |
+| Recorrente com valor diferente (> R$ 0,50) | 0 | 0 |
+
+Ficam fora deste item: celular (decisão 10) e unificação com a Conciliar Fatura (decisão 7).
