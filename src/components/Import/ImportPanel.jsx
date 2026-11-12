@@ -2984,7 +2984,7 @@ Importar mesmo assim no mês selecionado?`)) return
       })()}
       {row._tambemEm?.length > 0 && (
         <p className="text-aviso break-words">
-          ⚠ Também em {row._tambemEm.map(o => `${fmtFatura(o.fatura)} (${o.tx.description} · ${fmt(o.tx.amount)})`).join(', ')}
+          ⚠ Já há um lançamento igual na fatura {row._tambemEm.map(o => `${fmtFatura(o.fatura)} (${o.tx.description} · ${fmt(o.tx.amount)})`).join(', ')}
         </p>
       )}
       {(() => {
@@ -3001,7 +3001,7 @@ Importar mesmo assim no mês selecionado?`)) return
                 checked={baixa.ativa} disabled={!c}
                 onChange={e => updateRow(row._id, { _baixaOff: !e.target.checked })} />
               <span className="break-words">
-                {jaNoCartao ? 'Já no cartão – baixa agendamento ' : 'Baixa agendamento: '}
+                {jaNoCartao ? 'Já está no cartão — baixa o agendamento ' : 'Baixa o agendamento: '}
                 {c ? `${c.description} (${fmtDate(c.occurrenceDate)})` : '—'}
                 {!jaNoCartao && baixa.ativa && baixa.coberturas.length > 0 && ` + cobre ${baixa.coberturas.length} ocorrência${baixa.coberturas.length !== 1 ? 's' : ''} futura${baixa.coberturas.length !== 1 ? 's' : ''}`}
               </span>
@@ -3054,7 +3054,7 @@ Importar mesmo assim no mês selecionado?`)) return
         )}
         {temDetalhes(row) && (
           <button type="button" onClick={() => alternarLinha(row._id)} aria-expanded={linhasAbertas.has(row._id)}
-            aria-label="Detalhes da linha" title={aviso ? (row._avisoParecido ? 'Atenção: há uma compra parecida no Finup — ver detalhes' : 'Atenção: o mesmo lançamento aparece em outra fatura — ver detalhes') : 'Detalhes'}
+            aria-label="Detalhes da linha" title={aviso ? (row._avisoParecido ? 'Atenção: há uma compra parecida no Finup — ver detalhes' : 'Atenção: já há um lançamento igual em outra fatura — ver detalhes') : 'Detalhes'}
             className={`shrink-0 p-0.5 rounded ${aviso ? 'text-aviso' : 'text-texto-2 hover:text-texto-1'}`}>
             {aviso ? <AlertCircle size={14} /> : linhasAbertas.has(row._id) ? <ChevronDown size={14} /> : <Info size={14} />}
           </button>

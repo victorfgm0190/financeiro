@@ -596,7 +596,7 @@ export function projetarTotalFatura(resolvedRows, { fatura, accountId, transacti
     }
     itens.push({
       tipo: 'linha_fora', linha: r, valor: r2(v),
-      motivo: r._dupLevel === 'possivel' ? 'possível duplicata importada como nova' : 'linha desmarcada — não será importada',
+      motivo: 'não entra (desmarcada)',
     })
   }
   for (const t of naFatura) {
@@ -605,7 +605,7 @@ export function projetarTotalFatura(resolvedRows, { fatura, accountId, transacti
       itens.push({ tipo: 'aguardando_banco', tx: t, valor: r2(-valorComSinal(t)), motivo: 'parcela prevista que o banco ainda não lançou nesta fatura aberta' })
       continue
     }
-    itens.push({ tipo: 'so_no_banco', tx: t, valor: r2(-valorComSinal(t)), motivo: 'gravado na fatura, sem linha correspondente no arquivo' })
+    itens.push({ tipo: 'so_no_banco', tx: t, valor: r2(-valorComSinal(t)), motivo: 'está no Finup e não veio no arquivo' })
   }
   projetado = r2(projetado)
   const itensAguardando = itens.filter(i => i.tipo === 'aguardando_banco')

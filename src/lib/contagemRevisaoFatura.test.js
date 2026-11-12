@@ -106,10 +106,10 @@ describe('conferência da fatura', () => {
   const conf = conferenciaDaFatura(projecao)
   it('agrupa por motivo, com quantidade e subtotal; a soma dos subtotais é a diferença', () => {
     expect(conf.grupos.map(g => [g.titulo, g.qtd, g.subtotal])).toEqual([
-      ['Gravado no Finup, ainda não veio no arquivo', 1, -30],
-      ['Parcelas previstas aguardando lançamento do banco', 1, -40],
+      ['Está no Finup e não veio nesta fatura', 1, -30],
+      ['Aguardando o banco — parcelas previstas que o banco ainda não lançou', 1, -40],
       ['Diferença de centavos entre Finup e arquivo', 1, 0.01],
-      ['Linhas desmarcadas, não serão importadas', 1, 7],
+      ['Não entram — linhas desmarcadas', 1, 7],
     ])
     expect(conf.diferenca).toBe(Math.round((projecao.arquivo - projecao.projetado) * 100) / 100)
     expect(conf.explicada).toBe(conf.diferenca)

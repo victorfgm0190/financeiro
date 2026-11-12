@@ -26,9 +26,9 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
         <div className="space-y-1 max-w-[18rem]">
           <span className={`text-xs px-1.5 py-0.5 rounded ${divergente ? 'bg-aviso/15 text-aviso' : 'bg-receita/15 text-receita'}`}
             title="Já está no cartão (lançado à mão, pelo Assistente ou projetado): não cria outro lançamento; o existente é atualizado com o que a fatura diz e fica conciliado.">
-            ✔ {divergente ? 'Já existe — valor diferente' : 'Já existe'}
+            ✔ {divergente ? 'Já está no Finup — valor diferente' : 'Já está no Finup'}
           </span>
-          {partes.length > 0 && <p className="text-[10px] text-aviso">Atualizar o existente: {partes.join('; ')}</p>}
+          {partes.length > 0 && <p className="text-[10px] text-aviso">Ao confirmar, o lançamento do Finup muda: {partes.join('; ')}</p>}
           <Existente tx={tx} categories={categories} />
           {j.atualizarDescricao && <p className="text-[10px] text-texto-3">Descrição passa a ser a da fatura (a atual fica no histórico).</p>}
           <SeletorFavorecido row={row} j={j} modo={modo} payees={payees} updateRow={updateRow} />
@@ -42,7 +42,7 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
       <div className="space-y-1 max-w-[18rem]">
         <span className="text-xs px-1.5 py-0.5 rounded bg-receita/15 text-receita"
           title={pre ? 'Casa com um pré-lançamento do Assistente: será gravado pela importação com a classificação dele, e o pré-lançamento sai da lista.' : 'Já está no cartão (lançado à mão ou pelo Assistente): não cria outro lançamento nem outra transferência gerencial — o existente recebe valor/data da fatura e fica conciliado.'}>
-          ✔ {pre ? 'Pré-lançamento' : 'Já lançado'}
+          ✔ {pre ? 'Pré-lançamento do Assistente' : 'Já está no Finup'}
           {/* Estimado (compra em dólar / IOF): o valor real da fatura substitui o estimado. */}
           {tx.estimado && Math.round(Number(row.amount) * 100) !== Math.round((j.grupo ? j.grupo.reduce((s, t) => s + Number(t.amount), 0) : Number(tx.amount)) * 100) && (
             <> (valor ajustado {fmt(j.grupo ? j.grupo.reduce((s, t) => s + Number(t.amount), 0) : tx.amount)} → {fmt(row.amount)})</>
@@ -50,7 +50,7 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
         </span>
         {j.grupo && <p className="text-[10px] text-texto-3">IOF agrupado pelo banco: {j.grupo.length} IOFs estimados somados, repartidos na proporção.</p>}
         <p className="text-[10px] text-texto-3 break-words">
-          {pre ? 'Pré-lançamento' : 'Existente'}: <span className="text-texto-2">{tx.description || '—'}</span> · {fmtDate(tx.date)} · {fmt(tx.amount)}{cat ? ` · ${cat.icon || ''} ${cat.name}` : ''}
+          {pre ? 'Pré-lançamento' : 'No Finup'}: <span className="text-texto-2">{tx.description || '—'}</span> · {fmtDate(tx.date)} · {fmt(tx.amount)}{cat ? ` · ${cat.icon || ''} ${cat.name}` : ''}
         </p>
         {!pre && (
           <div className="text-[10px] text-texto-3 space-y-0.5">
@@ -89,7 +89,7 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
           title={row._parecido
             ? 'Só o nome é parecido com um lançamento do cartão: diga se é ele (vincula e atualiza) ou se é novo'
             : 'Pode já estar no cartão (mesmo valor ou mesma loja, data próxima, parcela com centavos ou compra em dólar estimada): escolha qual é, ou se é novo. Sem escolha, a linha não é importada.'}>
-          {pendente ? (row._parecido ? '⚠ Parecido — é este?' : '⚠ Para escolher') : 'Novo (escolhido)'}
+          {pendente ? '⚠ É este?' : 'Novo (escolhido)'}
         </span>
         {row._jaLancadoOpcoes.map(tx => (
           <label key={tx.id} data-help-id="revisaoFatura.decidir" className="flex items-start gap-1 text-[10px] text-texto-2 cursor-pointer">
@@ -101,7 +101,7 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
         <label data-help-id="revisaoFatura.decidir" className="flex items-center gap-1 text-[10px] text-texto-2 cursor-pointer">
           <input type="radio" className="accent-primary" name={`ja-${row._id}`} checked={row._jaLancadoEscolha === 'novo'}
             onChange={() => updateRow(row._id, { _jaLancadoEscolha: 'novo', selected: true })} />
-          <span>É novo — importar</span>
+          <span>Não, é outro — importar como novo</span>
         </label>
       </div>
     )
@@ -114,7 +114,7 @@ function Existente({ tx, categories }) {
   const num = Number(tx.installmentNum) || null
   return (
     <p className="text-[10px] text-texto-3 break-words">
-      Existente: <span className="text-texto-2">{tx.description || '—'}</span>
+      No Finup: <span className="text-texto-2">{tx.description || '—'}</span>
       {num && tx.installmentTotal ? ` · parcela ${num}/${tx.installmentTotal}` : ''} · {fmtDate(tx.date)} · {fmt(tx.amount)}
       {cat ? ` · ${cat.icon || ''} ${cat.name}` : ''}{tx.reconciled ? ' · conciliado' : ' · pendente'}
     </p>

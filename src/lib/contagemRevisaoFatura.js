@@ -111,10 +111,10 @@ export function agruparEstornosCentavos(rows) {
 // Grupos por motivo, a partir de projetarTotalFatura (lib/revisaoImportacao). Cada item já traz o
 // seu efeito na diferença (arquivo − Finup); a soma dos subtotais é a diferença explicada.
 const MOTIVOS = [
-  { tipo: 'so_no_banco', titulo: 'Gravado no Finup, ainda não veio no arquivo' },
-  { tipo: 'aguardando_banco', titulo: 'Parcelas previstas aguardando lançamento do banco' },
+  { tipo: 'so_no_banco', titulo: 'Está no Finup e não veio nesta fatura' },
+  { tipo: 'aguardando_banco', titulo: 'Aguardando o banco — parcelas previstas que o banco ainda não lançou' },
   { tipo: 'valor_diferente', titulo: 'Diferença de centavos entre Finup e arquivo', tituloValor: 'Diferença de valor entre Finup e arquivo' },
-  { tipo: 'linha_fora', titulo: 'Linhas desmarcadas, não serão importadas' },
+  { tipo: 'linha_fora', titulo: 'Não entram — linhas desmarcadas' },
   { tipo: 'outra_fatura', titulo: 'Linhas que vão para outra fatura' },
 ]
 
@@ -138,7 +138,7 @@ export function conferenciaDaFatura(projecao, tolerancia = 0.01) {
   // Sem decisão: listado, mas NÃO conta como explicado — essas linhas não serão importadas.
   const pendentes = itens.filter(i => i.tipo === 'sem_decisao')
   const semDecisao = { qtd: pendentes.length, valor: r2(pendentes.reduce((s, i) => s + i.valor, 0)) }
-  if (pendentes.length) grupos.unshift({ tipo: 'sem_decisao', titulo: 'Ainda sem decisão — não serão importadas', itens: pendentes, qtd: pendentes.length, subtotal: semDecisao.valor, naoExplica: true })
+  if (pendentes.length) grupos.unshift({ tipo: 'sem_decisao', titulo: 'Pedem sua decisão — ficam de fora até você responder', itens: pendentes, qtd: pendentes.length, subtotal: semDecisao.valor, naoExplica: true })
   const outros = itens.filter(i => i.tipo !== 'sem_decisao' && !MOTIVOS.some(m => m.tipo === i.tipo))
   if (outros.length) grupos.push({ tipo: 'outros', titulo: 'Outros', itens: outros, qtd: outros.length, subtotal: r2(outros.reduce((s, i) => s + i.valor, 0)) })
   const diferenca = r2(projecao.arquivo - projecao.projetado)

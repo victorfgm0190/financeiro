@@ -131,9 +131,9 @@ describe('4. Rodapé', () => {
     expect(screen.queryByRole('checkbox')).toBeNull()
     expect(screen.queryByText(/marcada/)).toBeNull()
   })
-  it('todas idênticas: uma linha recolhida "N parcelas já no banco, todas idênticas"', () => {
+  it('todas iguais: uma linha recolhida "N previsões iguais à fatura"', () => {
     render(<ParcelasJaNoBanco linhas={[]} identicas={[colisao('y', false), colisao('z', false)]} aplicar={0} onToggle={() => {}} />)
-    expect(screen.getByRole('button', { name: /2 parcelas já no banco, todas idênticas/ }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByRole('button', { name: /2 previsões iguais à fatura/ }).getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryByRole('table')).toBeNull()
   })
   it('bloco recolhido com contador; link para as regras de classificação', () => {

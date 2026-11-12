@@ -217,7 +217,7 @@ function ParcelasAtualizar({ linhas, identicas, aplicar, onToggle }) {
       <div className="card py-2.5">
         <button type="button" className="flex items-center gap-2 text-xs text-texto-2 w-full text-left" onClick={() => setVerIdenticas(v => !v)} aria-expanded={verIdenticas}>
           {verIdenticas ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          {plural(identicas.length, 'parcela já no banco, idêntica', 'parcelas já no banco, todas idênticas')} <Check size={14} className="text-primary-fg" />
+          {plural(identicas.length, 'previsão igual à fatura', 'previsões iguais à fatura')} <Check size={14} className="text-primary-fg" />
         </button>
         {verIdenticas && (
           <ul className="mt-2 pl-6 text-xs text-texto-1 space-y-0.5">
@@ -234,9 +234,9 @@ function ParcelasAtualizar({ linhas, identicas, aplicar, onToggle }) {
   return (
     <div className="card p-0 overflow-hidden">
       <div className="px-3 py-2.5 border-b border-borda flex items-center gap-2 flex-wrap">
-        <h3 className="text-xs font-semibold text-texto-1">Parcelas já no banco — atualizar?</h3>
+        <h3 className="text-xs font-semibold text-texto-1">Previsões do Finup que a fatura atualiza</h3>
         <span className="text-xs text-texto-2">
-          {plural(linhas.length, 'com diferença', 'com diferença')} · {aplicar} marcada{aplicar !== 1 ? 's' : ''} p/ atualizar
+          {plural(linhas.length, 'com diferença', 'com diferença')} · {aplicar} marcada{aplicar !== 1 ? 's' : ''} para atualizar
           {identicas.length > 0 && ` · ${identicas.length} idêntica${identicas.length !== 1 ? 's' : ''} (ocultas)`}
         </span>
       </div>
@@ -257,7 +257,7 @@ function ParcelasAtualizar({ linhas, identicas, aplicar, onToggle }) {
           {linhas.map((l, i) => (
             <tr key={l.id} className={`border-b border-borda/50 align-top ${i % 2 ? 'bg-surface-2' : ''}`}>
               <td className="px-2 py-1.5"><input type="checkbox" className="accent-primary" data-help-id="revisaoFatura.atualizarParcela" checked={l.aplicar} onChange={() => onToggle(l.id)} aria-label={`Atualizar ${l.descricao}`} /></td>
-              <td className="px-2 py-1.5"><Campo c={l.campos.descricao} />{l.csv && <span className="ml-1 text-[10px] px-1 rounded bg-surface-2 text-texto-2 border border-borda" title="O extrato traz um valor diferente em centavos (dentro da tolerância de R$ 0,50). O valor do banco é mantido.">CSV {l.csv}</span>}</td>
+              <td className="px-2 py-1.5"><Campo c={l.campos.descricao} />{l.csv && <span className="ml-1 text-[10px] px-1 rounded bg-surface-2 text-texto-2 border border-borda" title="A fatura traz um valor diferente em centavos. O valor do Finup é mantido.">CSV {l.csv}</span>}</td>
               <td className="px-2 py-1.5"><Campo c={l.campos.parcela} /></td>
               <td className="px-2 py-1.5"><Campo c={l.campos.data} /></td>
               <td className="px-2 py-1.5 text-right tabular-nums"><Campo c={l.campos.valor} /></td>

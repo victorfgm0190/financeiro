@@ -146,7 +146,7 @@ export const campos = {
   'revisaoFatura.importar': {
     titulo: 'Importar a linha',
     paraQueServe: 'Marca as compras que serão gravadas.',
-    relacaoComTela: 'Desmarcadas vão para o fim da lista e ficam de fora. Duplicata certa não pode ser marcada.',
+    relacaoComTela: 'Desmarcadas vão para o bloco "Não entram". O que já está no Finup não pode ser marcado.',
     obrigatorio: false,
   },
   'revisaoFatura.data': {
@@ -194,7 +194,7 @@ export const campos = {
   'revisaoFatura.decidir': {
     titulo: 'Decidir',
     paraQueServe: 'Diz o que fazer com uma linha que parece já estar no Finup.',
-    relacaoComTela: 'Escolher o lançamento existente vincula e atualiza ele; "É novo" ou "É outra compra" importa a linha; "É a mesma" atualiza o existente. Sem decisão, a linha não é importada.',
+    relacaoComTela: 'No cartão "É este?": "Sim, é este" junta a linha ao lançamento do Finup (nada novo é criado); "Não, é outro" importa a linha como nova. Embaixo de cada botão aparece o que acontece. Sem resposta, a linha não entra.',
     obrigatorio: true,
   },
   'revisaoFatura.favorecido': {
@@ -210,8 +210,8 @@ export const campos = {
     obrigatorio: false,
   },
   'revisaoFatura.atualizarParcela': {
-    titulo: 'Atualizar parcela já no banco',
-    paraQueServe: 'Aplica à parcela gravada o que a fatura diz de diferente.',
+    titulo: 'Atualizar a previsão do Finup',
+    paraQueServe: 'Aplica à parcela prevista no Finup o que a fatura diz de diferente.',
     relacaoComTela: 'Desmarcada, a parcela gravada fica como está.',
     obrigatorio: false,
   },
