@@ -22,6 +22,7 @@ import { favorecidoSugerido } from './casamentoFatura.js'
 import { faturaDoLancamento } from './scheduleBaixa.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
 import { numeroParcelaDoTx, totalParcelasDoTx, outraSerie } from './revisaoImportacao.js'
+import { valorCompativel } from './casamentoValor.js'
 
 export const TOL_NOME_FORTE = 0.05
 export const JANELA_DIAS_NOME_FORTE = 5
@@ -51,7 +52,8 @@ function medir(r, t, { nomes, apelidos, closingDay }) {
   const pr = parcelaDaLinha(r), pt = parcelaDoTx(t)
   return {
     tx: t, simNome, nomeForte: simNome >= SIMILARIDADE_MINIMA, diff, dias, pr, pt,
-    valorIgual: diff <= 1, valor5: diff <= Math.round(vt * TOL_NOME_FORTE),
+    // Valor abaixo de R$ 1,00: só o exato, ou ±0,01 da mesma loja (lib/casamentoValor).
+    valorIgual: valorCompativel(r, t), valor5: diff <= Math.round(vt * TOL_NOME_FORTE),
     mesmaParcela: mesmaParcela(pr, pt), fatura: faturaDoLancamento(t, closingDay),
     dataDiverge: !!(dataLinha && dataTx && dataLinha !== dataTx && !((pr?.num || 0) > 1)),
   }

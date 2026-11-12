@@ -32,6 +32,7 @@ import { ehIof, ajusteDaCompraEstimada } from './cambio.js'
 import { normalizarTermo } from './assistente/texto.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
 import { nomeSemSufixo, PALAVRAS_GENERICAS } from './nomeEstabelecimento.js'
+import { valorCompativel, mesmaLoja, chaveEstavel } from './casamentoValor.js'
 
 export const TOL_VALOR_JA_LANCADO = 0.01
 // Parcela com o mesmo n/total e centavos de diferença (arredondamento entre extratos): pergunta.
@@ -122,13 +123,14 @@ export function avaliarJaLancado(r, t, closingDay = 14) {
   if (tipoDe(r) !== tipoDe(t)) return null
   if (faturaDoLancamento(t, closingDay) !== r.faturaMonthYear) return null
   const diff = Math.abs(centavos(r.amount) - centavos(t.amount))
-  const exato = diff <= TOL_VALOR_JA_LANCADO * 100
+  // Valor abaixo de R$ 1,00: só o exato, ou ±0,01 da mesma loja (lib/casamentoValor).
+  const exato = valorCompativel(r, t, TOL_VALOR_JA_LANCADO)
   const pr = parcelaDaLinha(r)
   const pt = parcelaDoTx(t)
   if (pr || pt) {
     if (!pr || !pt || pr.num !== pt.num || pr.total !== pt.total) return null
     if (outraSerie(r, t)) return null
-    if (diff > TOL_PARCELA_PERGUNTA * 100) return null
+    if (diff > TOL_PARCELA_PERGUNTA * 100 || !valorCompativel(r, t, TOL_PARCELA_PERGUNTA)) return null
     // Centavos: só a previsão da MESMA série (ajuste automático do valor); senão não é candidato.
     if (!exato) return mesmaSerie(r, t) ? 'auto' : null
     // Parcela N > 1: a data é a do dia financeiro — sem data comparável, só a série dá certeza.
@@ -143,8 +145,11 @@ export const casaComLinha = (r, t, closingDay = 14) => avaliarJaLancado(r, t, cl
 export function casarJaLancados(linhas, candidatos, { closingDay = 14 } = {}) {
   const porLinha = new Map()
   for (const r of linhas) {
-    const lista = candidatos.map(t => ({ t, n: avaliarJaLancado(r, t, closingDay) })).filter(x => x.n)
-      .sort((a, b) => diasEntre(dataCompraDaLinha(r), dataCompraDoTx(a.t)) - diasEntre(dataCompraDaLinha(r), dataCompraDoTx(b.t)))
+    let lista = candidatos.map(t => ({ t, n: avaliarJaLancado(r, t, closingDay) })).filter(x => x.n)
+    // Havendo candidato da MESMA loja, só eles concorrem (antes da diferença de valor ou de data).
+    if (lista.some(x => mesmaLoja(r, x.t))) lista = lista.filter(x => mesmaLoja(r, x.t))
+    lista.sort((a, b) => diasEntre(dataCompraDaLinha(r), dataCompraDoTx(a.t)) - diasEntre(dataCompraDaLinha(r), dataCompraDoTx(b.t))
+      || (chaveEstavel(a.t) < chaveEstavel(b.t) ? -1 : 1))
     porLinha.set(r._id, lista)
   }
   return paresUmPraUm(linhas, porLinha, (r, t) => diasEntre(dataCompraDaLinha(r), dataCompraDoTx(t)))

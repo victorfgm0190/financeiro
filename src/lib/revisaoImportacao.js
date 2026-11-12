@@ -16,6 +16,7 @@ import { assignInstallmentOccurrences, findParcelaDaSerie } from './parcelas.js'
 import { descSimilarity, stripParcelaSuffix } from './conciliacaoMatch.js'
 import { faturaDoLancamento } from './scheduleBaixa.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
+import { valorCompativel, mesmaLoja, chaveEstavel, parearUmPraUm } from './casamentoValor.js'
 
 export const TOL_MESMO_VALOR = 0.01
 // Arredondamento de parcela entre extratos (R$ 100,00 em 3× vira 33,34/33,33/33,33 no banco e o
@@ -97,8 +98,9 @@ export function matchParcelaExistente(index, row, accountId, usados, tolerancia 
   let menorDiff = Infinity
   for (const t of candidatas) {
     if (usados?.has(t.id)) continue
+    if (!valorCompativel(row, t, tolerancia)) continue
     const diff = diffValor(t, row)
-    if (diff <= tolerancia && diff < menorDiff) { melhor = t; menorDiff = diff }
+    if (diff < menorDiff || (diff === menorDiff && melhor && chaveEstavel(t) < chaveEstavel(melhor))) { melhor = t; menorDiff = diff }
   }
   return melhor
 }
@@ -209,14 +211,21 @@ export function paresUmPraUm(linhas, porLinha, distancia = () => 0) {
     const grupo = soAuto(lista) ? linhas.filter(o => soAuto(porLinha.get(o._id) || []) && chave(porLinha.get(o._id)) === k) : []
     const fechado = grupo.length > 0 && candidatos.every(t => disputa.get(t.id) === grupo.length)
     if (!fechado || grupo.length < candidatos.length) { out.set(r._id, { status: 'escolher', candidatos }); continue }
-    // Pares pelo mais próximo (menor distância); empate pela ordem do arquivo.
+    // Pares pelo mais próximo: mesma loja primeiro, depois a menor distância; empate pela chave
+    // estável (nunca pela ordem do arquivo).
     const livresTx = [...candidatos]
     const livresLinhas = [...grupo]
+    const antes = (a, b) => {
+      if (a.loja !== b.loja) return a.loja < b.loja
+      if (a.d !== b.d) return a.d < b.d
+      const la = chaveEstavel(a.l), lb = chaveEstavel(b.l)
+      return la !== lb ? la < lb : chaveEstavel(a.t) < chaveEstavel(b.t)
+    }
     while (livresTx.length) {
       let melhor = null
       for (const l of livresLinhas) for (const t of livresTx) {
-        const d = distancia(l, t)
-        if (!melhor || d < melhor.d) melhor = { l, t, d }
+        const cand = { l, t, d: distancia(l, t), loja: mesmaLoja(l, t) ? 0 : 1 }
+        if (!melhor || antes(cand, melhor)) melhor = cand
       }
       out.set(melhor.l._id, { status: 'casada', candidatos: [melhor.t], tx: melhor.t })
       livresTx.splice(livresTx.indexOf(melhor.t), 1)
@@ -241,7 +250,7 @@ const mesmaDescricao = (r, t) => !!textoNormalizado(r.description) && textoNorma
 // + valor ±0,01, mas descrição, parcela ou data diferente. null = não é o mesmo lançamento.
 export function compararNaFatura(r, t) {
   if (tipoDe(r) !== tipoDe(t)) return null
-  if (diffValor(r, t) > TOL_MESMO_VALOR) return null
+  if (!valorCompativel(r, t)) return null
   const sim = similaridadeBase(r.description, t.description)
   const numIgual = numeroParcelaDaLinha(r) === numeroParcelaDoTx(t)
   if (sim >= SIM_MESMA_BASE && numIgual && !datasConflitam(r, t)) return 'existe'
@@ -343,11 +352,11 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
     if (!tx && serieDaLinha(r)) {
       tx = doCartao
         .filter(t => !usados.has(t.id) && tipoDe(t) === 'expense' && mesmaSerie(r, t) && naFatura(t)
-          && parcelaIgual(r, t) && diffValor(t, r) <= TOL_ARREDONDAMENTO)
-        .sort((a, b) => diffValor(a, r) - diffValor(b, r))[0] || null
+          && parcelaIgual(r, t) && valorCompativel(r, t, TOL_ARREDONDAMENTO))
+        .sort((a, b) => diffValor(a, r) - diffValor(b, r) || (chaveEstavel(a) < chaveEstavel(b) ? -1 : 1))[0] || null
     }
     if (!tx) continue
-    if (diffValor(tx, r) <= TOL_MESMO_VALOR) marcarColisao(r, tx)
+    if (valorCompativel(r, tx)) marcarColisao(r, tx)
     else if (podePerguntar(tx)) marcarColisao(r, tx, false, true)
   }
 
@@ -367,21 +376,29 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
   // Parcela (total > 1) não precisa de data: a projeção conciliada pelo "Já existe" fica sem data
   // do cartão, e mesmo n/total + valor + fatura já é o mesmo exato.
   const mesmaDataConciliado = (r, t) => mesmaData(r, t) || (!dataCartaoDoTx(t) && !!dataCompraLinha(r) && dataCompraLinha(r) === String(t.date || '').slice(0, 10))
+  // Pareamento GLOBAL (não na ordem do arquivo): todos os pares possíveis, ordenados por mesma loja,
+  // diferença de valor e força da data; cada linha e cada conciliado entram em um par só.
+  //   nível 0: mesma parcela e mesma data do cartão; 1: parcela (total > 1) sem data comparável;
+  //   2: linha SEM número de parcela legível × conciliado com parcela, com a MESMA descrição
+  //      (normalizada) e a mesma data do cartão — o conciliado foi gravado com o texto desta linha.
+  const paresConciliados = []
   for (const r of linhasLivres()) {
-    const conciliados = candidatos(r).filter(t => t.reconciled && tipoDe(t) === tipoDe(r) && diffValor(r, t) <= TOL_MESMO_VALOR)
-    const exatos = conciliados.filter(t => parcelaIgual(r, t))
-    // Linha SEM número de parcela legível (o texto do banco não traz, ou traz de um jeito que não
-    // dá para ler) × conciliado que tem parcela: é a reimportação se a descrição é a MESMA
-    // (normalizada) e a data do cartão também — o conciliado foi gravado com o texto desta linha.
-    const mesmoTexto = parcelaLinha(r) ? [] : conciliados.filter(t => !parcelaIgual(r, t) && mesmaData(r, t) && mesmaDescricao(r, t))
-    const tx = exatos.find(t => mesmaDataConciliado(r, t)) || (parcelaLinha(r) ? exatos[0] : null) || mesmoTexto[0] || null
-    if (tx) resolverExiste(r, tx)
+    for (const t of candidatos(r)) {
+      if (!t.reconciled || tipoDe(t) !== tipoDe(r) || !valorCompativel(r, t)) continue
+      let nivel = null
+      if (parcelaIgual(r, t) && mesmaDataConciliado(r, t)) nivel = 0
+      else if (parcelaIgual(r, t) && parcelaLinha(r)) nivel = 1
+      else if (!parcelaLinha(r) && !parcelaIgual(r, t) && mesmaData(r, t) && mesmaDescricao(r, t)) nivel = 2
+      if (nivel == null) continue
+      paresConciliados.push({ linha: r, tx: t, ordem: [mesmaLoja(r, t) ? 0 : 1, Math.round(diffValor(r, t) * 100), nivel] })
+    }
   }
+  for (const [id, tx] of parearUmPraUm(paresConciliados)) resolverExiste(out.find(r => r._id === id), tx)
   const livres2 = linhasLivres()
   const listas = new Map()
   for (const r of livres2) {
     const pr = parcelaLinha(r)
-    listas.set(r._id, candidatos(r).filter(t => !t.reconciled && tipoDe(t) === tipoDe(r) && diffValor(r, t) <= TOL_MESMO_VALOR
+    listas.set(r._id, candidatos(r).filter(t => !t.reconciled && tipoDe(t) === tipoDe(r) && valorCompativel(r, t)
       && parcelaIgual(r, t) && !outraSerie(r, t) && similaridadeBase(r.description, t.description) >= SIM_MESMA_BASE
       && (pr && pr.num > 1 ? true : ateDias(r, t, JANELA_DIAS_MESMO)))
       .map(t => ({ t, n: 'auto' })))
@@ -405,13 +422,13 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
     if (pr) {
       const baseLinha = baseDaChave(keyOfImportRow(r, accountId))
       tx = candidatos(r)
-        .filter(t => podePerguntar(t) && tipoDe(t) === 'expense' && tipoDe(r) === 'expense' && diffValor(r, t) <= TOL_MESMO_VALOR)
+        .filter(t => podePerguntar(t) && tipoDe(t) === 'expense' && tipoDe(r) === 'expense' && valorCompativel(r, t))
         .filter(t => {
           const pt = parcelaTx(t)
           if (!pt || pt.total !== pr.total || pt.num === pr.num) return false
           return mesmaSerie(r, t) || (!outraSerie(r, t) && !!baseLinha && baseDaChave(keyOfExistingTx(t)) === baseLinha)
         })
-        .sort((a, b) => Math.abs(parcelaTx(a).num - pr.num) - Math.abs(parcelaTx(b).num - pr.num))[0] || null
+        .sort((a, b) => Math.abs(parcelaTx(a).num - pr.num) - Math.abs(parcelaTx(b).num - pr.num) || (chaveEstavel(a) < chaveEstavel(b) ? -1 : 1))[0] || null
     }
     if (!tx) continue
     usados.add(tx.id)
@@ -431,7 +448,7 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
       // Conciliado (ou de fatura fechada) nunca é proposto; só o que ainda pode ser o mesmo lançamento
       // gravado na fatura errada.
       if (!podePerguntar(t) || usados.has(t.id)) return false
-      if (tipoDe(t) !== tipoDe(r) || diffValor(r, t) > TOL_MESMO_VALOR) return false
+      if (tipoDe(t) !== tipoDe(r) || !valorCompativel(r, t)) return false
       if (similaridadeBase(r.description, t.description) < SIM_MESMA_BASE) return false
       return num != null ? numeroParcelaDoTx(t) === num : mesmaData(r, t)
     })

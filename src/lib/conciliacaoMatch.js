@@ -7,6 +7,7 @@
 // estorna — sem comparar o tipo, ele casa com a própria compra e é descartado como duplicata.
 
 import { detectParcela } from './installments.js'
+import { valorCompativel, mesmaLoja, parearUmPraUm } from './casamentoValor.js'
 
 // ── Conciliação inteligente (Melhoria 1) ──────────────────────────────────────
 // Normaliza texto (maiúsculas, sem acentos) e mede similaridade: 1 = idêntico, 0.9 = um
@@ -84,22 +85,27 @@ const mesmaParcelaItens = (a, b) => {
 export function crossMatchConciliacao(soItau, soSistema) {
   const itauOut = soItau.map(i => ({ ...i }))
   const sysOut = soSistema.map(s => ({ ...s }))
-  const used = new Set()
-  for (const it of itauOut) {
-    let best = null, bestRank = 0, bestSim = -1
+  // Todos os pares possíveis, pareados de uma vez (lib/casamentoValor): o mais forte primeiro, a
+  // mesma loja antes da diferença de valor, sem depender da ordem do arquivo.
+  const pares = []
+  itauOut.forEach((it, i) => {
     for (const s of sysOut) {
-      if (used.has(s.id) || s.reconciled) continue
+      if (s.reconciled) continue
       if ((s.type || 'expense') !== (it.type || 'expense')) continue
-      if (Math.round(Math.abs((Number(it.amount) || 0) - (Number(s.amount) || 0)) * 100) > 1) continue
+      if (!valorCompativel(it, s)) continue
       if (!mesmaParcelaItens(it, s)) continue
       // Compara as descrições SEM o sufixo de parcela (sistema "01/03" vs Itaú "1/3").
       const sim = descSimilarity(stripParcelaSuffix(it.description), stripParcelaSuffix(s.description))
       const rank = normalizeDescForMatch(it.description) === normalizeDescForMatch(s.description) ? 3 : sim >= 0.7 ? 2 : sim >= 0.5 ? 1 : 0
       if (rank === 0) continue
-      if (rank > bestRank || (rank === bestRank && sim > bestSim)) { best = s; bestRank = rank; bestSim = sim }
+      const diff = Math.round(Math.abs((Number(it.amount) || 0) - (Number(s.amount) || 0)) * 100)
+      pares.push({ linha: { ...it, _idx: i }, tx: s, rank, ordem: [-rank, mesmaLoja(it, s) ? 0 : 1, diff, -Math.round(sim * 1000)] })
     }
-    if (!best) continue
-    used.add(best.id)
+  })
+  const escolhidos = parearUmPraUm(pares, (l) => l._idx)
+  for (const [i, best] of escolhidos) {
+    const it = itauOut[i]
+    const bestRank = pares.find(p => p.linha._idx === i && p.tx === best).rank
     const level = bestRank === 3 ? 'certeza' : bestRank === 2 ? 'provavel' : 'possivel'
     it._crossLevel = level; best._crossLevel = level
     it._crossSysId = best.id
@@ -118,3 +124,29 @@ export function idsConciliacaoConferidos(matched, soItau, excluirIds = new Set()
   return [...ids].filter(id => !excluirIds.has(id))
 }
 
+
+// Pareamento PRINCIPAL da Conciliar Fatura (seção "Conciliados"): mesma descrição normalizada (sem
+// sufixo de parcela), mesmo tipo e valor até ±R$ 0,50 — abaixo de R$ 1,00 só o exato ou ±0,01 da
+// mesma loja (lib/casamentoValor). 1:1, a menor diferença primeiro, sem depender da ordem do arquivo.
+// → { matched: [{ csv, sys }], soItau: [itens do arquivo sem par], usados: Set(ids do sistema) }
+export const TOL_CONCILIACAO = 0.50
+export function parearConciliacao(itens, sistema) {
+  const pares = []
+  ;(itens || []).forEach((c, i) => {
+    for (const t of sistema || []) {
+      if (t.type !== c.type) continue
+      if (normalizeDescForMatch(t.description) !== normalizeDescForMatch(c.description)) continue
+      if (!valorCompativel(c, t, TOL_CONCILIACAO)) continue
+      pares.push({ linha: { ...c, _idx: i }, tx: t, ordem: [Math.round(Math.abs((Number(t.amount) || 0) - (Number(c.amount) || 0)) * 100)] })
+    }
+  })
+  const escolhidos = parearUmPraUm(pares, (l) => l._idx)
+  const matched = []
+  const soItau = []
+  ;(itens || []).forEach((c, i) => {
+    const sys = escolhidos.get(i)
+    if (sys) matched.push({ csv: c, sys })
+    else soItau.push(c)
+  })
+  return { matched, soItau, usados: new Set([...escolhidos.values()].map(t => t.id)) }
+}

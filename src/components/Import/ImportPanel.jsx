@@ -20,7 +20,7 @@ import { deOfx, paraLinhaCartao, paraLinhaConta, lerCsv, aplicarModelo, acharMod
 import { decodificarOfx } from '../../lib/importacaoPadrao/ofx'
 import { listarModelosImportacao, salvarModeloImportacao, migrarMapeamentosAntigos } from '../../lib/importLayoutsApi'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
-import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao, idsConciliacaoConferidos } from '../../lib/conciliacaoMatch'
+import { descSimilarity, stripParcelaSuffix, crossMatchConciliacao, idsConciliacaoConferidos, parearConciliacao } from '../../lib/conciliacaoMatch'
 import { indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, mudancasDaColisao, diferencasDoConciliado, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, precisaDecisao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia, faturaEstaAberta, podeExcluirSoNoSistema } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante, dataRegistroParcela, dataCompraDaParcela } from '../../lib/parcelas'
@@ -3408,19 +3408,9 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         // Gêmeas legítimas do arquivo recebem o ordinal aqui também: sem ele as duas gravariam
         // a mesma installment_key e a segunda seria absorvida pela primeira no índice único.
         const classificados = assignInstallmentOccurrences(comEstorno, selectedAccount, faturaMonthYear)
-        const usedSys = new Set()
-        const matched = []
-        const soItau = []
-        for (const c of classificados) {
-          const sys = sysItens.find(t =>
-            !usedSys.has(t.id) &&
-            t.type === c.type &&
-            Math.abs((Number(t.amount) || 0) - (Number(c.amount) || 0)) <= 0.50 &&
-            normalizeDescForMatch(t.description) === normalizeDescForMatch(c.description)
-          )
-          if (sys) { usedSys.add(sys.id); matched.push({ csv: c, sys }) }
-          else soItau.push(c)
-        }
+        // Pareamento 1:1 determinístico (lib/conciliacaoMatch → parearConciliacao): mesma descrição,
+        // mesmo tipo, valor até ±0,50 — centavos só o exato ou ±0,01 da mesma loja.
+        const { matched, soItau, usados: usedSys } = parearConciliacao(classificados, sysItens)
         const soSistema = sysItens
           .filter(t => !usedSys.has(t.id))
           .map(t => ({ ...t, acao: 'manter' }))
