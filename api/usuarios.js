@@ -6,7 +6,7 @@ import {
   SENHA_MIN, USERNAME_RE, NIVEIS_VALIDOS, papelLegado, normUser, hashSenha, conferirSenha,
   ehTabelaInexistente, ErroHttp,
 } from './_usuarios.js'
-import { normalizarPermissoes } from '../src/lib/permissoes.js'
+import { normalizarPermissoes, normalizarPerfis, temTodosPerfis } from '../src/lib/permissoes.js'
 import { payloadDoCadastro, JWT_EXPIRA } from './auth.js'
 import { comAmbiente, comAmbienteNoPayload } from './_ambiente.js'
 import { enviarEmail, ErroEmail } from './_email.js'
@@ -83,6 +83,36 @@ async function validarPerfis(q, v) {
   return ids
 }
 
+// ─── Quem concede (auditoria 11/2026, item 3) ───────────────────────────────────────────────────
+// Um administrador só concede o que ele mesmo tem: perfis dentro dos SEUS (lidos do banco, não do
+// token) e nunca "todos" — "todos" só quem tem "todos" (o administrador principal do ambiente). O
+// mesmo vale para mexer em quem enxerga além dele (senha, nível, perfis, ativo, convite): senão
+// bastaria trocar a senha do administrador principal e entrar como ele. O login fixo de emergência
+// (origem 'env') é o administrador principal. `quem` null = chamada interna (sem conferência).
+async function perfisDeQuem(q, quem) {
+  if (!quem || quem.origem !== 'db') return 'todos'
+  const [u] = await q('SELECT perfis_permitidos FROM usuarios WHERE id = $1', [quem.id])
+  return normalizarPerfis(u ? u.perfis_permitidos : [])
+}
+const cabeEm = (meus, pedidos) => temTodosPerfis(meus) || (!temTodosPerfis(pedidos) && pedidos.every(p => meus.includes(p)))
+
+async function exigirPodeConceder(q, quem, perfisPedidos) {
+  if (!quem) return
+  const meus = await perfisDeQuem(q, quem)
+  if (cabeEm(meus, perfisPedidos)) return
+  throw new ErroHttp(403, temTodosPerfis(perfisPedidos)
+    ? 'Só o administrador principal (com acesso a todos os perfis) concede "todos os perfis"'
+    : 'Você só pode conceder perfis que você mesmo tem')
+}
+
+async function exigirPodeAlterar(q, quem, alvo) {
+  if (!quem) return
+  const meus = await perfisDeQuem(q, quem)
+  if (!cabeEm(meus, normalizarPerfis(alvo.perfis_permitidos))) {
+    throw new ErroHttp(403, 'Este usuário tem acesso a perfis que você não tem: só o administrador principal pode alterá-lo')
+  }
+}
+
 // Linha do banco → resposta (sem senha_hash, que nem é selecionado).
 const resposta = (u) => (u ? { ...u, perfis_permitidos: Array.isArray(u.perfis_permitidos) ? u.perfis_permitidos : 'todos' } : null)
 
@@ -95,7 +125,7 @@ async function buscarDaOrg(q, orgId, id) {
   return resposta(u || null)
 }
 
-export async function criarUsuario(q, orgId, body = {}, autor = null) {
+export async function criarUsuario(q, orgId, body = {}, autor = null, quem = null) {
   const username = normUser(body.username)
   if (!USERNAME_RE.test(username)) throw new ErroHttp(400, 'Usuário deve ter de 3 a 40 caracteres: letras minúsculas, números, ponto, hífen ou sublinhado')
   const senha = validarSenha(body.senha)
@@ -104,6 +134,7 @@ export async function criarUsuario(q, orgId, body = {}, autor = null) {
   const email = validarEmail(body.email)
   await exigirEmailLivre(q, email)
   const perfis = await validarPerfis(q, body.perfis_permitidos)
+  await exigirPodeConceder(q, quem, perfis)
   const permissoes = nivel === 'personalizado' ? normalizarPermissoes(body.permissoes) : {}
   const senhaHash = await hashSenha(senha)
   try {
@@ -139,6 +170,7 @@ export async function editarUsuario(q, orgId, body = {}, quem = null) {
   if (!body.id) throw new ErroHttp(400, 'id é obrigatório')
   const alvo = await buscarDaOrg(q, orgId, String(body.id))
   if (!alvo) throw new ErroHttp(404, 'Usuário não encontrado')
+  await exigirPodeAlterar(q, quem, alvo)
 
   const sets = []
   const params = [alvo.id]
@@ -154,7 +186,11 @@ export async function editarUsuario(q, orgId, body = {}, quem = null) {
     set('ativo', body.ativo === true)
   }
   if ('trocar_senha' in body) set('trocar_senha', body.trocar_senha === true)
-  if ('perfis_permitidos' in body) set('perfis_permitidos', JSON.stringify(await validarPerfis(q, body.perfis_permitidos)), '::jsonb')
+  if ('perfis_permitidos' in body) {
+    const perfis = await validarPerfis(q, body.perfis_permitidos)
+    await exigirPodeConceder(q, quem, perfis)
+    set('perfis_permitidos', JSON.stringify(perfis), '::jsonb')
+  }
   const nivel = 'nivel' in body ? validarNivel(body.nivel) : alvo.nivel
   if (nivel !== alvo.nivel) set('nivel', nivel)
   if ('permissoes' in body || nivel !== alvo.nivel) {
@@ -209,17 +245,18 @@ export async function trocarMinhaSenha(q, user, body = {}, { secret = process.en
 
 // Convite: link 'convite' (48 h) para o e-mail do usuário da organização. `q` de uma transação; o
 // e-mail sai depois do commit (enviarConvite). Devolve { usuario, token }.
-export async function prepararConvite(q, orgId, body = {}, { ip = null, agora = new Date() } = {}) {
+export async function prepararConvite(q, orgId, body = {}, { ip = null, agora = new Date(), quem = null } = {}) {
   if (!body.id) throw new ErroHttp(400, 'id é obrigatório')
   const u = await buscarDaOrg(q, orgId, String(body.id))
   if (!u) throw new ErroHttp(404, 'Usuário não encontrado')
+  await exigirPodeAlterar(q, quem, u)
   if (!u.ativo) throw new ErroHttp(409, 'Usuário inativo: ative antes de enviar o link')
   if (!String(u.email || '').trim()) throw new ErroHttp(409, 'Usuário sem e-mail cadastrado')
   return { usuario: u, token: await gerarTokenSenha(q, u.id, 'convite', { ip, agora }) }
 }
 
-export async function enviarConvite(transacao, orgId, body, { ambiente, ip, enviar = enviarEmail } = {}) {
-  const { usuario, token } = await transacao((q) => prepararConvite(q, orgId, body, { ip }))
+export async function enviarConvite(transacao, orgId, body, { ambiente, ip, enviar = enviarEmail, quem = null } = {}) {
+  const { usuario, token } = await transacao((q) => prepararConvite(q, orgId, body, { ip, quem }))
   const sigla = ambiente?.sigla || AMBIENTE_PRINCIPAL
   const { assunto, html, texto } = modeloConvite({
     nome: usuario.nome || usuario.username, username: usuario.username, sigla, url: urlDefinirSenha(sigla, token),
@@ -256,10 +293,10 @@ async function handler(req, res) {
     }
     if (queryParam(req, 'acao') === 'enviar-convite') {
       if (req.method !== 'POST') return res.status(405).end()
-      return res.json(await enviarConvite(withTransaction, orgId, await parseBody(req), { ambiente: req.ambiente, ip: ipDoReq(req) }))
+      return res.json(await enviarConvite(withTransaction, orgId, await parseBody(req), { ambiente: req.ambiente, ip: ipDoReq(req), quem: req.user }))
     }
     const autor = req.user.username || req.user.id
-    if (req.method === 'POST') return res.json({ ok: true, usuario: await criarUsuario(query, orgId, await parseBody(req), autor) })
+    if (req.method === 'POST') return res.json({ ok: true, usuario: await criarUsuario(query, orgId, await parseBody(req), autor, req.user) })
     if (req.method === 'PATCH') {
       const body = await parseBody(req)
       const antes = body.id ? await buscarDaOrg(query, orgId, String(body.id)) : null
