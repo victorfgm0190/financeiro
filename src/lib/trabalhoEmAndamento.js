@@ -65,3 +65,5 @@ export function _reiniciarTrabalhos() {
   ouvindoSaida = false
   avisar()
 }
+
+// Versão de teste do aviso de atualização (13/11/2026): só este comentário.
