@@ -34,14 +34,15 @@ const PAGE_TITLES = {
 
 // Espaço livre do cabeçalho com a marca-d'água (MarcaDagua) centralizada. A marca é absoluta: não muda
 // a altura nem a largura de nada. Só desktop (lg+) e só quando a sobra tem pelo menos 72px (container
-// query); com menos, some — nunca aperta os outros elementos.
+// query); com menos, some — nunca aperta os outros elementos. A frase ao lado da coroa só aparece com
+// 280px de sobra (MarcaDagua.jsx); abaixo disso fica só a coroa.
 // `comMarca`: a marca existe uma vez só no cabeçalho (com chips, no bloco deles; sem chips, no spacer).
 function EspacoMarca({ className = '', classeMarca = '', comMarca = true }) {
   return (
     <div className={`flex-1 min-w-0 self-stretch relative @container ${className}`}>
       {comMarca && (
         <div className={`hidden lg:flex absolute inset-y-0 left-0 items-center justify-center pointer-events-none print:hidden ${classeMarca}`}>
-          <MarcaDagua variant="header" className="hidden @min-[72px]:block shrink-0" />
+          <MarcaDagua variant="header" className="hidden @min-[72px]:flex shrink-0" />
         </div>
       )}
     </div>

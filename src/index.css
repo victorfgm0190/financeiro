@@ -193,12 +193,17 @@
   --marca-dagua-cor: var(--color-texto-3);
   --marca-dagua-opacidade-simbolo: 0.12;
   --marca-dagua-opacidade-texto: 0.14;
+  /* Frase AO LADO da coroa, só no cabeçalho do computador (texto de 12px, legível): própria, para não
+     mexer no login e no celular. O cabeçalho só existe no computador, então o padrão aqui é o do
+     escuro do computador. */
+  --marca-dagua-opacidade-texto-header: 0.26;
 }
 /* Claro: texto principal, símbolo 14% / frase 22%. :root[...] para vencer o :root acima. */
 :root[data-theme="light"] {
   --marca-dagua-cor: var(--color-texto-1);
   --marca-dagua-opacidade-simbolo: 0.14;
   --marca-dagua-opacidade-texto: 0.22;
+  --marca-dagua-opacidade-texto-header: 0.30;
 }
 
 @layer base {
@@ -260,6 +265,7 @@
   .marca-dagua { color: var(--marca-dagua-cor); }
   .marca-dagua-simbolo { opacity: var(--marca-dagua-opacidade-simbolo); }
   .marca-dagua-frase { opacity: var(--marca-dagua-opacidade-texto); }
+  .marca-dagua-frase-header { opacity: var(--marca-dagua-opacidade-texto-header); }
   .badge {
     @apply inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold;
   }

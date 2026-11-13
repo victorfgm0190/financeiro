@@ -21,7 +21,6 @@ import { useId } from 'react'
 // barra são as mesmas nas duas.
 // Login no celular: 90px (no 375x667 o formulário cabe sem rolagem); 120px a partir de md.
 const ALTURA = {
-  header: 'h-[52px]',
   mobile: 'h-[64px]',
   login: 'h-[90px] md:h-[120px]',
 }
@@ -94,14 +93,36 @@ export function SimboloCoroa({ simples = false, ...props }) {
   )
 }
 
+// Cabeçalho do computador: coroa (versão simples, 44px — quase toda a altura do cabeçalho de 55px) e a
+// frase AO LADO, numa linha, em texto de 12px (embaixo da coroa ela ficava com ~4,5px, ilegível).
+// O cabeçalho mostra a marca dentro de um @container (Header.jsx → EspacoMarca): a coroa aparece com
+// 72px de sobra; a frase só com 280px (coroa 44 + 8 de espaço + frase ~190 + folga). Com menos, some só
+// a frase. A frase tem opacidade própria (--marca-dagua-opacidade-texto-header): legível, mas discreta,
+// sem mexer no login e no celular.
+function MarcaCabecalho({ className }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-marca-dagua="header"
+      className={`marca-dagua items-center gap-2 pointer-events-none select-none print:hidden ${className}`}
+    >
+      <SimboloCoroa simples width="44" height="44" className="marca-dagua-simbolo shrink-0" />
+      <span className="marca-dagua-frase-header hidden @min-[280px]:inline whitespace-nowrap leading-none text-[12px] tracking-[0.17em] font-normal font-[Georgia,'Times_New_Roman',serif]">
+        TOTUS TUUS, MARIA
+      </span>
+    </span>
+  )
+}
+
 export default function MarcaDagua({ variant = 'header', className = '' }) {
+  if (variant === 'header') return <MarcaCabecalho className={className} />
   return (
     <svg
       viewBox="-22 0 144 122"
       aria-hidden="true"
       focusable="false"
       data-marca-dagua={variant}
-      className={`marca-dagua ${ALTURA[variant] || ALTURA.header} w-auto pointer-events-none select-none print:hidden ${className}`}
+      className={`marca-dagua ${ALTURA[variant] || ALTURA.mobile} w-auto pointer-events-none select-none print:hidden ${className}`}
     >
       <SimboloCoroa simples={variant !== 'login'} x="6" y="2" width="88" height="88" className="marca-dagua-simbolo" />
       <text

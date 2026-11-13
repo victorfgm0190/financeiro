@@ -14,7 +14,7 @@ vi.mock('./Offline/AvisoSairModal', () => ({ default: () => null }))
 vi.mock('./Offline/useSair', () => ({ useSair: () => ({ sair: () => {}, saindo: false, aviso: {} }) }))
 
 afterEach(() => { cleanup(); vi.clearAllMocks() })
-const marcas = (c) => c.querySelectorAll('svg[data-marca-dagua]')
+const marcas = (c) => c.querySelectorAll('[data-marca-dagua]')
 
 describe("marca-d'água", () => {
   it('frase exata e só decoração', () => {
@@ -27,16 +27,16 @@ describe("marca-d'água", () => {
     expect(svg.getAttribute('class')).toContain('select-none')
     expect(svg.closest('[data-guia]')).toBeNull()
   })
-  it('cor e opacidades por variáveis CSS do tema: símbolo e frase separados, nada no <svg>', () => {
-    const { container } = render(<MarcaDagua />)
+  it.each(['mobile', 'login'])('%s: cor e opacidades por variáveis CSS do tema, símbolo e frase separados, nada no <svg>', (variant) => {
+    const { container } = render(<MarcaDagua variant={variant} />)
     const svg = marcas(container)[0]
     expect(svg.getAttribute('class')).toContain('marca-dagua')
     expect(svg.getAttribute('class')).not.toMatch(/opacity|text-texto/)
     expect(svg.querySelector('svg').getAttribute('class')).toBe('marca-dagua-simbolo')
     expect(svg.querySelector('text').getAttribute('class')).toBe('marca-dagua-frase')
   })
-  it('símbolo quadrado no lugar do anterior (88×88 em 6,2), decorativo', () => {
-    const { container } = render(<MarcaDagua />)
+  it.each(['mobile', 'login'])('%s: símbolo quadrado 88×88 em (6,2) acima da frase, decorativo', (variant) => {
+    const { container } = render(<MarcaDagua variant={variant} />)
     const simbolo = marcas(container)[0].querySelector('svg')
     expect(simbolo.getAttribute('viewBox')).toBe('0 0 400 400')
     expect(simbolo.getAttribute('width')).toBe(simbolo.getAttribute('height'))
@@ -73,7 +73,31 @@ describe("marca-d'água", () => {
     const refs = [...container.querySelectorAll('[mask]')].map(e => e.getAttribute('mask'))
     expect(refs.sort()).toEqual(ids.map(id => `url(#${id})`).sort())
   })
-  it.each([['header', 'h-[52px]'], ['mobile', 'h-[64px]'], ['login', 'h-[90px]']])('variante %s', (variant, altura) => {
+  it('header: coroa simples de 44px e a frase AO LADO, em texto de 12px, com opacidade própria', () => {
+    const { container } = render(<MarcaDagua variant="header" className="hidden @min-[72px]:flex" />)
+    const raiz = marcas(container)[0]
+    expect(raiz.tagName).toBe('SPAN')
+    expect(raiz.getAttribute('class')).toMatch(/\bmarca-dagua\b.*\bitems-center\b.*\bgap-2\b/)
+    expect(raiz.getAttribute('class')).toContain('@min-[72px]:flex')
+    expect(raiz.querySelectorAll('svg')).toHaveLength(1)
+    const [coroa, frase] = raiz.children
+    expect(coroa.tagName.toLowerCase()).toBe('svg')
+    expect([coroa.getAttribute('width'), coroa.getAttribute('height')]).toEqual(['44', '44'])
+    expect(coroa.getAttribute('class')).toContain('marca-dagua-simbolo')
+    expect(coroa.querySelectorAll(':scope > circle')).toHaveLength(1)
+    expect(frase.tagName).toBe('SPAN')
+    expect(frase.textContent).toBe('TOTUS TUUS, MARIA')
+    const cls = frase.getAttribute('class')
+    expect(cls).toContain('marca-dagua-frase-header')
+    expect(cls).not.toMatch(/\bmarca-dagua-frase\s/)
+    // sem 280px de sobra no cabeçalho, some só a frase (a coroa fica)
+    expect(cls).toMatch(/\bhidden @min-\[280px\]:inline\b/)
+    expect(cls).toContain('text-[12px]')
+    expect(cls).toContain('whitespace-nowrap')
+    expect(cls).toMatch(/Georgia/)
+    expect(raiz.querySelector('text')).toBeNull()
+  })
+  it.each([['mobile', 'h-[64px]'], ['login', 'h-[90px]']])('variante %s', (variant, altura) => {
     const { container } = render(<MarcaDagua variant={variant} />)
     const svg = marcas(container)[0]
     expect(svg.getAttribute('data-marca-dagua')).toBe(variant)
@@ -89,6 +113,8 @@ describe("marca-d'água", () => {
     const lista = marcas(container)
     expect(lista).toHaveLength(1)
     expect(lista[0].parentElement.getAttribute('class')).toMatch(/\bhidden lg:flex\b/)
+    expect(lista[0].getAttribute('data-marca-dagua')).toBe('header')
+    expect(lista[0].getAttribute('class')).toMatch(/\bhidden @min-\[72px\]:flex\b/)
     expect(lista[0].closest('[data-guia]')).toBeNull()
   })
 })
