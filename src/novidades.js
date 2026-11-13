@@ -18,6 +18,19 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.13',
+    data: '2026-11-13',
+    titulo: 'Agendamento com Contas Anuais: o resgate é agendado junto',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'Num agendamento de despesa em conta corrente com classificação que gera resgate (como Contas Anuais), o novo campo “Resgatar de” diz de qual função da reserva sai o dinheiro. Com uma opção só, ela já vem escolhida, e “+ Nova função” cria uma ali mesmo.',
+      'Ao salvar, o Finup agenda também o resgate de cada ocorrência, com a mesma data e o mesmo valor: ele já aparece no Fluxo de Caixa e na reserva como previsto.',
+      'Pagar, pular, mudar data ou valor, excluir ou estornar a despesa faz o mesmo no resgate. O que já foi efetivado não muda.',
+      'Se já houver uma provisão aberta da mesma função no mesmo mês, o formulário avisa, para a despesa não contar duas vezes.',
+    ],
+  },
+  {
     id: '2026.11.12-6',
     data: '2026-11-12',
     titulo: 'Atualizar o Finup sem perder o que está fazendo',

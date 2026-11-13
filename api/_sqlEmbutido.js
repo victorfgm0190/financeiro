@@ -211,5 +211,9 @@ export const MIGRACOES = [
  {
   "nome": "2026-11-12b_ia_sugestoes_importacao.sql",
   "sql": "-- Sugestões do Assistente na Importar Fatura (Etapa 6c): opção do CLIENTE em Configurações › Geral.\n-- Vazio = desligada. Só aparece e só vale com o recurso liberado pelo administrador da plataforma\n-- (ambientes.modulos no central). Idempotente. Não altera nenhum dado existente.\nALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS ia_sugestoes_importacao BOOLEAN;\n"
+ },
+ {
+  "nome": "2026-11-13_resgate_vinculado.sql",
+  "sql": "-- Resgate agendado junto com o agendamento de despesa de conta corrente com classificação gerencial\n-- que gera resgate (Contas Anuais, PharmaLog, Imperium…). O agendamento do resgate aponta para o da\n-- despesa nesta coluna e acompanha as ocorrências dela (src/lib/resgateVinculado.js).\n-- Aditiva e idempotente: NULL = agendamento comum (todos os existentes). Não altera nenhum dado.\nALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS agendamento_vinculado_id TEXT;\nCREATE INDEX IF NOT EXISTS agendamentos_vinculado_idx ON agendamentos (agendamento_vinculado_id)\n  WHERE agendamento_vinculado_id IS NOT NULL;\n"
  }
 ]

@@ -137,9 +137,16 @@ export const campos = {
   },
   'agendamento.gerencial': {
     titulo: 'Classificação gerencial',
-    paraQueServe: 'Define como o dinheiro se move ao efetivar: débito direto, reserva, resgate de conta específica ou só registro.',
-    relacaoComTela: 'Ao registrar, decide se o valor sai da conta principal, de uma reserva ou de outra conta, e em que grupo aparece no controle gerencial.',
+    paraQueServe: 'Define como o dinheiro se move: débito direto, reserva, resgate de conta específica ou só registro.',
+    relacaoComTela: 'Decide se o valor sai da conta principal, de uma reserva ou de outra conta, e em que grupo aparece no controle gerencial. Em conta corrente, um grupo com resgate (ex.: Contas Anuais) agenda o resgate junto, nas mesmas datas; em cartão, o resgate entra no vencimento da fatura.',
     obrigatorio: false,
+  },
+  'agendamento.resgatarDe': {
+    titulo: 'Resgatar de',
+    paraQueServe: 'De qual função de reserva da conta do grupo sai o dinheiro desta despesa.',
+    relacaoComTela: 'Ao salvar, o Finup agenda também o resgate (transferência da conta do grupo para a conta da despesa) com a mesma data e o mesmo valor de cada ocorrência. Ele aparece no Fluxo de Caixa e na reserva como previsto e é efetivado junto com a despesa; pular, mudar data ou valor, excluir ou estornar a despesa faz o mesmo no resgate.',
+    obrigatorio: true,
+    atencao: 'Com uma opção só, ela vem escolhida. "+ Nova função" cria a função nessa conta ali mesmo. Se já houver uma provisão aberta da mesma função no mesmo mês, efetive a provisão para não contar duas vezes.',
   },
   'agendamento.funcaoReserva': {
     titulo: 'Função de reserva',
@@ -238,7 +245,7 @@ export const formularios = {
       'agendamento.transactionType', 'agendamento.description', 'agendamento.account', 'agendamento.toAccount', 'agendamento.amount',
       'agendamento.category', 'agendamento.payee', 'agendamento.frequency', 'agendamento.startDate', 'agendamento.occurrence',
       'agendamento.installments', 'agendamento.parcelasPorOcorrencia', 'agendamento.remindDaysBefore', 'agendamento.autoRegister',
-      'agendamento.sincronizarAgenda', 'agendamento.gerencial',
+      'agendamento.sincronizarAgenda', 'agendamento.gerencial', 'agendamento.resgatarDe',
     ],
     resumoAoSalvar: 'As ocorrências entram no Fluxo Futuro e nos avisos de vencimento. Nada é lançado na conta até você registrar (ou até a data, se "Registrar automático" estiver ligado).',
   },

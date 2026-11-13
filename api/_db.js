@@ -244,7 +244,7 @@ export const COLUNAS_OPCIONAIS = {
   contas: ['spread_cambio', 'iof_linha_separada'],
   configuracoes: ['iof_compra_internacional', 'reserva_perguntar_virada', 'reserva_dias_caixa', 'ia_sugestoes_importacao'],
   agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato', 'efetivacoes', 'parcelas_por_ocorrencia',
-    'categoria_origem_id', 'categoria_destino_id'],
+    'categoria_origem_id', 'categoria_destino_id', 'agendamento_vinculado_id'],
   envelopes: ['tipo_orcamento', 'valor_dia', 'dias_semana', 'descontar_feriados'],
 }
 // Coluna opcional ausente só sai do upsert quando o valor dela é NEUTRO (o mesmo que o banco sem a
@@ -298,6 +298,7 @@ export async function recursosDoBanco(q) {
   const enc = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'contrato_itens' AND column_name = 'na_parcela'")
   const efet = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'agendamentos' AND column_name = 'efetivacoes'")
   const vir = await q("SELECT to_regclass('reserve_viradas') IS NOT NULL AS tem")
+  const vinc = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'agendamentos' AND column_name = 'agendamento_vinculado_id'")
   // Contrato sem a tabela (módulo nunca instalado) não tem o que recusar: true.
   // Repasse = as migrações 2026-11-07b cadastro, 07c composição e saldo, 07d benfeitoria e reajuste,
   // 07e rendimentos e 07f conferência do extrato: vão juntas.
@@ -312,7 +313,7 @@ export async function recursosDoBanco(q) {
       WHERE table_schema = current_schema() AND table_name = 'contrato_competencias' AND column_name = 'conferencia')) AS tem`)
   return {
     envelopeDiario, creditoPrevisto, feriados: !!fer[0]?.tem, encargosContrato: enc.length > 0, efetivacoesProvisao: efet.length > 0,
-    viradaAssistida: !!vir[0]?.tem, contratoRepasse: !!rep[0]?.tem,
+    viradaAssistida: !!vir[0]?.tem, contratoRepasse: !!rep[0]?.tem, resgateVinculado: vinc.length > 0,
   }
 }
 

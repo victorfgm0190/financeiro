@@ -49,6 +49,11 @@ import { baixaNoPeriodo } from '../../lib/conflitoPeriodo'
 import { perguntaFluxoPrincipal, considerarFluxoParaGravar } from '../../lib/fluxoPrincipal'
 import InputMoeda from '../shared/InputMoeda'
 import { useTrabalhoEmAndamento, useAlteradoDesdeAbertura } from '../../hooks/useTrabalhoEmAndamento'
+import Modal from '../shared/Modal'
+import FuncaoReservaForm from '../Reservas/FuncaoReservaForm'
+import ProvisaoForm from './ProvisaoForm'
+import { grupoComResgate, opcoesResgatarDe, rotuloOrigem, resumoResgates, provisoesNoMesmoMes } from '../../lib/resgateVinculado'
+import { faltaRecurso } from '../../lib/recursosBanco'
 import {
   ehParcelado, ehUnicaParcelada, frequenciaExibida, normalizarUnica, permiteParcelamento, erroLimiteParcelas,
   textoDivisao, parcelaDaData, valorBaseDaChave, planoParcelamento, temConsumo, situacaoDaOcorrencia,
@@ -56,6 +61,8 @@ import {
 } from '../../lib/parcelasOcorrencia'
 
 const datasFeitas = (s) => new Set([...(s.registered || []), ...(s.skipped || [])])
+const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+const mesLegivel = (ym) => `${MESES_CURTOS[Number(String(ym).slice(5, 7)) - 1]}/${String(ym).slice(0, 4)}`
 
 const FREQUENCIES = [
   { value: 'once', label: 'Única' },
@@ -105,7 +112,7 @@ function Toggle({ value, onChange }) {
 
 // Validação do Salvar — FONTE ÚNICA do handleSubmit e do Preenchimento Guiado ("Obrigatório" e o
 // bloqueio do Próximo). → [{ id (do help de campo), msg }], na ordem em que a tela barra.
-export function errosDoAgendamento(form, { tipoDocObrigatorio = false, precisaCategoriaReserva = false } = {}) {
+export function errosDoAgendamento(form, { tipoDocObrigatorio = false, precisaCategoriaReserva = false, exigeResgatarDe = false } = {}) {
   const e = []
   const add = (id, msg) => e.push({ id, msg })
   if (!form.description) add('agendamento.description', 'Preencha a descrição.')
@@ -114,6 +121,7 @@ export function errosDoAgendamento(form, { tipoDocObrigatorio = false, precisaCa
   if (form.transactionType === 'transfer' && !form.toAccountId) add('agendamento.toAccount', 'Escolha a conta de destino.')
   if (form.transactionType === 'transfer' && precisaCategoriaReserva && !form.reservaExpenseCategoryId) add('agendamento.categoriaReserva', 'Escolha a categoria.')
   if (tipoDocObrigatorio && !form.tipoDocumentoId) add('agendamento.tipoDocumento', 'Selecione o tipo de documento.')
+  if (exigeResgatarDe && !form.reservaFuncaoId) add('agendamento.resgatarDe', 'Escolha de onde sai o resgate (Resgatar de).')
   if (!form.frequency) add('agendamento.frequency', 'Escolha a frequência.')
   if (!form.startDate) add('agendamento.startDate', 'Informe a data de início.')
   if (form.frequency && form.frequency !== 'once' && form.occurrenceType === 'installment' && Number(form.installments) < 1) add('agendamento.occurrence', 'Informe o número de ocorrências.')
@@ -124,7 +132,7 @@ const CHAVE_DO_HELP = {
   'agendamento.description': 'description', 'agendamento.account': 'accountId', 'agendamento.amount': 'amount',
   'agendamento.toAccount': 'toAccountId', 'agendamento.categoriaReserva': 'reservaExpenseCategoryId',
   'agendamento.tipoDocumento': 'tipoDocumentoId', 'agendamento.frequency': 'frequency', 'agendamento.startDate': 'startDate',
-  'agendamento.occurrence': 'installments',
+  'agendamento.occurrence': 'installments', 'agendamento.resgatarDe': 'reservaFuncaoId',
 }
 
 function buildCatOpts(categories, type) {
@@ -136,13 +144,16 @@ function buildCatOpts(categories, type) {
 
 // Prévia do Assistente IA: `destaques` (chaves do form) e `onSalvo(form, id)` ao criar — mesma gravação.
 export default function ScheduleForm({ initial, onClose, onAviso, destaques = null, onSalvo = null }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId, registrarEventoContrato, settings, profiles } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId, registrarEventoContrato, settings, profiles, garantirResgateVinculado, addReserveFunction, recursosBanco } = useApp()
   // Controle gerencial do ambiente: desligado, o bloco some, agendamento novo não ganha grupo e a
   // edição mantém o gravado; com grupo gerencial, valor, data e conta ficam travados.
   const gerencialLigado = controleGerencialAtivo(settings)
   const trava = travaGerencial(initial, { ativo: gerencialLigado, gerencialGroups })
   // Nível de acesso: criar = incluir; salvar edição = editar (sem permissão: só leitura).
-  const podeGravarForm = pode('agendamentos', initial?.id ? 'editar' : 'incluir')
+  // Resgate ligado a uma despesa (src/lib/resgateVinculado.js): acompanha a despesa e não se edita à mão.
+  const ehResgateLigado = !!initial?.agendamentoVinculadoId
+  const despesaDoResgate = ehResgateLigado ? (schedules || []).find(s => s.id === initial.agendamentoVinculadoId) || null : null
+  const podeGravarForm = pode('agendamentos', initial?.id ? 'editar' : 'incluir') && !ehResgateLigado
 
   // Detalhamento por função do resgate (schedule_reserva_funcoes) do agendamento em edição.
   // Quando presente, exibimos a árvore (somente leitura) e ocultamos o select único.
@@ -397,6 +408,21 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   const reservaGroupAccount = showFuncaoReserva && schGerGrupo?.defaultAccountId
     ? accounts.find(a => a.id === schGerGrupo.defaultAccountId)
     : null
+
+  // "Resgatar de" — despesa em CONTA (não cartão) com grupo que gera resgate: de qual função da conta
+  // do grupo sai o resgate agendado junto (src/lib/resgateVinculado.js). Uma opção só → ela.
+  const resgateInfo = gerencialLigado && !ehResgateLigado && form.transactionType === 'expense' && selectedAccount && !isCredit
+    ? grupoComResgate(form.grupoGerencial, { gerencialGroups, accounts })
+    : null
+  const opcoesResgate = resgateInfo ? opcoesResgatarDe(resgateInfo.conta.id, reserveFunctions) : []
+  const funcaoResgate = !resgateInfo ? null
+    : opcoesResgate.length === 1 ? opcoesResgate[0].id
+      : (opcoesResgate.some(f => f.id === form.reservaFuncaoId) ? form.reservaFuncaoId : '')
+  const semRecursoResgate = faltaRecurso(recursosBanco, 'resgateVinculado')
+  const resgateJaLigado = initial?.id ? (schedules || []).find(s => s.agendamentoVinculadoId === initial.id) || null : null
+  const podeNovaFuncao = pode('reservas', 'incluir')
+  const [novaFuncaoAberta, setNovaFuncaoAberta] = useState(false)
+  const [provisaoAberta, setProvisaoAberta] = useState(null)
 
   // Fatura a que a Data de Vencimento Atual pertence (só despesa em cartão de crédito).
   // Recalcula automaticamente quando muda a conta (closingDay) ou a data.
@@ -748,7 +774,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     return true
   }
 
-  const regrasValidacao = { tipoDocObrigatorio, precisaCategoriaReserva: !!schNeedsReservaCategorySelect }
+  const regrasValidacao = { tipoDocObrigatorio, precisaCategoriaReserva: !!schNeedsReservaCategorySelect, exigeResgatarDe: !!resgateInfo && opcoesResgate.length > 1 }
   // Preenchimento Guiado: a mesma validação do Salvar.
   const validacaoGuia = {
     erros: () => errosDoAgendamento(form, regrasValidacao),
@@ -795,6 +821,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       ...(gerencialLigado ? {} : { grupoGerencial: grupoComChaveDesligada(initial) }),
       remindDaysBefore: Number(form.remindDaysBefore) || 0,
       parcelasPorOcorrencia: nForm,
+      // "Resgatar de": a função escolhida (uma opção só → ela; conta sem funções → nenhuma).
+      ...(resgateInfo ? { reservaFuncaoId: funcaoResgate || null } : {}),
     }
     // Série parcelada com baixa não muda de frequência (as baixas estão presas às datas atuais), e a
     // Única continua sendo Anual + 1 ocorrência no banco.
@@ -876,6 +904,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       salvandoRef.current = true
       const ok = await salvarEdicao(data, mudancas, ctx, decisao)
       if (!ok) { salvandoRef.current = false; return }
+      // Agendamento que passou a gerar resgate (ou antigo sem ele): resgate só das pendentes.
+      if (resgateInfo && !semRecursoResgate) garantirResgateVinculado(initial.id)
       // Parcela de contrato editada à mão: evento na linha do tempo do contrato (antes/depois).
       if (ehParcelaContrato && mudancas.length) {
         registrarEventoContrato?.(initial.contratoId, {
@@ -888,6 +918,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       }
     } else {
       schedId = addSchedule(data)
+      if (resgateInfo && !semRecursoResgate) garantirResgateVinculado(schedId)
       onSalvo?.(form, schedId)
     }
     // Rateio da SÉRIE (apenas receita/despesa): agendamento novo, ou editado com escopo além de "Só esta".
@@ -990,6 +1021,15 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
               <button type="button" className="btn-secondary text-xs py-1.5" onClick={recarregarDeFora}>Recarregar com os dados novos</button>
               <button type="button" className="btn-ghost text-xs py-1.5" onClick={manterMinhaEdicao}>Manter a minha edição</button>
             </div>
+          </div>
+        )}
+        {ehResgateLigado && (
+          <div data-testid="aviso-resgate-ligado" className="max-sm:-order-1 sm:col-span-2 flex items-start gap-2 text-xs text-texto-2 bg-reserva/10 border border-reserva/30 rounded-lg px-3 py-2">
+            <Info size={13} className="mt-0.5 shrink-0 text-reserva" />
+            <span>
+              Este resgate acompanha o agendamento "{despesaDoResgate?.description || 'da despesa'}": datas, valores e pulos vêm dele,
+              e ele é efetivado junto com a despesa. Para mudar, edite o agendamento da despesa.
+            </span>
           </div>
         )}
         {!mudouFora && atualizadoFora && (
@@ -1512,10 +1552,78 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
                 </p>
               )
               const contaR = accounts.find(a => a.id === g.defaultAccountId)
-              return (
+              // Conta (não cartão) com resgate: o bloco "Resgatar de" abaixo explica.
+              if (resgateInfo) return null
+              if (!contaR) return (
+                <p className="text-xs text-aviso leading-snug">Este grupo não tem conta padrão: configure-a no controle gerencial para o Finup agendar o resgate.</p>
+              )
+              return isCredit ? (
                 <p className="text-xs text-despesa leading-snug">
-                  Ao efetivar, resgatará automaticamente{contaR ? ` de "${contaR.name}"` : ''} para a conta principal.
+                  No vencimento de cada fatura, o Finup agenda o resgate de "{contaR.apelido || contaR.name}" para a conta principal.
                 </p>
+              ) : null
+            })()}
+
+            {/* "Resgatar de" — despesa em conta com grupo que gera resgate: o resgate é agendado junto. */}
+            {resgateInfo && (() => {
+              const origem = rotuloOrigem(resgateInfo.conta, funcaoResgate, reserveFunctions)
+              const destino = selectedAccount?.apelido || selectedAccount?.name || 'a conta'
+              const { continua, n } = resumoResgates(scheduleParcela)
+              const valor = fmt(Number(form.amount) || 0)
+              const provisoes = funcaoResgate ? provisoesNoMesmoMes(scheduleParcela, funcaoResgate, schedules) : []
+              return (
+                <div data-help-id="agendamento.resgatarDe" className="space-y-1.5">
+                  {opcoesResgate.length > 0 ? (
+                    <>
+                      <label htmlFor="agendamento-resgatar-de" className="label text-xs uppercase tracking-wide text-reserva" style={{ marginBottom: 0 }}>
+                        Resgatar de *<HelpCampo campo="agendamento.resgatarDe" />
+                      </label>
+                      <select
+                        id="agendamento-resgatar-de"
+                        data-testid="agendamento-resgatar-de"
+                        className="input"
+                        value={funcaoResgate || ''}
+                        disabled={opcoesResgate.length === 1 && !podeNovaFuncao}
+                        onChange={e => {
+                          if (e.target.value === '__nova__') { setNovaFuncaoAberta(true); return }
+                          set('reservaFuncaoId', e.target.value)
+                        }}
+                      >
+                        {opcoesResgate.length > 1 && <option value="">Escolha a função…</option>}
+                        {opcoesResgate.map(f => (
+                          <option key={f.id} value={f.id}>{resgateInfo.conta.apelido || resgateInfo.conta.name} › {f.name}</option>
+                        ))}
+                        {podeNovaFuncao && <option value="__nova__">+ Nova função</option>}
+                      </select>
+                    </>
+                  ) : (
+                    <p className="text-xs text-texto-2">
+                      Resgatar de: <strong className="text-texto-1">{resgateInfo.conta.apelido || resgateInfo.conta.name}</strong>
+                      {podeNovaFuncao && (
+                        <button type="button" className="ml-2 text-primary-fg hover:underline" onClick={() => setNovaFuncaoAberta(true)}>+ Nova função</button>
+                      )}
+                    </p>
+                  )}
+                  {semRecursoResgate ? (
+                    <p className="text-xs text-aviso leading-snug">O banco deste ambiente ainda não tem a atualização do resgate agendado: nenhum resgate será criado. Avise o suporte.</p>
+                  ) : resgateJaLigado ? (
+                    <p data-testid="agendamento-frase-resgate" className="text-xs text-reserva leading-snug">
+                      Os resgates de {origem} para {destino} acompanham este agendamento, nas mesmas datas. Mudanças valem para os ainda não efetivados.
+                    </p>
+                  ) : (opcoesResgate.length <= 1 || funcaoResgate) && (continua || n > 0) ? (
+                    <p data-testid="agendamento-frase-resgate" className="text-xs text-reserva leading-snug">
+                      {continua
+                        ? `Ao salvar, o Finup agenda também um resgate de ${valor} de ${origem} para ${destino} em cada ocorrência, nas mesmas datas.`
+                        : `Ao salvar, o Finup agenda também ${n} ${n === 1 ? 'resgate' : 'resgates'} de ${valor} de ${origem} para ${destino}, nas mesmas datas.`}
+                    </p>
+                  ) : null}
+                  {provisoes.map(({ provisao, mes }) => (
+                    <p key={provisao.id} data-testid="aviso-provisao-mesma-funcao" className="text-xs text-aviso bg-aviso/10 border border-aviso/30 rounded-lg px-2.5 py-1.5 leading-snug">
+                      Já existe a provisão "{provisao.description}" ({fmt(Number(provisao.amount) || 0)}) desta função em {mesLegivel(mes)}. Se for a mesma despesa, efetive a provisão para não contar duas vezes.{' '}
+                      <button type="button" className="underline font-medium" onClick={() => setProvisaoAberta(provisao)}>abrir provisão</button>
+                    </p>
+                  ))}
+                </div>
               )
             })()}
 
@@ -1616,9 +1724,29 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           <button type="button" className="btn-secondary flex-1" onClick={() => { if (podeDescartar()) onClose() }}>Cancelar</button>
           {podeGravarForm
             ? <button type="submit" disabled={!!mudouFora} data-guia="agendamento-form.salvar" data-help-salvar="agendamento" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
-            : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
+            : <p className="flex-1 text-xs text-texto-3 self-center text-center">{ehResgateLigado ? 'Somente leitura — altere pelo agendamento da despesa.' : 'Somente leitura — seu nível de acesso não permite gravar.'}</p>}
         </div>
       </form>
+
+      <Modal open={novaFuncaoAberta} onClose={() => setNovaFuncaoAberta(false)} title="Nova Função de Reserva">
+        {novaFuncaoAberta && resgateInfo && (
+          <FuncaoReservaForm
+            initial={null}
+            contaFixa={resgateInfo.conta.id}
+            accounts={accounts.filter(a => a.type !== 'credit')}
+            categories={categories}
+            onSubmit={dados => {
+              const id = addReserveFunction({ ...dados, accountId: resgateInfo.conta.id })
+              set('reservaFuncaoId', id)
+              setNovaFuncaoAberta(false)
+            }}
+            onClose={() => setNovaFuncaoAberta(false)}
+          />
+        )}
+      </Modal>
+      <Modal open={!!provisaoAberta} onClose={() => setProvisaoAberta(null)} title="Editar Provisão de Despesa">
+        {provisaoAberta && <ProvisaoForm initial={provisaoAberta} onClose={() => setProvisaoAberta(null)} />}
+      </Modal>
 
       {editingOcc && (
         <OcorrenciaEditModal

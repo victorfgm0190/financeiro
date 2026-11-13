@@ -29,6 +29,7 @@ import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao, resgateDaEfetivacao } from '../lib/herancaCampos'
 import { aplicarEfetivacao, desfazerEfetivacao, situacaoDesfazer, novoIdEfetivacao } from '../lib/efetivacaoProvisao'
 import { faltaRecurso } from '../lib/recursosBanco'
+import { sincronizarResgatesVinculados, criarResgateSeFaltar } from '../lib/resgateVinculado'
 import { comCamposDaOcorrencia, ESCOPO, agendamentoDoMotor } from '../lib/camposSerie'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { casaAgendamento } from '../lib/agendamentoManda'
@@ -2983,6 +2984,28 @@ export function AppProvider({ children }) {
     // Rateio do agendamento (lancamento_rateios guarda também o id do agendamento) não fica órfão.
     if (rateiosByLancamento.get(id)?.length) deleteRateiosFor(id)
   }, [update, reconciliarPorAgendamento, rateiosByLancamento, deleteRateiosFor])
+
+  // Resgate ligado à despesa de conta com classificação gerencial que gera resgate
+  // (src/lib/resgateVinculado.js): depois de QUALQUER mudança de agendamentos/lançamentos (pagar,
+  // pular, estornar, editar, excluir, registro automático), o resgate acompanha a despesa. Pura e
+  // idempotente: sem nada a fazer devolve o mesmo estado (o React descarta a atualização).
+  useEffect(() => {
+    if (!initialized) return
+    // Derivado do próprio estado e idempotente (sem mudança, o React descarta): não entra em cascata.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setData(prev => sincronizarResgatesVinculados(prev, {
+      sombras: (tx, accounts) => buildReservaAutoTxs(tx, accounts, tx.id, prev.reserveFunctions),
+      efeitoTransferencia: applyTransferEffect,
+    }))
+  }, [initialized, data.schedules, data.transactions])
+
+  // Ao salvar um agendamento de despesa: cria o resgate ligado se ele gera resgate e ainda não tem
+  // (agendamento antigo editado ganha o resgate só das ocorrências pendentes). Banco sem a coluna
+  // nova → não cria (o sync recusaria).
+  const garantirResgateVinculado = useCallback((despesaId) => {
+    if (!despesaId || faltaRecurso(recursosBanco, 'resgateVinculado')) return
+    update(d => criarResgateSeFaltar(d, despesaId))
+  }, [update, recursosBanco])
 
   // Módulo de Contratos (src/hooks/useContratos.js): ficha via api/contrato*.js, parcelas = agendamentos.
   const contratosCtx = useContratos({
@@ -6350,6 +6373,7 @@ export function AppProvider({ children }) {
       addSchedule, updateSchedule, updateSchedulesPayee, salvarFavorecidoDoAgendamento,
       mergeScheduleFromDb,
       deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,
+      garantirResgateVinculado,
       efetivarProvisao, getProximaProvisaoOccurrence, desfazerEfetivacaoProvisao, situacaoDesfazerEfetivacao,
       registerScheduleOccurrence, skipScheduleOccurrence, desfazerPuloOcorrencia,
       addBudget, updateBudget, deleteBudget,

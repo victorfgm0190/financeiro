@@ -769,6 +769,8 @@ export const scheduleToRow = (s) => ({
   // Provisão: efetivações com vínculo (src/lib/efetivacaoProvisao.js) — base do "Desfazer efetivação".
   // JSONB; [] é neutro (ambiente sem a coluna não recusa o sync — COLUNAS_OPCIONAIS).
   efetivacoes: Array.isArray(s.efetivacoes) ? s.efetivacoes : [],
+  // Resgate ligado ao agendamento da despesa (src/lib/resgateVinculado.js). NULL = comum.
+  agendamento_vinculado_id: s.agendamentoVinculadoId || null,
 })
 
 export const rowToSchedule = (r) => ({
@@ -821,6 +823,7 @@ export const rowToSchedule = (r) => ({
   composicao: r.composicao || null,
   considerarFluxoPrincipal: typeof r.considerar_fluxo_principal === 'boolean' ? r.considerar_fluxo_principal : null,
   efetivacoes: Array.isArray(r.efetivacoes) ? r.efetivacoes : [],
+  agendamentoVinculadoId: r.agendamento_vinculado_id || null,
   // Parcela de financiamento: desdobramento principal/juros e o elo com financing_installments.
   // Deliberadamente FORA de scheduleToRow (mesma regra do bemId em rowToTransaction): quem
   // escreve estas colunas é api/financiamento/*, e incluí-las no mapper de escrita faria cada
