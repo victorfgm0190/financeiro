@@ -12,6 +12,7 @@ import { excluirCliente, situacaoExclusaoDoCliente } from './_excluirCliente.js'
 import { comAmbiente } from './_ambiente.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 import { limitesDoAmbiente, validarLimites } from '../src/lib/assistente/limiteIa.js'
+import { RECURSOS_CONTRATADOS, recursoLiberado, comRecurso } from '../src/lib/recursosCliente.js'
 
 // Limites do Assistente IA do ambiente do cliente (central). Sem as colunas (migração
 // 2026-10-30_ambientes_ia_limite pendente) → o padrão, e a edição avisa.
@@ -64,6 +65,21 @@ const AMBIENTE_NA_ACAO = { suspender: 'suspenso', cancelar: 'cancelado', reativa
 async function ambienteDoClienteId(id) {
   const [amb] = await query('SELECT id, sigla, status FROM ambientes WHERE cliente_id = $1', [id])
   return amb || null
+}
+
+// Recurso contratado (ambientes.modulos) de UM ambiente: liga/desliga e registra quem e quando — no
+// histórico do ambiente (ambientes_historico, vale para o ambiente principal, que não tem cliente) e,
+// havendo cliente, também no histórico do cliente. Sem mudança, nada é gravado. → estado final.
+async function alterarRecursoDoAmbiente(q, ambienteId, recurso, ligado, autor) {
+  const [amb] = await q('SELECT id, cliente_id, modulos FROM ambientes WHERE id = $1 FOR UPDATE', [ambienteId])
+  if (!amb) return null
+  if (recursoLiberado(amb.modulos, recurso.id) !== ligado) {
+    const detalhe = `Recurso "${recurso.rotulo}": ${ligado ? 'liberado' : 'retirado'}`
+    await q('UPDATE ambientes SET modulos = $2::jsonb WHERE id = $1', [amb.id, JSON.stringify(comRecurso(amb.modulos, recurso.id, ligado))])
+    await q('INSERT INTO ambientes_historico (ambiente_id, evento, detalhe, autor) VALUES ($1, $2, $3, $4)', [amb.id, 'recurso', detalhe, autor])
+    if (amb.cliente_id) await registrarHistorico(q, amb.cliente_id, 'editado', detalhe, autor)
+  }
+  return { [recurso.id]: ligado }
 }
 
 const contarNovos = async (q) => (await q("SELECT count(*)::int AS n FROM plataforma_clientes WHERE status = 'pedido'"))[0]?.n || 0
@@ -148,6 +164,21 @@ async function handler(req, res) {
 
     if (req.method === 'GET') {
       if (acao === 'resumo') return res.json({ novos: await contarNovos(query) })
+      // Recursos contratados por AMBIENTE (todos, com ou sem cliente) + os últimos registros de quem/quando.
+      if (acao === 'recursos-ambientes') {
+        const ambs = await query(`SELECT a.id, a.sigla, a.nome, a.status, a.cliente_id, a.modulos, c.nome AS cliente_nome
+                                    FROM ambientes a LEFT JOIN plataforma_clientes c ON c.id = a.cliente_id ORDER BY a.sigla`)
+        const hist = await query(`SELECT ambiente_id, detalhe, autor, created_at FROM ambientes_historico
+                                    WHERE evento = 'recurso' ORDER BY created_at DESC LIMIT 200`)
+        return res.json({
+          recursos: RECURSOS_CONTRATADOS,
+          ambientes: ambs.map(a => ({
+            id: a.id, sigla: a.sigla, nome: a.nome, status: a.status, cliente: a.cliente_nome || null, semCliente: !a.cliente_id,
+            recursos: Object.fromEntries(RECURSOS_CONTRATADOS.map(r => [r.id, recursoLiberado(a.modulos, r.id)])),
+            historico: hist.filter(h => h.ambiente_id === a.id).slice(0, 5).map(h => ({ detalhe: h.detalhe, autor: h.autor, quando: h.created_at })),
+          })),
+        })
+      }
       if (acao === 'sigla') {
         return res.json(await checarSigla(query, queryParam(req, 'sigla'), queryParam(req, 'nome') || '', queryParam(req, 'id')))
       }
@@ -161,10 +192,14 @@ async function handler(req, res) {
         const cliente = await buscarCliente(query, id)
         if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' })
         const historico = await query('SELECT * FROM plataforma_historico WHERE cliente_id = $1 ORDER BY created_at DESC, id', [id])
-        const [ambiente] = await query('SELECT sigla, database_name, status FROM ambientes WHERE cliente_id = $1', [cliente.id])
+        const [ambiente] = await query('SELECT sigla, database_name, status, modulos FROM ambientes WHERE cliente_id = $1', [cliente.id])
+        // Recursos contratados (ambientes.modulos): só o estado de cada um, nunca o JSON inteiro.
+        const recursos = ambiente ? Object.fromEntries(RECURSOS_CONTRATADOS.map(r => [r.id, recursoLiberado(ambiente.modulos, r.id)])) : null
         return res.json({
-          cliente, historico, ambiente: ambiente || null, exclusao: await situacaoExclusaoDoCliente(query, cliente),
+          cliente, historico, ambiente: ambiente ? { sigla: ambiente.sigla, database_name: ambiente.database_name, status: ambiente.status } : null,
+          exclusao: await situacaoExclusaoDoCliente(query, cliente),
           iaLimites: ambiente ? await limitesIaDoAmbiente(cliente.id) : null,
+          recursos,
         })
       }
       const clientes = (await query('SELECT * FROM plataforma_clientes ORDER BY created_at DESC'))
@@ -211,6 +246,28 @@ async function handler(req, res) {
       }
       await withTransaction(q => registrarHistorico(q, String(body.id), 'editado', `Limite do assistente: ${v.diario}/dia, ${v.imagem} com imagem`, autor))
       return res.json({ ok: true, iaLimites: { diario: v.diario, imagem: v.imagem } })
+    }
+    // Recurso contratado (ambientes.modulos): liberar/retirar, com quem e quando no histórico do cliente.
+    if (req.method === 'POST' && acao === 'recurso') {
+      const recurso = RECURSOS_CONTRATADOS.find(r => r.id === body?.recurso)
+      if (!recurso) return res.status(400).json({ error: 'Recurso inválido' })
+      const ligado = body?.ligado === true
+      const id = String(body?.id || '')
+      const resultado = await withTransaction(async (q) => {
+        const [amb] = await q('SELECT id FROM ambientes WHERE cliente_id = $1', [id])
+        return amb ? alterarRecursoDoAmbiente(q, amb.id, recurso, ligado, autor) : null
+      })
+      if (!resultado) return res.status(404).json({ error: 'Cliente sem ambiente' })
+      _limparCacheAmbientes()
+      return res.json({ ok: true, recursos: resultado })
+    }
+    if (req.method === 'POST' && acao === 'recurso-ambiente') {
+      const recurso = RECURSOS_CONTRATADOS.find(r => r.id === body?.recurso)
+      if (!recurso) return res.status(400).json({ error: 'Recurso inválido' })
+      const resultado = await withTransaction(q => alterarRecursoDoAmbiente(q, String(body?.ambienteId || ''), recurso, body?.ligado === true, autor))
+      if (!resultado) return res.status(404).json({ error: 'Ambiente não encontrado' })
+      _limparCacheAmbientes()
+      return res.json({ ok: true, recursos: resultado })
     }
     if (req.method === 'POST' && acao) return res.status(400).json({ error: 'Ação inválida' })
     if (req.method === 'POST') return res.json({ ok: true, cliente: await withTransaction(q => criarClienteManual(q, body, autor)) })

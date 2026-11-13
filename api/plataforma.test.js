@@ -344,3 +344,51 @@ describe('e-mail de boas-vindas (Resend)', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 })
+
+describe('recurso contratado: Sugestões do Assistente na importação (Etapa 6c)', () => {
+  it('só o PLATAFORMA_ADMIN libera e retira; vai para ambientes.modulos e para o histórico (quem e quando)', async () => {
+    await pedir()
+    const id = (await q('SELECT id FROM plataforma_clientes LIMIT 1'))[0].id
+    await q("INSERT INTO ambientes (sigla, nome, database_name, status, cliente_id, modulos) VALUES ('mss', 'M', 'cliente_mss', 'ativo', $1, '{\"contratos\": true}'::jsonb)", [id])
+    const recurso = (ligado, auth) => clientes({ method: 'POST', url: '/api/clientes?acao=recurso', body: { id, recurso: 'ia_sugestoes_importacao', ligado }, ...(auth ? { auth } : {}) })
+
+    expect((await clientes({ url: `/api/clientes?id=${id}` })).body.recursos).toEqual({ ia_sugestoes_importacao: false })
+    expect((await recurso(true, token('outro'))).statusCode).toBe(403)
+    expect((await recurso(true)).body).toEqual({ ok: true, recursos: { ia_sugestoes_importacao: true } })
+    expect((await q("SELECT modulos FROM ambientes WHERE sigla = 'mss'"))[0].modulos).toEqual({ contratos: true, ia_sugestoes_importacao: true })
+    const det = await clientes({ url: `/api/clientes?id=${id}` })
+    expect(det.body.recursos).toEqual({ ia_sugestoes_importacao: true })
+    expect(det.body.ambiente).not.toHaveProperty('modulos')
+    expect(det.body.historico.find(h => /Sugestões do Assistente na importação.*liberado/.test(h.detalhe || ''))).toMatchObject({ autor: 'vmoreira' })
+
+    expect((await recurso(false)).body.recursos).toEqual({ ia_sugestoes_importacao: false })
+    expect((await q("SELECT modulos FROM ambientes WHERE sigla = 'mss'"))[0].modulos).toEqual({ contratos: true })
+    expect((await clientes({ url: `/api/clientes?id=${id}` })).body.historico.some(h => /retirado/.test(h.detalhe || ''))).toBe(true)
+    expect((await clientes({ method: 'POST', url: '/api/clientes?acao=recurso', body: { id, recurso: 'inventado', ligado: true } })).statusCode).toBe(400)
+  })
+})
+
+describe('recursos por AMBIENTE (inclusive o principal, sem cliente)', () => {
+  it('ambiente sem cliente_id: o admin libera e retira; quem e quando ficam em ambientes_historico', async () => {
+    const [amb] = await q("INSERT INTO ambientes (sigla, nome, database_name, status, modulos) VALUES ('principal', 'Principal', 'neondb_teste', 'ativo', '{\"contratos\": true}'::jsonb) RETURNING id")
+    const alternar = (ligado, auth) => clientes({ method: 'POST', url: '/api/clientes?acao=recurso-ambiente', body: { ambienteId: amb.id, recurso: 'ia_sugestoes_importacao', ligado }, ...(auth ? { auth } : {}) })
+    const lista = async () => (await clientes({ url: '/api/clientes?acao=recursos-ambientes' })).body.ambientes.find(a => a.sigla === 'principal')
+
+    expect(await lista()).toMatchObject({ semCliente: true, recursos: { ia_sugestoes_importacao: false }, historico: [] })
+    expect((await alternar(true, token('outro'))).statusCode).toBe(403)
+    expect((await alternar(true)).body).toEqual({ ok: true, recursos: { ia_sugestoes_importacao: true } })
+    expect((await q("SELECT modulos FROM ambientes WHERE sigla = 'principal'"))[0].modulos).toEqual({ contratos: true, ia_sugestoes_importacao: true })
+    expect((await lista()).historico[0]).toMatchObject({ detalhe: 'Recurso "Sugestões do Assistente na importação": liberado', autor: 'vmoreira' })
+
+    expect((await alternar(false)).body.recursos).toEqual({ ia_sugestoes_importacao: false })
+    const depois = await lista()
+    expect(depois.recursos.ia_sugestoes_importacao).toBe(false)
+    expect(depois.historico.map(h => h.detalhe)).toEqual([
+      'Recurso "Sugestões do Assistente na importação": retirado', 'Recurso "Sugestões do Assistente na importação": liberado'])
+    expect((await q("SELECT modulos FROM ambientes WHERE sigla = 'principal'"))[0].modulos).toEqual({ contratos: true })
+    // Sem mudança, nada é registrado.
+    await alternar(false)
+    expect((await q('SELECT count(*)::int AS n FROM ambientes_historico WHERE ambiente_id = $1', [amb.id]))[0].n).toBe(2)
+    expect((await clientes({ method: 'POST', url: '/api/clientes?acao=recurso-ambiente', body: { ambienteId: 'nao-existe', recurso: 'ia_sugestoes_importacao', ligado: true } })).statusCode).toBe(404)
+  })
+})

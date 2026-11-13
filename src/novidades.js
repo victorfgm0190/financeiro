@@ -16,6 +16,18 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.12-4',
+    data: '2026-11-12',
+    titulo: 'Importar Fatura: sugestões do Assistente',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'Recurso contratado à parte: quando liberado para você, aparece em Configurações › Geral › Assistente. Vem desligado; você decide se usa.',
+      'Ligado, o Assistente sugere a resposta dos cartões “É este?” e a categoria, o grupo e o favorecido das compras novas que as suas regras não classificaram.',
+      'Cada sugestão tem Aceitar e Ignorar; nos Novos há “Aceitar todas”. Nada é gravado sem o Confirmar, e o Finup só aprende a classificação das compras que você confirmar.',
+    ],
+  },
+  {
     id: '2026.11.12-3',
     data: '2026-11-12',
     titulo: 'Importar Fatura: conferência mais simples',

@@ -135,6 +135,12 @@ export const campos = {
     relacaoComTela: 'Clique, arraste ou cole. Arquivo não reconhecido abre o mapeamento de colunas. Nada é gravado antes de confirmar.',
     obrigatorio: true,
   },
+  'importarFatura.sugestoesIa': {
+    titulo: 'Sugestões do Assistente na importação',
+    paraQueServe: 'O Assistente sugere a resposta de “É este?” e a categoria, o grupo e o favorecido das compras novas que as suas regras não classificaram.',
+    relacaoComTela: 'Descrição, valor e data das compras vão ao serviço de IA (Anthropic) só para a sugestão; a descrição pode ter o nome da loja ou de uma pessoa. Conta, cartão, CPF/CNPJ e saldo não vão. Nada é gravado sem você confirmar.',
+    obrigatorio: false,
+  },
   'importarFatura.conciliar': {
     titulo: 'Conciliar fatura',
     paraQueServe: 'Compara o extrato do banco com os lançamentos que já estão na fatura escolhida.',

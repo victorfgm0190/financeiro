@@ -57,29 +57,40 @@ export function ResumoConferencia({ resumo, onIr, children }) {
   )
 }
 
-// ── 6. Lugar da sugestão do Assistente ─────────────────────────────────────────────────────────────
-// Etapa 6c: recebe uma sugestão JÁ validada (validarSugestao). Sem sugestão, não ocupa espaço.
-export function SugestaoAssistente({ sugestao, onUsar, compacto = false }) {
+// ── 6. Sugestão do Assistente (Etapa 6c) ───────────────────────────────────────────────────────────
+// Recebe uma sugestão JÁ validada (lib/sugestaoAssistente). Sem sugestão, não ocupa espaço. Aceitar
+// só preenche a tela; sem permissão de importar, não há Aceitar. Cabe em 380 px (quebra em linhas).
+const BOTAO_IA = 'min-h-[32px] px-2.5 rounded-md text-xs font-medium'
+export function SugestaoAssistente({ sugestao, texto, onAceitar, onIgnorar, podeAceitar = true, aceita = false, compacto = false }) {
   if (!sugestao) return null
-  if (compacto) {
-    return (
-      <span data-testid="sugestao-assistente" title={`Sugestão do Assistente (${ROTULO_CONFIANCA[sugestao.confianca]}): ${sugestao.motivo}`}
-        className="shrink-0 inline-flex items-center text-primary-fg"><Lightbulb size={13} /></span>
-    )
-  }
+  const detalhe = `${ROTULO_CONFIANCA[sugestao.confianca] || ''}: ${sugestao.motivo}`
   return (
-    <div data-testid="sugestao-assistente" className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-texto-1">
-      <Lightbulb size={14} className="text-primary-fg shrink-0 mt-0.5" />
-      <p className="min-w-0 break-words flex-1">
-        <span className="font-medium">Sugestão do Assistente</span> ({ROTULO_CONFIANCA[sugestao.confianca]}): {sugestao.motivo}
+    <div data-testid="sugestao-assistente" className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-primary/30 bg-primary/5 text-texto-1 ${compacto ? 'px-2 py-1 text-[11px]' : 'px-3 py-2 text-xs'}`}>
+      <Lightbulb size={compacto ? 12 : 14} className="text-primary-fg shrink-0" />
+      <p className="min-w-0 flex-1 basis-40 break-words">
+        <span className="font-medium">Sugestão do Assistente</span>
+        {texto && <>: <span className="font-medium">{texto}</span></>}
+        {compacto ? <span className="text-texto-2" title={detalhe}> · {sugestao.confianca === 'alta' ? 'confiança alta' : sugestao.confianca === 'media' ? 'confiança média' : 'confiança baixa'}</span> : <span className="text-texto-2"> ({detalhe})</span>}
       </p>
-      {onUsar && <button type="button" className="text-primary-fg hover:underline shrink-0" onClick={() => onUsar(sugestao)}>Usar sugestão</button>}
+      <span className="flex gap-1.5 shrink-0">
+        {aceita
+          ? <span className="text-primary-fg font-medium">Aceita</span>
+          : podeAceitar && onAceitar && <button type="button" data-testid="sugestao-aceitar" className="btn-primary !min-h-[32px] !py-1 !px-2.5 text-xs" onClick={() => onAceitar(sugestao)}>Aceitar</button>}
+        {onIgnorar && <button type="button" data-testid="sugestao-ignorar" className={`${BOTAO_IA} border border-borda-campo text-texto-2 hover:text-texto-1`} onClick={() => onIgnorar(sugestao)}>{aceita ? 'Desfazer' : 'Ignorar'}</button>}
+      </span>
     </div>
   )
 }
 
+// Aviso discreto: o Assistente não respondeu (fora do ar, demora, limite) — a tela segue sem ele.
+export function AvisoAssistente({ estado }) {
+  if (estado === 'carregando') return <p data-testid="aviso-assistente" className="text-[11px] text-texto-3">Assistente analisando as linhas…</p>
+  if (estado === 'indisponivel') return <p data-testid="aviso-assistente" className="text-[11px] text-texto-3">Assistente indisponível agora.</p>
+  return null
+}
+
 // ── 2. "É este?" ─────────────────────────────────────────────────────────────────────────────────
-export function CartoesDecisao({ perguntas, ctx, onSim, onNao, sugestoes = {} }) {
+export function CartoesDecisao({ perguntas, ctx, onSim, onNao, sugestoes = {}, podeAceitar = true, onIgnorarSugestao }) {
   const [idx, setIdx] = useState(0)
   const n = perguntas.length
   const i = n ? Math.min(idx, n - 1) : 0
@@ -154,8 +165,16 @@ export function CartoesDecisao({ perguntas, ctx, onSim, onNao, sugestoes = {} })
             })}
           </div>
         </div>
-        {/* Etapa 6c: sugestão do Assistente entre a comparação e os botões. */}
-        <SugestaoAssistente sugestao={sugestoes[p.id] || null} />
+        {/* Etapa 6c: sugestão do Assistente entre a comparação e os botões. Aceitar = a resposta sugerida. */}
+        {(() => {
+          const sug = sugestoes[p.id] || null
+          if (!sug) return null
+          const k = sug.decisao === 'mesmo' ? colunas.findIndex(col => col.c.id === sug.candidatoId) : -1
+          if (sug.decisao === 'mesmo' && k < 0) return null
+          const texto = sug.decisao === 'novo' ? 'é outra compra' : varios ? `é a opção ${k + 1}` : 'é este'
+          const aceitar = () => (sug.decisao === 'novo' ? onNao(p) : onSim(p, colunas[k].c))
+          return <SugestaoAssistente sugestao={sug} texto={texto} podeAceitar={podeAceitar} onAceitar={aceitar} onIgnorar={onIgnorarSugestao ? () => onIgnorarSugestao(p.id) : undefined} />
+        })()}
         <div className={`grid gap-2 ${varios ? '' : 'sm:grid-cols-2'}`}>
           {varios ? (
             <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${colunas.length}, minmax(0, 1fr))` }}>
@@ -187,7 +206,7 @@ function BotaoResposta({ testid, rotulo, frase, onClick, principal = false }) {
 }
 
 // ── 3. Blocos recolhidos ─────────────────────────────────────────────────────────────────────────
-export function BlocoConferencia({ id, titulo, qtd, sub, aberto, onAlternar, children, acoes, info = false }) {
+export function BlocoConferencia({ id, titulo, qtd, sub, aberto, onAlternar, children, acoes, acoesSempre = false, info = false }) {
   return (
     <section id={`bloco-${id}`} data-testid={`bloco-${id}`} className="card p-0 overflow-hidden">
       <div className="flex items-center gap-2 px-3 min-h-[44px]">
@@ -199,7 +218,7 @@ export function BlocoConferencia({ id, titulo, qtd, sub, aberto, onAlternar, chi
           {sub && <span className="text-xs text-texto-2">· {sub}</span>}
           {info && <span className="text-[11px] px-1.5 rounded bg-surface-2 border border-borda text-texto-2">só informação</span>}
         </button>
-        {aberto && acoes}
+        {(aberto || acoesSempre) && acoes}
       </div>
       {aberto && qtd > 0 && <div className="border-t border-borda">{children}</div>}
     </section>

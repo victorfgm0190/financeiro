@@ -1118,6 +1118,7 @@ export async function loadFromDb(defaultData) {
               rodapeFrase: d.cfg.rodape_frase ?? null,
               reservaPerguntarVirada: typeof d.cfg.reserva_perguntar_virada === 'boolean' ? d.cfg.reserva_perguntar_virada : null,
               reservaDiasCaixa: d.cfg.reserva_dias_caixa ?? null,
+              iaSugestoesImportacao: d.cfg.ia_sugestoes_importacao === true,
             }
           : defaultData.settings,
         costCenters: d.cfg?.cost_centers ?? defaultData.costCenters,
@@ -1496,6 +1497,8 @@ export const settingsToRow = (settings, costCenters) => ({
   reserva_perguntar_virada: typeof settings.reservaPerguntarVirada === 'boolean' ? settings.reservaPerguntarVirada : null,
   // Reservas › dias à frente do aviso de caixa. null = padrão (60).
   reserva_dias_caixa: Number.isInteger(settings.reservaDiasCaixa) && settings.reservaDiasCaixa > 0 ? settings.reservaDiasCaixa : null,
+  // Importar Fatura › sugestões do Assistente (só vale com o recurso liberado no central). null = desligada.
+  ia_sugestoes_importacao: settings.iaSugestoesImportacao === true ? true : null,
 })
 
 // Coluna de configuracoes → chave do estado do app (inverso do settingsToRow; cost_centers mora
@@ -1518,6 +1521,7 @@ export const CHAVE_APP_DA_CONFIGURACAO = {
   rodape_frase: 'rodapeFrase',
   reserva_perguntar_virada: 'reservaPerguntarVirada',
   reserva_dias_caixa: 'reservaDiasCaixa',
+  ia_sugestoes_importacao: 'iaSugestoesImportacao',
 }
 
 // Só as colunas alteradas, com camposAlterados (o sinal que a trava do servidor exige).

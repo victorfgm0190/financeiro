@@ -548,6 +548,7 @@ export const AJUDA_TELAS = {
     dicas: [
       'Os números do resumo, dos blocos e do botão Confirmar sempre batem entre si.',
       'No computador: Alt+S responde "Sim", Alt+O "Não, é outro", Alt+. e Alt+, vão para a próxima e a anterior.',
+      'Com as sugestões do Assistente ligadas (recurso contratado), cada dúvida e cada compra nova sem categoria pode trazer uma sugestão com Aceitar e Ignorar. Nada é gravado sem o Confirmar.',
       'Itens que precisam de decisão ficam de fora até você escolher o que fazer com eles.',
     ],
     errosComuns: [

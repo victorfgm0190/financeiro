@@ -9,6 +9,9 @@ export const CONFIG_ABAS = [
       { id: 'periodo', label: 'Período financeiro' },
       { id: 'identidade', label: 'Identidade do ambiente', novo: true },
       { id: 'estornos', label: 'Estorno e IOF de cartão' },
+      // Recursos contratados à parte (ex.: sugestões do Assistente na importação): a seção só aparece
+      // quando o administrador da plataforma liberou algum para este cliente.
+      { id: 'assistente', label: 'Assistente', recursoContratado: true },
       { id: 'perfis', label: 'Perfis' },
       { id: 'agenda-celular', label: 'Agenda no celular', novo: true },
       // Preferência do aparelho (todos os níveis): instalar o Finup no computador / navegador recomendado.

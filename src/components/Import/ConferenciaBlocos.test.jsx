@@ -11,7 +11,7 @@ vi.mock('../../hooks/useIsMobile', () => ({ useIsMobile: () => false }))
 vi.mock('../../lib/abrirTela', () => ({ navegarPara: vi.fn() }))
 const { AtalhosProvider } = await import('../../context/AtalhosContext.jsx')
 const {
-  ResumoConferencia, CartoesDecisao, BlocoConferencia, ListaJaNoFinup, ListaJaConciliados, ListaNaoEntram, ListaAguardando, SugestaoAssistente,
+  ResumoConferencia, CartoesDecisao, BlocoConferencia, ListaJaNoFinup, ListaJaConciliados, ListaNaoEntram, ListaAguardando, SugestaoAssistente, AvisoAssistente,
 } = await import('./ConferenciaBlocos.jsx')
 const { montarBlocos, resumoDosBlocos, perguntasDeDecisao } = await import('../../lib/blocosConferencia.js')
 
@@ -121,13 +121,71 @@ describe('2. Pedem sua decisão — "É este?"', () => {
     montar([DUP], { sugestoes: { dup: { linhaId: 'dup', decisao: 'mesmo', candidatoId: 't6', confianca: 'alta', motivo: 'Mesma loja e mesmo valor.' } } })
     const cartao = screen.getByTestId('decisao-cartao')
     const sug = within(cartao).getByTestId('sugestao-assistente')
-    expect(sug.textContent).toMatch(/Sugestão do Assistente \(confiança alta\): Mesma loja/)
+    expect(sug.textContent).toMatch(/Sugestão do Assistente: é este \(confiança alta: Mesma loja/)
     expect(sug.compareDocumentPosition(screen.getByTestId('decisao-sim')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(sug.compareDocumentPosition(screen.getByTestId('campo-origem')) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
   })
   it('sugestão compacta (lista de Novos) só com sugestão', () => {
     const { container } = render(<SugestaoAssistente compacto sugestao={null} />)
     expect(container.textContent).toBe('')
+  })
+})
+
+describe('6c. Sugestão do Assistente: Aceitar / Ignorar', () => {
+  const montarSug = (sug, props = {}) => {
+    const onSim = vi.fn(); const onNao = vi.fn(); const onIgnorar = vi.fn()
+    render(<AtalhosProvider><CartoesDecisao perguntas={perguntasDeDecisao([DUP, DOIS])} ctx={{ mostrarGrupo: false }} onSim={onSim} onNao={onNao}
+      sugestoes={sug} onIgnorarSugestao={onIgnorar} {...props} /></AtalhosProvider>)
+    return { onSim, onNao, onIgnorar }
+  }
+  it('Aceitar dá a MESMA resposta do botão sugerido; Ignorar some com a sugestão (sem responder)', () => {
+    const { onSim, onNao, onIgnorar } = montarSug({ dup: { linhaId: 'dup', decisao: 'mesmo', candidatoId: 't6', confianca: 'alta', motivo: 'Mesma série.' } })
+    fireEvent.click(screen.getByTestId('sugestao-aceitar'))
+    expect(onSim).toHaveBeenCalledWith(expect.objectContaining({ id: 'dup' }), expect.objectContaining({ id: 't6' }))
+    fireEvent.click(screen.getByTestId('sugestao-ignorar'))
+    expect(onIgnorar).toHaveBeenCalledWith('dup')
+    expect(onNao).not.toHaveBeenCalled()
+  })
+  it('"é outra compra" aceita = "Não, é outro"; com vários candidatos diz qual opção', () => {
+    const a = montarSug({ dup: { linhaId: 'dup', decisao: 'novo', candidatoId: null, confianca: 'media', motivo: 'Outra parcela.' } })
+    expect(screen.getByTestId('sugestao-assistente').textContent).toMatch(/é outra compra/)
+    fireEvent.click(screen.getByTestId('sugestao-aceitar'))
+    expect(a.onNao).toHaveBeenCalledWith(expect.objectContaining({ id: 'dup' }))
+    cleanup()
+    montarSug({ dois: { linhaId: 'dois', decisao: 'mesmo', candidatoId: 't5', confianca: 'alta', motivo: 'x' } })
+    fireEvent.click(screen.getByTestId('decisao-proxima'))
+    expect(screen.getByTestId('sugestao-assistente').textContent).toMatch(/é a opção 2/)
+  })
+  it('sem permissão de importar: a sugestão aparece sem o Aceitar', () => {
+    montarSug({ dup: { linhaId: 'dup', decisao: 'mesmo', candidatoId: 't6', confianca: 'alta', motivo: 'x' } }, { podeAceitar: false })
+    expect(screen.getByTestId('sugestao-assistente')).toBeTruthy()
+    expect(screen.queryByTestId('sugestao-aceitar')).toBeNull()
+  })
+  it('sugestão de candidato que não está no cartão não aparece', () => {
+    montarSug({ dup: { linhaId: 'dup', decisao: 'mesmo', candidatoId: 'inventado', confianca: 'alta', motivo: 'x' } })
+    expect(screen.queryByTestId('sugestao-assistente')).toBeNull()
+  })
+  it('na linha dos Novos: texto da sugestão, Aceitar e, depois de aceita, Desfazer', () => {
+    const onAceitar = vi.fn(); const onIgnorar = vi.fn()
+    const sug = { linhaId: 'n1', categoriaId: 'c', confianca: 'media', motivo: 'Assinatura mensal.' }
+    const { rerender } = render(<SugestaoAssistente compacto sugestao={sug} texto="📺 Assinaturas" onAceitar={onAceitar} onIgnorar={onIgnorar} />)
+    expect(screen.getByTestId('sugestao-assistente').textContent).toMatch(/Sugestão do Assistente: 📺 Assinaturas · confiança média/)
+    fireEvent.click(screen.getByTestId('sugestao-aceitar'))
+    expect(onAceitar).toHaveBeenCalledWith(sug)
+    rerender(<SugestaoAssistente compacto sugestao={sug} texto="📺 Assinaturas" aceita onAceitar={onAceitar} onIgnorar={onIgnorar} />)
+    expect(screen.queryByTestId('sugestao-aceitar')).toBeNull()
+    expect(screen.getByTestId('sugestao-ignorar').textContent).toBe('Desfazer')
+  })
+  it('aviso discreto quando o Assistente não responde', () => {
+    const { rerender } = render(<AvisoAssistente estado="indisponivel" />)
+    expect(screen.getByTestId('aviso-assistente').textContent).toBe('Assistente indisponível agora.')
+    rerender(<AvisoAssistente estado={null} />)
+    expect(screen.queryByTestId('aviso-assistente')).toBeNull()
+  })
+  it('bloco Novos: "Aceitar N sugestões" visível mesmo com o bloco fechado', () => {
+    render(<BlocoConferencia id="novos" titulo="Novos" qtd={3} aberto={false} onAlternar={() => {}} acoesSempre acoes={<button type="button">Aceitar 3 sugestões</button>}><p>tabela</p></BlocoConferencia>)
+    expect(screen.getByRole('button', { name: 'Aceitar 3 sugestões' })).toBeTruthy()
+    expect(screen.queryByText('tabela')).toBeNull()
   })
 })
 

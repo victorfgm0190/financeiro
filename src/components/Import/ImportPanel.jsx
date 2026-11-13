@@ -48,7 +48,9 @@ import { ConferenciaFatura, DataCelula, FaturaCelula, DescricaoCelula, Selo, Par
 import { aplicarCorrespondencias } from '../../lib/importacaoCorrespondencias'
 import { aplicarRecorrentesParecidos, respostaRecorrente, desfazerRespostaRecorrente, baixaDoRecorrenteConfirmado } from '../../lib/recorrenteParecido'
 import { montarBlocos, resumoDosBlocos, perguntasDeDecisao, blocoDaLinha, respostaDaLinha, ROTULO } from '../../lib/blocosConferencia'
-import { ResumoConferencia, CartoesDecisao, BlocoConferencia, ListaJaNoFinup, ListaJaConciliados, ListaNaoEntram, ListaAguardando, SugestaoAssistente } from './ConferenciaBlocos'
+import { ResumoConferencia, CartoesDecisao, BlocoConferencia, ListaJaNoFinup, ListaJaConciliados, ListaNaoEntram, ListaAguardando, SugestaoAssistente, AvisoAssistente } from './ConferenciaBlocos'
+import { itensParaIa, sugestoesValidas, aceitarSugestaoNovo, desfazerSugestaoNovo, regrasDaConfirmacao } from '../../lib/sugestaoAssistente'
+import { statusSugestoesImportacao, pedirSugestoesImportacao } from '../../lib/sugestoesImportacaoApi'
 import { hojeSP } from '../../lib/hoje'
 import { aplicarJaLancados, resumoJaLancados, favorecidoDaLinha, patchesJaLancado, termoDescricaoFatura } from '../../lib/casamentoFatura'
 import { listarPreLancamentos, listarApelidos, aprenderApelidos, concluirPreLancamento } from '../../lib/assistenteApi'
@@ -1177,7 +1179,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     reserveFunctions, settings, updateSettings, data,
     isFaturaFechada, syncing, atualizarCamposLancamentos,
     getProvisoesPendentes, getFaturasProvisaoGerencial, executarProvisoesGerenciais,
-    updateSchedule, registrarEdicao,
+    updateSchedule, registrarEdicao, pode,
   } = useApp()
   const favorecidoAliases = data?.favorecidoAliases || []
 
@@ -2460,6 +2462,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // idempotente. Necessário para faturas de CICLO PASSADO, que o motor (reconcileFaturaState)
     // ignora pela guarda faturaCicloNoPassado — sem isto os gerenciais não seriam materializados.
     gerencialTxIds.forEach(id => ensureGerencialState(id))
+    // Sugestões do Assistente aceitas: a regra do "Classificar Auto" é criada SÓ agora, para as linhas
+    // gravadas, com a categoria que ficou na linha (lib/sugestaoAssistente → regrasDaConfirmacao).
+    for (const r of regrasDaConfirmacao(toImport)) learnClassification(r.description, r.categoryId, r.payee, r.opcoes)
 
     // Resumo final: X inseridos · Y que já estavam no banco (já existe / colisão pulada) · Z atualizados.
     const resumo = { novos: toImport.length, existiam: contarJaExistiam(resolvedRows), atualizados: collisionsToApply.length, conciliados: toImport.length + conferidosNoBanco.length }
@@ -2714,9 +2719,64 @@ Importar mesmo assim no mês selecionado?`)) return
   const blocos = useMemo(() => montarBlocos(resolvedRows, projecao), [resolvedRows, projecao])
   const resumoBlocos = useMemo(() => resumoDosBlocos(blocos, projecao), [blocos, projecao])
   const perguntas = useMemo(() => perguntasDeDecisao(resolvedRows), [resolvedRows])
-  // Etapa 6c: sugestões do Assistente por linha ({ [linhaId]: sugestão validada } — lib/sugestaoAssistente).
-  // Nesta etapa ninguém preenche: o lugar existe no cartão "É este?" e ao lado da categoria dos Novos.
-  const [sugestoesIa] = useState(() => ({}))
+  // ── Etapa 6c: sugestões do Assistente (só com o recurso liberado no central e a opção do cliente
+  // ligada — api/ia-importacao.js confere de novo). UMA chamada por importação (arquivo + cartão), só
+  // com o que sobrou das regras e do histórico; nunca trava a tela.
+  const [iaStatus, setIaStatus] = useState({ liberado: false, ligado: false })
+  useEffect(() => { let vivo = true; statusSugestoesImportacao().then(st => { if (vivo) setIaStatus(st) }); return () => { vivo = false } }, [])
+  const [ia, setIa] = useState({ chave: null, estado: null, porLinha: {}, ignoradas: new Set() })
+  const iaPedida = useRef(null)
+  const podeAceitarIa = pode('importar', 'incluir') || pode('importar', 'editar')
+  const chaveIa = comAbas && filename ? `${selectedAccount}|${filename}` : null
+  useEffect(() => {
+    if (!chaveIa || !iaStatus.ligado || iaPedida.current === chaveIa) return
+    const timer = setTimeout(() => {
+      iaPedida.current = chaveIa
+      const itens = itensParaIa({ perguntas, novos: blocos.novos })
+      if (!itens.length) { setIa({ chave: chaveIa, estado: null, porLinha: {}, ignoradas: new Set() }); return }
+      setIa({ chave: chaveIa, estado: 'carregando', porLinha: {}, ignoradas: new Set() })
+      pedirSugestoesImportacao({ itens, perfilId: perfilCategorias || null, fatura: faturaMonthYear || null }).then(r => {
+        if (iaPedida.current !== chaveIa) return
+        if (r.indisponivel) {
+          // Sem liberação / opção desligada: nada a mostrar. Falha da IA ou limite: aviso discreto.
+          setIa(v => ({ ...v, estado: r.motivo === 'nao_liberado' || r.motivo === 'desligado' ? null : 'indisponivel' }))
+          return
+        }
+        const { porLinha, descartadas } = sugestoesValidas(r.sugestoes, {
+          perguntas, linhas: resolvedRows, categorias: categories, perfilId: perfilCategorias || null,
+          gruposIds: gerencialLigado ? gerencialGroups.map(g => g.id) : null, favorecidos: payees,
+        })
+        if (descartadas) console.info(`[sugestões do Assistente] ${descartadas} descartada(s) na validação da tela`)
+        setIa(v => ({ ...v, estado: 'ok', porLinha }))
+      })
+    }, 800)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveIa, iaStatus.ligado])
+  // Sugestões vigentes: da importação atual, não ignoradas.
+  const sugestoesIa = ia.chave === chaveIa ? Object.fromEntries(Object.entries(ia.porLinha).filter(([id]) => !ia.ignoradas.has(id))) : {}
+  const ignorarSugestaoIa = (linhaId) => {
+    const row = resolvedRows.find(r => r._id === linhaId)
+    if (row?._iaAceita) updateRow(linhaId, desfazerSugestaoNovo(row))
+    setIa(v => ({ ...v, ignoradas: new Set([...v.ignoradas, linhaId]) }))
+  }
+  // Aceitar nos Novos: só preenche a linha (grupo padrão da categoria quando o grupo não veio e a
+  // linha está no padrão). Nada é gravado nem aprendido até o Confirmar.
+  const aceitarSugestaoIa = (row, sug) => {
+    const patch = aceitarSugestaoNovo(row, sug)
+    if (!sug.grupoId && sug.categoriaId && (!row.grupoGerencial || row.grupoGerencial === defaultGrupoD)) {
+      const cat = categories.find(c => c.id === sug.categoriaId)
+      if (cat?.defaultGerencialGroup) patch.grupoGerencial = cat.defaultGerencialGroup
+    }
+    updateRow(row._id, patch)
+  }
+  const novosComSugestao = comAbas ? blocos.novos.filter(r => sugestoesIa[r._id] && !r._iaAceita) : []
+  const aceitarTodasIa = () => novosComSugestao.forEach(r => aceitarSugestaoIa(r, sugestoesIa[r._id]))
+  const textoSugestaoNovo = (s) => [
+    s.categoriaId && (() => { const c = categories.find(x => x.id === s.categoriaId); return c ? `${c.icon || ''} ${c.name}`.trim() : null })(),
+    s.grupoId && gerencialLigado && (() => { const g = gerencialGroups.find(x => x.id === s.grupoId); return g ? `grupo ${g.number} · ${g.name}` : null })(),
+    s.favorecido && `favorecido ${s.favorecido}`,
+  ].filter(Boolean).join(' · ')
   const ctxComparacao = { categorias: categories, grupos: gerencialGroups, mostrarGrupo: gerencialLigado, closingDay: importClosingDay, schedules }
   // Respostas do cartão "É este?" — os mesmos efeitos dos controles de antes.
   const responderSim = (p, cand) => {
@@ -2874,7 +2934,6 @@ Importar mesmo assim no mês selecionado?`)) return
         />
       )}
       {/* Etapa 6c: categoria sugerida pelo Assistente (só aparece com sugestão válida). */}
-      <SugestaoAssistente compacto sugestao={sugestoesIa[row._id]?.categoriaId ? sugestoesIa[row._id] : null} />
       {row._suggestedCategory && (!row._dbTx || row._collisionTx) && (
         <button
           type="button"
@@ -2895,6 +2954,16 @@ Importar mesmo assim no mês selecionado?`)) return
       )}
     </div>
   )
+  const celSugestaoNovo = (row) => {
+    const sug = comAbas ? sugestoesIa[row._id] : null
+    if (!sug || sug.decisao) return null
+    return (
+      <div className="mt-1">
+        <SugestaoAssistente compacto sugestao={sug} texto={textoSugestaoNovo(sug)} podeAceitar={podeAceitarIa} aceita={!!row._iaAceita}
+          onAceitar={() => aceitarSugestaoIa(row, sug)} onIgnorar={() => ignorarSugestaoIa(row._id)} />
+      </div>
+    )
+  }
   const celGrupo = (row) => (
     <div className="min-w-0">
       {/* Duplicata "certeza": o grupo gerencial REAL do lançamento salvo, somente leitura. */}
@@ -3076,7 +3145,7 @@ Importar mesmo assim no mês selecionado?`)) return
         <td className="px-1.5 py-1.5"><DataCelula row={row} onChange={ch => updateRow(row._id, ch)} /></td>
         <td className="px-1.5 py-1.5"><FaturaCelula row={row} referencia={faturaMonthYear} opcoes={monthOptionsCom(row.faturaMonthYear)} onChange={ch => updateRow(row._id, ch)} /></td>
         <td className="px-1.5 py-1.5">{celDescricao(row)}</td>
-        <td className="px-1.5 py-1.5">{celCategoria(row)}</td>
+        <td className="px-1.5 py-1.5">{celCategoria(row)}{celSugestaoNovo(row)}</td>
         {gerencialLigado && <td className="px-1.5 py-1.5">{celGrupo(row)}</td>}
         <td className="px-1.5 py-1.5 text-right">{celValor(row)}</td>
         <td className="px-2 py-1.5 sticky right-0 bg-inherit">{celStatus(row)}</td>
@@ -3100,6 +3169,7 @@ Importar mesmo assim no mês selecionado?`)) return
         <FaturaCelula row={row} referencia={faturaMonthYear} opcoes={monthOptionsCom(row.faturaMonthYear)} onChange={ch => updateRow(row._id, ch)} />
         {celCategoria(row)}
         {gerencialLigado && <div className="w-[8rem]">{celGrupo(row)}</div>}
+        {celSugestaoNovo(row) && <div className="basis-full">{celSugestaoNovo(row)}</div>}
         <div className="min-w-[10rem]">{celStatus(row)}</div>
       </div>
       {linhasAbertas.has(row._id) && <div className="mt-1.5 pl-6">{detalhesLinha(row)}</div>}
@@ -4382,13 +4452,22 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           {comAbas ? (
             <div className="space-y-2" data-guia="import.abas">
               {/* 2. Pedem sua decisão — aberto, um cartão por pergunta. */}
-              <div id="bloco-decisao">
-                <CartoesDecisao key={aberturaRevisao} perguntas={perguntas} ctx={ctxComparacao} onSim={responderSim} onNao={responderNao} sugestoes={sugestoesIa} />
+              <div id="bloco-decisao" className="space-y-1">
+                <AvisoAssistente estado={ia.chave === chaveIa ? ia.estado : null} />
+                <CartoesDecisao key={aberturaRevisao} perguntas={perguntas} ctx={ctxComparacao} onSim={responderSim} onNao={responderNao}
+                  sugestoes={sugestoesIa} podeAceitar={podeAceitarIa} onIgnorarSugestao={ignorarSugestaoIa} />
               </div>
 
               {/* 3. O resto, recolhido. */}
               <BlocoConferencia id="novos" titulo="Novos" qtd={blocos.novos.length} sub={`${fmt(resumoBlocos.novos.valor)} · serão importados`}
-                aberto={blocosAbertos.has('novos')} onAlternar={() => alternarBloco('novos')}>
+                aberto={blocosAbertos.has('novos')} onAlternar={() => alternarBloco('novos')} acoesSempre
+                acoes={podeAceitarIa && novosComSugestao.length > 0 && (
+                  <button type="button" data-testid="aceitar-todas-sugestoes" className="btn-secondary !py-1 text-xs shrink-0"
+                    title="Preenche as linhas com as sugestões do Assistente. Nada é gravado até o Confirmar; Desfazer na linha volta ao que estava."
+                    onClick={() => { aceitarTodasIa(); setBlocosAbertos(prev => new Set([...prev, 'novos'])) }}>
+                    Aceitar {novosComSugestao.length} {novosComSugestao.length === 1 ? 'sugestão' : 'sugestões'}
+                  </button>
+                )}>
                 {renderTabelaRevisao()}
               </BlocoConferencia>
               <BlocoConferencia id="jaNoFinup" titulo="Juntados agora (ficam conciliados)" qtd={blocos.jaNoFinup.length} sub="lançamentos do Finup que esta fatura confirma; nada novo é criado"

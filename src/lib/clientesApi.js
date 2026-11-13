@@ -44,6 +44,11 @@ export const tentativasSenha = (id) => chamar(`/api/clientes?${qs({ acao: 'tenta
 export const liberarSenha = (id) => chamar('/api/clientes?acao=liberar-senha', { method: 'POST', body: { id } })
 // Limite diário do Assistente IA por usuário (do ambiente do cliente).
 export const salvarLimitesIa = (id, diario, imagem) => chamar('/api/clientes?acao=limite-ia', { method: 'POST', body: { id, diario, imagem } })
+// Recurso contratado (src/lib/recursosCliente.js): liberar/retirar para o ambiente do cliente.
+export const salvarRecursoCliente = (id, recurso, ligado) => chamar('/api/clientes?acao=recurso', { method: 'POST', body: { id, recurso, ligado } })
+// Recursos por AMBIENTE (inclusive o principal, que não tem cliente).
+export const listarRecursosAmbientes = () => chamar('/api/clientes?acao=recursos-ambientes')
+export const salvarRecursoAmbiente = (ambienteId, recurso, ligado) => chamar('/api/clientes?acao=recurso-ambiente', { method: 'POST', body: { ambienteId, recurso, ligado } })
 // Exclusão definitiva (só cancelado ou nunca aprovado; `confirmacao` = a sigla exata).
 export const excluirClienteApi = (id, confirmacao) => chamar('/api/clientes?acao=excluir', { method: 'POST', body: { id, confirmacao } })
 export const reenviarConviteCliente = (id) => chamar('/api/clientes?acao=reenviar-convite', { method: 'POST', body: { id } })

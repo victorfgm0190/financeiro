@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { fmtDate } from '../shared/utils'
 import { Plus, RefreshCw, Check, X, Pause, Play, Ban, Copy, MessageCircle, Pencil, Mail, Loader2, Circle, AlertTriangle, ExternalLink, Unlock, Trash2, BarChart3 } from 'lucide-react'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
 import AnaliseCliente from './AnaliseCliente'
 import ConsumoIa from './ConsumoIa'
+import { RECURSOS_CONTRATADOS } from '../../lib/recursosCliente'
 import {
   listarClientes, detalheCliente, criarCliente, editarCliente, aprovarCliente, mudarStatusCliente, checarSiglaAdmin,
-  andamentoProvisionamento, reenviarConviteCliente, tentativasSenha, liberarSenha, excluirClienteApi, salvarLimitesIa,
+  andamentoProvisionamento, reenviarConviteCliente, tentativasSenha, liberarSenha, excluirClienteApi, salvarLimitesIa, salvarRecursoCliente,
+  listarRecursosAmbientes, salvarRecursoAmbiente,
 } from '../../lib/clientesApi'
 import {
   STATUS_CLIENTE, ROTULO_STATUS, DOMINIO_CLIENTES, formatarDocumento, linkWhatsApp, candidatasSigla, normalizarSigla,
@@ -222,6 +225,37 @@ function LimiteIa({ id, limites, onMudou, onToast }) {
   )
 }
 
+// Recursos contratados à parte (ambientes.modulos no central): só o administrador da plataforma liga
+// e desliga. Cada mudança vai para o histórico do cliente (quem e quando).
+function RecursosContratados({ id, recursos, onMudou, onToast }) {
+  const [salvando, setSalvando] = useState(null)
+  const alternar = async (recurso, ligado) => {
+    setSalvando(recurso)
+    try {
+      await salvarRecursoCliente(id, recurso, ligado)
+      onToast({ message: ligado ? 'Recurso liberado' : 'Recurso retirado' })
+      onMudou()
+    } catch (e) {
+      onToast({ message: `Falha ao salvar: ${e.message}`, variant: 'error' })
+    } finally {
+      setSalvando(null)
+    }
+  }
+  return (
+    <div className="border border-borda rounded-lg p-3 space-y-2" data-testid="recursos-contratados">
+      <h3 className="text-sm font-semibold text-texto-1">Recursos contratados</h3>
+      {RECURSOS_CONTRATADOS.map(r => (
+        <label key={r.id} className="flex items-center gap-2 text-sm text-texto-1 cursor-pointer">
+          <input type="checkbox" className="accent-primary w-4 h-4" checked={!!recursos?.[r.id]} disabled={salvando === r.id}
+            onChange={e => alternar(r.id, e.target.checked)} />
+          {r.rotulo}
+        </label>
+      ))}
+      <p className="text-[11px] text-texto-3">Liberado aqui, o cliente vê a opção em Configurações e decide se usa. Retirar desliga na hora.</p>
+    </div>
+  )
+}
+
 const COR_RESULTADO = { enviado: 'text-receita', bloqueado_ip: 'text-perigo', bloqueado_usuario: 'text-perigo', falha_envio: 'text-perigo' }
 
 // Quadro "Tentativas de senha" (pedidos de "Esqueci minha senha" da última hora neste ambiente).
@@ -428,6 +462,7 @@ function DetalheCliente({ id, onMudou, onProvisionar, onToast, onExcluido, onAna
       {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}
 
       {dados.ambiente && <TentativasSenha id={id} onMudou={carregar} onToast={onToast} />}
+      {dados.ambiente && dados.recursos && <RecursosContratados id={id} recursos={dados.recursos} onMudou={carregar} onToast={onToast} />}
       {dados.ambiente && dados.iaLimites && (
         <LimiteIa key={`${dados.iaLimites.diario}-${dados.iaLimites.imagem}`} id={id} limites={dados.iaLimites} onMudou={carregar} onToast={onToast} />
       )}
@@ -553,18 +588,70 @@ function ProvisionamentoModal({ id, onFechar, onMudou }) {
   )
 }
 
-// Abas: Clientes (o controle de sempre) e Consumo de IA (todos os ambientes; ConsumoIa.jsx).
+// Recursos contratados por AMBIENTE (todos, inclusive o principal, que não tem cliente): liberar /
+// retirar e os últimos registros de quem e quando (ambientes_historico).
+export function RecursosPorAmbiente({ carregar = listarRecursosAmbientes, salvar = salvarRecursoAmbiente }) {
+  const [dados, setDados] = useState(null)
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(null)
+  const recarregar = useCallback(() => carregar().then(d => { setDados(d); setErro('') }).catch(e => setErro(e.message)), [carregar])
+  useEffect(() => { recarregar() }, [recarregar])
+  const alternar = async (amb, recurso, ligado) => {
+    setSalvando(`${amb.id}|${recurso}`)
+    try { await salvar(amb.id, recurso, ligado); await recarregar() } catch (e) { setErro(e.message) } finally { setSalvando(null) }
+  }
+  if (erro) return <p className="text-xs text-perigo">{erro}</p>
+  if (!dados) return <p className="text-xs text-texto-3">Carregando…</p>
+  return (
+    <section className="space-y-2" data-testid="recursos-por-ambiente">
+      <p className="text-xs text-texto-3">Recursos cobrados à parte. Liberado aqui, o cliente vê a opção em Configurações e decide se usa; retirar desliga na hora.</p>
+      <div className="card !p-0 overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
+          <thead>
+            <tr className="text-xs text-texto-3 border-b border-borda text-left">
+              <th className="font-medium px-3 py-2">Ambiente</th>
+              {dados.recursos.map(r => <th key={r.id} className="font-medium px-3 py-2">{r.rotulo}</th>)}
+              <th className="font-medium px-3 py-2">Últimas mudanças</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dados.ambientes.map(a => (
+              <tr key={a.id} className="border-b border-borda/60 last:border-0 align-top">
+                <td className="px-3 py-2 text-texto-1">
+                  <span className="font-medium">{a.sigla}</span> <span className="text-texto-3">· {a.cliente || (a.semCliente ? 'ambiente principal / sem cliente' : a.nome)}</span>
+                </td>
+                {dados.recursos.map(r => (
+                  <td key={r.id} className="px-3 py-2">
+                    <input type="checkbox" className="accent-primary w-4 h-4" aria-label={`${r.rotulo} — ${a.sigla}`}
+                      checked={!!a.recursos[r.id]} disabled={salvando === `${a.id}|${r.id}`}
+                      onChange={e => alternar(a, r.id, e.target.checked)} />
+                  </td>
+                ))}
+                <td className="px-3 py-2 text-xs text-texto-2">
+                  {a.historico.length ? a.historico.map((h, i) => <div key={i}>{h.detalhe} · {h.autor || '—'} · {fmtDate(String(h.quando).slice(0, 10))}</div>) : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+// Abas: Clientes (o controle de sempre), Consumo de IA (todos os ambientes; ConsumoIa.jsx) e Recursos
+// por ambiente (recursos contratados, inclusive no ambiente principal).
 export default function ClientesPanel({ onMudou = () => {} }) {
   const [aba, setAba] = useState('clientes')
   return (
     <div className="space-y-4">
       <div className="flex gap-1 border-b border-borda" role="tablist" aria-label="Clientes Finup" data-guia="clientes.abas">
-        {[['clientes', 'Clientes'], ['consumo', 'Consumo de IA']].map(([v, r]) => (
+        {[['clientes', 'Clientes'], ['consumo', 'Consumo de IA'], ['recursos', 'Recursos por ambiente']].map(([v, r]) => (
           <button key={v} type="button" role="tab" aria-selected={aba === v} onClick={() => setAba(v)}
             className={`px-3 py-2 min-h-[40px] text-sm font-medium border-b-2 -mb-px ${aba === v ? 'border-primary text-primary-fg' : 'border-transparent text-texto-2 hover:text-texto-1'}`}>{r}</button>
         ))}
       </div>
-      {aba === 'clientes' ? <ControleDeClientes onMudou={onMudou} /> : <ConsumoIa />}
+      {aba === 'clientes' ? <ControleDeClientes onMudou={onMudou} /> : aba === 'consumo' ? <ConsumoIa /> : <RecursosPorAmbiente />}
     </div>
   )
 }

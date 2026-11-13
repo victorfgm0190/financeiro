@@ -7,6 +7,8 @@ import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from '../Layout/RodapeIdentidade'
 import VersaoAmbiente from '../Layout/VersaoAmbiente'
 import IdentidadeAmbiente from './IdentidadeAmbiente'
+import SugestoesAssistenteOpcao from './SugestoesAssistenteOpcao'
+import { statusSugestoesImportacao } from '../../lib/sugestoesImportacaoApi'
 import VarreduraRateio from './VarreduraRateio'
 import { noAmbientePrincipal } from '../../lib/api'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
@@ -576,12 +578,16 @@ export default function SettingsPanel() {
   // Abas por módulo (src/lib/permissoes.js): Usuários só admin; Geral/Dados/Zona de perigo =
   // Configurações do sistema; Cadastros/Regras = Cadastros (operador vê, não edita).
   const ehAdmin = pode('usuarios', 'ver')
+  // Seção "Assistente": só com recurso contratado liberado no central (conferido no servidor).
+  const [recursoIaLiberado, setRecursoIaLiberado] = useState(false)
+  useEffect(() => { let vivo = true; statusSugestoesImportacao().then(st => { if (vivo) setRecursoIaLiberado(st.liberado) }); return () => { vivo = false } }, [])
   // Seção `todos` (Dados › Dados deste aparelho) aparece mesmo sem acesso ao módulo da aba.
   const abas = CONFIG_ABAS
     .map(a => {
       const veAba = pode(MODULO_DA_ABA_CONFIG[a.id] || 'configuracoes', 'ver')
       // Importação histórica Dindin: só no ambiente principal ('vm').
-      return { ...a, secoes: a.secoes.filter(s => (veAba || s.todos) && !ocultas.has(s.id) && (s.id !== 'importacao' || noAmbientePrincipal())) }
+      return { ...a, secoes: a.secoes.filter(s => (veAba || s.todos) && !ocultas.has(s.id) && (s.id !== 'importacao' || noAmbientePrincipal())
+        && (!s.recursoContratado || recursoIaLiberado)) }
     })
     .filter(a => a.secoes.length > 0)
   const abaAtual = abas.find(a => a.id === rota.aba) || abas[0]
@@ -759,6 +765,15 @@ export default function SettingsPanel() {
       )}
 
       {secao === 'identidade' && <IdentidadeAmbiente somenteLeitura={somenteLeitura} />}
+
+      {/* Assistente: recursos contratados (só aparece com liberação do administrador da plataforma). */}
+      {secao === 'assistente' && (
+        <div className="card" data-help-form="assistente">
+          <h2 className="text-sm font-semibold text-texto-2 mb-1">Assistente</h2>
+          <p className="text-xs text-texto-3">Recursos do Assistente contratados para este ambiente.</p>
+          <SugestoesAssistenteOpcao somenteLeitura={somenteLeitura} />
+        </div>
+      )}
 
       {/* Estornos de Cartão */}
       {secao === 'estornos' && (

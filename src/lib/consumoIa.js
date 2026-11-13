@@ -11,7 +11,7 @@ export const ROTULO_FERRAMENTA = {
   registrar_lancamento: 'Lançamento', lote: 'Lote', criar_agendamento: 'Agendamento', baixar_agendamento: 'Baixa',
   consultar_saldo: 'Saldo', consultar_saldo_principal: 'Saldo principal', buscar_lancamentos: 'Busca',
   consultar_vencimentos: 'Vencimentos', consultar_fatura: 'Fatura', consultar_gastos_categoria: 'Gastos por categoria',
-  perguntar: 'Pergunta', abrir_tela: 'Abrir tela',
+  perguntar: 'Pergunta', abrir_tela: 'Abrir tela', sugestao_importacao: 'Sugestões na importação',
 }
 export const rotuloFerramenta = (f) => ROTULO_FERRAMENTA[f] || f || '—'
 

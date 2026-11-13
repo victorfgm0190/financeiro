@@ -207,5 +207,9 @@ export const MIGRACOES = [
  {
   "nome": "2026-11-12_data_compra.sql",
   "sql": "-- Data da COMPRA original das parcelas de cartão (decisão 9 de docs/importar-fatura-6b-diagnostico.md,\n-- 12/11/2026). TEXT 'AAAA-MM-DD', gravada em TODAS as parcelas da série (vinda do date_cartao da parcela 1\n-- ou da linha do Itaú, que traz a data da compra). Serve para mostrar \"Parcela 2/3 · compra em 12/11\" e\n-- para calcular a data de registro das parcelas novas (mesmo dia da compra, N-1 meses depois).\n-- date_cartao continua sendo \"o que veio no arquivo\" e não muda de papel no casamento da importação.\n-- Aditiva e idempotente: nenhum dado existente é alterado (as parcelas antigas ficam com NULL).\nALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS data_compra TEXT;\n"
+ },
+ {
+  "nome": "2026-11-12b_ia_sugestoes_importacao.sql",
+  "sql": "-- Sugestões do Assistente na Importar Fatura (Etapa 6c): opção do CLIENTE em Configurações › Geral.\n-- Vazio = desligada. Só aparece e só vale com o recurso liberado pelo administrador da plataforma\n-- (ambientes.modulos no central). Idempotente. Não altera nenhum dado existente.\nALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS ia_sugestoes_importacao BOOLEAN;\n"
  }
 ]

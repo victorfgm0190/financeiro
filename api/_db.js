@@ -242,7 +242,7 @@ export const COLUNAS_OPCIONAIS = {
     'moeda', 'valor_original', 'cotacao', 'data_cotacao', 'spread', 'estimado', 'compra_iof_id', 'bem_id',
     'categoria_origem_id', 'categoria_destino_id', 'data_compra'],
   contas: ['spread_cambio', 'iof_linha_separada'],
-  configuracoes: ['iof_compra_internacional', 'reserva_perguntar_virada', 'reserva_dias_caixa'],
+  configuracoes: ['iof_compra_internacional', 'reserva_perguntar_virada', 'reserva_dias_caixa', 'ia_sugestoes_importacao'],
   agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato', 'efetivacoes', 'parcelas_por_ocorrencia',
     'categoria_origem_id', 'categoria_destino_id'],
   envelopes: ['tipo_orcamento', 'valor_dia', 'dias_semana', 'descontar_feriados'],
