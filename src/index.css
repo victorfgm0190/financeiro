@@ -123,7 +123,7 @@
    destaque menos saturadas. Matizes iguais (receita azul, despesa coral, reserva roxo — regra de
    daltonismo acima). O celular e o tema claro não mudam. Contraste medido (texto sobre page,
    surface, surface-2, surface-hover): texto-1 ≥ 9,6 · texto-2 ≥ 6,7 · texto-3 ≥ 4,6 · semânticas
-   ≥ 5,0 · borda-campo ≥ 3,0 (sobre surface-2). Botões sólidos (primary, perigo-solido, destaque)
+   ≥ 5,0 · borda-campo ≥ 3,4 (sobre surface-2). Botões sólidos (primary, perigo-solido, destaque)
    e as barras cheias não mudam: o texto branco sobre eles já foi medido. */
 @media (min-width: 768px) {
   :root:not([data-theme="light"]) {
@@ -133,7 +133,7 @@
     --color-surface-hover: #32363F;
     --color-borda: #363A44;
     --color-borda-forte: #424754;
-    --color-borda-campo: #737B8A;
+    --color-borda-campo: #7B8392;
     --color-input: #2D3139;
     --color-overlay: rgb(8 9 12 / 0.6);
 
