@@ -68,11 +68,15 @@ export function limparDescricao(s) {
     .replace(/\s+/g, ' ').trim().slice(0, 120)
 }
 
-// Até `n` nomes de favorecidos mais parecidos com a descrição (similaridade ≥ 0,4).
+// Até `n` nomes de favorecidos mais parecidos com a descrição: similaridade ≥ 0,4 E pelo menos uma
+// palavra de 3+ letras em comum (um favorecido "s" ou "x" parecia com tudo). Nomes curtos ficam fora.
+const palavras = (s) => new Set(String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 3))
 export function prefiltrarFavorecidos(descricao, nomes, n = MAX_FAVORECIDOS_POR_LINHA) {
   const d = limparDescricao(descricao)
   if (!d) return []
+  const pd = palavras(d)
   return (nomes || [])
+    .filter(nome => String(nome || '').trim().length >= 3 && [...palavras(nome)].some(w => pd.has(w)))
     .map(nome => ({ nome, s: descSimilarity(d, nome) }))
     .filter(x => x.s >= 0.4)
     .sort((a, b) => b.s - a.s || a.nome.localeCompare(b.nome))

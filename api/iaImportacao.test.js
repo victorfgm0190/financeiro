@@ -166,6 +166,9 @@ describe('dados mínimos (LGPD)', () => {
   it('limpeza da descrição e pré-filtro de favorecidos', () => {
     expect(limparDescricao('LOJA X 4541 CPF 123.456.789-09')).toBe('LOJA X CPF')
     expect(prefiltrarFavorecidos('STREAMING EXEMPLO', ['Streaming Exemplo', 'Outra Coisa', 'Fulano de Tal'])).toEqual(['Streaming Exemplo'])
+    // Favorecido de 1 ou 2 letras (ou sem palavra em comum) nunca entra — achado da chamada real no teste1.
+    expect(prefiltrarFavorecidos('POSTO DE COMBUSTIVEL EXEMPLO', ['s', 'xy', 'Posto', 'Mercado'])).toEqual(['Posto'])
+    expect(prefiltrarFavorecidos('ESTORNO LOJA ALFA', ['s'])).toEqual([])
   })
 })
 
