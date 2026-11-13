@@ -1062,9 +1062,9 @@ function ScheduleRow({
   const { coberturaCartao, baixarComoJaNoCartao, transactions: todasTxs, pode, possiveisDuplicados, schedules: todosAgendamentos } = useApp()
   // Nível de acesso (src/lib/permissoes.js): pagar/estornar/pular/efetivar/confirmar/editar = editar;
   // excluir = excluir. Sem permissão o botão some (a API também barra).
-  // Resgate ligado a uma despesa (src/lib/resgateVinculado.js): segue a despesa. Na linha dele: Pagar
-  // (antes da despesa não dobra), Vincular a um resgate já feito e Excluir (esta ocorrência ou o
-  // resgate inteiro); Pular/Estornar ficam na despesa. O selo "Acompanha" leva à despesa.
+  // Resgate ligado a uma despesa (src/lib/resgateVinculado.js): a data segue a despesa, o PAGAMENTO
+  // é separado (pagar a despesa não paga o resgate). Na linha dele: Pagar, Vincular a um resgate já
+  // feito e Excluir (esta ocorrência ou o resgate inteiro). O selo "Acompanha" leva à despesa.
   const ehResgateLigado = !!schedule.agendamentoVinculadoId
   const despesaLigada = ehResgateLigado ? despesaDoResgate(schedule, todosAgendamentos) : null
   const podeEditar = pode('agendamentos', 'editar')
@@ -1333,7 +1333,7 @@ function ScheduleRow({
                 data-testid="selo-acompanha"
                 onClick={(e) => { e.stopPropagation(); if (despesaLigada) onEditSchedule(despesaLigada) }}
                 disabled={!despesaLigada}
-                title="Este resgate anda junto com a despesa: pagar, pular, estornar e excluir são feitos nela. Abrir a despesa."
+                title="Este resgate acompanha a data da despesa (mudar data, pular e excluir a despesa valem para ele). Pagar a despesa não paga o resgate: pague-o aqui (ou vincule a um resgate já feito) quando fizer a transferência. Toque para abrir a despesa."
                 className="inline-flex items-center gap-1 text-xs bg-reserva/15 text-reserva px-1.5 py-0.5 rounded font-medium hover:bg-reserva/25 transition-colors text-left whitespace-normal break-words"
               >
                 <Link2 size={10} className="shrink-0" /> Acompanha: {despesaLigada?.description || 'despesa'}
@@ -1522,7 +1522,7 @@ function ScheduleRow({
           <div className={`flex items-center justify-end gap-1 ${detalheMobile ? 'flex-wrap' : 'flex-nowrap'}`}>
             {nextDate && podeEditar && ehResgateLigado && !futura && (
               <>
-                <button onClick={() => setShowPay(true)} title="Pagar este resgate agora (antes da despesa não dobra)" aria-label="Pagar"
+                <button onClick={() => setShowPay(true)} title="Pagar este resgate (a transferência da reserva para a conta da despesa)" aria-label="Pagar"
                   className="flex items-center justify-center gap-1 h-8 min-w-8 px-2 text-xs bg-receita/15 text-receita rounded-md hover:bg-receita/25 transition-colors font-medium">
                   <CheckCircle size={12} /> <span className="hidden 2xl:inline">Pagar</span>
                 </button>

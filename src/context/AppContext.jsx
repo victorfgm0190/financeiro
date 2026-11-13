@@ -2546,7 +2546,9 @@ export function AppProvider({ children }) {
       let transactions = d.transactions.filter(t => t.id !== id)
       // Reabre as ocorrências que este lançamento baixou (sem isso a baixa ficava órfã, com a meta
       // apontando um lançamento apagado). Agendamentos do motor da fatura ficam com o motor.
-      const schedules = reabrirBaixasDoLancamento(d.schedules, tx, { ignorar: agendamentoDoMotor })
+      // O resgate LIGADO a uma despesa (tipo resgate_reserva, mas com agendamentoVinculadoId) não é do
+      // motor: excluir o lançamento dele reabre a ocorrência, como em qualquer agendamento.
+      const schedules = reabrirBaixasDoLancamento(d.schedules, tx, { ignorar: s => agendamentoDoMotor(s) && !s.agendamentoVinculadoId })
 
       // Grupo G: remove a transferência imediata (etapa A) vinculada a este gasto.
       if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
@@ -2994,18 +2996,15 @@ export function AppProvider({ children }) {
   }, [update, reconciliarPorAgendamento, rateiosByLancamento, deleteRateiosFor])
 
   // Resgate ligado à despesa de conta com classificação gerencial que gera resgate
-  // (src/lib/resgateVinculado.js): depois de QUALQUER mudança de agendamentos/lançamentos (pagar,
-  // pular, estornar, editar, excluir, registro automático), o resgate acompanha a despesa. Pura e
-  // idempotente: sem nada a fazer devolve o mesmo estado (o React descarta a atualização).
+  // (src/lib/resgateVinculado.js): depois de qualquer mudança nos agendamentos (mudar data, pular,
+  // editar, excluir), a ESTRUTURA do resgate acompanha a despesa. O pagamento é separado: pagar ou
+  // estornar a despesa não mexe no resgate. Pura e idempotente (sem mudança, o React descarta).
   useEffect(() => {
     if (!initialized) return
     // Derivado do próprio estado e idempotente (sem mudança, o React descarta): não entra em cascata.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setData(prev => sincronizarResgatesVinculados(prev, {
-      sombras: (tx, accounts) => buildReservaAutoTxs(tx, accounts, tx.id, prev.reserveFunctions),
-      efeitoTransferencia: applyTransferEffect,
-    }))
-  }, [initialized, data.schedules, data.transactions])
+    setData(prev => sincronizarResgatesVinculados(prev))
+  }, [initialized, data.schedules])
 
   // Ao salvar um agendamento de despesa: cria o resgate ligado se ele gera resgate e ainda não tem
   // (agendamento antigo editado ganha o resgate só das ocorrências pendentes). Banco sem a coluna

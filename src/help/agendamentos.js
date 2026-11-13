@@ -144,7 +144,7 @@ export const campos = {
   'agendamento.resgatarDe': {
     titulo: 'Resgatar de',
     paraQueServe: 'De qual função de reserva da conta do grupo sai o dinheiro desta despesa.',
-    relacaoComTela: 'Ao salvar, o Finup agenda também o resgate (transferência da conta do grupo para a conta da despesa) com a mesma data e o mesmo valor de cada ocorrência. Ele aparece no Fluxo de Caixa e na reserva como previsto e é efetivado junto com a despesa; pular, mudar data ou valor, excluir ou estornar a despesa faz o mesmo no resgate.',
+    relacaoComTela: 'Ao salvar, o Finup agenda também o resgate (transferência da conta do grupo para a conta da despesa) com a mesma data e o mesmo valor de cada ocorrência. Ele aparece no Fluxo de Caixa e na reserva como previsto. Pular, mudar data ou valor e excluir a despesa valem para o resgate. O resgate fica agendado na mesma data; pague-o (ou vincule a um resgate já feito) quando fizer a transferência. Pagar ou estornar a despesa não mexe no resgate, e vice-versa.',
     obrigatorio: true,
     atencao: 'Com uma opção só, ela vem escolhida. "+ Nova função" cria a função nessa conta ali mesmo. Se já houver uma provisão aberta da mesma função no mesmo mês, efetive a provisão para não contar duas vezes. No próprio resgate você pode mudar a data de uma ocorrência, excluir (uma ou o resgate inteiro, que não volta sozinho) ou vincular a um resgate já feito.',
   },

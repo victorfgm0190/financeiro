@@ -2,8 +2,9 @@
 // Resgate ligado na LISTA de Agendamentos (tela real + AppProvider real, API simulada). Na linha do
 // resgate: Pagar, Vincular a um resgate já feito e Excluir (esta ocorrência ou o resgate inteiro);
 // Pular/Estornar ficam na despesa; selo "Acompanha" abre a despesa; Editar abre o painel do resgate
-// (mudar a data de uma ocorrência). A despesa continua mandando. Pagar a despesa efetiva o resgate
-// UMA vez. No mesmo dia, o resgate vem antes da despesa. Dados fictícios.
+// (mudar a data de uma ocorrência). A despesa continua mandando na data. O PAGAMENTO é separado:
+// pagar a despesa não paga o resgate (fica pendente); pagar o resgate na linha dele grava uma
+// transferência só. No mesmo dia, o resgate vem antes da despesa. Dados fictícios.
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup, within, act } from '@testing-library/react'
 import { novoResgateVinculado } from '../lib/resgateVinculado'
@@ -146,17 +147,48 @@ describe('linha do resgate ligado', () => {
     await waitFor(() => expect(occEfetiva(resgate(), chave).date).toBe(daDespesa))
   }, 40000)
 
-  it('Pagar a despesa efetiva o resgate ligado UMA vez (sem o "Resgate <grupo>" avulso), antes da despesa', async () => {
+  it('Pagar a despesa por valor diferente NÃO paga o resgate: ele fica pendente; saldos só da despesa; nenhum "Resgate <grupo>" avulso', async () => {
     await montar()
+    const res0 = saldo('res')
+    const cc0 = saldo('cc')
     fireEvent.click(within(linhaDaDespesa()).getByRole('button', { name: 'Pagar' }))
-    fireEvent.click(await screen.findByRole('button', { name: /Confirmar Pagamento/ }))
+    await screen.findByRole('button', { name: /Confirmar Pagamento/ })
+    const valor = document.querySelector('[data-help-id="registrarAgendamento.valor"] input')
+    fireEvent.change(valor, { target: { value: '1.300,50' } })
+    await waitFor(() => expect(valor.value).toBe('1.300,50'))
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar Pagamento/ }))
+    await waitFor(() => expect(app.transactions.some(t => t.type === 'expense' && t.scheduleId === 'sch_esc')).toBe(true))
+    await new Promise(r => setTimeout(r, 50))
+    expect(app.transactions.find(t => t.scheduleId === 'sch_esc').amount).toBe(1300.5)
+    expect(app.transactions.filter(t => t.type === 'transfer')).toHaveLength(0)
+    expect(resgate().registered).toEqual([])
+    expect(saldo('res')).toBe(res0)
+    expect(saldo('cc')).toBe(cc0 - 1300.5)
+    // A linha do resgate continua com Pagar.
+    expect(within(linhaDoResgate()).getByRole('button', { name: 'Pagar' })).toBeTruthy()
+  }, 40000)
+
+  it('Pagar o RESGATE (linha dele) por valor diferente do agendado: uma transferência só, com o valor pago; a despesa continua pendente', async () => {
+    await montar()
+    const res0 = saldo('res')
+    const cc0 = saldo('cc')
+    fireEvent.click(within(linhaDoResgate()).getByRole('button', { name: 'Pagar' }))
+    await screen.findByRole('button', { name: /Confirmar/ })
+    const valor = document.querySelector('[data-help-id="registrarAgendamento.valor"] input')
+    fireEvent.change(valor, { target: { value: '1.300,50' } })
+    await waitFor(() => expect(valor.value).toBe('1.300,50'))
+    fireEvent.click(screen.getAllByRole('button', { name: /Confirmar/ }).at(-1))
     await waitFor(() => expect(resgate().registered).toHaveLength(1))
+    await new Promise(r => setTimeout(r, 50))
     const transfers = app.transactions.filter(t => t.type === 'transfer')
     expect(transfers).toHaveLength(1)
-    expect(transfers[0]).toMatchObject({ accountId: 'res', toAccountId: 'cc', amount: 1268, reservaFuncaoId: 'fn_esc' })
-    const desp = app.transactions.find(t => t.type === 'expense' && t.scheduleId === 'sch_esc')
-    expect(transfers[0].createdAt < desp.createdAt).toBe(true)
-    expect(app.transactions.indexOf(transfers[0])).toBeLessThan(app.transactions.indexOf(desp))
+    expect(transfers[0]).toMatchObject({ accountId: 'res', toAccountId: 'cc', amount: 1300.5, scheduleId: resgate().id })
+    expect(saldo('res')).toBe(res0 - 1300.5)
+    expect(saldo('cc')).toBe(cc0 + 1300.5)
+    expect(app.schedules.find(s => s.id === 'sch_esc').registered).toEqual([])
+    // Nenhum lançamento da despesa (as sombras da reserva, sem conta, são do resgate).
+    expect(app.transactions.some(t => t.scheduleId === 'sch_esc')).toBe(false)
+    expect(app.transactions.filter(t => t.accountId === 'cc' || t.toAccountId === 'cc').map(t => t.type)).toEqual(['transfer'])
   }, 40000)
 })
 

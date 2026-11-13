@@ -97,7 +97,7 @@ export default function ResgateLigadoPainel({ resgate: inicial, onClose }) {
         <Info size={13} className="mt-0.5 shrink-0 text-reserva" />
         <span>
           Este resgate acompanha o agendamento "{despesa?.description || 'da despesa'}": valor, conta e função vêm dele
-          (para mudar "Resgatar de", edite a despesa) e ele é efetivado junto com ela. Aqui você pode mudar a data de uma
+          (para mudar "Resgatar de", edite a despesa). O resgate fica agendado na mesma data; pague-o (ou vincule a um resgate já feito) quando fizer a transferência. Aqui você pode mudar a data de uma
           ocorrência, excluir ou vincular a um resgate já feito.
         </span>
       </div>

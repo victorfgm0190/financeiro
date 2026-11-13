@@ -112,7 +112,7 @@ describe('formulário: "Resgatar de"', () => {
     expect((await screen.findByTestId('erro-salvar-agendamento')).textContent).toMatch('Resgatar de')
     await escolher('fn_esc')
     expect(screen.getByTestId('agendamento-frase-resgate').textContent)
-      .toMatch(/^Ao salvar, o Finup agenda também 12 resgates de R\$\s*1\.268,00 de Contas Anuais › Escola para Conta Corrente, nas mesmas datas\.$/)
+      .toMatch(/^Ao salvar, o Finup agenda também 12 resgates de R\$\s*1\.268,00 de Contas Anuais › Escola para Conta Corrente, nas mesmas datas\. Pague cada resgate \(ou vincule a um resgate já feito\) quando fizer a transferência\.$/)
   }, 30000)
 
   it('provisão aberta da mesma função no mesmo mês: aviso com "abrir provisão"', async () => {
@@ -177,45 +177,83 @@ describe('formulário: "Resgatar de"', () => {
 })
 
 describe('criar e andar junto (contexto real)', () => {
-  it('cria 12 resgates com a mesma data e valor; pagar efetiva o resgate; estornar desfaz', async () => {
+  it('cria 12 resgates; pagar a despesa NÃO paga o resgate; pagar o resgate depois: transferência única com o valor pago', async () => {
     const d = await criarEscola()
     const r = resgateDe(d.id)
     expect(r).toMatchObject({ tipo: 'resgate_reserva', accountId: 'res', toAccountId: 'cc', amount: 1268, reservaFuncaoId: 'fn_esc' })
     expect(computeOccurrences(r, 400)).toEqual(computeOccurrences(d, 400))
     expect(computeOccurrences(r, 400)).toHaveLength(12)
     const res0 = saldo('res')
+    const cc0 = saldo('cc')
 
-    let txId
-    act(() => { txId = app.registerScheduleOccurrence(d.id, '2027-01-10', '2027-01-08', 1300) })
-    await waitFor(() => expect(resgateDe(d.id).registered).toEqual(['2027-01-08']))
-    const tr = app.transactions.find(t => t.type === 'transfer' && t.scheduleId === r.id)
-    expect(tr).toMatchObject({ accountId: 'res', toAccountId: 'cc', amount: 1300, date: '2027-01-10', reservaFuncaoId: 'fn_esc' })
-    expect(saldo('res')).toBe(res0 - 1300)
-
-    act(() => app.reverseTransaction(txId))
-    await waitFor(() => expect(resgateDe(d.id).registered).toEqual([]))
-    expect(app.transactions.some(t => t.scheduleId === r.id)).toBe(false)
-    expect(saldo('res')).toBe(res0)
+    let txDesp
+    act(() => { txDesp = app.registerScheduleOccurrence(d.id, '2027-01-10', '2027-01-08', 1300) })
+    await waitFor(() => expect(despesa().registered).toEqual(['2027-01-08']))
+    await new Promise(res => setTimeout(res, 50))
+    // Resgate pendente (com a mesma série de 12), nenhuma transferência, reserva intacta.
+    expect(resgateDe(d.id).registered).toEqual([])
+    expect(computeOccurrences(resgateDe(d.id), 400)[0]).toBe('2027-01-08')
     expect(computeOccurrences(resgateDe(d.id), 400)).toHaveLength(12)
+    expect(app.transactions.filter(t => t.type === 'transfer')).toHaveLength(0)
+    expect(saldo('res')).toBe(res0)
+    expect(saldo('cc')).toBe(cc0 - 1300)
+
+    // Pagar o resgate (linha dele) com o valor pago: uma transferência só; a despesa não muda.
+    act(() => { app.registerScheduleOccurrence(r.id, '2027-01-10', '2027-01-08', 1300) })
+    await waitFor(() => expect(resgateDe(d.id).registered).toEqual(['2027-01-08']))
+    await new Promise(res => setTimeout(res, 50))
+    const transfers = app.transactions.filter(t => t.type === 'transfer')
+    expect(transfers).toHaveLength(1)
+    expect(transfers[0]).toMatchObject({ accountId: 'res', toAccountId: 'cc', amount: 1300, scheduleId: r.id })
+    expect(saldo('res')).toBe(res0 - 1300)
+    expect(saldo('cc')).toBe(cc0)
+    expect(despesa().registered).toEqual(['2027-01-08'])
+
+    // Estornar a despesa não mexe no resgate pago.
+    act(() => app.reverseTransaction(txDesp))
+    await waitFor(() => expect(despesa().registered).toEqual([]))
+    await new Promise(res => setTimeout(res, 50))
+    expect(resgateDe(d.id).registered).toEqual(['2027-01-08'])
+    expect(app.transactions.filter(t => t.type === 'transfer')).toHaveLength(1)
+    expect(saldo('res')).toBe(res0 - 1300)
   }, 30000)
 
-  it('pular e excluir a despesa', async () => {
+  it('pagar o resgate ANTES da despesa: a despesa continua pendente; estornar o resgate não mexe na despesa', async () => {
     const d = await criarEscola()
+    const r = resgateDe(d.id)
+    let txRes
+    act(() => { txRes = app.registerScheduleOccurrence(r.id, '2027-01-05', '2027-01-08') })
+    await waitFor(() => expect(resgateDe(d.id).registered).toEqual(['2027-01-08']))
+    await new Promise(res => setTimeout(res, 50))
+    expect(despesa().registered).toEqual([])
+    expect(computeOccurrences(despesa(), 400)[0]).toBe('2027-01-08')
+    act(() => { app.registerScheduleOccurrence(d.id, '2027-01-08', '2027-01-08') })
+    await waitFor(() => expect(despesa().registered).toEqual(['2027-01-08']))
+    act(() => app.deleteTransaction(txRes))
+    await waitFor(() => expect(resgateDe(d.id).registered).toEqual([]))
+    await new Promise(res => setTimeout(res, 50))
+    expect(despesa().registered).toEqual(['2027-01-08'])
+    expect(app.transactions.filter(t => t.type === 'transfer')).toHaveLength(0)
+  }, 30000)
+
+  it('pular, mudar data e excluir a despesa levam o resgate pendente; o resgate pago não muda', async () => {
+    const d = await criarEscola()
+    const r = resgateDe(d.id)
+    act(() => { app.registerScheduleOccurrence(r.id, '2027-02-08', '2027-02-08') })
+    await waitFor(() => expect(resgateDe(d.id).registered).toEqual(['2027-02-08']))
     act(() => app.skipScheduleOccurrence(d.id, '2027-01-08'))
     await waitFor(() => expect(computeOccurrences(resgateDe(d.id), 400)).not.toContain('2027-01-08'))
-    expect(computeOccurrences(resgateDe(d.id), 400)).toEqual(computeOccurrences(despesa(), 400))
+    act(() => app.updateSchedule(d.id, { overrides: { '2027-03-08': { date: '2027-03-15' } } }))
+    await waitFor(() => expect(resgateDe(d.id).overrides['2027-03-08']?.date).toBe('2027-03-15'))
+    // Pular a despesa de 08/02 (o resgate dessa ocorrência já foi pago): o resgate pago fica.
+    act(() => app.skipScheduleOccurrence(d.id, '2027-02-08'))
+    await waitFor(() => expect(despesa().skipped).toContain('2027-02-08'))
+    await new Promise(res => setTimeout(res, 50))
+    expect(resgateDe(d.id).registered).toEqual(['2027-02-08'])
+    expect(app.transactions.filter(t => t.type === 'transfer')).toHaveLength(1)
     act(() => app.deleteSchedule(d.id))
     await waitFor(() => expect(resgateDe(d.id)).toBeUndefined())
-  }, 30000)
-
-  it('excluir o lançamento da despesa desfaz o resgate da mesma ocorrência', async () => {
-    const d = await criarEscola()
-    let txId
-    act(() => { txId = app.registerScheduleOccurrence(d.id, '2027-01-08', '2027-01-08') })
-    await waitFor(() => expect(resgateDe(d.id).registered).toEqual(['2027-01-08']))
-    act(() => app.deleteTransaction(txId))
-    await waitFor(() => expect(resgateDe(d.id).registered).toEqual([]))
-    expect(app.transactions.filter(t => t.type === 'transfer')).toHaveLength(0)
+    expect(app.transactions.filter(t => t.type === 'transfer')).toHaveLength(1)
   }, 30000)
 
   it('abrir o resgate: somente leitura, aponta para a despesa', async () => {

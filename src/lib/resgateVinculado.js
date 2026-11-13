@@ -8,11 +8,10 @@
 // mesmas da despesa, então pular, mudar data/valor (só esta ou esta e as próximas), encurtar a série
 // ou excluir a despesa valem para o resgate sem código por operação.
 //
-// O que já foi efetivado nunca é recalculado. A efetivação anda junto (sincronizarResgatesVinculados):
-//   • ocorrência da despesa baixada → o resgate da MESMA ocorrência é efetivado (data e valor do
-//     lançamento da despesa), com id determinístico `tx_resgv_<resgate>_<ocorrência>`;
-//   • baixa da despesa desfeita (estorno, exclusão do lançamento, desvincular) → o lançamento do
-//     resgate gerado aqui é removido e a ocorrência dele reabre.
+// O PAGAMENTO é separado (regra de 13/11/2026): pagar, efetivar em lote ou registrar
+// automaticamente a despesa grava só a despesa; o resgate da mesma ocorrência fica pendente (em
+// atraso, se passar a data) até ser pago na linha dele ou vinculado a um resgate já feito. Estornar
+// um não mexe no outro. O que já foi efetivado/vinculado no resgate nunca é recalculado.
 // Ocorrências anteriores ao vínculo (`overrides._resgateDesde`: agendamento antigo que ganhou o
 // resgate ao ser editado) ficam de fora — nada de resgate retroativo.
 //
@@ -22,13 +21,10 @@
 
 import { computeOccurrences } from './occurrences.js'
 import { occEfetiva } from './fluxoCaixa.js'
-import { aplicarBaixa, metaBaixaGerada, desfazerBaixa } from './scheduleBaixa.js'
-import { ORIGIN } from './origins.js'
 
 export const TIPO_RESGATE_VINCULADO = 'resgate_reserva'
 export const PREFIXO_TX = 'tx_resgv_'
 const ehChaveData = (k) => /^\d{4}-\d{2}-\d{2}$/.test(k)
-const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 
 export const idResgateVinculado = (despesaId) => `sch_resgv_${despesaId}`
 export const idTxResgate = (resgateId, chave) => `${PREFIXO_TX}${resgateId}_${chave}`
@@ -135,16 +131,24 @@ export function derivarResgate(despesa, resgate, ctx) {
   }
   if (desde) overrides._resgateDesde = desde
   if (excluidas.length) overrides._resgateExcluidas = [...new Set(excluidas)].sort()
-  // Pulos: os da despesa; as baixas da despesa sem resgate (anteriores ao vínculo ou fora dele) — a
-  // série do resgate consome as mesmas datas e o nº de ocorrências fecha igual; ocorrências tiradas
-  // do resgate por exceção "só esta" na despesa; as excluídas à mão no resgate.
+  // Pulos: os da despesa; as baixas da despesa ANTERIORES ao vínculo (a série do resgate consome as
+  // mesmas datas e o nº de ocorrências fecha igual; nada de resgate retroativo); ocorrências tiradas
+  // do resgate por exceção "só esta" na despesa; as excluídas à mão no resgate. Pagar a despesa NÃO
+  // tira a ocorrência do resgate: ela fica pendente até o resgate ser pago ou vinculado.
   const skipped = new Set(despesa.skipped || [])
-  for (const d of despesa.registered || []) if (!regResgate.has(d)) skipped.add(d)
+  for (const d of despesa.registered || []) if (desde && d < desde && !regResgate.has(d)) skipped.add(d)
   for (const k of Object.keys(despesa.overrides || {})) {
     if (ehChaveData(k) && !regResgate.has(k) && chaveForaDoResgate(despesa, k, ctx)) skipped.add(k)
   }
   for (const k of excluidas) skipped.add(k)
   for (const d of regResgate) skipped.delete(d)
+  // Âncora da série (nextOccurrence) é a da despesa, que AVANÇA quando ela é paga. O pagamento do
+  // resgate é separado: ocorrência paga na despesa e ainda pendente no resgate não pode ficar para
+  // trás — a âncora do resgate volta para a mais antiga delas (é uma data da mesma série).
+  const pendentesSoNoResgate = (despesa.registered || [])
+    .filter(k => (!desde || k >= desde) && !regResgate.has(k) && !skipped.has(k)).sort()
+  const ancora = despesa.nextOccurrence && pendentesSoNoResgate[0] && pendentesSoNoResgate[0] < despesa.nextOccurrence
+    ? pendentesSoNoResgate[0] : (despesa.nextOccurrence || null)
   const funcaoId = funcaoValida(despesa.reservaFuncaoId, info.conta.id, ctx.reserveFunctions)
   return {
     ...(resgate || {}),
@@ -165,7 +169,7 @@ export function derivarResgate(despesa, resgate, ctx) {
     occurrenceType: despesa.occurrenceType || 'continuous',
     installments: despesa.installments ?? 0,
     parcelasPorOcorrencia: Number(despesa.parcelasPorOcorrencia) || 1,
-    nextOccurrence: despesa.nextOccurrence || null,
+    nextOccurrence: ancora,
     overrides,
     skipped: [...skipped].sort(),
     registered: resgate?.registered || [],
@@ -201,29 +205,14 @@ const CAMPOS = ['description', 'accountId', 'accountType', 'toAccountId', 'amoun
 const assinatura = (s) => JSON.stringify(CAMPOS.map(c => s?.[c] ?? null))
 export const mesmoResgate = (a, b) => assinatura(a) === assinatura(b)
 
-// Lançamento da despesa que baixou a ocorrência `chave` (meta ou scheduleId + dataOcorrencia).
-function lancamentoDaBaixa(despesa, chave, transactions) {
-  const id = despesa.registeredMeta?.[chave]?.lancamento_id
-  if (id) {
-    const t = transactions.find(x => x.id === id)
-    if (t) return t
-  }
-  return transactions.find(t => t.scheduleId === despesa.id && t.dataOcorrencia === chave) || null
-}
-
-// Garante, no estado `d`, que todo resgate ligado acompanha a sua despesa (pura e idempotente:
-// sem nada a fazer, devolve o MESMO `d`). deps: { sombras(tx, accounts) → lançamentos de sombra,
-// efeitoTransferencia(accounts, tx, dir) → accounts, agora() → ISO }.
-export function sincronizarResgatesVinculados(d, deps = {}) {
+// Garante, no estado `d`, que a ESTRUTURA de todo resgate ligado acompanha a sua despesa (pura e
+// idempotente: sem nada a fazer, devolve o MESMO `d`). Não cria nem desfaz lançamentos: o pagamento
+// do resgate é separado do da despesa.
+export function sincronizarResgatesVinculados(d) {
   const resgates = (d.schedules || []).filter(ehResgateVinculado)
   if (!resgates.length) return d
   const ctx = { accounts: d.accounts, gerencialGroups: d.gerencialGroups, reserveFunctions: d.reserveFunctions }
-  const sombras = deps.sombras || (() => [])
-  const efeito = deps.efeitoTransferencia || ((accounts) => accounts)
-  const agora = deps.agora || (() => new Date().toISOString())
   let schedules = d.schedules
-  let transactions = d.transactions || []
-  let accounts = d.accounts
   let mudou = false
   const porId = new Map(schedules.map(s => [s.id, s]))
 
@@ -236,62 +225,14 @@ export function sincronizarResgatesVinculados(d, deps = {}) {
       mudou = true
       continue
     }
-    let r = r0
-    const regDespesa = new Set(despesa.registered || [])
-    // 1. Baixa da despesa desfeita → desfaz o resgate gerado aqui (só se o lançamento está no estado).
-    for (const chave of [...(r.registered || [])]) {
-      if (regDespesa.has(chave)) continue
-      const txId = r.registeredMeta?.[chave]?.lancamento_id
-      if (!ehTxDeResgateVinculado(txId)) continue
-      const tx = transactions.find(t => t.id === txId)
-      if (!tx) continue
-      const filhos = transactions.filter(t => t.parentTxId === txId)
-      accounts = efeito(accounts, tx, -1)
-      const fora = new Set([txId, ...filhos.map(f => f.id)])
-      transactions = transactions.filter(t => !fora.has(t.id))
-      r = desfazerBaixa(r, chave)
-      mudou = true
-    }
-    // 2. Despesa baixada → efetiva o resgate da mesma ocorrência (a partir do vínculo).
-    const desde = r.overrides?._resgateDesde || ''
-    const regResgate = new Set(r.registered || [])
-    const excluidas = new Set(excluidasDoResgate(r))
-    for (const chave of despesa.registered || []) {
-      if (regResgate.has(chave) || chave < desde || excluidas.has(chave) || chaveForaDoResgate(despesa, chave, ctx)) continue
-      const base = lancamentoDaBaixa(despesa, chave, transactions)
-      const ef = occEfetiva(despesa, chave)
-      const txId = idTxResgate(r.id, chave)
-      if (transactions.some(t => t.id === txId)) { r = aplicarBaixa(r, chave, metaBaixaGerada(txId)); mudou = true; continue }
-      const funcaoId = funcaoValida(despesa.reservaFuncaoId, r.accountId, ctx.reserveFunctions)
-      const tx = {
-        id: txId, type: 'transfer',
-        accountId: r.accountId, accountType: r.accountType || null,
-        toAccountId: base?.accountId || despesa.accountId,
-        amount: r2(base ? base.amount : ef.amount),
-        categoryId: '', description: r.description, payee: '', costCenter: '',
-        date: base?.date || ef.date,
-        scheduleId: r.id, dataOcorrencia: chave, sourceScheduleId: r.id,
-        reservaFuncaoId: funcaoId, tipoDocumentoId: null,
-        // No mesmo dia o resgate vem ANTES da despesa: gravado um instante antes do lançamento dela.
-        origin: ORIGIN.AGENDAMENTO, createdAt: antesDe(base?.createdAt) || agora(),
-      }
-      accounts = efeito(accounts, tx, 1)
-      const extras = sombras(tx, accounts).map((t, i) => ({ ...t, id: `${txId}_s${i}`, parentTxId: txId }))
-      const pos = base ? transactions.indexOf(base) : -1
-      transactions = pos >= 0
-        ? [...transactions.slice(0, pos), tx, ...extras, ...transactions.slice(pos)]
-        : [...transactions, tx, ...extras]
-      r = aplicarBaixa(r, chave, metaBaixaGerada(txId))
-      mudou = true
-    }
-    // 3. Estrutura recalculada a partir da despesa.
-    const novo = derivarResgate(despesa, r, ctx)
+    // Só a estrutura acompanha a despesa (data, pulos, valor, exclusão). Pagamento é separado.
+    const novo = derivarResgate(despesa, r0, ctx)
     if (!mesmoResgate(novo, r0)) {
       schedules = schedules.map(s => (s.id === r0.id ? novo : s))
       mudou = true
     }
   }
-  return mudou ? { ...d, schedules, transactions, accounts } : d
+  return mudou ? { ...d, schedules } : d
 }
 
 // Resgate inteiro excluído à mão: marca na despesa (a sincronização e o salvar não o recriam).
@@ -336,12 +277,6 @@ export const temResgateLigado = (despesaId, schedules = []) =>
 // Agendamento da despesa que o resgate ligado acompanha (ou null).
 export const despesaDoResgate = (resgate, schedules = []) =>
   (resgate?.agendamentoVinculadoId && (schedules || []).find(s => s.id === resgate.agendamentoVinculadoId)) || null
-
-// Um instante (1 ms) antes de um createdAt ISO — o resgate fica antes da despesa no mesmo dia.
-function antesDe(iso) {
-  const t = iso ? Date.parse(iso) : NaN
-  return Number.isFinite(t) ? new Date(t - 1).toISOString() : null
-}
 
 // ── Mexer só no resgate ─────────────────────────────────────────────────────────────────────────
 

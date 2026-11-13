@@ -26,7 +26,7 @@ export const NOVIDADES = [
     itens: [
       'Num agendamento de despesa em conta corrente com classificação que gera resgate (como Contas Anuais), o novo campo “Resgatar de” diz de qual função da reserva sai o dinheiro. Com uma opção só, ela já vem escolhida, e “+ Nova função” cria uma ali mesmo.',
       'Ao salvar, o Finup agenda também o resgate de cada ocorrência, com a mesma data e o mesmo valor: ele já aparece no Fluxo de Caixa e na reserva como previsto.',
-      'Pagar, pular, mudar data ou valor, excluir ou estornar a despesa faz o mesmo no resgate. O que já foi efetivado não muda.',
+      'Pular, mudar data ou valor e excluir a despesa valem para o resgate. O resgate fica agendado na mesma data; pague-o (ou vincule a um resgate já feito) quando fizer a transferência. Pagar ou estornar a despesa não mexe no resgate. O que já foi pago não muda.',
       'Se já houver uma provisão aberta da mesma função no mesmo mês, o formulário avisa, para a despesa não contar duas vezes.',
       'A lista “Resgatar de” vem em ordem alfabética e aceita digitar para filtrar.',
       'Na lista de Agendamentos, o resgate mostra “Acompanha: <despesa>” (toque para abrir a despesa) e vem antes da despesa no mesmo dia, também no Fluxo de Caixa, no extrato e na reserva.',

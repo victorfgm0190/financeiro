@@ -1612,13 +1612,13 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
                     </p>
                   ) : resgateJaLigado ? (
                     <p data-testid="agendamento-frase-resgate" className="text-xs text-reserva leading-snug">
-                      Os resgates de {origem} para {destino} acompanham este agendamento, nas mesmas datas. Mudanças valem para os ainda não efetivados.
+                      Os resgates de {origem} para {destino} acompanham este agendamento, nas mesmas datas. Mudanças valem para os ainda não pagos. Pagar a despesa não paga o resgate: pague-o (ou vincule a um resgate já feito) quando fizer a transferência.
                     </p>
                   ) : (opcoesResgate.length <= 1 || funcaoResgate) && (continua || n > 0) ? (
                     <p data-testid="agendamento-frase-resgate" className="text-xs text-reserva leading-snug">
                       {continua
-                        ? `Ao salvar, o Finup agenda também um resgate de ${valor} de ${origem} para ${destino} em cada ocorrência, nas mesmas datas.`
-                        : `Ao salvar, o Finup agenda também ${n} ${n === 1 ? 'resgate' : 'resgates'} de ${valor} de ${origem} para ${destino}, nas mesmas datas.`}
+                        ? `Ao salvar, o Finup agenda também um resgate de ${valor} de ${origem} para ${destino} em cada ocorrência, nas mesmas datas. Pague cada resgate (ou vincule a um resgate já feito) quando fizer a transferência.`
+                        : `Ao salvar, o Finup agenda também ${n} ${n === 1 ? 'resgate' : 'resgates'} de ${valor} de ${origem} para ${destino}, nas mesmas datas. Pague cada resgate (ou vincule a um resgate já feito) quando fizer a transferência.`}
                     </p>
                   ) : null}
                   {provisoes.map(({ provisao, mes }) => (
