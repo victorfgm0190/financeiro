@@ -16,7 +16,7 @@ const QUERY_CLARO = '(prefers-color-scheme: light)'
 // Cor da barra do navegador/PWA = fundo de página do tema (mesmos valores de --color-page).
 // darkDesktop = o escuro suave do computador (index.css, min-width 768px): a barra de título do
 // Finup instalado no computador acompanha o novo fundo. Celular e claro usam dark/light.
-export const THEME_COLOR = { dark: '#030712', light: '#EEF1F6', darkDesktop: '#16181D' }
+export const THEME_COLOR = { dark: '#030712', light: '#EEF1F6', darkDesktop: '#202329' }
 
 // Pura — testável sem DOM. O script anti-flash do index.html repete esta regra.
 export function corBarra(tema, contexto) {

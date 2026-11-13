@@ -117,24 +117,24 @@
 
 /* ─── Escuro SUAVE no computador (13/11/2026) ──────────────────────────────────────────────────
    O escuro do @theme (preto #030712 + navy saturado + texto quase #fff) cansava a vista na tela
-   grande. Só no computador (fora de MOBILE_MEDIA_QUERY = acima de 767.98px) e só no tema escuro
+   grande. 13/11 (2ª): fundo subiu para cinza grafite (#202329), todas as camadas juntas. Só no computador (fora de MOBILE_MEDIA_QUERY = acima de 767.98px) e só no tema escuro
    (atributo "dark" ou ausente), os tokens passam para cinzas neutros em camadas: página → cartão →
    bloco interno → hover, ~2–4 pontos de luminosidade entre elas, bordas discretas e cores de
    destaque menos saturadas. Matizes iguais (receita azul, despesa coral, reserva roxo — regra de
    daltonismo acima). O celular e o tema claro não mudam. Contraste medido (texto sobre page,
-   surface, surface-2, surface-hover): texto-1 ≥ 11,0 · texto-2 ≥ 7,6 · texto-3 ≥ 5,3 · semânticas
-   ≥ 5,7 · borda-campo ≥ 3,5 (sobre surface-2). Botões sólidos (primary, perigo-solido, destaque)
+   surface, surface-2, surface-hover): texto-1 ≥ 9,6 · texto-2 ≥ 6,7 · texto-3 ≥ 4,6 · semânticas
+   ≥ 5,0 · borda-campo ≥ 3,0 (sobre surface-2). Botões sólidos (primary, perigo-solido, destaque)
    e as barras cheias não mudam: o texto branco sobre eles já foi medido. */
 @media (min-width: 768px) {
   :root:not([data-theme="light"]) {
-    --color-page: #16181D;
-    --color-surface: #1E2128;
-    --color-surface-2: #23262E;
-    --color-surface-hover: #272A33;
-    --color-borda: #2A2E37;
-    --color-borda-forte: #363B46;
+    --color-page: #202329;
+    --color-surface: #282B33;
+    --color-surface-2: #2D3139;
+    --color-surface-hover: #32363F;
+    --color-borda: #363A44;
+    --color-borda-forte: #424754;
     --color-borda-campo: #737B8A;
-    --color-input: #23262E;
+    --color-input: #2D3139;
     --color-overlay: rgb(8 9 12 / 0.6);
 
     --color-texto-1: #E4E6EB;
@@ -147,14 +147,14 @@
     --color-receita: #8DB6E2;
     --color-despesa: #E8A089;
     --color-reserva: #B0AAE3;
-    --color-reserva-bg: #2C2D48;
+    --color-reserva-bg: #383A56;
 
     --color-aviso: #E6C86E;
     --color-perigo: #F08A8A;
-    --color-perigo-bg: #3A2328;
+    --color-perigo-bg: #482C32;
 
     --color-chart-eixo: #9AA1AD;
-    --color-chart-grade: #2E323C;
+    --color-chart-grade: #383C47;
 
     --color-barra-ok-claro: #5FC2A3;
     --color-barra-alerta-claro: #E6C86E;

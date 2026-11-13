@@ -75,7 +75,7 @@ describe('index.html anti-flash em sincronia com o código', () => {
 
 describe('corBarra', () => {
   it('escuro do computador usa o fundo suave', () => {
-    expect(corBarra('dark', 'desktop')).toBe('#16181D')
+    expect(corBarra('dark', 'desktop')).toBe('#202329')
   })
   it('escuro do celular e tema claro não mudam', () => {
     expect(corBarra('dark', 'mobile')).toBe('#030712')

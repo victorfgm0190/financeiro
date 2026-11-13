@@ -10,7 +10,7 @@
   },
   "headers": [
     { "source": "/(.*)", "headers": [
-      { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'sha256-pggF0hQvCHzMuxumaUNg2IurIq9h/nfiYr4+pDbl4tU=' 'sha256-hq2fFR+peajindNMxEnPsmkpELyc9PHFG5Ml2VRz3Ak='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" },
+      { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'sha256-pggF0hQvCHzMuxumaUNg2IurIq9h/nfiYr4+pDbl4tU=' 'sha256-UWQ4yI5RxeWXO9+2L7Nx+W3VjMbXVcVZa/Z0tt7AbaE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" },
       { "key": "X-Frame-Options", "value": "DENY" },
       { "key": "X-Content-Type-Options", "value": "nosniff" },
       { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
