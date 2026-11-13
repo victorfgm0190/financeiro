@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { resolverTema, lerPreferencia, CHAVES_TEMA, THEME_COLOR } from './useTheme'
+import { resolverTema, lerPreferencia, CHAVES_TEMA, THEME_COLOR, corBarra } from './useTheme'
 import { MOBILE_MEDIA_QUERY } from '../lib/breakpoints'
 
 describe('resolverTema', () => {
@@ -68,5 +68,18 @@ describe('index.html anti-flash em sincronia com o código', () => {
   it('usa as mesmas cores de theme-color', () => {
     expect(html).toContain(`dark: '${THEME_COLOR.dark}'`)
     expect(html).toContain(`light: '${THEME_COLOR.light}'`)
+    expect(html).toContain(`darkDesktop: '${THEME_COLOR.darkDesktop}'`)
+    expect(html).toContain("var cor = tema === 'light' ? THEME_COLOR.light : contexto === 'desktop' ? THEME_COLOR.darkDesktop : THEME_COLOR.dark")
+  })
+})
+
+describe('corBarra', () => {
+  it('escuro do computador usa o fundo suave', () => {
+    expect(corBarra('dark', 'desktop')).toBe('#16181D')
+  })
+  it('escuro do celular e tema claro não mudam', () => {
+    expect(corBarra('dark', 'mobile')).toBe('#030712')
+    expect(corBarra('light', 'mobile')).toBe('#EEF1F6')
+    expect(corBarra('light', 'desktop')).toBe('#EEF1F6')
   })
 })

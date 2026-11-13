@@ -26,6 +26,7 @@ export const NOVIDADES = [
     itens: [
       'No computador, o tema escuro ficou mais confortável para a vista: fundo cinza-escuro em vez de preto, cartões um tom acima, bordas discretas e letras um pouco menos brilhantes.',
       'As cores de receita, despesa, reserva e avisos continuam as mesmas, só um pouco mais suaves.',
+      'Com o Finup instalado no computador, a barra de título também acompanha o novo fundo no tema escuro.',
       'O tema claro e o tema escuro do celular não mudaram.',
     ],
   },

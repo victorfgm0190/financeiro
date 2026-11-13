@@ -14,7 +14,15 @@ export const PREFERENCIAS = ['light', 'dark', 'system']
 const PADRAO = 'dark'
 const QUERY_CLARO = '(prefers-color-scheme: light)'
 // Cor da barra do navegador/PWA = fundo de página do tema (mesmos valores de --color-page).
-export const THEME_COLOR = { dark: '#030712', light: '#EEF1F6' }
+// darkDesktop = o escuro suave do computador (index.css, min-width 768px): a barra de título do
+// Finup instalado no computador acompanha o novo fundo. Celular e claro usam dark/light.
+export const THEME_COLOR = { dark: '#030712', light: '#EEF1F6', darkDesktop: '#16181D' }
+
+// Pura — testável sem DOM. O script anti-flash do index.html repete esta regra.
+export function corBarra(tema, contexto) {
+  if (tema === 'light') return THEME_COLOR.light
+  return contexto === 'desktop' ? THEME_COLOR.darkDesktop : THEME_COLOR.dark
+}
 
 const temJanela = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function'
 
@@ -77,12 +85,13 @@ function snapshot() {
 }
 const snapshotServidor = () => `desktop|${PADRAO}|0`
 
-export function aplicarTema(tema) {
+export function aplicarTema(tema, contexto = contextoAtual()) {
   if (typeof document === 'undefined') return
   const html = document.documentElement
   if (html.dataset.theme !== tema) html.dataset.theme = tema
   html.style.colorScheme = tema
-  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', THEME_COLOR[tema]))
+  const cor = corBarra(tema, contexto)
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', cor))
 }
 
 // Chamar uma vez no App (raiz) para aplicar o tema mesmo quando nenhum ThemeToggle está montado;
@@ -92,7 +101,7 @@ export function useTheme() {
   const [contexto, preferencia, claro] = snap.split('|')
   const tema = resolverTema(preferencia, claro === '1')
 
-  useEffect(() => { aplicarTema(tema) }, [tema])
+  useEffect(() => { aplicarTema(tema, contexto) }, [tema, contexto])
 
   const setPreferencia = useCallback((nova) => {
     if (!PREFERENCIAS.includes(nova)) return
@@ -149,7 +158,7 @@ export function useThemeColors() {
   const cores = useMemo(() => {
     // Garante o data-theme no <html> antes de ler (o efeito do useTheme só roda depois do render).
     // Idempotente: grava o mesmo valor que o useTheme gravaria.
-    aplicarTema(tema)
+    aplicarTema(tema, contexto)
     return lerCores()
     // contexto: o escuro do computador tem tokens próprios (index.css, min-width 768px) —
     // cruzar o breakpoint com o mesmo tema também troca as cores.

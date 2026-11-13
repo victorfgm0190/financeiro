@@ -29,18 +29,20 @@
       ATENÇÃO — valores repetidos de propósito (o index.html não importa módulos antes do React):
         - media query de mobile  = MOBILE_MEDIA_QUERY em src/lib/breakpoints.js
         - chaves do localStorage = CHAVES_TEMA em src/hooks/useTheme.js
-        - cores da barra         = THEME_COLOR em src/hooks/useTheme.js (= --color-page de cada tema)
+        - cores da barra         = THEME_COLOR e corBarra() em src/hooks/useTheme.js (= --color-page;
+                                   escuro do computador = darkDesktop)
       Se mudar um, mude o outro: useIsMobile, useTheme e este script não podem discordar.
     -->
     <script>
       (function () {
         var MOBILE_MEDIA_QUERY = '(max-width: 767.98px)' // = src/lib/breakpoints.js
         var CHAVES = { mobile: 'finup_tema_mobile', desktop: 'finup_tema_desktop' }
-        var THEME_COLOR = { dark: '#030712', light: '#EEF1F6' }
+        var THEME_COLOR = { dark: '#030712', light: '#EEF1F6', darkDesktop: '#16181D' }
         var tema = 'dark'
+        var contexto = 'desktop'
         try {
           var mm = window.matchMedia
-          var contexto = mm && mm(MOBILE_MEDIA_QUERY).matches ? 'mobile' : 'desktop'
+          contexto = mm && mm(MOBILE_MEDIA_QUERY).matches ? 'mobile' : 'desktop'
           var pref = null
           try { pref = window.localStorage.getItem(CHAVES[contexto]) } catch (e) { pref = null }
           if (pref === 'light') tema = 'light'
@@ -51,8 +53,10 @@
         var html = document.documentElement
         html.setAttribute('data-theme', tema)
         html.style.colorScheme = tema
+        // = corBarra() em src/hooks/useTheme.js
+        var cor = tema === 'light' ? THEME_COLOR.light : contexto === 'desktop' ? THEME_COLOR.darkDesktop : THEME_COLOR.dark
         var metas = document.querySelectorAll('meta[name="theme-color"]')
-        for (var i = 0; i < metas.length; i++) metas[i].setAttribute('content', THEME_COLOR[tema])
+        for (var i = 0; i < metas.length; i++) metas[i].setAttribute('content', cor)
       })()
     </script>
   </head>
