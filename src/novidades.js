@@ -18,6 +18,22 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.13-2',
+    data: '2026-11-13',
+    titulo: 'Parcelas marcadas como pagas sem lançamento',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'Nova revisão em Agendamentos › “Baixas sem lançamento”: lista cada parcela marcada como paga sem nenhum lançamento, mostra o lançamento que parece ser o pagamento e deixa vincular, desfazer a baixa ou manter assim (pago fora do Finup).',
+      'Na lista de Agendamentos, um sinal de alerta ao lado do “2/5” avisa quando a série tem parcela paga sem lançamento.',
+      'Em “Ver ocorrências registradas”, “Pago em” mostra só a data de um pagamento de verdade. A parcela sem lançamento aparece em destaque, com “Vincular lançamento” e “Desfazer baixa”. O rodapé mostra o previsto da série inteira, o total pago e as baixas sem lançamento.',
+      'Ao excluir um lançamento que pagou uma parcela de agendamento, o Finup pergunta se a parcela volta a ficar a pagar (padrão) ou continua paga sem lançamento.',
+      'Ao editar um agendamento, a próxima data não pode cair antes de uma parcela já paga, e a Data de Início não pode passar de uma parcela paga com lançamento. Se a Data de Início passar de uma parcela marcada como paga sem lançamento, o Finup pergunta se quer desfazer essa baixa.',
+      'Empurrar a próxima data para frente agora pergunta se as parcelas que ficam para trás viram puladas (padrão) ou se a alteração é desfeita: nenhuma parcela some sem registro.',
+      'O histórico de alterações do agendamento passa a registrar também a Data de Início, a frequência, o número de parcelas e as baixas desfeitas e as parcelas puladas.',
+    ],
+  },
+  {
     id: '2026.11.13',
     data: '2026-11-13',
     titulo: 'Agendamento com Contas Anuais: o resgate é agendado junto',

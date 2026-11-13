@@ -31,7 +31,9 @@ describe('historicoOcorrencias — TV PAPAI', () => {
   })
   it('dados do LANÇAMENTO na paga; totais', () => {
     expect(h.linhas[3]).toMatchObject({ txId: 'tx_1789737019825_czmcqdsy8pf', accountId: 'acc_bb', payee: 'CARLOS ROBERTO MOREIRA', valorPago: 150, diferenca: 0 })
-    expect([h.nPagas, h.totalPago, h.totalPrevisto, h.diferenca]).toEqual([3, 450, 450, 0])
+    expect([h.nPagas, h.totalPago, h.previstoPagas, h.diferenca]).toEqual([3, 450, 450, 0])
+    // Previsto da SÉRIE inteira: 8 × 150; a baixa de 18/06 sem lançamento aparece à parte.
+    expect([h.totalPrevisto, h.previstoDaSerie, h.nSemLancamento, h.totalSemLancamento]).toEqual([1200, true, 1, 150])
   })
   it('resumo do botão: 4 de 8', () => {
     expect(resumoRegistradas(TV_PAPAI, TXS)).toMatchObject({ registradas: 4, total: 8, continua: false, temAlgo: true })

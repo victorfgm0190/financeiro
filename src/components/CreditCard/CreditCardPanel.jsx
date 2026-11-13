@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import EscolhaBaixaExclusao from '../shared/EscolhaBaixaExclusao'
 import {
   CreditCard, DollarSign, Calendar, FileText, FileBarChart, ArrowLeft,
   ChevronLeft, ChevronRight, Plus, Edit2, Trash2, CheckCircle2, Circle, CheckSquare, RotateCcw,
@@ -473,6 +474,7 @@ export default function CreditCardPanel() {
   const [showNewTx, setShowNewTx] = useState(false)
   const [editTx, setEditTx] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [manterBaixa, setManterBaixa] = useState(false)
   const [showPrevistos, setShowPrevistos] = useState(false)
 
   // Duplicar lançamento de cartão: abre o form em modo NOVO (sem id) com os dados originais e a
@@ -1565,12 +1567,14 @@ export default function CreditCardPanel() {
 
       <ConfirmDialog
         open={!!confirmDelete}
-        onClose={() => setConfirmDelete(null)}
-        onConfirm={() => { deleteTransaction(confirmDelete.id); setConfirmDelete(null) }}
+        onClose={() => { setConfirmDelete(null); setManterBaixa(false) }}
+        onConfirm={() => { deleteTransaction(confirmDelete.id, { manterBaixa }); setConfirmDelete(null) }}
         title="Excluir Lançamento"
         message={`Excluir "${confirmDelete?.description}"?`}
         danger
-      />
+      >
+        {confirmDelete && <EscolhaBaixaExclusao tx={confirmDelete} manter={manterBaixa} onChange={setManterBaixa} />}
+      </ConfirmDialog>
 
       <Modal open={showPayModal} onClose={() => setShowPayModal(false)} title="Pagar Fatura do Cartão" size="sm">
         <div className="space-y-4" data-help-form="pagamentoFatura">

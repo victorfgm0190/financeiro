@@ -43,7 +43,8 @@ import { installmentKey } from '../lib/installments'
 import { computeOccurrences } from '../lib/occurrences'
 import { ehParcelado } from '../lib/parcelasOcorrencia'
 import { aplicarRenomeacao, nomeFavorecido } from '../lib/favorecidos'
-import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada, lancamentosVinculados, ocorrenciaDaCobranca, baixarPeloValor, reabrirBaixasDoLancamento } from '../lib/scheduleBaixa'
+import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada, lancamentosVinculados, ocorrenciaDaCobranca, baixarPeloValor, reabrirBaixasDoLancamento, manterBaixasDoLancamento } from '../lib/scheduleBaixa'
+import { mapaBaixasSemLancamento, metaPagoFora } from '../lib/baixasSemLancamento'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa'
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
@@ -2494,7 +2495,9 @@ export function AppProvider({ children }) {
     for (const id of list) updateTransaction(id, changes)
   }, [updateTransaction, marcarHistorico])
 
-  const deleteTransaction = useCallback((id) => {
+  // `manterBaixa` (pergunta da exclusão): a ocorrência que o lançamento baixou continua baixada, sem
+  // lançamento. Padrão: volta para pendente.
+  const deleteTransaction = useCallback((id, { manterBaixa = false } = {}) => {
     // Captura as faturas afetadas (gasto + parcelas-filhas) antes do update p/ recalcular depois.
     const before = dataRef.current
     const txBefore = before.transactions.find(t => t.id === id)
@@ -2549,7 +2552,10 @@ export function AppProvider({ children }) {
       // apontando um lançamento apagado). Agendamentos do motor da fatura ficam com o motor.
       // O resgate LIGADO a uma despesa (tipo resgate_reserva, mas com agendamentoVinculadoId) não é do
       // motor: excluir o lançamento dele reabre a ocorrência, como em qualquer agendamento.
-      const schedules = reabrirBaixasDoLancamento(d.schedules, tx, { ignorar: s => agendamentoDoMotor(s) && !s.agendamentoVinculadoId })
+      const ignorarMotor = { ignorar: s => agendamentoDoMotor(s) && !s.agendamentoVinculadoId }
+      const schedules = manterBaixa
+        ? manterBaixasDoLancamento(d.schedules, tx, ignorarMotor)
+        : reabrirBaixasDoLancamento(d.schedules, tx, ignorarMotor)
 
       // Grupo G: remove a transferência imediata (etapa A) vinculada a este gasto.
       if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
@@ -3639,6 +3645,12 @@ export function AppProvider({ children }) {
       hojeStr: format(new Date(), 'yyyy-MM-dd'),
     }),
     [data.schedules, data.transactions, data.accounts],
+  )
+  // Baixas sem lançamento dos agendamentos do usuário (fora motor/contrato e as "pago fora do
+  // Finup"): Map(scheduleId → [{ data, vencimento, parcela, total, valor }]). Alerta da lista e revisão.
+  const baixasSemLancamento = useMemo(
+    () => mapaBaixasSemLancamento(data.schedules, data.transactions),
+    [data.schedules, data.transactions],
   )
   // Ocorrências para PROJEÇÃO (fluxos, previstos da fatura, Fluxo Futuro): getNextOccurrences sem
   // as cobertas pelo cartão. As telas de ação (Agendamentos, Pagar, alertas) seguem no
@@ -5398,6 +5410,36 @@ export function AppProvider({ children }) {
     return plano
   }, [update, registrarEdicao])
 
+  // Baixa sem lançamento → "Desfazer baixa": a ocorrência volta a pendente (desfazerBaixa: tira de
+  // registered, apaga o meta, recua a âncora). Histórico no agendamento.
+  const desfazerBaixaOcorrencia = useCallback((scheduleId, dataOc) => {
+    const s0 = dataRef.current.schedules.find(s => s.id === scheduleId)
+    if (!s0 || !(s0.registered || []).includes(dataOc)) return false
+    const novo = desfazerBaixa(s0, dataOc)
+    update(d => ({ ...d, schedules: d.schedules.map(s => (s.id === scheduleId ? novo : s)) }))
+    const loteId = novoLoteId()
+    registrarEdicao({
+      agendamentos: [novo], loteId,
+      historico: linhasHistorico({ entidade: 'agendamento', loteId, motivo: 'Baixa sem lançamento desfeita', itens: [{ id: scheduleId, ocorrenciaData: dataOc, escopo: ESCOPO.PARCELA, mudancas: [{ campo: 'baixa', de: dataOc, para: null }] }] }),
+    }).catch(e => console.error('[baixa] histórico:', e?.message || e))
+    return true
+  }, [update, registrarEdicao])
+
+  // Baixa sem lançamento → "Manter assim (pago fora do Finup)": grava o motivo no registered_meta e
+  // a baixa sai do alerta e da revisão.
+  const manterBaixaPagoFora = useCallback((scheduleId, dataOc) => {
+    const s0 = dataRef.current.schedules.find(s => s.id === scheduleId)
+    if (!s0 || !(s0.registered || []).includes(dataOc)) return false
+    const novo = { ...s0, registeredMeta: { ...(s0.registeredMeta || {}), [dataOc]: metaPagoFora(format(new Date(), 'yyyy-MM-dd')) } }
+    update(d => ({ ...d, schedules: d.schedules.map(s => (s.id === scheduleId ? novo : s)) }))
+    const loteId = novoLoteId()
+    registrarEdicao({
+      agendamentos: [novo], loteId,
+      historico: linhasHistorico({ entidade: 'agendamento', loteId, motivo: 'Pago fora do Finup', itens: [{ id: scheduleId, ocorrenciaData: dataOc, escopo: ESCOPO.PARCELA, mudancas: [{ campo: 'baixa_pago_fora', de: null, para: dataOc }] }] }),
+    }).catch(e => console.error('[baixa] histórico:', e?.message || e))
+    return true
+  }, [update, registrarEdicao])
+
   // Caso 2: mescla o avulso NA parcela existente da série — a parcela fica (numeração/série), recebe
   // os campos escolhidos, as baixas que apontavam o avulso passam para ela e o avulso é removido.
   // Só pela tela, depois da confirmação do usuário (o Assistente nunca chama isto).
@@ -6475,6 +6517,9 @@ export function AppProvider({ children }) {
       getOccurrencesProjecao,
       coberturaCartao,
       possiveisDuplicados,
+      baixasSemLancamento,
+      desfazerBaixaOcorrencia,
+      manterBaixaPagoFora,
       baixarComoJaNoCartao,
       classifyByRules,
       learnClassification,

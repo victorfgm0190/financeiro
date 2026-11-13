@@ -26,6 +26,7 @@ export const TIPO_BAIXA = {
   IMPORTADO: 'importado',             // regra B: linha nova da fatura
   JA_NO_CARTAO: 'ja_no_cartao',       // regra A / botão "Baixar como já no cartão"
   COBERTA_PARCELA: 'coberta_parcela', // regra B: parcela futura da série cobre a ocorrência
+  PAGO_FORA: 'pago_fora',             // baixa sem lançamento mantida de propósito ("pago fora do Finup")
 }
 const TIPOS_DE_IMPORTACAO = new Set([TIPO_BAIXA.IMPORTADO, TIPO_BAIXA.JA_NO_CARTAO, TIPO_BAIXA.COBERTA_PARCELA])
 
@@ -224,8 +225,22 @@ export function desfazerBaixa(s, occurrenceDate) {
   const registeredMeta = { ...(s.registeredMeta || {}) }
   delete registeredMeta[occurrenceDate]
   if ((s.frequency || 'once') === 'once') return { ...s, registered, registeredMeta, confirmado: false }
-  const nextOccurrence = (s.nextOccurrence && s.nextOccurrence <= occurrenceDate) ? s.nextOccurrence : occurrenceDate
+  // Baixa ANTES da Data de Início: perto dela (até meio período) é a 1ª parcela paga antes → a âncora
+  // volta para o início; longe (série reaproveitada para outra data) não é ocorrência desta série → a
+  // âncora fica onde está. Recuar para a data da baixa recomeçaria a série no passado.
+  const inicio = String(s.startDate || '').slice(0, 10)
+  let alvo = occurrenceDate
+  if (inicio && occurrenceDate < inicio) {
+    const dias = Math.abs(new Date(`${inicio}T12:00:00`) - new Date(`${occurrenceDate}T12:00:00`)) / 86400000
+    alvo = dias <= (MEIO_PERIODO_DIAS[s.frequency] ?? 15.5) ? inicio : null
+  }
+  if (!alvo) return { ...s, registered, registeredMeta, confirmado: false }
+  const nextOccurrence = (s.nextOccurrence && s.nextOccurrence <= alvo) ? s.nextOccurrence : alvo
   return { ...s, registered, registeredMeta, nextOccurrence, confirmado: false }
+}
+const MEIO_PERIODO_DIAS = {
+  daily: 0.5, weekly: 3.5, biweekly: 7, monthly: 15.5, bimonthly: 31, quarterly: 46,
+  quadrimestral: 61, semiannual: 92, annual: 183,
 }
 
 // Ocorrências que o lançamento `tx` baixou neste agendamento: pela meta (lancamento_id) — cobre o
@@ -368,4 +383,34 @@ export function ocorrenciasProjetadas(schedule, count, cobertura) {
   const cobertas = cobertura?.get(schedule.id)
   if (!cobertas?.size) return computeOccurrences(schedule, count)
   return computeOccurrences(schedule, count + cobertas.size).filter(d => !cobertas.has(d)).slice(0, count)
+}
+
+// Ocorrências que a exclusão de `tx` reabriria (para a pergunta da exclusão): [{ schedule, data }].
+// Mesma regra de reabrirBaixasDoLancamento, sem os agendamentos ignorados (motor da fatura).
+export function baixasDoLancamento(schedules, tx, { ignorar = () => false } = {}) {
+  if (!tx) return []
+  const out = []
+  for (const s of schedules || []) {
+    if (ignorar(s)) continue
+    for (const data of ocorrenciasDoLancamento(s, tx)) out.push({ schedule: s, data })
+  }
+  return out
+}
+
+// Exclusão com "manter baixada sem lançamento": a ocorrência continua registrada; o meta deixa de
+// apontar o lançamento apagado e guarda qual foi (a baixa entra na revisão de baixas sem lançamento).
+export const TIPO_MANTIDA_NA_EXCLUSAO = 'mantida_na_exclusao'
+export function manterBaixasDoLancamento(schedules, tx, { ignorar = () => false } = {}) {
+  if (!tx) return schedules
+  let mudou = false
+  const out = schedules.map(s => {
+    if (ignorar(s)) return s
+    const datas = ocorrenciasDoLancamento(s, tx)
+    if (!datas.length) return s
+    mudou = true
+    const registeredMeta = { ...(s.registeredMeta || {}) }
+    for (const d of datas) registeredMeta[d] = { tipo: TIPO_MANTIDA_NA_EXCLUSAO, lancamento_id: null, import_id: null, lancamento_excluido: tx.id }
+    return { ...s, registeredMeta }
+  })
+  return mudou ? out : schedules
 }

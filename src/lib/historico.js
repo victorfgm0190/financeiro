@@ -33,6 +33,10 @@ export function linhasHistorico({ entidade, itens, serieKey = null, loteId, moti
 
 export const ROTULO_ESCOPO = { parcela: 'Só esta parcela', proximas: 'Esta e as próximas', serie: 'Série (pendentes)' }
 
+const ROTULO_FREQUENCIA = {
+  once: 'Uma vez', daily: 'Diária', weekly: 'Semanal', biweekly: 'Quinzenal', monthly: 'Mensal', bimonthly: 'Bimestral',
+  quarterly: 'Trimestral', quadrimestral: 'Quadrimestral', semiannual: 'Semestral', annual: 'Anual',
+}
 const brl = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0)
 const ddmmyyyy = (iso) => (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso)
 
@@ -43,7 +47,13 @@ export function formatarValorHistorico(campo, v, ctx = {}) {
   switch (campo) {
     case 'amount':
     case 'valorTotalOcorrencia': return brl(v)
-    case 'date': return ddmmyyyy(v)
+    case 'date':
+    case 'startDate':
+    case 'baixa':
+    case 'pulo':
+    case 'baixa_pago_fora': return ddmmyyyy(v)
+    case 'frequency': return ROTULO_FREQUENCIA[v] || String(v)
+    case 'installments': return `${v} parcela${Number(v) === 1 ? '' : 's'}`
     case 'categoryId':
     case 'categoriaCnpjId':
     case 'categoriaCpfId':
@@ -81,6 +91,8 @@ export function formatarValorHistorico(campo, v, ctx = {}) {
 
 // Campos que só aparecem no histórico (correções da revisão automática do cartão).
 const ROTULO_EXTRA = {
+  startDate: 'Data de início', frequency: 'Frequência', installments: 'Nº de parcelas',
+  baixa: 'Baixa desfeita (ocorrência)', pulo: 'Ocorrência pulada', baixa_pago_fora: 'Baixa mantida (pago fora do Finup)',
   exclusao: 'Lançamento excluído', faturaMonthYear: 'Fatura', rateio: 'Rateio', vinculo: 'Vínculo',
   mesclado_de: 'Mesclado com o avulso', mesclagem: 'Mesclagem', desfazer_mesclagem: 'Mesclagem desfeita', reconciled: 'Conciliado',
 }

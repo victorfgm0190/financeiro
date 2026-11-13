@@ -35,6 +35,7 @@ import {
   agendamentoUnicoPendente, serieKeyDe, mensagemAplicada, conflitosProximas, normalizarCampo, edicaoDeOcorrencia,
 } from '../../lib/camposSerie'
 import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico'
+import { erroProximaData, baixasAntesDoInicio, erroDataInicio, perguntaDesfazerBaixas, deixadasParaTras, aplicarDecisoesDeDatas, dataBR, mudancasDeEstrutura } from '../../lib/edicaoSerieBaixas'
 import RateioModal from '../shared/RateioModal'
 import ResumoRateio from '../shared/ResumoRateio'
 import { validarRateio, normalizarRateio, categoriaPrincipal, rateioDaOcorrencia } from '../../lib/rateio'
@@ -385,6 +386,10 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   const parcelamentoBloqueado = !!initial?.id && !parcelavaAntes && temConsumo(serieBase)
   const serieComBaixa = parcelavaAntes && temConsumo(serieBase)
   const [erroParcelamento, setErroParcelamento] = useState('')
+  // Datas da série × ocorrências consumidas (lib/edicaoSerieBaixas): erro de bloqueio e a pergunta
+  // (desfazer baixa sem lançamento antes do novo início / marcar pendentes deixadas para trás).
+  const [erroDatas, setErroDatas] = useState('')
+  const [perguntaDatas, setPerguntaDatas] = useState(null) // { decisao, desfazer, pular, etapa, desfazerEscolhido }
   const occAlvoParcela = parcelavaAntes && ancoraSalva ? (parcelaDaData(serieBase, ancoraSalva)?.ocorrencia || null) : null
   // Pergunta do fluxo principal (só despesa/receita em conta não FC, ou transferência FC ↔ não FC;
   // nunca cartão). Vale para a série: o realizado segue a regra da conta.
@@ -700,7 +705,10 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         planoSchedule = plano.schedule
         afetadas = plano.afetadas
       }
-      const final = { ...planoSchedule, accountType: accounts.find(a => a.id === planoSchedule.accountId)?.type || planoSchedule.accountType }
+      const final = aplicarDecisoesDeDatas(
+        { ...planoSchedule, accountType: accounts.find(a => a.id === planoSchedule.accountId)?.type || planoSchedule.accountType },
+        { pular: decisao?.pularDatas || [], desfazer: decisao?.desfazerBaixas || [] },
+      )
       if (ehParcelado(final)) final.nextOccurrence = getNextOccurrences(final, 1)[0] || null
       updateSchedule(initial.id, final)
       finais = [final]
@@ -754,9 +762,18 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       entidade: 'agendamento', serieKey, loteId, motivo: e.motivo || motivo,
       itens: itensPorEscopo([{ id: initial.id, ocorrenciaData: e.escopo === ESCOPO.PARCELA ? e.occDate : null, mudancas: e.mudancas }], e.escopo),
     }))
+    // Estrutura da série (nº de parcelas, Data de Início, frequência) e as decisões de datas
+    // (baixas desfeitas, pendentes puladas) também ficam no histórico, no mesmo lote.
+    const estrutura = mudancasDeEstrutura(atual, data)
+    const itensExtras = [
+      ...(estrutura.length ? [{ id: initial.id, escopo: ESCOPO.SERIE, mudancas: estrutura }] : []),
+      ...(decisao?.desfazerBaixas || []).map(d => ({ id: initial.id, ocorrenciaData: d, escopo: ESCOPO.PARCELA, mudancas: [{ campo: 'baixa', de: d, para: null }] })),
+      ...(decisao?.pularDatas || []).map(d => ({ id: initial.id, ocorrenciaData: d, escopo: ESCOPO.PARCELA, mudancas: [{ campo: 'pulo', de: null, para: d }] })),
+    ]
     const historico = [
       ...historicoChip,
       ...linhasHistorico({ entidade: 'agendamento', itens: itensPorEscopo(entradas, escopoParcela), serieKey, loteId, motivo }),
+      ...linhasHistorico({ entidade: 'agendamento', itens: itensExtras, serieKey, loteId, motivo }),
     ]
     if (historico.length) {
       try {
@@ -768,7 +785,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     }
     if (mudancas.length) {
       onAviso?.(ctx.tipo === 'simples' ? 'Alteração salva. Histórico registrado.' : mensagemAplicada(nAfetadas))
-    } else if (historicoChip.length) {
+    } else if (historicoChip.length || itensExtras.length) {
       onAviso?.('Alterações salvas. Histórico registrado.')
     }
     return true
@@ -852,6 +869,14 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       // Regra única de séries: campo da PARCELA mudou e há pendentes depois → pergunta o escopo.
       let mudancas = diffCampos(camposAntes, camposDoForm(form))
       const ctx = contextoSerie()
+      // Série recorrente com ocorrências consumidas: nenhuma baixada pode ficar antes/em cima da
+      // próxima data nem antes da Data de Início (baixa COM lançamento bloqueia).
+      const regraDatas = ctx.tipo === 'A' && !parcelavaAntes && !ehParcelado(atual)
+      const antesDoInicio = regraDatas && String(form.startDate || '').slice(0, 10) !== String(atual.startDate || '').slice(0, 10)
+        ? baixasAntesDoInicio(atual, form.startDate, transactions) : null
+      const erroDeDatas = regraDatas ? ((ancoraTocada ? erroProximaData(atual, form.nextOccurrence) : null) || erroDataInicio(antesDoInicio)) : null
+      setErroDatas(erroDeDatas || '')
+      if (erroDeDatas) return
       // Recorrência parcelada: "Valor" aqui é o total da ocorrência; total e N têm pergunta própria.
       if (parcelavaAntes) {
         const edicao = edicaoDoParcelamento(serieBase, { total: Number(form.amount), n: nForm })
@@ -876,6 +901,23 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           conflitos: ctx.tipo === 'A' ? conflitosProximas(serieBase, { occDate: ctx.occDate, mudancas, pendentes: ctx.pendentes }) : [],
         })
         return
+      }
+      if (regraDatas && !decisao?.datasDecididas) {
+        const escopoData = decisao?.escopo || (ctx.nProximas > 0 ? ESCOPO.PARCELA : ESCOPO.PROXIMAS)
+        const ancoraAntes = ancoraDe(atual)
+        const novaAncora = ancoraTocada
+          ? (escopoData === ESCOPO.PROXIMAS ? form.nextOccurrence : null)
+          : (serieLocal ? ancoraDe(serieLocal) : null)
+        // Data de Início movida para depois delas = a série recomeçou: não ficam "para trás".
+        const inicioNovo = String(form.startDate || '').slice(0, 10)
+        const pular = (novaAncora && ancoraAntes
+          ? deixadasParaTras(getNextOccurrences(atual, 400), ancoraAntes, novaAncora, atual.frequency) : [])
+          .filter(d => !inicioNovo || d >= inicioNovo)
+        const desfazer = antesDoInicio?.semLancamento || []
+        if (pular.length || desfazer.length) {
+          setPerguntaDatas({ decisao, desfazer, pular, etapa: desfazer.length ? 'desfazer' : 'pular', desfazerEscolhido: [] })
+          return
+        }
       }
       if (rateioMudou) {
         escopoRateio = ctx.nProximas > 0 ? (decisao?.escopo || ESCOPO.PARCELA) : ESCOPO.SERIE
@@ -957,6 +999,74 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         onCancel={() => setChipPendente(null)}
         onConfirm={(decisao) => { const c = chipPendente; setChipPendente(null); aplicarEdicaoOcorrencia(c.occDate, c.mudancas, decisao) }}
       />
+      {dialogoDescartar}
+      </>
+    )
+  }
+  if (perguntaDatas) {
+    const p = perguntaDatas
+    const seguir = (desfazerBaixas) => {
+      if (p.etapa === 'desfazer' && p.pular.length) { setPerguntaDatas({ ...p, etapa: 'pular', desfazerEscolhido: desfazerBaixas }); return }
+      setPerguntaDatas(null)
+      handleSubmit(null, { ...(p.decisao || {}), datasDecididas: true, desfazerBaixas, pularDatas: [] })
+    }
+    const pularTodas = () => {
+      setPerguntaDatas(null)
+      handleSubmit(null, { ...(p.decisao || {}), datasDecididas: true, desfazerBaixas: p.desfazerEscolhido, pularDatas: p.pular })
+    }
+    // "Desfazer a alteração": a próxima data volta a ser a de antes (e somem as edições pela prévia).
+    const desfazerAlteracao = () => {
+      setPerguntaDatas(null)
+      setSerieLocal(null)
+      setEdicoesChip([])
+      const anc = ancoraDe(atual)
+      setForm(f => ({ ...f, overrides: atual.overrides || {}, skipped: atual.skipped || [], nextOccurrence: anc ? occEfetiva(atual, anc).date : f.nextOccurrence }))
+      setAncoraTocada(false)
+    }
+    const n = p.pular.length
+    return (
+      <>
+      <div className="space-y-4" data-testid="pergunta-datas-serie">
+        {p.etapa === 'desfazer' ? (
+          <>
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={16} className="text-aviso mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-texto-1">{perguntaDesfazerBaixas(p.desfazer)}</p>
+                <p className="text-xs text-texto-2 mt-1">
+                  A nova Data de Início fica depois dessa baixa, que foi marcada como paga sem nenhum lançamento.
+                  Desfazendo, ela deixa de contar como parcela paga e a série recomeça inteira na nova data.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end flex-wrap">
+              <button type="button" className="btn-secondary" onClick={() => setPerguntaDatas(null)}>Voltar</button>
+              <button type="button" className="btn-secondary" onClick={() => seguir([])}>Não, manter a baixa</button>
+              <button type="button" className="btn-primary" onClick={() => seguir(p.desfazer)}>Sim, desfazer</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={16} className="text-aviso mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-texto-1">
+                  {n === 1 ? 'Marcar essa ocorrência como pulada?' : 'Marcar essas ' + n + ' ocorrências como puladas?'}
+                </p>
+                <p className="text-xs text-texto-2 mt-1">
+                  A nova próxima data deixa para trás {n === 1 ? 'a ocorrência pendente de ' : 'as ocorrências pendentes de '}
+                  <span className="text-texto-1">{p.pular.map(dataBR).join(', ')}</span>.
+                  Para nada sumir sem registro, {n === 1 ? 'ela fica marcada como pulada' : 'elas ficam marcadas como puladas'} (dá para desfazer o pulo depois).
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end flex-wrap">
+              <button type="button" className="btn-secondary" onClick={desfazerAlteracao}>Desfazer a alteração</button>
+              <button type="button" className="btn-primary" onClick={pularTodas}>{n === 1 ? 'Marcar como pulada' : 'Marcar como puladas'}</button>
+            </div>
+          </>
+        )}
+      </div>
       {dialogoDescartar}
       </>
     )
@@ -1721,6 +1831,9 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
         {/* Celular: barra de ações presa ao pé da área que rola (Salvar sempre à mão), acima da
             safe area do iPhone. O fundo cobre o conteúdo que passa por baixo. */}
+        {erroDatas && (
+          <p role="alert" data-testid="erro-datas-serie" className="sm:col-span-2 text-sm text-perigo">{erroDatas}</p>
+        )}
         {erroSalvar && erroSalvar.id !== 'agendamento.tipoDocumento' && errosDoAgendamento(form, regrasValidacao).some(x => x.id === erroSalvar.id) && (
           <p role="alert" data-testid="erro-salvar-agendamento" className="sm:col-span-2 text-sm text-perigo">{erroSalvar.msg}</p>
         )}

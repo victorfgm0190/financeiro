@@ -1,4 +1,5 @@
 import { resgatePrimeiro } from '../../lib/ordemResgate'
+import EscolhaBaixaExclusao from '../shared/EscolhaBaixaExclusao'
 import { useState, useMemo } from 'react'
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp,
@@ -565,6 +566,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const [confirmEstorno, setConfirmEstorno] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [manterBaixa, setManterBaixa] = useState(false)
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null) // row netizado a excluir inteiro
   const [showBulkDelete, setShowBulkDelete] = useState(false) // modal de exclusão em lote (modo Selecionar)
   const [toast, setToast] = useState(null)
@@ -574,10 +576,11 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const handleDelete = (tx) => {
     const r = findLinkedResgate(tx.id)
-    if (onDelete) onDelete(tx.id)
-    else deleteTransaction(tx.id)
+    if (onDelete) onDelete(tx.id, { manterBaixa })
+    else deleteTransaction(tx.id, { manterBaixa })
     if (r) deleteSchedule(r.id)
     setConfirmDelete(null)
+    setManterBaixa(false)
   }
 
   // Exclui todas as transferências de um grupo netizado (mesmo fluxo de deleteTransaction,
@@ -1484,7 +1487,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
       <ConfirmDialog
         open={!!confirmDelete}
-        onClose={() => setConfirmDelete(null)}
+        onClose={() => { setConfirmDelete(null); setManterBaixa(false) }}
         onConfirm={() => handleDelete(confirmDelete)}
         title="Excluir Lançamento"
         message={(() => {
@@ -1500,7 +1503,9 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         })()}
         confirmLabel={confirmDelete && findLinkedResgate(confirmDelete.id) ? 'Excluir ambos' : 'Excluir'}
         danger
-      />
+      >
+        {confirmDelete && <EscolhaBaixaExclusao tx={confirmDelete} manter={manterBaixa} onChange={setManterBaixa} />}
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={!!confirmDeleteGroup}

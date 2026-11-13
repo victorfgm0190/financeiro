@@ -9,15 +9,17 @@
 //   • schedule.registeredMeta[data] = { tipo, lancamento_id } — como a baixa foi feita (só as recentes).
 //   • lancamentos com scheduleId === schedule.id.
 //
-// Cada data consumida (registered ∪ skipped), em ordem cronológica, ocupa uma parcela (1/N, 2/N…);
-// o vencimento teórico da parcela i é a i-ésima data da série desde a Data de Início.
+// Cada data consumida (registered ∪ skipped), em ordem cronológica, ocupa uma parcela (1/N, 2/N…).
+// Vencimento da consumida: a data teórica da série (desde a Data de Início) mais próxima dela, a até
+// meio período; longe de qualquer data da série (ex.: Data de Início movida para depois da baixa),
+// vale a própria data gravada — a edição da série nunca "muda" o vencimento de uma baixada.
 // Casamento lançamento ↔ data registrada, nesta ordem:
 //   a) registeredMeta[data].lancamento_id (pode ser lançamento de cartão, sem scheduleId);
 //   b) lançamento com scheduleId mais próximo da data REGISTRADA, ainda não usado, dentro de ±1
 //      período da frequência (mensal = 31 dias);
 //   c) fora da janela → não casa (a data fica "Baixada").
 // Lançamentos com scheduleId que sobram entram no fim como "Avulso vinculado".
-import { computeOccurrences } from './occurrences.js'
+import { computeOccurrences, datasDaSerie, diaVencimentoDe } from './occurrences.js'
 import { occEfetiva } from './fluxoCaixa.js'
 import { lancamentosVinculados } from './scheduleBaixa.js'
 import { casaCategoria } from './filtroCategoria.js'
@@ -46,7 +48,10 @@ const MOTIVO_BAIXA = {
   ja_no_cartao: 'já no cartão',
   importado: 'importada',
   coberta_parcela: 'coberta por parcela',
+  pago_fora: 'pago fora do Finup',
 }
+// Baixas que, por desenho, não têm lançamento do agendamento: o dinheiro está no cartão/importação.
+const BAIXA_DE_IMPORTACAO = new Set(['ja_no_cartao', 'importado', 'coberta_parcela'])
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 const dia = (d) => String(d || '').slice(0, 10)
@@ -67,7 +72,7 @@ export function resumoRegistradas(schedule, transactions = []) {
 }
 
 export function historicoOcorrencias(schedule, transactions = []) {
-  if (!schedule) return { linhas: [], totalPago: 0, totalPrevisto: 0, diferenca: 0, nPagas: 0 }
+  if (!schedule) return { linhas: [], totalPago: 0, totalPrevisto: 0, previstoDaSerie: false, previstoPagas: 0, diferenca: 0, nPagas: 0, nSemLancamento: 0, totalSemLancamento: 0 }
   const s = schedule
   const continua = (s.occurrenceType || 'continuous') !== 'installment'
   const total = totalDaSerie(s, continua)
@@ -75,10 +80,7 @@ export function historicoOcorrencias(schedule, transactions = []) {
   const cobertas = new Set(Array.isArray(s.overrides?._resgateCobertas) ? s.overrides._resgateCobertas : [])
   const puladas = new Set((s.skipped || []).map(dia).filter(d => !cobertas.has(d)))
   const eventos = [...new Set([...registradas, ...puladas])].sort()
-  // Vencimentos teóricos desde a Data de Início (série sem baixas/pulos), um por parcela consumida.
-  const teoricas = s.startDate
-    ? computeOccurrences({ ...s, nextOccurrence: null, registered: [], skipped: [] }, Math.max(eventos.length, 1))
-    : []
+  const vencimentos = vencimentosDasConsumidas(s, eventos)
 
   const txById = new Map((transactions || []).map(t => [t.id, t]))
   const vinculados = (transactions || []).filter(t => t.scheduleId === s.id)
@@ -110,8 +112,9 @@ export function historicoOcorrencias(schedule, transactions = []) {
   const linhas = eventos.map((d, i) => {
     const valorOriginal = r2(occEfetiva(s, d).amount)
     const base = {
-      parcela: i + 1, total, vencimento: (s.agendamentoVinculadoId ? d : teoricas[i]) || d, dataRegistro: d, valorOriginal,
+      parcela: i + 1, total, vencimento: (s.agendamentoVinculadoId ? d : vencimentos.get(d)) || d, dataRegistro: d, valorOriginal,
       pagoEm: null, valorPago: null, diferenca: null, accountId: null, payee: null, txId: null, motivo: null,
+      semLancamento: false, pagoFora: false,
     }
     if (puladas.has(d) && !registradas.includes(d)) return { ...base, status: STATUS_OCORRENCIA.PULADA }
     const tx = casado.get(d)
@@ -124,7 +127,11 @@ export function historicoOcorrencias(schedule, transactions = []) {
         diferenca: r2(valorPago - valorOriginal), accountId: tx.accountId || null, payee: tx.payee || null, txId: tx.id,
       }
     }
-    return { ...base, status: STATUS_OCORRENCIA.BAIXADA, motivo: MOTIVO_BAIXA[meta[d]?.tipo] || 'sem lançamento' }
+    const tipo = meta[d]?.tipo
+    return {
+      ...base, status: STATUS_OCORRENCIA.BAIXADA, motivo: MOTIVO_BAIXA[tipo] || 'sem lançamento',
+      semLancamento: !BAIXA_DE_IMPORTACAO.has(tipo), pagoFora: tipo === 'pago_fora',
+    }
   })
 
   // Lançamentos vinculados que sobraram (pagamento fora de qualquer data registrada).
@@ -138,11 +145,59 @@ export function historicoOcorrencias(schedule, transactions = []) {
   }
 
   const pagas = linhas.filter(l => l.status === STATUS_OCORRENCIA.PAGA)
+  // Total pago = soma dos lançamentos vinculados (pagas + avulsos).
   const totalPago = r2(linhas.reduce((acc, l) => acc + (l.valorPago || 0), 0))
-  // Previsto = valor original das parcelas PAGAS (comparável ao que foi pago por elas).
-  const totalPrevisto = r2(pagas.reduce((acc, l) => acc + l.valorOriginal, 0))
+  const previstoPagas = r2(pagas.reduce((acc, l) => acc + l.valorOriginal, 0))
   const totalPagoPagas = r2(pagas.reduce((acc, l) => acc + l.valorPago, 0))
-  return { linhas, totalPago, totalPrevisto, diferenca: r2(totalPagoPagas - totalPrevisto), nPagas: pagas.length }
+  // Total previsto = valor original de TODAS as ocorrências da série (consumidas + pendentes), fora
+  // as puladas. Série contínua (sem fim): só as consumidas.
+  const consumidasNaoPuladas = linhas.filter(l => l.dataRegistro && l.status !== STATUS_OCORRENCIA.PULADA)
+  let totalPrevisto = consumidasNaoPuladas.reduce((acc, l) => acc + l.valorOriginal, 0)
+  const previstoDaSerie = !!total
+  if (previstoDaSerie) {
+    for (const d of computeOccurrences(s, total)) totalPrevisto += Number(occEfetiva(s, d).amount) || 0
+  }
+  const semLanc = linhas.filter(l => l.semLancamento && !l.pagoFora)
+  return {
+    linhas, totalPago, totalPrevisto: r2(totalPrevisto), previstoDaSerie,
+    previstoPagas, diferenca: r2(totalPagoPagas - previstoPagas), nPagas: pagas.length,
+    nSemLancamento: semLanc.length, totalSemLancamento: r2(semLanc.reduce((acc, l) => acc + l.valorOriginal, 0)),
+  }
+}
+
+// Vencimento de cada data consumida (Map data → vencimento): a data teórica da série mais próxima,
+// ainda não usada, a até meio período; senão a própria data gravada.
+function vencimentosDasConsumidas(s, eventos) {
+  const out = new Map()
+  if (!eventos.length) return out
+  const ultimo = eventos[eventos.length - 1]
+  const inicio = String(s.startDate || '').slice(0, 10)
+  let teoricas = []
+  if (inicio && !ehParcelado(s)) {
+    const limite = s.occurrenceType === 'installment' ? Math.max(Number(s.installments) || 0, eventos.length) : 600
+    teoricas = datasDaSerie(inicio, s.frequency || 'once', limite, diaVencimentoDe(s)).filter(d => d <= somaDias(ultimo, janelaDaSerie(s)))
+  } else if (inicio) {
+    teoricas = computeOccurrences({ ...s, nextOccurrence: null, registered: [], skipped: [], efetivacoes: [] }, Math.max(eventos.length, 1))
+  }
+  const meia = janelaDaSerie(s) / 2
+  const usadas = new Set()
+  for (const d of eventos) {
+    let melhor = null
+    let melhorDist = Infinity
+    for (const t of teoricas) {
+      if (usadas.has(t)) continue
+      const dist = distDias(t, d)
+      if (dist <= meia && dist < melhorDist) { melhor = t; melhorDist = dist }
+    }
+    if (melhor) usadas.add(melhor)
+    out.set(d, melhor || d)
+  }
+  return out
+}
+const somaDias = (d, n) => {
+  const x = new Date(`${dia(d)}T12:00:00`)
+  x.setDate(x.getDate() + Math.ceil(n))
+  return x.toISOString().slice(0, 10)
 }
 
 // Aba "Pagos" (Agendamentos): UMA linha por ocorrência PAGA de qualquer agendamento — inclusive das

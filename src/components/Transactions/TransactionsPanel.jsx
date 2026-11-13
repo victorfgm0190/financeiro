@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import EscolhaBaixaExclusao from '../shared/EscolhaBaixaExclusao'
 import { rotuloCategoria, parteDaCategoria } from '../../lib/rateio'
 import SeloVinculo from '../shared/SeloVinculo'
 import {
@@ -114,6 +115,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
   // Reconciliar em lote: só no computador.
   const isMobile = useIsMobile()
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [manterBaixa, setManterBaixa] = useState(false)
   const [confirmEstorno, setConfirmEstorno] = useState(null)
   const [showEdit, setShowEdit] = useState(false)
   const [toast, setToast] = useState(null)
@@ -388,10 +390,10 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
       </Modal>
       <ConfirmDialog
         open={!!confirmDelete}
-        onClose={() => setConfirmDelete(null)}
+        onClose={() => { setConfirmDelete(null); setManterBaixa(false) }}
         onConfirm={() => {
           const r = confirmDelete && findLinkedResgate(confirmDelete.id)
-          deleteTransaction(confirmDelete.id)
+          deleteTransaction(confirmDelete.id, { manterBaixa })
           if (r) deleteSchedule(r.id)
         }}
         title="Excluir Lançamento"
@@ -408,7 +410,9 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
         })()}
         confirmLabel={confirmDelete && findLinkedResgate(confirmDelete.id) ? 'Excluir ambos' : undefined}
         danger
-      />
+      >
+        {confirmDelete && <EscolhaBaixaExclusao tx={confirmDelete} manter={manterBaixa} onChange={setManterBaixa} />}
+      </ConfirmDialog>
       {confirmEstorno && (
         <EstornoLancamentoDialog tx={confirmEstorno} onClose={() => setConfirmEstorno(null)} onFeito={showToast} />
       )}

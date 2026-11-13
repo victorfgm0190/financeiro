@@ -14,6 +14,8 @@ import BotaoPreencherGuia from '../Ajuda/BotaoPreencherGuia'
 import OpcoesDestinoPorPerfil from '../shared/OpcoesDestinoPorPerfil'
 import { rateioComQuitacao, quitarPorPadrao, podeQuitarComDesconto } from '../../lib/financiamento'
 import ExecutarGerenciaisModal from './ExecutarGerenciaisModal'
+import BaixasSemLancamento from './BaixasSemLancamento'
+import { textoAlertaBaixas } from '../../lib/baixasSemLancamento'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import DataPagamentoField from '../shared/DataPagamentoField'
 import { ORIGIN } from '../../lib/origins'
@@ -1098,7 +1100,9 @@ function ScheduleRow({
   // Regra C: ocorrências pendentes que um lançamento do cartão já cobre (cartão, fatura, valor,
   // data ±3 dias e descrição — ver txCobrindoOcorrencia). Só sinaliza — o agendamento não muda até
   // o usuário baixar. O tooltip cita o lançamento casado para conferência antes de baixar.
-  const { coberturaCartao, baixarComoJaNoCartao, transactions: todasTxs, pode, possiveisDuplicados, schedules: todosAgendamentos } = useApp()
+  const { coberturaCartao, baixarComoJaNoCartao, transactions: todasTxs, pode, possiveisDuplicados, schedules: todosAgendamentos, baixasSemLancamento } = useApp()
+  // Baixas sem lançamento da série (o mapa já deixa de fora os agendamentos automáticos).
+  const nOrfas = baixasSemLancamento?.get?.(schedule.id)?.length || 0
   // Nível de acesso (src/lib/permissoes.js): pagar/estornar/pular/efetivar/confirmar/editar = editar;
   // excluir = excluir. Sem permissão o botão some (a API também barra).
   // Resgate ligado a uma despesa (src/lib/resgateVinculado.js): a data segue a despesa, o PAGAMENTO
@@ -1381,6 +1385,12 @@ function ScheduleRow({
             {seloParcela && (
               <span className="text-xs bg-surface-hover/60 text-texto-2 px-1 py-0.5 rounded whitespace-nowrap" title="Parcela desta ocorrência">
                 {seloParcela}
+              </span>
+            )}
+            {nOrfas > 0 && (
+              <span data-testid="alerta-baixa-sem-lancamento" title={textoAlertaBaixas(nOrfas)} aria-label={textoAlertaBaixas(nOrfas)}
+                className="inline-flex items-center text-aviso cursor-help">
+                <AlertTriangle size={13} />
               </span>
             )}
             {schedule.contratoId && <SeloContrato schedule={schedule} />}
@@ -2901,7 +2911,14 @@ export default function SchedulePanel() {
     markScheduleRegistered, getNextOccurrences,
     getProvisoesPendentes, getFaturasProvisaoGerencial, executarProvisoesGerenciais, efetivarProvisao,
     activeProfileId, settings, tiposDocumento, transactions, pode, usuario, rateiosByLancamento,
+    baixasSemLancamento,
   } = useApp()
+  // Revisão das baixas sem lançamento dos agendamentos do perfil (lib/baixasSemLancamento).
+  const [showBaixasOrfas, setShowBaixasOrfas] = useState(false)
+  const nBaixasOrfas = useMemo(
+    () => (schedules || []).reduce((n, s) => n + (baixasSemLancamento?.get?.(s.id)?.length || 0), 0),
+    [schedules, baixasSemLancamento],
+  )
   // Nível de acesso: criar agendamento/provisão = incluir; Executar Gerenciais cria lançamentos.
   const podeIncluirAgend = pode('agendamentos', 'incluir')
   // Controle gerencial desligado: Executar Gerenciais some (nada gerencial é gerado).
@@ -3533,6 +3550,12 @@ export default function SchedulePanel() {
               <FileSpreadsheet size={14} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
             </button>
           )}
+          {(nBaixasOrfas > 0 || showBaixasOrfas) && (
+            <button type="button" data-testid="botao-baixas-sem-lancamento" className="btn-secondary flex items-center gap-2 whitespace-nowrap text-aviso"
+              onClick={() => setShowBaixasOrfas(true)} title="Ocorrências marcadas como pagas sem nenhum lançamento: revisar">
+              <AlertTriangle size={14} /> Baixas sem lançamento ({nBaixasOrfas})
+            </button>
+          )}
           {provisoesPendentes.length > 0 && podeExecutarGer && (
             <button data-guia="schedule.executar-gerenciais" className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={abrirExecutarGer} title={tituloExecutarGer}>
               <BarChart3 size={14} /> Executar Gerenciais ({provisoesPendentes.length})
@@ -3851,6 +3874,10 @@ export default function SchedulePanel() {
 
       <Modal open={!!editandoLancamento} onClose={() => setEditandoLancamento(null)} title="Editar Lançamento">
         {editandoLancamento && <TransactionForm initial={editandoLancamento} onClose={() => setEditandoLancamento(null)} />}
+      </Modal>
+
+      <Modal open={showBaixasOrfas} onClose={() => setShowBaixasOrfas(false)} title="Baixas sem lançamento" size="lg">
+        {showBaixasOrfas && <BaixasSemLancamento schedules={schedules} />}
       </Modal>
 
       {showExecutarGer && (
