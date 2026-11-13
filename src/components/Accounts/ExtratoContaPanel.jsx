@@ -1,3 +1,4 @@
+import { resgatePrimeiro } from '../../lib/ordemResgate'
 import { useState, useMemo } from 'react'
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp,
@@ -118,7 +119,7 @@ function netCAIncoming(rows, accountId, aplicacaoIds) {
 function buildRows(transactions, accountId, isAplicacao, aplicacaoIds) {
   const relevant = transactions
     .filter(tx => tx.accountId === accountId || tx.toAccountId === accountId)
-    .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''))
+    .sort((a, b) => a.date.localeCompare(b.date) || resgatePrimeiro(a, b) || (a.createdAt || '').localeCompare(b.createdAt || ''))
 
   // A netização bidirecional (round-trip do mesmo dia) ocorre sempre que o PAR envolve uma
   // conta de aplicação — seja a conta visualizada (isAplicacao), seja a conta oposta
@@ -663,7 +664,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   const periodReconcilable = useMemo(
     () => filteredTxs
       .filter(tx => (tx.accountId === account.id || tx.toAccountId === account.id))
-      .sort((a, b) => a.date.localeCompare(b.date)),
+      .sort((a, b) => a.date.localeCompare(b.date) || resgatePrimeiro(a, b)),
     [filteredTxs, account.id]
   )
 

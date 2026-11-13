@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
-  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown, List, CalendarDays, Smartphone, FileSpreadsheet, Undo2,
+  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown, List, CalendarDays, Smartphone, FileSpreadsheet, Undo2, Link2,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -27,6 +27,9 @@ import { exportarExcel } from '../../lib/exportExcel'
 import { totaisPorTipo, TIPOS_AGENDAMENTO, filtrarPorTipo, contarPorTipo, lerTipoAgendamento, salvarTipoAgendamento } from '../../lib/agendamentosTipo'
 import { linhasDosAgendamentos, linhasDosPagos, linhasDasFaturas, specAgendamentos, periodoDoArquivo } from '../../lib/exportarAgendamentos'
 import SeloContrato from '../Contratos/SeloContrato'
+import { temResgateLigado, despesaDoResgate } from '../../lib/resgateVinculado'
+import { resgatePrimeiro } from '../../lib/ordemResgate'
+import { ExcluirResgateModal, VincularResgateLista } from './ResgateLigado'
 import BotaoComposicaoParcela from '../Contratos/BotaoComposicaoParcela'
 import ComposicaoParcelaResumo from '../Contratos/ComposicaoParcelaResumo'
 import HelpCampo from '../shared/HelpCampo'
@@ -436,7 +439,10 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
     // Grupo numerado (≠ G, ≠ D) gera resgate para a Conta central do perfil da conta paga: sem
     // ela, bloqueia o pagamento inteiro antes de gravar.
     const grupoPag = tab === 'pagamento' && payGrupo ? gerencialGroups.find(g => g.id === payGrupo) : null
-    const precisaCentral = grupoPag && grupoPag.number !== 'D' && grupoPag.number !== 1 && accounts.some(a => a.id === grupoPag.defaultAccountId)
+    // Resgate agendado junto (ligado a este agendamento): ele é efetivado com a despesa; o resgate
+    // avulso abaixo dobraria a saída da reserva.
+    const comResgateLigado = temResgateLigado(scheduleProp.id, todosAgendamentos)
+    const precisaCentral = !comResgateLigado && grupoPag && grupoPag.number !== 'D' && grupoPag.number !== 1 && accounts.some(a => a.id === grupoPag.defaultAccountId)
     const central = precisaCentral ? centralPagamento(payAccountId) : { conta: null, erro: null }
     if (central.erro) { setAvisoOperacao(central.erro); return }
     const contaPrincipal = central.conta
@@ -467,7 +473,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
             if (payAccountId && contaReserva) {
               addTransaction({ type: 'transfer', accountId: payAccountId, toAccountId: contaReserva.id, amount, date: payDate, description: `Reserva ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })
             }
-          } else {
+          } else if (!comResgateLigado) {
             const contaResgate = accounts.find(a => a.id === grupo.defaultAccountId)
             if (contaResgate && contaPrincipal) {
               addTransaction({ type: 'transfer', accountId: contaResgate.id, toAccountId: contaPrincipal.id, amount, date: payDate, description: `Resgate ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })
@@ -1056,8 +1062,16 @@ function ScheduleRow({
   const { coberturaCartao, baixarComoJaNoCartao, transactions: todasTxs, pode, possiveisDuplicados, schedules: todosAgendamentos } = useApp()
   // Nível de acesso (src/lib/permissoes.js): pagar/estornar/pular/efetivar/confirmar/editar = editar;
   // excluir = excluir. Sem permissão o botão some (a API também barra).
+  // Resgate ligado a uma despesa (src/lib/resgateVinculado.js): segue a despesa. Na linha dele: Pagar
+  // (antes da despesa não dobra), Vincular a um resgate já feito e Excluir (esta ocorrência ou o
+  // resgate inteiro); Pular/Estornar ficam na despesa. O selo "Acompanha" leva à despesa.
+  const ehResgateLigado = !!schedule.agendamentoVinculadoId
+  const despesaLigada = ehResgateLigado ? despesaDoResgate(schedule, todosAgendamentos) : null
   const podeEditar = pode('agendamentos', 'editar')
   const podeExcluir = pode('agendamentos', 'excluir')
+  const podeAgirNaOcorrencia = podeEditar && !ehResgateLigado
+  const [excluindoResgate, setExcluindoResgate] = useState(false)
+  const [vinculandoResgate, setVinculandoResgate] = useState(false)
   const cobertas = coberturaCartao?.get(schedule.id)
   const nCobertas = cobertas?.size || 0
   const tituloCobertas = nCobertas ? [...cobertas].map(([d, txId]) => {
@@ -1208,7 +1222,7 @@ function ScheduleRow({
         {/* Checkbox */}
         {selectionMode && (
           <td className="px-3 py-3 w-8">
-            {!ehSintetico(schedule) ? (
+            {!ehSintetico(schedule) && !ehResgateLigado ? (
               <input
                 type="checkbox"
                 checked={isSelected}
@@ -1311,6 +1325,18 @@ function ScheduleRow({
                 className="inline-flex items-center gap-1 text-xs bg-primary/15 text-primary-fg px-1.5 py-0.5 rounded whitespace-nowrap font-medium hover:bg-primary/25 transition-colors"
               >
                 <List size={10} /> Ver gastos
+              </button>
+            )}
+            {ehResgateLigado && (
+              <button
+                type="button"
+                data-testid="selo-acompanha"
+                onClick={(e) => { e.stopPropagation(); if (despesaLigada) onEditSchedule(despesaLigada) }}
+                disabled={!despesaLigada}
+                title="Este resgate anda junto com a despesa: pagar, pular, estornar e excluir são feitos nela. Abrir a despesa."
+                className="inline-flex items-center gap-1 text-xs bg-reserva/15 text-reserva px-1.5 py-0.5 rounded font-medium hover:bg-reserva/25 transition-colors text-left whitespace-normal break-words"
+              >
+                <Link2 size={10} className="shrink-0" /> Acompanha: {despesaLigada?.description || 'despesa'}
               </button>
             )}
             {seloParcela && (
@@ -1494,7 +1520,19 @@ function ScheduleRow({
           </div>
           )}
           <div className={`flex items-center justify-end gap-1 ${detalheMobile ? 'flex-wrap' : 'flex-nowrap'}`}>
-            {nextDate && podeEditar && !futura && (
+            {nextDate && podeEditar && ehResgateLigado && !futura && (
+              <>
+                <button onClick={() => setShowPay(true)} title="Pagar este resgate agora (antes da despesa não dobra)" aria-label="Pagar"
+                  className="flex items-center justify-center gap-1 h-8 min-w-8 px-2 text-xs bg-receita/15 text-receita rounded-md hover:bg-receita/25 transition-colors font-medium">
+                  <CheckCircle size={12} /> <span className="hidden 2xl:inline">Pagar</span>
+                </button>
+                <button onClick={() => setVinculandoResgate(true)} title="Vincular a um resgate já feito" aria-label="Vincular"
+                  className="flex items-center justify-center gap-1 h-8 min-w-8 px-2 text-xs bg-reserva/15 text-reserva rounded-md hover:bg-reserva/25 transition-colors font-medium">
+                  <Link2 size={12} /> <span className="hidden 2xl:inline">Vincular</span>
+                </button>
+              </>
+            )}
+            {nextDate && podeAgirNaOcorrencia && !futura && (
               <>
                 <button
                   data-guia="schedule.pagar"
@@ -1532,7 +1570,7 @@ function ScheduleRow({
             {podeEditar && <button data-guia="schedule.editar" onClick={() => onEditSchedule(schedule)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0" title="Editar agendamento" aria-label="Editar">
               <Edit2 size={13} />
             </button>}
-            {podeExcluir && !futura && <button data-guia="schedule.excluir" onClick={() => setShowExcluir(true)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0 hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg" title="Excluir agendamento" aria-label="Excluir">
+            {podeExcluir && !futura && <button data-guia="schedule.excluir" onClick={() => (ehResgateLigado ? setExcluindoResgate(true) : setShowExcluir(true))} className="btn-amber w-8 h-8 p-0 justify-center shrink-0 hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg" title="Excluir agendamento" aria-label="Excluir">
               <Trash2 size={13} />
             </button>}
           </div>
@@ -1622,6 +1660,12 @@ function ScheduleRow({
         />
       )}
 
+      {excluindoResgate && <ExcluirResgateModal resgate={schedule} chave={nextDate} onClose={() => setExcluindoResgate(false)} />}
+      {vinculandoResgate && (
+        <Modal open onClose={() => setVinculandoResgate(false)} title="Vincular a um resgate já feito" size="md">
+          <VincularResgateLista resgate={schedule} chave={nextDate} onFeito={() => setVinculandoResgate(false)} />
+        </Modal>
+      )}
       {showExcluir && deContrato && (
         <ExcluirParcelaContratoModal schedule={schedule} onClose={() => setShowExcluir(false)} />
       )}
@@ -2175,7 +2219,7 @@ const SELECTION_GROUP_ORDER = GRUPOS_SELECAO
 // tabela, com as MESMAS linhas (buildScheduleGroups) e a mesma linha de ações (ScheduleRow).
 // reservaFoco: conta de reserva filtrada na aba Contas Anuais (o resumo da seleção conta pelo lado dela).
 function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true, pagosLinhas = null, calendario = null, reservaFoco = null }) {
-  const { profiles, setAvisoOperacao, scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa, pode, definirSincronizarAgenda } = useApp()
+  const { profiles, setAvisoOperacao, scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa, pode, definirSincronizarAgenda, schedules: todosAgendamentosTabela } = useApp()
   // Seleção (registrar/pular/definir tipo em massa) só para quem edita agendamentos.
   const podeSelecionar = pode('agendamentos', 'editar')
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
@@ -2223,15 +2267,16 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
 
   // Particionamento por DATA usa displayDate (mesma data mostrada na linha e no formulário);
   // seleção/ações continuam por nextDate (ocorrência real).
-  const overdue    = rows.filter(r => r.displayDate && r.displayDate < today).sort((a, b) => a.displayDate.localeCompare(b.displayDate))
-  const next7      = rows.filter(r => r.displayDate && r.displayDate >= today && r.displayDate <= in7).sort((a, b) => a.displayDate.localeCompare(b.displayDate))
-  const next30     = rows.filter(r => r.displayDate && r.displayDate > in7 && r.displayDate <= in30).sort((a, b) => a.displayDate.localeCompare(b.displayDate))
-  const future     = rows.filter(r => r.displayDate && r.displayDate > in30).sort((a, b) => a.displayDate.localeCompare(b.displayDate))
+  // Mesmo dia: o resgate ligado antes da despesa (lib/ordemResgate).
+  const overdue    = rows.filter(r => r.displayDate && r.displayDate < today).sort((a, b) => a.displayDate.localeCompare(b.displayDate) || resgatePrimeiro(a, b))
+  const next7      = rows.filter(r => r.displayDate && r.displayDate >= today && r.displayDate <= in7).sort((a, b) => a.displayDate.localeCompare(b.displayDate) || resgatePrimeiro(a, b))
+  const next30     = rows.filter(r => r.displayDate && r.displayDate > in7 && r.displayDate <= in30).sort((a, b) => a.displayDate.localeCompare(b.displayDate) || resgatePrimeiro(a, b))
+  const future     = rows.filter(r => r.displayDate && r.displayDate > in30).sort((a, b) => a.displayDate.localeCompare(b.displayDate) || resgatePrimeiro(a, b))
   const completed  = rows.filter(r => !r.nextDate).sort((a, b) => (b.schedule.startDate || '').localeCompare(a.schedule.startDate || ''))
 
   // Selecionável = registro real (sintéticos — envelope, resgate previsto sch:… — nunca). Registrar/
   // pular só valem para quem tem próxima ocorrência (selectedRows); o tipo de documento, para todos.
-  const selectableRows = rows.filter(r => !ehSintetico(r.schedule))
+  const selectableRows = rows.filter(r => !ehSintetico(r.schedule) && !r.schedule.agendamentoVinculadoId)
   const allSelected = selectableRows.length > 0 && selectableRows.every(r => selected.has(r.schedule.id))
   const selectedRows = rows.filter(r => selected.has(r.schedule.id) && r.nextDate)
   const selectedIds = selectableRows.filter(r => selected.has(r.schedule.id)).map(r => r.schedule.id)
@@ -2290,7 +2335,8 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
     // Grupo numerado gera resgate para a Conta central do PERFIL DA CONTA DO AGENDAMENTO: sem ela,
     // esta ocorrência não é registrada (as outras do lote seguem).
     const grupo = schedule.grupoGerencial ? gerencialGroups.find(g => g.id === schedule.grupoGerencial) : null
-    const precisaCentral = grupo && grupo.number !== 'D' && grupo.number !== 1 && accounts.some(a => a.id === grupo.defaultAccountId)
+    const comResgateLigado = temResgateLigado(schedule.id, todosAgendamentosTabela)
+    const precisaCentral = !comResgateLigado && grupo && grupo.number !== 'D' && grupo.number !== 1 && accounts.some(a => a.id === grupo.defaultAccountId)
     const central = precisaCentral ? contaCentralParaId(accounts, profiles, schedule.accountId) : { conta: null, erro: null }
     if (central.erro) { setAvisoOperacao(central.erro); return }
     const contaPrincipal = central.conta
@@ -2303,7 +2349,7 @@ function SchedulesTable({ onAbrirAvulso, schedules, categories, accounts, gerenc
       if (schedule.accountId && contaReserva) {
         addTransaction({ type: 'transfer', accountId: schedule.accountId, toAccountId: contaReserva.id, amount, date: txDate, description: `Reserva ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })
       }
-    } else {
+    } else if (!comResgateLigado) {
       const contaResgate = accounts.find(a => a.id === grupo.defaultAccountId)
       if (contaResgate && contaPrincipal) {
         addTransaction({ type: 'transfer', accountId: contaResgate.id, toAccountId: contaPrincipal.id, amount, date: txDate, description: `Resgate ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })

@@ -65,6 +65,7 @@ import AvisoParecidos from './AvisoParecidos'
 import { controleGerencialAtivo, grupoComChaveDesligada, travaGerencial } from '../../lib/controleGerencial'
 import { contaCentralDoPerfil, contaCentralPara } from '../../lib/contaCentral'
 import { useTrabalhoEmAndamento, useAlteradoDesdeAbertura } from '../../hooks/useTrabalhoEmAndamento'
+import { useDescartarAlteracoes } from '../shared/useDescartarAlteracoes'
 
 const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita', atalho: 'lancamento.tipoReceita' },
@@ -270,6 +271,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   useTrabalhoEmAndamento('form-lancamento', formAlterado, form.type === 'transfer' ? 'uma transferência que ainda não foi salva' : 'um lançamento que ainda não foi salvo')
 
   const [step, setStep] = useState('form')
+  // Fechar com alteração não salva pergunta "Descartar as alterações?" — só ANTES de salvar (nas
+  // etapas depois do salvar, como agendar o resgate, o lançamento já foi gravado).
+  const { pedirFechar, dialogo: dialogoDescartar } = useDescartarAlteracoes(formAlterado && step === 'form', onClose)
   // Cada passo (parecidos, série, parcelas, reserva…) começa no topo do corpo do modal.
   useRolarAoTopo(step)
   // Repetição vinda do cartão do agendamento: aplicada ao estado durante o render quando muda, sem
@@ -2446,7 +2450,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       )}
 
       <div className="flex gap-3 pt-1">
-        <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+        <button type="button" className="btn-secondary flex-1" onClick={pedirFechar}>Cancelar</button>
         {podeGravarForm ? (
           <button type="submit" data-guia="lancamento-form.salvar" data-help-salvar="lancamento" className="btn-primary flex-1" title={tituloGravar}>
             {rotuloGravar || (initial ? 'Salvar' : 'Registrar')}
@@ -2455,6 +2459,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         ) : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
       </div>
     </form>
+    {dialogoDescartar}
     <Modal open={vinculoAberto} onClose={() => setVinculoAberto(false)} title="Vincular lançamento" size="lg">
       {vinculoAberto && initial?.id && (
         <VinculoPainel tx={initial} onToast={onToast} onClose={(feito) => { setVinculoAberto(false); if (feito) onClose?.() }} />

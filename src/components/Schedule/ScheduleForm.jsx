@@ -27,7 +27,7 @@ import { isTransferenciaEntrePerfis, categoriasEntrePerfis, categoriasDosLados }
 import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
 import EscopoSerieDialog from '../shared/EscopoSerieDialog'
 import OcorrenciasRegistradas from './OcorrenciasRegistradas'
-import { useGuardaFechamento } from '../shared/guardaFechamento'
+import { useDescartarAlteracoes } from '../shared/useDescartarAlteracoes'
 import { HistoricoPainel } from '../shared/HistoricoPainel'
 import {
   ESCOPO, diffCampos, precisaEscolherEscopo, planoAgendamento, planoRegistros, occCampos,
@@ -52,6 +52,7 @@ import { useTrabalhoEmAndamento, useAlteradoDesdeAbertura } from '../../hooks/us
 import Modal from '../shared/Modal'
 import FuncaoReservaForm from '../Reservas/FuncaoReservaForm'
 import ProvisaoForm from './ProvisaoForm'
+import ResgateLigadoPainel from './ResgateLigado'
 import { grupoComResgate, opcoesResgatarDe, rotuloOrigem, resumoResgates, provisoesNoMesmoMes } from '../../lib/resgateVinculado'
 import { faltaRecurso } from '../../lib/recursosBanco'
 import {
@@ -144,7 +145,7 @@ function buildCatOpts(categories, type) {
 
 // Prévia do Assistente IA: `destaques` (chaves do form) e `onSalvo(form, id)` ao criar — mesma gravação.
 export default function ScheduleForm({ initial, onClose, onAviso, destaques = null, onSalvo = null }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId, registrarEventoContrato, settings, profiles, garantirResgateVinculado, addReserveFunction, recursosBanco } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId, registrarEventoContrato, settings, profiles, garantirResgateVinculado, addReserveFunction, recursosBanco, reativarResgateVinculado } = useApp()
   // Controle gerencial do ambiente: desligado, o bloco some, agendamento novo não ganha grupo e a
   // edição mantém o gravado; com grupo gerencial, valor, data e conta ficam travados.
   const gerencialLigado = controleGerencialAtivo(settings)
@@ -152,7 +153,6 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   // Nível de acesso: criar = incluir; salvar edição = editar (sem permissão: só leitura).
   // Resgate ligado a uma despesa (src/lib/resgateVinculado.js): acompanha a despesa e não se edita à mão.
   const ehResgateLigado = !!initial?.agendamentoVinculadoId
-  const despesaDoResgate = ehResgateLigado ? (schedules || []).find(s => s.id === initial.agendamentoVinculadoId) || null : null
   const podeGravarForm = pode('agendamentos', initial?.id ? 'editar' : 'incluir') && !ehResgateLigado
 
   // Detalhamento por função do resgate (schedule_reserva_funcoes) do agendamento em edição.
@@ -354,8 +354,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
   const [editingOcc, setEditingOcc] = useState(null)
   // Edição de ocorrência pendente (não salva) → Cancelar/X perguntam antes de descartar.
-  const podeDescartar = () => edicoesChip.length === 0 || window.confirm('Descartar alterações não salvas?')
-  useGuardaFechamento(podeDescartar)
+  // Fechar com alteração não salva (X, Esc, fora, Cancelar) pergunta "Descartar as alterações?".
+  const { pedirFechar, dialogo: dialogoDescartar } = useDescartarAlteracoes(agendamentoAlterado || edicoesChip.length > 0, onClose)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   // Tipo/contas mudaram: se a transferência deixou de ser entre perfis, o bloco some e as duas
@@ -939,11 +939,14 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     onClose()
   }
 
+  // Resgate ligado a uma despesa: painel próprio (data de uma ocorrência, excluir, vincular).
+  if (ehResgateLigado) return <ResgateLigadoPainel resgate={initial} onClose={onClose} />
   if (verHistorico && initial?.id) {
-    return <HistoricoPainel entidade="agendamento" entidadeId={initial.id} serieKey={serieKeyDe({ agendamento: initial })} onVoltar={() => setVerHistorico(false)} />
+    return <><HistoricoPainel entidade="agendamento" entidadeId={initial.id} serieKey={serieKeyDe({ agendamento: initial })} onVoltar={() => setVerHistorico(false)} />{dialogoDescartar}</>
   }
   if (chipPendente) {
     return (
+      <>
       <EscopoSerieDialog
         variante="ocorrencia"
         continua={form.occurrenceType === 'continuous'}
@@ -954,10 +957,13 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         onCancel={() => setChipPendente(null)}
         onConfirm={(decisao) => { const c = chipPendente; setChipPendente(null); aplicarEdicaoOcorrencia(c.occDate, c.mudancas, decisao) }}
       />
+      {dialogoDescartar}
+      </>
     )
   }
   if (escopoPendente) {
     return (
+      <>
       <EscopoSerieDialog
         variante={escopoPendente.parcelamento ? 'parcelamento' : escopoPendente.ocorrencia ? 'ocorrencia' : undefined}
         anoOcorrencia={occAlvoParcela ? occAlvoParcela.slice(0, 4) : null}
@@ -969,6 +975,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         onCancel={() => setEscopoPendente(null)}
         onConfirm={(decisao) => { setEscopoPendente(null); handleSubmit(null, decisao) }}
       />
+      {dialogoDescartar}
+      </>
     )
   }
 
@@ -1021,15 +1029,6 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
               <button type="button" className="btn-secondary text-xs py-1.5" onClick={recarregarDeFora}>Recarregar com os dados novos</button>
               <button type="button" className="btn-ghost text-xs py-1.5" onClick={manterMinhaEdicao}>Manter a minha edição</button>
             </div>
-          </div>
-        )}
-        {ehResgateLigado && (
-          <div data-testid="aviso-resgate-ligado" className="max-sm:-order-1 sm:col-span-2 flex items-start gap-2 text-xs text-texto-2 bg-reserva/10 border border-reserva/30 rounded-lg px-3 py-2">
-            <Info size={13} className="mt-0.5 shrink-0 text-reserva" />
-            <span>
-              Este resgate acompanha o agendamento "{despesaDoResgate?.description || 'da despesa'}": datas, valores e pulos vêm dele,
-              e ele é efetivado junto com a despesa. Para mudar, edite o agendamento da despesa.
-            </span>
           </div>
         )}
         {!mudouFora && atualizadoFora && (
@@ -1575,26 +1574,26 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
                 <div data-help-id="agendamento.resgatarDe" className="space-y-1.5">
                   {opcoesResgate.length > 0 ? (
                     <>
-                      <label htmlFor="agendamento-resgatar-de" className="label text-xs uppercase tracking-wide text-reserva" style={{ marginBottom: 0 }}>
+                      <p className="label text-xs uppercase tracking-wide text-reserva" style={{ marginBottom: 0 }}>
                         Resgatar de *<HelpCampo campo="agendamento.resgatarDe" />
-                      </label>
-                      <select
-                        id="agendamento-resgatar-de"
-                        data-testid="agendamento-resgatar-de"
-                        className="input"
-                        value={funcaoResgate || ''}
-                        disabled={opcoesResgate.length === 1 && !podeNovaFuncao}
-                        onChange={e => {
-                          if (e.target.value === '__nova__') { setNovaFuncaoAberta(true); return }
-                          set('reservaFuncaoId', e.target.value)
-                        }}
-                      >
-                        {opcoesResgate.length > 1 && <option value="">Escolha a função…</option>}
-                        {opcoesResgate.map(f => (
-                          <option key={f.id} value={f.id}>{resgateInfo.conta.apelido || resgateInfo.conta.name} › {f.name}</option>
-                        ))}
-                        {podeNovaFuncao && <option value="__nova__">+ Nova função</option>}
-                      </select>
+                      </p>
+                      {/* Lista longa (ex.: 41 funções): busca ao digitar, ordem alfabética, "+ Nova função" sempre no fim. */}
+                      <div data-testid="agendamento-resgatar-de" data-valor={funcaoResgate || ''}>
+                        <SearchableSelect
+                          options={[
+                            ...opcoesResgate.map(f => ({ id: f.id, label: `${resgateInfo.conta.apelido || resgateInfo.conta.name} › ${f.name}` })),
+                            ...(podeNovaFuncao ? [{ id: '__nova__', label: '+ Nova função', sempre: true }] : []),
+                          ]}
+                          value={funcaoResgate || ''}
+                          onChange={id => {
+                            if (id === '__nova__') { setNovaFuncaoAberta(true); return }
+                            set('reservaFuncaoId', id)
+                          }}
+                          placeholder="Escolha a função…"
+                          quebrarRotulo
+                          required
+                        />
+                      </div>
                     </>
                   ) : (
                     <p className="text-xs text-texto-2">
@@ -1606,6 +1605,11 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
                   )}
                   {semRecursoResgate ? (
                     <p className="text-xs text-aviso leading-snug">O banco deste ambiente ainda não tem a atualização do resgate agendado: nenhum resgate será criado. Avise o suporte.</p>
+                  ) : !resgateJaLigado && initial?.id && atual?.overrides?._resgateExcluido ? (
+                    <p data-testid="agendamento-resgate-excluido" className="text-xs text-texto-2 leading-snug">
+                      O resgate deste agendamento foi excluído e não é recriado sozinho.{' '}
+                      <button type="button" className="text-primary-fg underline font-medium" onClick={() => reativarResgateVinculado(initial.id)}>Agendar o resgate de novo</button>
+                    </p>
                   ) : resgateJaLigado ? (
                     <p data-testid="agendamento-frase-resgate" className="text-xs text-reserva leading-snug">
                       Os resgates de {origem} para {destino} acompanham este agendamento, nas mesmas datas. Mudanças valem para os ainda não efetivados.
@@ -1721,13 +1725,14 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           <p role="alert" data-testid="erro-salvar-agendamento" className="sm:col-span-2 text-sm text-perigo">{erroSalvar.msg}</p>
         )}
         <div className="sm:col-span-2 flex gap-3 pt-1 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:bg-surface max-sm:border-t max-sm:border-borda max-sm:pt-3 acoes-safe-bottom">
-          <button type="button" className="btn-secondary flex-1" onClick={() => { if (podeDescartar()) onClose() }}>Cancelar</button>
+          <button type="button" className="btn-secondary flex-1" onClick={pedirFechar}>Cancelar</button>
           {podeGravarForm
             ? <button type="submit" disabled={!!mudouFora} data-guia="agendamento-form.salvar" data-help-salvar="agendamento" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
-            : <p className="flex-1 text-xs text-texto-3 self-center text-center">{ehResgateLigado ? 'Somente leitura — altere pelo agendamento da despesa.' : 'Somente leitura — seu nível de acesso não permite gravar.'}</p>}
+            : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
         </div>
       </form>
 
+      {dialogoDescartar}
       <Modal open={novaFuncaoAberta} onClose={() => setNovaFuncaoAberta(false)} title="Nova Função de Reserva">
         {novaFuncaoAberta && resgateInfo && (
           <FuncaoReservaForm

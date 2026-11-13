@@ -1,3 +1,4 @@
+import { resgatePrimeiro } from './ordemResgate.js'
 // Datas PROVISÓRIAS no relatório Fluxo de Caixa: simulação de tela (nada é gravado) e o
 // "Aplicar no agendamento", que grava a data num agendamento real.
 
@@ -26,7 +27,7 @@ export function montarLinhasSimuladas(rows, { datas = new Map(), excluidas = new
   // Mesmo critério da lib (data; Registrada antes das projeções no mesmo dia) e, no empate, a
   // ordem original — sem data provisória a tela fica idêntica à de antes.
   noPeriodo.sort((a, b) =>
-    a.date.localeCompare(b.date) || (a.real === b.real ? 0 : a.real ? -1 : 1) || a._ordem - b._ordem)
+    a.date.localeCompare(b.date) || resgatePrimeiro(a, b) || (a.real === b.real ? 0 : a.real ? -1 : 1) || a._ordem - b._ordem)
 
   let bal = saldoBase
   let entrada = 0
@@ -79,6 +80,10 @@ function moverExcecao(overrides, orig, novaChave) {
 // ocorrência) movida para `nova`. `primeiraPendente` = primeira ocorrência pendente da série.
 // Devolve { bloqueio } quando não pode aplicar, senão as opções possíveis e os avisos.
 export function opcoesAplicarData(s, orig, nova, primeiraPendente) {
+  // Resgate ligado a uma despesa: a data de UMA ocorrência pode mudar só nele; a série segue a despesa.
+  if (s?.agendamentoVinculadoId) {
+    return { once: false, serie: { ok: false, motivo: 'O resgate segue a série da despesa: para mover a série, mude a despesa.' }, avisos: [] }
+  }
   if (agendamentoGeridoPeloMotor(s)) {
     return { bloqueio: 'Agendamento de fatura de cartão / gerencial: a data é definida pelo motor de faturas (vencimento do cartão). Alterá-la aqui seria desfeito no próximo recálculo — não foi aplicada.' }
   }

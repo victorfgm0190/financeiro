@@ -1,12 +1,15 @@
 // Resgate ligado à despesa de conta com classificação gerencial que gera resgate. Dados fictícios.
 import { describe, it, expect } from 'vitest'
 import {
+  excluirOcorrenciaDoResgate, mudarDataDoResgate, candidatosResgateFeito, resgatePrimeiro, ehDoResgateLigado,
   derivarResgate, novoResgateVinculado, sincronizarResgatesVinculados, criarResgateSeFaltar,
   despesaGeraResgate, opcoesResgatarDe, idResgateVinculado, idTxResgate, resumoResgates, provisoesNoMesmoMes,
 } from './resgateVinculado'
 import { computeOccurrences } from './occurrences'
 import { aplicarBaixa, metaBaixaGerada, reabrirBaixasDoLancamento } from './scheduleBaixa'
 import { planoAgendamento, ESCOPO } from './camposSerie'
+import { planejarVinculo, planejarDesvinculo } from './vinculo'
+import { occEfetiva } from './fluxoCaixa'
 import { previsoesDasFuncoes } from './previsaoReserva'
 import { indexarReserva, saldoDaFuncao } from './saldoReserva'
 
@@ -75,8 +78,10 @@ describe('quem gera resgate e de onde', () => {
     expect(despesaGeraResgate(despesa({ grupoGerencial: null }), ctx)).toBeNull()
     expect(despesaGeraResgate(despesa({ accountId: 'cartao' }), ctx)).toBeNull()
   })
-  it('"Resgatar de": só as funções da conta do grupo, na ordem das Reservas', () => {
-    expect(opcoesResgatarDe('ca', reserveFunctions).map(f => f.name)).toEqual(['IPVA', 'Escola'])
+  it('"Resgatar de": só as funções da conta do grupo, em ordem alfabética pt-BR (sem acento/maiúscula)', () => {
+    expect(opcoesResgatarDe('ca', reserveFunctions).map(f => f.name)).toEqual(['Escola', 'IPVA'])
+    const mais = [...reserveFunctions, { id: 'f3', name: 'óleo', accountId: 'ca' }, { id: 'f4', name: 'Academia', accountId: 'ca' }, { id: 'f5', name: 'Oficina', accountId: 'ca' }]
+    expect(opcoesResgatarDe('ca', mais).map(f => f.name)).toEqual(['Academia', 'Escola', 'IPVA', 'Oficina', 'óleo'])
     expect(opcoesResgatarDe('imp', reserveFunctions)).toEqual([])
   })
 })
@@ -176,7 +181,7 @@ describe('pular, mudar data/valor, encurtar, excluir', () => {
       mudancas: [{ campo: 'date', de: '2027-04-08', para: '2027-04-15' }, { campo: 'amount', de: 1268, para: 1500 }],
     }).schedule)
     const r = resgateDe(d)
-    expect(r.overrides['2027-04-08']).toEqual({ date: '2027-04-15', amount: 1500 })
+    expect(r.overrides['2027-04-08']).toMatchObject({ date: '2027-04-15', amount: 1500 })
     const prev = previsoesDasFuncoes(reserveFunctions, { accounts, schedules: d.schedules, getNextOccurrences: computeOccurrences }, { ini: '2027-04-01', fim: '2027-04-30' })
     expect(prev.fEscola).toEqual([expect.objectContaining({ tipo: 'resgate', date: '2027-04-15', amount: 1500 })])
   })
@@ -290,4 +295,97 @@ describe('ambiente sem a coluna nova', () => {
 it('derivar sem resgate antigo devolve null para despesa que não gera', () => {
   expect(derivarResgate(despesa({ grupoGerencial: 'gD' }), null, { accounts, gerencialGroups, reserveFunctions })).toBeNull()
   expect(novoResgateVinculado(despesa(), { accounts, gerencialGroups, reserveFunctions }).overrides._resgateDesde).toBe('2027-01-08')
+})
+
+const mudarResgate = (d, f) => sinc({ ...d, schedules: d.schedules.map(s => (s.agendamentoVinculadoId ? f(s) : s)) })
+
+describe('mexer só no resgate (a despesa continua mandando)', () => {
+  it('excluir UMA ocorrência do resgate: some só nele; mudar/pagar a despesa não a traz de volta', () => {
+    let d = mudarResgate(criado(), r => excluirOcorrenciaDoResgate(r, '2027-03-08'))
+    expect(pendentes(resgateDe(d))).not.toContain('2027-03-08')
+    expect(pendentes(despesaDe(d))).toContain('2027-03-08')
+    d = mudarDespesa(d, s => ({ ...s, amount: 1300 }))
+    expect(pendentes(resgateDe(d))).not.toContain('2027-03-08')
+    d = pagar(d, '2027-03-08')
+    expect(d.transactions.filter(t => t.type === 'transfer')).toHaveLength(0)
+    expect(sinc(d)).toBe(d)
+  })
+  it('excluir o resgate inteiro (marca na despesa): salvar a despesa não o recria', () => {
+    const d = criado()
+    const semResgate = { ...d, schedules: d.schedules.filter(s => !s.agendamentoVinculadoId).map(s => ({ ...s, overrides: { ...s.overrides, _resgateExcluido: true } })) }
+    expect(criarResgateSeFaltar(semResgate, 'sch_escola')).toBe(semResgate)
+  })
+  it('mudar a data do resgate vale; depois mudar a data da despesa → vale a da despesa', () => {
+    let d = mudarResgate(criado(), r => mudarDataDoResgate(r, despesaDe(criado()), '2027-02-08', '2027-02-05'))
+    expect(occEfetiva(resgateDe(d), '2027-02-08').date).toBe('2027-02-05')
+    expect(occEfetiva(despesaDe(d), '2027-02-08').date).toBe('2027-02-08')
+    d = mudarDespesa(d, s => ({ ...s, amount: 1290 })) // outra mudança na despesa: a data do resgate fica
+    expect(occEfetiva(resgateDe(d), '2027-02-08').date).toBe('2027-02-05')
+    d = mudarDespesa(d, s => ({ ...s, overrides: { ...s.overrides, '2027-02-08': { date: '2027-02-12' } } }))
+    expect(occEfetiva(resgateDe(d), '2027-02-08').date).toBe('2027-02-12')
+  })
+  it('pular a despesa pula o resgate mesmo com data mudada à mão', () => {
+    let d = mudarResgate(criado(), r => mudarDataDoResgate(r, despesaDe(criado()), '2027-02-08', '2027-02-05'))
+    d = mudarDespesa(d, s => ({ ...s, skipped: ['2027-02-08'] }))
+    expect(pendentes(resgateDe(d))).not.toContain('2027-02-08')
+  })
+})
+
+describe('vincular a um resgate já feito', () => {
+  const feito = { id: 'tx_feito', type: 'transfer', accountId: 'ca', toAccountId: 'itau', amount: 1268, date: '2027-01-06', reservaFuncaoId: 'fEscola' }
+  const outro = { id: 'tx_outro', type: 'transfer', accountId: 'ca', toAccountId: 'itau', amount: 900, date: '2027-01-08' }
+  const longe = { id: 'tx_longe', type: 'transfer', accountId: 'ca', toAccountId: 'itau', amount: 1268, date: '2027-03-01' }
+  it('candidatos: só transferências da reserva para a conta, sem vínculo, ±15 dias; mesmo valor primeiro', () => {
+    const d = { ...criado(), transactions: [outro, feito, longe] }
+    const c = candidatosResgateFeito(resgateDe(d), '2027-01-08', d)
+    expect(c.map(x => x.tx.id)).toEqual(['tx_feito', 'tx_outro'])
+  })
+  it('vincular: efetivada com aquele lançamento; pagar a despesa NÃO cria outro; saldos certos; desvincular gera o dela', () => {
+    let d = { ...criado(), transactions: [feito] }
+    const r = resgateDe(d)
+    const plano = planejarVinculo(d, { txId: 'tx_feito', scheduleId: r.id, data: '2027-01-08', manter: 'agendamento' })
+    expect(plano.ok).toBe(true)
+    d = sinc({ ...d, schedules: d.schedules.map(s => (s.id === r.id ? plano.schedule : s)) })
+    expect(resgateDe(d).registered).toEqual(['2027-01-08'])
+    const ca0 = d.accounts.find(a => a.id === 'ca').balance
+    const itau0 = d.accounts.find(a => a.id === 'itau').balance
+    d = pagar(d, '2027-01-08')
+    expect(d.transactions.filter(t => t.type === 'transfer').map(t => t.id)).toEqual(['tx_feito'])
+    expect(d.accounts.find(a => a.id === 'ca').balance).toBe(ca0)
+    expect(d.accounts.find(a => a.id === 'itau').balance).toBe(itau0 - 1268)
+    // Desvincular com a despesa já paga: a despesa paga tem o seu resgate — o Finup gera o dessa ocorrência.
+    const des = planejarDesvinculo(d, { scheduleId: r.id, data: '2027-01-08' })
+    d = sinc({ ...d, schedules: d.schedules.map(s => (s.id === r.id ? des.schedule : s)) })
+    expect(d.transactions.filter(t => t.type === 'transfer').map(t => t.id).sort()).toEqual([idTxResgate(r.id, '2027-01-08'), 'tx_feito'].sort())
+  })
+  it('desvincular antes de pagar: volta a pendente', () => {
+    let d = { ...criado(), transactions: [feito] }
+    const r = resgateDe(d)
+    d = sinc({ ...d, schedules: d.schedules.map(s => (s.id === r.id ? planejarVinculo(d, { txId: 'tx_feito', scheduleId: r.id, data: '2027-01-08', manter: 'agendamento' }).schedule : s)) })
+    const des = planejarDesvinculo(d, { scheduleId: r.id, data: '2027-01-08' })
+    d = sinc({ ...d, schedules: d.schedules.map(s => (s.id === r.id ? des.schedule : s)) })
+    expect(resgateDe(d).registered).toEqual([])
+    expect(pendentes(resgateDe(d))).toContain('2027-01-08')
+  })
+})
+
+describe('ordem no mesmo dia: resgate antes da despesa', () => {
+  it('o lançamento do resgate entra antes do da despesa (posição e createdAt)', () => {
+    const d0 = criado()
+    const tx = { id: 'tx_pg', type: 'expense', accountId: 'itau', amount: 1268, date: '2027-01-08', scheduleId: 'sch_escola', dataOcorrencia: '2027-01-08', createdAt: '2027-01-08T10:00:00.000Z' }
+    const d = sinc({ ...d0, transactions: [tx], schedules: d0.schedules.map(s => (s.id === 'sch_escola' ? aplicarBaixa(s, '2027-01-08', metaBaixaGerada('tx_pg')) : s)) })
+    const ids = d.transactions.map(t => t.id)
+    const r = resgateDe(d)
+    expect(ids.indexOf(idTxResgate(r.id, '2027-01-08'))).toBeLessThan(ids.indexOf('tx_pg'))
+    expect(d.transactions.find(t => t.id === idTxResgate(r.id, '2027-01-08')).createdAt).toBe('2027-01-08T09:59:59.999Z')
+  })
+  it('resgatePrimeiro reconhece agendamento, linha projetada e lançamento do resgate', () => {
+    const r = resgateDe(criado())
+    expect(ehDoResgateLigado(r)).toBe(true)
+    expect(ehDoResgateLigado({ _key: `${r.id}_2027-01-08`, _scheduleId: r.id })).toBe(true)
+    expect(ehDoResgateLigado({ id: idTxResgate(r.id, '2027-01-08') })).toBe(true)
+    expect(ehDoResgateLigado({ _key: 'sch_escola_2027-01-08', _scheduleId: 'sch_escola' })).toBe(false)
+    const lista = [{ id: 'despesa', _scheduleId: 'sch_escola' }, { id: 'resgate', _scheduleId: r.id }]
+    expect(lista.sort(resgatePrimeiro).map(x => x.id)).toEqual(['resgate', 'despesa'])
+  })
 })

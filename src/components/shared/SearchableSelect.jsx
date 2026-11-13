@@ -120,8 +120,9 @@ export default function SearchableSelect({
   const filtered = useMemo(() => {
     if (!search.trim()) return options
     const q = normalizar(search.trim())
-    // Busca casa pelo rótulo do item OU pelo nome do grupo.
-    return options.filter(o => normalizar(o.label).includes(q) || normalizar(o.group).includes(q))
+    // Busca casa pelo rótulo do item OU pelo nome do grupo. `sempre`: ação fixa da lista (ex.: "+ Nova
+    // função") que continua visível com qualquer filtro.
+    return options.filter(o => o.sempre || normalizar(o.label).includes(q) || normalizar(o.group).includes(q))
   }, [options, search])
 
   // Build flat items list for keyboard nav + grouped structure for rendering

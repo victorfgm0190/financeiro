@@ -43,12 +43,14 @@ export function grupoComResgate(grupoId, { gerencialGroups = [], accounts = [] }
   return conta ? { grupo, conta } : null
 }
 
-// Funções de reserva da conta do grupo, na ordem da tela de Reservas.
+// Funções de reserva da conta do grupo, em ordem alfabética (pt-BR, sem diferenciar acento nem
+// maiúscula: "ipva" junto de "IPVA", "Óleo" junto de "Oficina").
+const ALFABETICA = new Intl.Collator('pt-BR', { sensitivity: 'base', numeric: true })
 export function opcoesResgatarDe(contaId, reserveFunctions = []) {
   if (!contaId) return []
   return (reserveFunctions || [])
     .filter(f => f.accountId === contaId)
-    .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || String(a.name || '').localeCompare(String(b.name || '')))
+    .sort((a, b) => ALFABETICA.compare(String(a.name || ''), String(b.name || '')) || String(a.id).localeCompare(String(b.id)))
 }
 
 const contaEhCartao = (id, accounts) => (accounts || []).find(a => a.id === id)?.type === 'credit'
@@ -82,33 +84,66 @@ function chaveForaDoResgate(despesa, chave, ctx) {
   return false
 }
 
-// Estrutura do resgate a partir da despesa (pura). `resgate` = o atual (registered/meta/id/desde).
+// O que o usuário pode mexer SÓ no resgate (a despesa não muda):
+//   • excluir uma ocorrência → overrides._resgateExcluidas (a sincronização não a recria);
+//   • mudar a data de uma ocorrência → overrides[k].date, com `_de` = a data da despesa naquele
+//     momento. Vale enquanto a despesa mantiver essa data; mudou a da despesa, vale a da despesa;
+//   • vincular a um resgate já feito (baixa com o lançamento existente — lib/vinculo).
+// Ocorrência do resgate já efetivada ou vinculada nunca é alterada aqui.
+export const excluidasDoResgate = (r) => (Array.isArray(r?.overrides?._resgateExcluidas) ? r.overrides._resgateExcluidas : [])
+
+// Estrutura do resgate a partir da despesa (pura). `resgate` = o atual (registered/meta/id/desde e
+// o que o usuário mexeu nele).
 export function derivarResgate(despesa, resgate, ctx) {
   const info = despesaGeraResgate(despesa, ctx)
   if (!info) return null
   const desde = resgate?.overrides?._resgateDesde || null
   const regResgate = new Set(resgate?.registered || [])
+  const excluidas = excluidasDoResgate(resgate).filter(k => !regResgate.has(k))
+  const ovResgate = resgate?.overrides || {}
   const overrides = {}
   for (const [k, v] of Object.entries(despesa.overrides || {})) {
-    if (ehChaveData(k)) {
-      if (!v || typeof v !== 'object') continue
-      const o = {}
-      if (v.date) o.date = v.date
-      if (v.amount != null) o.amount = v.amount
-      if (Object.keys(o).length) overrides[k] = o
-    } else if (k === '_diaVencimento' || k === '_parcelamento') {
-      overrides[k] = v
+    if (ehChaveData(k)) continue
+    if (k === '_diaVencimento' || k === '_parcelamento') overrides[k] = v
+  }
+  // Datas e valores por ocorrência: as chaves com exceção na despesa ou no resgate.
+  const chaves = new Set([
+    ...Object.keys(despesa.overrides || {}).filter(ehChaveData),
+    ...Object.keys(ovResgate).filter(ehChaveData),
+  ])
+  for (const k of chaves) {
+    if (regResgate.has(k)) {
+      // Efetivada/vinculada: fica como está.
+      if (ovResgate[k] !== undefined) overrides[k] = ovResgate[k]
+      continue
     }
+    const vD = despesa.overrides?.[k]
+    const oD = vD && typeof vD === 'object' ? vD : {}
+    const dataDespesa = oD.date || k
+    const o = {}
+    const vR = ovResgate[k]
+    const ref = vR && typeof vR === 'object' ? (vR._de || k) : null
+    if (vR?.date && vR.date !== ref && ref === dataDespesa) {
+      o.date = vR.date // data mudada à mão no resgate, e a despesa não mudou a dela desde então
+      o._de = dataDespesa
+    } else if (oD.date) {
+      o.date = oD.date
+      o._de = oD.date
+    }
+    if (oD.amount != null) o.amount = oD.amount
+    if (Object.keys(o).length) overrides[k] = o
   }
   if (desde) overrides._resgateDesde = desde
+  if (excluidas.length) overrides._resgateExcluidas = [...new Set(excluidas)].sort()
   // Pulos: os da despesa; as baixas da despesa sem resgate (anteriores ao vínculo ou fora dele) — a
   // série do resgate consome as mesmas datas e o nº de ocorrências fecha igual; ocorrências tiradas
-  // do resgate por exceção "só esta".
+  // do resgate por exceção "só esta" na despesa; as excluídas à mão no resgate.
   const skipped = new Set(despesa.skipped || [])
   for (const d of despesa.registered || []) if (!regResgate.has(d)) skipped.add(d)
   for (const k of Object.keys(despesa.overrides || {})) {
     if (ehChaveData(k) && !regResgate.has(k) && chaveForaDoResgate(despesa, k, ctx)) skipped.add(k)
   }
+  for (const k of excluidas) skipped.add(k)
   for (const d of regResgate) skipped.delete(d)
   const funcaoId = funcaoValida(despesa.reservaFuncaoId, info.conta.id, ctx.reserveFunctions)
   return {
@@ -220,8 +255,9 @@ export function sincronizarResgatesVinculados(d, deps = {}) {
     // 2. Despesa baixada → efetiva o resgate da mesma ocorrência (a partir do vínculo).
     const desde = r.overrides?._resgateDesde || ''
     const regResgate = new Set(r.registered || [])
+    const excluidas = new Set(excluidasDoResgate(r))
     for (const chave of despesa.registered || []) {
-      if (regResgate.has(chave) || chave < desde || chaveForaDoResgate(despesa, chave, ctx)) continue
+      if (regResgate.has(chave) || chave < desde || excluidas.has(chave) || chaveForaDoResgate(despesa, chave, ctx)) continue
       const base = lancamentoDaBaixa(despesa, chave, transactions)
       const ef = occEfetiva(despesa, chave)
       const txId = idTxResgate(r.id, chave)
@@ -236,11 +272,15 @@ export function sincronizarResgatesVinculados(d, deps = {}) {
         date: base?.date || ef.date,
         scheduleId: r.id, dataOcorrencia: chave, sourceScheduleId: r.id,
         reservaFuncaoId: funcaoId, tipoDocumentoId: null,
-        origin: ORIGIN.AGENDAMENTO, createdAt: agora(),
+        // No mesmo dia o resgate vem ANTES da despesa: gravado um instante antes do lançamento dela.
+        origin: ORIGIN.AGENDAMENTO, createdAt: antesDe(base?.createdAt) || agora(),
       }
       accounts = efeito(accounts, tx, 1)
       const extras = sombras(tx, accounts).map((t, i) => ({ ...t, id: `${txId}_s${i}`, parentTxId: txId }))
-      transactions = [...transactions, tx, ...extras]
+      const pos = base ? transactions.indexOf(base) : -1
+      transactions = pos >= 0
+        ? [...transactions.slice(0, pos), tx, ...extras, ...transactions.slice(pos)]
+        : [...transactions, tx, ...extras]
       r = aplicarBaixa(r, chave, metaBaixaGerada(txId))
       mudou = true
     }
@@ -254,11 +294,14 @@ export function sincronizarResgatesVinculados(d, deps = {}) {
   return mudou ? { ...d, schedules, transactions, accounts } : d
 }
 
+// Resgate inteiro excluído à mão: marca na despesa (a sincronização e o salvar não o recriam).
+export const resgateExcluidoNaDespesa = (despesa) => !!despesa?.overrides?._resgateExcluido
+
 // Cria o resgate da despesa se faltar (salvar o agendamento). Devolve `d` igual se não há o que criar.
 export function criarResgateSeFaltar(d, despesaId) {
   const despesa = (d.schedules || []).find(s => s.id === despesaId)
   const ctx = { accounts: d.accounts, gerencialGroups: d.gerencialGroups, reserveFunctions: d.reserveFunctions }
-  if (!despesa || !despesaGeraResgate(despesa, ctx)) return d
+  if (!despesa || !despesaGeraResgate(despesa, ctx) || resgateExcluidoNaDespesa(despesa)) return d
   if ((d.schedules || []).some(s => s.agendamentoVinculadoId === despesaId)) return d
   const novo = novoResgateVinculado(despesa, ctx)
   if (!novo) return d
@@ -285,3 +328,73 @@ export function provisoesNoMesmoMes(despesa, funcaoId, schedules = [], { limite 
   }
   return out
 }
+
+// A despesa tem resgate ligado? (o Pagar não cria o resgate avulso "Resgate <grupo>": dobraria).
+export const temResgateLigado = (despesaId, schedules = []) =>
+  !!despesaId && (schedules || []).some(s => s.agendamentoVinculadoId === despesaId)
+
+// Agendamento da despesa que o resgate ligado acompanha (ou null).
+export const despesaDoResgate = (resgate, schedules = []) =>
+  (resgate?.agendamentoVinculadoId && (schedules || []).find(s => s.id === resgate.agendamentoVinculadoId)) || null
+
+// Um instante (1 ms) antes de um createdAt ISO — o resgate fica antes da despesa no mesmo dia.
+function antesDe(iso) {
+  const t = iso ? Date.parse(iso) : NaN
+  return Number.isFinite(t) ? new Date(t - 1).toISOString() : null
+}
+
+// ── Mexer só no resgate ─────────────────────────────────────────────────────────────────────────
+
+// Excluir UMA ocorrência pendente do resgate (a despesa não muda; a sincronização não a recria).
+export function excluirOcorrenciaDoResgate(resgate, chave) {
+  if (!resgate || !chave || (resgate.registered || []).includes(chave)) return resgate
+  const atuais = excluidasDoResgate(resgate)
+  if (atuais.includes(chave)) return resgate
+  return {
+    ...resgate,
+    overrides: { ...(resgate.overrides || {}), _resgateExcluidas: [...atuais, chave].sort() },
+    skipped: [...new Set([...(resgate.skipped || []), chave])].sort(),
+  }
+}
+
+// Mudar a data de UMA ocorrência do resgate (exceção de data só dele). `_de` guarda a data da
+// despesa naquele momento: se a despesa mudar a dela depois, vale a da despesa.
+export function mudarDataDoResgate(resgate, despesa, chave, novaData) {
+  if (!resgate || !despesa || !chave || !novaData || (resgate.registered || []).includes(chave)) return resgate
+  const dataDespesa = occEfetiva(despesa, chave).date
+  const ov = { ...(resgate.overrides?.[chave] || {}) }
+  if (novaData === dataDespesa) { delete ov.date; delete ov._de } else { ov.date = novaData; ov._de = dataDespesa }
+  const overrides = { ...(resgate.overrides || {}) }
+  if (Object.keys(ov).length) overrides[chave] = ov
+  else delete overrides[chave]
+  return { ...resgate, overrides }
+}
+
+// "Vincular a um resgate já feito": transferências EFETIVADAS da conta da reserva para a conta da
+// despesa, sem vínculo, até 15 dias da ocorrência. Ordem: mesmo valor primeiro; depois a mesma
+// função; depois a data mais perto. → [{ tx, dias, mesmoValor, mesmaFuncao }]
+export const JANELA_RESGATE_FEITO_DIAS = 15
+export function candidatosResgateFeito(resgate, chave, { transactions = [], schedules = [], hoje = null } = {}) {
+  if (!resgate || !chave) return []
+  const ef = occEfetiva(resgate, chave)
+  const presos = new Set()
+  for (const s of schedules || []) {
+    for (const [dt, m] of Object.entries(s.registeredMeta || {})) if (m?.lancamento_id && (s.registered || []).includes(dt)) presos.add(m.lancamento_id)
+  }
+  const dia = (x) => Date.parse(`${String(x).slice(0, 10)}T12:00:00Z`)
+  const out = []
+  for (const t of transactions || []) {
+    if (t.type !== 'transfer' || t.accountId !== resgate.accountId || t.toAccountId !== resgate.toAccountId) continue
+    if (presos.has(t.id) || t.reservaAuto || t.isEspelho) continue
+    if (t.scheduleId && (schedules || []).some(s => s.id === t.scheduleId)) continue
+    if (hoje && t.date > hoje) continue
+    if (resgate.reservaFuncaoId && t.reservaFuncaoId && t.reservaFuncaoId !== resgate.reservaFuncaoId) continue
+    const dias = Math.abs(Math.round((dia(t.date) - dia(ef.date)) / 86400000))
+    if (dias > JANELA_RESGATE_FEITO_DIAS) continue
+    out.push({ tx: t, dias, mesmoValor: Math.abs((Number(t.amount) || 0) - (Number(ef.amount) || 0)) < 0.005, mesmaFuncao: !!resgate.reservaFuncaoId && t.reservaFuncaoId === resgate.reservaFuncaoId })
+  }
+  return out.sort((a, b) => Number(b.mesmoValor) - Number(a.mesmoValor) || Number(b.mesmaFuncao) - Number(a.mesmaFuncao) || a.dias - b.dias)
+}
+
+// Ordem no mesmo dia (o resgate ligado antes da despesa): src/lib/ordemResgate.js.
+export { ehDoResgateLigado, resgatePrimeiro } from './ordemResgate.js'

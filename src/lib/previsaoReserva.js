@@ -9,6 +9,7 @@
 import { occEfetiva } from './fluxoCaixa.js'
 import { ehParcelado, rotuloDaParcela } from './parcelasOcorrencia.js'
 import { parteDaFuncao, parteDaFuncaoNaOcorrencia, itemSaidaFluxo } from './resgateComposicao.js'
+import { resgatePrimeiro } from './ordemResgate.js'
 
 export function previsoesDasFuncoes(funcoes, { accounts = [], schedules = [], scheduleReservaFuncoes = [], getNextOccurrences }, { ini, fim, ocorrencias = 140 }) {
   const accById = new Map(accounts.map(a => [a.id, a]))
@@ -62,7 +63,7 @@ export function previsoesDasFuncoes(funcoes, { accounts = [], schedules = [], sc
           : { tipo: 'resgate', date, amount, label, schedule: s, itemFluxo: itemSaidaFluxo(s, date, amount, f.id) })
       }
     }
-    out[f.id] = itens.sort((a, b) => a.date.localeCompare(b.date))
+    out[f.id] = itens.sort((a, b) => a.date.localeCompare(b.date) || resgatePrimeiro(a, b))
   }
   return out
 }

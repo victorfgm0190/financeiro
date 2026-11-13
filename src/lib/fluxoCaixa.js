@@ -1,3 +1,4 @@
+import { resgatePrimeiro } from './ordemResgate.js'
 // Núcleo do Fluxo de Caixa por Conta — fonte ÚNICA da projeção de saldo de um conjunto de
 // contas dentro de um período. Usado pelo relatório (Reports/FluxoCaixaPorConta) e pelos KPIs
 // FINAL CICLO / PROJETADO do Painel Geral, garantindo que ambos calculem do MESMO jeito.
@@ -350,7 +351,8 @@ export function computeFluxoCaixa({
     })
   })
 
-  out.sort((a, b) => a.date.localeCompare(b.date) || (a.real === b.real ? 0 : a.real ? -1 : 1))
+  // Mesmo dia: o resgate ligado vem antes da despesa (lib/ordemResgate).
+  out.sort((a, b) => a.date.localeCompare(b.date) || resgatePrimeiro(a, b) || (a.real === b.real ? 0 : a.real ? -1 : 1))
 
   // saldoAnterior = saldo na véspera de `start`: parte do balance e estorna o efeito líquido
   // das transações reais em [start, hoje]. (Ocultos seguem a mesma regra.)

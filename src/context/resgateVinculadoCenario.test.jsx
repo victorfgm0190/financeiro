@@ -26,6 +26,8 @@ const dados = () => ({
   reserveFunctions: [
     { id: 'fn_esc', name: 'Escola', accountId: 'res', ordem: 0 },
     { id: 'fn_ipva', name: 'IPVA', accountId: 'res', ordem: 1 },
+    { id: 'fn_oleo', name: 'Óleo', accountId: 'res', ordem: 2 },
+    { id: 'fn_aca', name: 'academia', accountId: 'res', ordem: 3 },
   ],
   schedules: [
     // Provisão aberta da função Escola em jan/2027 (para o aviso).
@@ -56,6 +58,7 @@ beforeAll(() => {
   globalThis.fetch = vi.fn(async () => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }))
   localStorage.setItem('auth_token', 'x.' + btoa(JSON.stringify({ nivel: 'admin', sub: 't', exp: 4102444800 })) + '.y')
   window.matchMedia = window.matchMedia || (() => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }))
+  Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || function () {}
 })
 afterEach(() => cleanup())
 
@@ -77,9 +80,23 @@ const despesa = () => app.schedules.find(s => s.description === 'ESCOLA EXEMPLO 
 const resgateDe = (id) => app.schedules.find(s => s.agendamentoVinculadoId === id)
 const saldo = (id) => app.accounts.find(a => a.id === id).balance
 
+// "Resgatar de" é a lista com busca (SearchableSelect): abre pelo gatilho; opções no menu portado.
+const ROTULO = { fn_esc: 'Contas Anuais › Escola', fn_ipva: 'Contas Anuais › IPVA', fn_oleo: 'Contas Anuais › Óleo', fn_aca: 'Contas Anuais › academia', __nova__: '+ Nova função' }
+async function abrirLista() {
+  const campo = await screen.findByTestId('agendamento-resgatar-de')
+  fireEvent.click(within(campo).getByRole('button'))
+  return campo
+}
+const opcoesAbertas = () => [...document.querySelectorAll('[data-item]')].map(b => b.textContent)
+async function escolher(id) {
+  await abrirLista()
+  fireEvent.click(screen.getByRole('button', { name: ROTULO[id] }))
+}
+const valorResgate = () => screen.getByTestId('agendamento-resgatar-de').dataset.valor
+
 async function criarEscola(funcao = 'fn_esc', m0 = null) {
   const m = m0 || await montar()
-  fireEvent.change(await screen.findByTestId('agendamento-resgatar-de'), { target: { value: funcao } })
+  await escolher(funcao)
   fireEvent.click(screen.getByRole('button', { name: 'Criar Agendamento' }))
   await waitFor(() => expect(m.fechou()).toBe(true))
   await waitFor(() => expect(resgateDe(despesa().id)).toBeTruthy())
@@ -89,36 +106,36 @@ async function criarEscola(funcao = 'fn_esc', m0 = null) {
 describe('formulário: "Resgatar de"', () => {
   it('Contas Anuais com várias funções: campo obrigatório e a frase nova', async () => {
     await montar()
-    const sel = await screen.findByTestId('agendamento-resgatar-de')
-    expect([...sel.options].map(o => o.textContent)).toEqual(['Escolha a função…', 'Contas Anuais › Escola', 'Contas Anuais › IPVA', '+ Nova função'])
+    expect((await screen.findByTestId('agendamento-resgatar-de')).textContent).toMatch('Escolha a função…')
     expect(screen.queryByText(/resgatará automaticamente/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Criar Agendamento' }))
     expect((await screen.findByTestId('erro-salvar-agendamento')).textContent).toMatch('Resgatar de')
-    fireEvent.change(sel, { target: { value: 'fn_esc' } })
+    await escolher('fn_esc')
     expect(screen.getByTestId('agendamento-frase-resgate').textContent)
       .toMatch(/^Ao salvar, o Finup agenda também 12 resgates de R\$\s*1\.268,00 de Contas Anuais › Escola para Conta Corrente, nas mesmas datas\.$/)
   }, 30000)
 
   it('provisão aberta da mesma função no mesmo mês: aviso com "abrir provisão"', async () => {
     await montar()
-    fireEvent.change(await screen.findByTestId('agendamento-resgatar-de'), { target: { value: 'fn_esc' } })
+    await escolher('fn_esc')
     const aviso = await screen.findByTestId('aviso-provisao-mesma-funcao')
     expect(aviso.textContent).toMatch(/provisão "MATERIAL ESCOLAR" \(R\$\s*1\.300,00\) desta função em jan\/2027/)
     fireEvent.click(within(aviso).getByRole('button', { name: 'abrir provisão' }))
     expect(await screen.findByText('Editar Provisão de Despesa')).toBeTruthy()
-    fireEvent.change(screen.getByTestId('agendamento-resgatar-de'), { target: { value: 'fn_ipva' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Fechar' }).at(-1))
+    await escolher('fn_ipva')
     expect(screen.queryByTestId('aviso-provisao-mesma-funcao')).toBeNull()
   }, 30000)
 
   it('"+ Nova função" cria a função na conta do grupo e já a seleciona', async () => {
     await montar()
-    fireEvent.change(await screen.findByTestId('agendamento-resgatar-de'), { target: { value: '__nova__' } })
+    await escolher('__nova__')
     expect(await screen.findByText('Nova Função de Reserva')).toBeTruthy()
     fireEvent.change(screen.getByPlaceholderText('Digite o nome da função'), { target: { value: 'Escola Nova' } })
     fireEvent.click(screen.getByRole('button', { name: 'Criar' }))
     await waitFor(() => expect(app.reserveFunctions.some(f => f.name === 'Escola Nova' && f.accountId === 'res')).toBe(true))
     const nova = app.reserveFunctions.find(f => f.name === 'Escola Nova')
-    await waitFor(() => expect(screen.getByTestId('agendamento-resgatar-de').value).toBe(nova.id))
+    await waitFor(() => expect(valorResgate()).toBe(nova.id))
     expect(screen.getByTestId('agendamento-frase-resgate').textContent).toMatch('Contas Anuais › Escola Nova')
   }, 30000)
 
@@ -131,7 +148,7 @@ describe('formulário: "Resgatar de"', () => {
 
   it('celular 380 px e temas claro/escuro: só cores do tema, sem largura fixa nem texto que não quebra', async () => {
     await montar()
-    fireEvent.change(await screen.findByTestId('agendamento-resgatar-de'), { target: { value: 'fn_esc' } })
+    await escolher('fn_esc')
     const bloco = document.querySelector('[data-help-id="agendamento.resgatarDe"]')
     // O ícone de ajuda (HelpCampo, igual em todos os campos) fica fora: é só o "?" ao lado do rótulo.
     const classes = [bloco, ...bloco.querySelectorAll('*')].filter(el => !el.closest('.help-campo-alvo'))
@@ -139,7 +156,17 @@ describe('formulário: "Resgatar de"', () => {
     expect(classes).not.toMatch(/\b(min-)?w-\[|\bwhitespace-nowrap\b|#[0-9a-fA-F]{3,6}\b|\b(text|bg|border)-(red|green|blue|gray|slate|zinc|white|black)\b/)
     expect(classes).toMatch(/\btext-reserva\b/)
     expect(classes).toMatch(/\btext-aviso\b/)
-    expect(screen.getByTestId('agendamento-resgatar-de').className).toMatch(/\binput\b/)
+    expect(within(screen.getByTestId('agendamento-resgatar-de')).getByRole('button').className).toMatch(/\binput\b/)
+  }, 30000)
+
+  it('lista em ordem alfabética (sem diferenciar acento/maiúscula), "+ Nova função" no fim; digitar filtra', async () => {
+    await montar()
+    await abrirLista()
+    expect(opcoesAbertas()).toEqual(['Contas Anuais › academia', 'Contas Anuais › Escola', 'Contas Anuais › IPVA', 'Contas Anuais › Óleo', '+ Nova função'])
+    fireEvent.change(screen.getByPlaceholderText('Buscar...'), { target: { value: 'oleo' } })
+    expect(opcoesAbertas()).toEqual(['Contas Anuais › Óleo', '+ Nova função'])
+    fireEvent.change(screen.getByPlaceholderText('Buscar...'), { target: { value: 'zzz' } })
+    expect(opcoesAbertas()).toEqual(['+ Nova função'])
   }, 30000)
 
   it('cartão: sem "Resgatar de" (o resgate é no vencimento da fatura)', async () => {
@@ -203,8 +230,7 @@ describe('criar e andar junto (contexto real)', () => {
 describe('agendamento antigo', () => {
   it('editar e salvar pede "Resgatar de" e cria resgate só das pendentes', async () => {
     await montar(dados().schedules.find(s => s.id === 'sch_antigo'))
-    const sel = await screen.findByTestId('agendamento-resgatar-de')
-    fireEvent.change(sel, { target: { value: 'fn_ipva' } })
+    await escolher('fn_ipva')
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(resgateDe('sch_antigo')).toBeTruthy())
     const r = resgateDe('sch_antigo')

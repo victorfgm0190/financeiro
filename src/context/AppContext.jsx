@@ -29,7 +29,7 @@ import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao, resgateDaEfetivacao } from '../lib/herancaCampos'
 import { aplicarEfetivacao, desfazerEfetivacao, situacaoDesfazer, novoIdEfetivacao } from '../lib/efetivacaoProvisao'
 import { faltaRecurso } from '../lib/recursosBanco'
-import { sincronizarResgatesVinculados, criarResgateSeFaltar } from '../lib/resgateVinculado'
+import { sincronizarResgatesVinculados, criarResgateSeFaltar, excluirOcorrenciaDoResgate, mudarDataDoResgate } from '../lib/resgateVinculado'
 import { comCamposDaOcorrencia, ESCOPO, agendamentoDoMotor } from '../lib/camposSerie'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { casaAgendamento } from '../lib/agendamentoManda'
@@ -2979,7 +2979,15 @@ export function AppProvider({ children }) {
 
   const deleteSchedule = useCallback((id) => {
     const antes = dataRef.current.schedules.find(s => s.id === id) || null
-    update(d => ({ ...d, schedules: d.schedules.filter(s => s.id !== id) }))
+    // Resgate ligado excluído à mão (o resgate inteiro): a despesa guarda a marca, para nem a
+    // sincronização nem o próximo salvar dela o recriarem (src/lib/resgateVinculado.js).
+    const despesaId = antes?.agendamentoVinculadoId || null
+    update(d => ({
+      ...d,
+      schedules: d.schedules.filter(s => s.id !== id).map(s => (despesaId && s.id === despesaId
+        ? { ...s, overrides: { ...(s.overrides || {}), _resgateExcluido: true } }
+        : s)),
+    }))
     if (antes) reconciliarPorAgendamento([antes])
     // Rateio do agendamento (lancamento_rateios guarda também o id do agendamento) não fica órfão.
     if (rateiosByLancamento.get(id)?.length) deleteRateiosFor(id)
@@ -3005,6 +3013,32 @@ export function AppProvider({ children }) {
   const garantirResgateVinculado = useCallback((despesaId) => {
     if (!despesaId || faltaRecurso(recursosBanco, 'resgateVinculado')) return
     update(d => criarResgateSeFaltar(d, despesaId))
+  }, [update, recursosBanco])
+
+  // Mexer SÓ no resgate ligado (a despesa não muda): excluir uma ocorrência; mudar a data de uma.
+  const excluirOcorrenciaResgate = useCallback((resgateId, chave) => {
+    update(d => ({ ...d, schedules: d.schedules.map(s => (s.id === resgateId ? excluirOcorrenciaDoResgate(s, chave) : s)) }))
+  }, [update])
+  const mudarDataResgate = useCallback((resgateId, chave, novaData) => {
+    update(d => {
+      const r = d.schedules.find(s => s.id === resgateId)
+      const despesa = r && d.schedules.find(s => s.id === r.agendamentoVinculadoId)
+      if (!r || !despesa) return d
+      return { ...d, schedules: d.schedules.map(s => (s.id === resgateId ? mudarDataDoResgate(s, despesa, chave, novaData) : s)) }
+    })
+  }, [update])
+  // "Agendar o resgate de novo" (resgate inteiro excluído à mão): tira a marca e cria das pendentes.
+  const reativarResgateVinculado = useCallback((despesaId) => {
+    if (!despesaId || faltaRecurso(recursosBanco, 'resgateVinculado')) return
+    update(d => criarResgateSeFaltar({
+      ...d,
+      schedules: d.schedules.map(s => {
+        if (s.id !== despesaId || !s.overrides?._resgateExcluido) return s
+        const overrides = { ...s.overrides }
+        delete overrides._resgateExcluido
+        return { ...s, overrides }
+      }),
+    }, despesaId))
   }, [update, recursosBanco])
 
   // Módulo de Contratos (src/hooks/useContratos.js): ficha via api/contrato*.js, parcelas = agendamentos.
@@ -6373,7 +6407,7 @@ export function AppProvider({ children }) {
       addSchedule, updateSchedule, updateSchedulesPayee, salvarFavorecidoDoAgendamento,
       mergeScheduleFromDb,
       deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,
-      garantirResgateVinculado,
+      garantirResgateVinculado, excluirOcorrenciaResgate, mudarDataResgate, reativarResgateVinculado,
       efetivarProvisao, getProximaProvisaoOccurrence, desfazerEfetivacaoProvisao, situacaoDesfazerEfetivacao,
       registerScheduleOccurrence, skipScheduleOccurrence, desfazerPuloOcorrencia,
       addBudget, updateBudget, deleteBudget,

@@ -1,3 +1,4 @@
+import { resgatePrimeiro } from './ordemResgate.js'
 // Visão CALENDÁRIO da tela de Agendamentos. Sem React — testável. Só exibição: parte das MESMAS
 // linhas da lista (buildScheduleGroups) e dos mesmos valores efetivos (occEfetiva); nada aqui grava.
 //
@@ -163,7 +164,8 @@ export function porDia(itens) {
   const out = new Map()
   for (const [d, lista] of m) {
     // Atrasado e pendente antes; pagos por último; depois o maior valor.
-    lista.sort((a, b) => Number(a.pago) - Number(b.pago) || Number(b.proxima) - Number(a.proxima) || b.amount - a.amount)
+    // Resgate ligado antes da despesa (lib/ordemResgate).
+    lista.sort((a, b) => Number(a.pago) - Number(b.pago) || resgatePrimeiro(a, b) || Number(b.proxima) - Number(a.proxima) || b.amount - a.amount)
     out.set(d, { itens: lista, totais: totaisDe(lista) })
   }
   return out

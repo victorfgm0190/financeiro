@@ -28,6 +28,10 @@ export const NOVIDADES = [
       'Ao salvar, o Finup agenda também o resgate de cada ocorrência, com a mesma data e o mesmo valor: ele já aparece no Fluxo de Caixa e na reserva como previsto.',
       'Pagar, pular, mudar data ou valor, excluir ou estornar a despesa faz o mesmo no resgate. O que já foi efetivado não muda.',
       'Se já houver uma provisão aberta da mesma função no mesmo mês, o formulário avisa, para a despesa não contar duas vezes.',
+      'A lista “Resgatar de” vem em ordem alfabética e aceita digitar para filtrar.',
+      'Na lista de Agendamentos, o resgate mostra “Acompanha: <despesa>” (toque para abrir a despesa) e vem antes da despesa no mesmo dia, também no Fluxo de Caixa, no extrato e na reserva.',
+      'No próprio resgate dá para mudar a data de uma ocorrência, excluir (só uma ou o resgate inteiro) e vincular a um resgate que você já fez. Mudar a data, pular ou excluir a despesa continua valendo para o resgate.',
+      'Fechar um agendamento, lançamento ou transferência com algo não salvo (X, Esc, tocar fora ou Cancelar) agora pergunta “Descartar as alterações?”.',
     ],
   },
   {

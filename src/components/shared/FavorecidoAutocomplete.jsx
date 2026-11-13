@@ -24,6 +24,8 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
   }
 
   const handleKeyDown = (e) => {
+    // Esc com a lista aberta fecha SÓ a lista (marcado: o Modal em volta não fecha).
+    if (open && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); return }
     if (!open || filtered.length === 0) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
@@ -34,8 +36,6 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
     } else if (e.key === 'Enter' && active >= 0) {
       e.preventDefault()
       handleSelect(filtered[active])
-    } else if (e.key === 'Escape') {
-      setOpen(false)
     }
   }
 

@@ -1,3 +1,4 @@
+import { resgatePrimeiro } from './ordemResgate.js'
 // Agenda no MOBILE (abas Pendentes | Atrasados | Pagos, agrupamento por semana e total a pagar
 // no mês). Só exibição: particiona as linhas que o SchedulesTable já monta (buildScheduleGroups)
 // com a MESMA regra do bucket "Em atraso" (displayDate < hoje). Sem React — testável.
@@ -30,7 +31,7 @@ export function agruparPorSemana(items, dataDe, { desc = false } = {}) {
 // rows (buildScheduleGroups) → { pendentes, atrasados, concluidos }. Atrasado = displayDate < hoje
 // (mesma regra do "Em atraso" da tabela); concluído = sem próxima ocorrência.
 export function particionarAgenda(rows, today) {
-  const porData = (a, b) => a.displayDate.localeCompare(b.displayDate)
+  const porData = (a, b) => a.displayDate.localeCompare(b.displayDate) || resgatePrimeiro(a, b)
   return {
     atrasados: rows.filter(r => r.displayDate && r.displayDate < today).sort(porData),
     pendentes: rows.filter(r => r.displayDate && r.displayDate >= today).sort(porData),
