@@ -159,6 +159,11 @@
     --color-barra-ok-claro: #5FC2A3;
     --color-barra-alerta-claro: #E6C86E;
     --color-barra-estouro-claro: #F08A8A;
+
+    /* Marca-d'água no grafite: opacidade um pouco maior que no celular (no cinza, valor baixo some). */
+    --marca-dagua-cor: var(--color-texto-3);
+    --marca-dagua-opacidade-simbolo: 0.10;
+    --marca-dagua-opacidade-texto: 0.18;
   }
   /* Cartões coloridos da tela Contas (gradiente saturado com texto branco): um pouco menos de
      saturação e brilho, sem sombra — a separação vem do tom. O filtro escurece fundo e texto
@@ -181,6 +186,19 @@
   --bg-page: var(--color-page);
   --bg-card: var(--color-surface);
   --bg-card-hover: var(--color-surface-hover);
+
+  /* Marca-d'água (src/components/MarcaDagua.jsx): cor e opacidades por tema. A frase é sempre mais
+     visível que o símbolo. Padrão = escuro do celular (fundo #030712); o claro e o escuro do computador
+     (bloco "Escuro SUAVE no computador") sobrescrevem. Nunca branco puro: usa o texto apagado. */
+  --marca-dagua-cor: var(--color-texto-3);
+  --marca-dagua-opacidade-simbolo: 0.07;
+  --marca-dagua-opacidade-texto: 0.14;
+}
+/* Claro: o mesmo resultado de antes (texto principal, 8% / 22%). :root[...] para vencer o :root acima. */
+:root[data-theme="light"] {
+  --marca-dagua-cor: var(--color-texto-1);
+  --marca-dagua-opacidade-simbolo: 0.08;
+  --marca-dagua-opacidade-texto: 0.22;
 }
 
 @layer base {
@@ -239,6 +257,9 @@
     color: var(--color-primary-fg)!important;
     background-color: color-mix(in srgb, var(--color-primary) 15%, transparent)!important;
   }
+  .marca-dagua { color: var(--marca-dagua-cor); }
+  .marca-dagua-simbolo { opacity: var(--marca-dagua-opacidade-simbolo); }
+  .marca-dagua-frase { opacity: var(--marca-dagua-opacidade-texto); }
   .badge {
     @apply inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold;
   }

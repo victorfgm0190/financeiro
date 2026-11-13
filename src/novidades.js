@@ -18,6 +18,17 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.13-4',
+    data: '2026-11-13',
+    titulo: "Nova marca-d'água do Finup",
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      "A marca-d'água do topo da tela, do Início no celular e da tela de entrada ganhou um novo símbolo: uma coroa com cruz, dentro de um círculo com doze estrelas. A frase continua a mesma.",
+      'As cores dela foram ajustadas a cada tema: continua discreta, sem atrapalhar a leitura.',
+    ],
+  },
+  {
     id: '2026.11.13-3',
     data: '2026-11-13',
     titulo: 'Tema escuro mais suave no computador',
