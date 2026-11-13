@@ -50,6 +50,10 @@ export function validarSugestao(s, { linhaId, candidatosIds = [], categoriasIds 
 
 export const ROTULO_CONFIANCA = { alta: 'confiança alta', media: 'confiança média', baixa: 'confiança baixa' }
 
+// "Aceitar N sugestões" (lote) só leva as de confiança alta e média; as de confiança baixa ficam para
+// o usuário conferir uma a uma, com Aceitar/Ignorar na própria linha.
+export const aceitaEmLote = (s) => s?.confianca === 'alta' || s?.confianca === 'media'
+
 // ── O que vai para a IA ──────────────────────────────────────────────────────────────────────────
 const parcelaLinha = (r) => (r._installment ? `${r._installment.num}/${r._installment.total}` : null)
 const parcelaTx = (t) => {
@@ -123,7 +127,7 @@ export function sugestoesValidas(sugestoes, { perguntas = [], linhas = [], categ
 // Patch da linha ao aceitar: os campos sugeridos e o que havia antes (para "Ignorar" desfazer).
 export function aceitarSugestaoNovo(row, s) {
   const antes = { categoryId: row.categoryId || '', grupoGerencial: row.grupoGerencial ?? null, payee: row.payee ?? '' }
-  const patch = { _iaAceita: { antes } }
+  const patch = { _iaAceita: { antes }, _aprender: s.categoriaId ? 'ia' : (row._aprender ?? null) }
   if (s.categoriaId) { patch.categoryId = s.categoriaId; patch._suggestedCategory = false }
   if (s.grupoId) patch.grupoGerencial = s.grupoId
   if (s.favorecido) patch.payee = s.favorecido
@@ -133,17 +137,29 @@ export function aceitarSugestaoNovo(row, s) {
 // "Ignorar" depois de aceitar: a linha volta ao que estava antes.
 export function desfazerSugestaoNovo(row) {
   if (!row?._iaAceita) return {}
-  return { ...row._iaAceita.antes, _iaAceita: null }
+  return { ...row._iaAceita.antes, _iaAceita: null, _aprender: row._aprender === 'ia' ? null : row._aprender ?? null }
 }
 
-// Aprendizado SÓ no "Confirmar": para as linhas gravadas que vieram de uma sugestão aceita, a regra
-// do "Classificar Auto" (learnClassification) com a categoria que FICOU na linha (se o usuário trocou
-// depois de aceitar, vale a troca). Cancelar a importação não chama isto.
+// Escolha MANUAL de categoria na revisão (select, 💡✓ da sugestão do histórico): só MARCA a linha;
+// a regra é criada no Confirmar (regrasDaConfirmacao). Vale a última ação (manual × sugestão aceita).
+export const marcaEscolhaManual = () => ({ _aprender: 'manual' })
+
+// Aprendizado SÓ no "Confirmar": para as linhas GRAVADAS marcadas (escolha manual ou sugestão do
+// Assistente aceita), a regra do "Classificar Auto" (learnClassification) com a categoria que FICOU na
+// linha. Manual = regra do jeito de sempre (dia e valor aproximado da compra); sugestão = regra pela
+// palavra-chave. Cancelar a importação não chama isto.
 export function regrasDaConfirmacao(linhasGravadas) {
   return (linhasGravadas || [])
-    .filter(r => r._iaAceita && r.categoryId)
-    .map(r => ({
-      description: r.description, categoryId: r.categoryId, payee: r.payee || '',
-      opcoes: { dayOfMonth: null, amountApprox: null, grupoGerencial: r.grupoGerencial || null, reservaFuncaoId: r._reservaFuncaoId || null },
-    }))
+    .filter(r => r.categoryId && (r._aprender === 'manual' || r._aprender === 'ia' || (r._aprender === undefined && r._iaAceita)))
+    .map(r => {
+      const manual = r._aprender === 'manual'
+      const dia = manual && r.date ? Number(String(r.date).slice(8, 10)) || null : null
+      return {
+        description: r.description, categoryId: r.categoryId, payee: r.payee || '',
+        opcoes: {
+          dayOfMonth: dia, amountApprox: manual ? Number(r.amount) || null : null,
+          grupoGerencial: r.grupoGerencial || null, reservaFuncaoId: r._reservaFuncaoId || null,
+        },
+      }
+    })
 }

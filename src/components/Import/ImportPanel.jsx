@@ -49,8 +49,9 @@ import { aplicarCorrespondencias } from '../../lib/importacaoCorrespondencias'
 import { aplicarRecorrentesParecidos, respostaRecorrente, desfazerRespostaRecorrente, baixaDoRecorrenteConfirmado } from '../../lib/recorrenteParecido'
 import { montarBlocos, resumoDosBlocos, perguntasDeDecisao, blocoDaLinha, respostaDaLinha, ROTULO } from '../../lib/blocosConferencia'
 import { ResumoConferencia, CartoesDecisao, BlocoConferencia, ListaJaNoFinup, ListaJaConciliados, ListaNaoEntram, ListaAguardando, SugestaoAssistente, AvisoAssistente } from './ConferenciaBlocos'
-import { itensParaIa, sugestoesValidas, aceitarSugestaoNovo, desfazerSugestaoNovo, regrasDaConfirmacao } from '../../lib/sugestaoAssistente'
-import { statusSugestoesImportacao, pedirSugestoesImportacao } from '../../lib/sugestoesImportacaoApi'
+import { itensParaIa, sugestoesValidas, aceitarSugestaoNovo, desfazerSugestaoNovo, regrasDaConfirmacao, marcaEscolhaManual, aceitaEmLote } from '../../lib/sugestaoAssistente'
+import { pedirSugestoesImportacao } from '../../lib/sugestoesImportacaoApi'
+import { useStatusSugestoesIa } from '../../hooks/useStatusSugestoesIa'
 import { hojeSP } from '../../lib/hoje'
 import { aplicarJaLancados, resumoJaLancados, favorecidoDaLinha, patchesJaLancado, termoDescricaoFatura } from '../../lib/casamentoFatura'
 import { listarPreLancamentos, listarApelidos, aprenderApelidos, concluirPreLancamento } from '../../lib/assistenteApi'
@@ -2722,8 +2723,7 @@ Importar mesmo assim no mês selecionado?`)) return
   // ── Etapa 6c: sugestões do Assistente (só com o recurso liberado no central e a opção do cliente
   // ligada — api/ia-importacao.js confere de novo). UMA chamada por importação (arquivo + cartão), só
   // com o que sobrou das regras e do histórico; nunca trava a tela.
-  const [iaStatus, setIaStatus] = useState({ liberado: false, ligado: false })
-  useEffect(() => { let vivo = true; statusSugestoesImportacao().then(st => { if (vivo) setIaStatus(st) }); return () => { vivo = false } }, [])
+  const iaStatus = useStatusSugestoesIa()
   const [ia, setIa] = useState({ chave: null, estado: null, porLinha: {}, ignoradas: new Set() })
   const iaPedida = useRef(null)
   const podeAceitarIa = pode('importar', 'incluir') || pode('importar', 'editar')
@@ -2770,7 +2770,7 @@ Importar mesmo assim no mês selecionado?`)) return
     }
     updateRow(row._id, patch)
   }
-  const novosComSugestao = comAbas ? blocos.novos.filter(r => sugestoesIa[r._id] && !r._iaAceita) : []
+  const novosComSugestao = comAbas ? blocos.novos.filter(r => sugestoesIa[r._id] && !r._iaAceita && aceitaEmLote(sugestoesIa[r._id])) : []
   const aceitarTodasIa = () => novosComSugestao.forEach(r => aceitarSugestaoIa(r, sugestoesIa[r._id]))
   const textoSugestaoNovo = (s) => [
     s.categoriaId && (() => { const c = categories.find(x => x.id === s.categoriaId); return c ? `${c.icon || ''} ${c.name}`.trim() : null })(),
@@ -2918,7 +2918,8 @@ Importar mesmo assim no mês selecionado?`)) return
           onChange={e => {
             const newCat = e.target.value
             // `_catEdit`: escolha manual — na colisão, prevalece sobre a categoria do banco.
-            const changes = { categoryId: newCat, _suggestedCategory: false, _manualEdit: true, _catEdit: true }
+            // Escolha manual: a regra só é criada no Confirmar (regrasDaConfirmacao) — cancelar não aprende.
+            const changes = { categoryId: newCat, _suggestedCategory: false, _manualEdit: true, _catEdit: true, ...(newCat ? marcaEscolhaManual() : { _aprender: null }) }
             const cat = newCat ? categories.find(c => c.id === newCat) : null
             // Grupo gerencial padrão da categoria: preenche quando o grupo atual está
             // vazio ou no padrão D (não sobrescreve escolha manual ≠ D).
@@ -2927,7 +2928,6 @@ Importar mesmo assim no mês selecionado?`)) return
               changes._gerEdit = true
             }
             editarLinhaDoAgendamento(row, changes)
-            if (newCat) learnClassification(row.description, newCat, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: changes.grupoGerencial || row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
             if (newCat) offerApplyToAll(row, changes.grupoGerencial ? { categoryId: newCat, grupoGerencial: changes.grupoGerencial } : { categoryId: newCat })
           }}
           searchable
@@ -2940,8 +2940,8 @@ Importar mesmo assim no mês selecionado?`)) return
           title="Categoria sugerida pelo histórico — clique para aceitar e criar regra permanente"
           aria-label="Aceitar categoria sugerida"
           onClick={() => {
-            if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
-            updateRow(row._id, { _suggestedCategory: false, _manualEdit: true })
+            // Aceitar a sugestão do histórico = escolha manual: aprende só no Confirmar.
+            updateRow(row._id, { _suggestedCategory: false, _manualEdit: true, ...(row.categoryId ? marcaEscolhaManual() : {}) })
           }}
           className="shrink-0 text-[11px] leading-5 px-1 rounded bg-primary/15 text-primary-fg hover:bg-primary/25"
         >
@@ -4463,7 +4463,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                 aberto={blocosAbertos.has('novos')} onAlternar={() => alternarBloco('novos')} acoesSempre
                 acoes={podeAceitarIa && novosComSugestao.length > 0 && (
                   <button type="button" data-testid="aceitar-todas-sugestoes" className="btn-secondary !py-1 text-xs shrink-0"
-                    title="Preenche as linhas com as sugestões do Assistente. Nada é gravado até o Confirmar; Desfazer na linha volta ao que estava."
+                    title="Aceita as sugestões de confiança alta e média. As de confiança baixa ficam para você conferir uma a uma. Nada é gravado até o Confirmar; Desfazer na linha volta ao que estava."
                     onClick={() => { aceitarTodasIa(); setBlocosAbertos(prev => new Set([...prev, 'novos'])) }}>
                     Aceitar {novosComSugestao.length} {novosComSugestao.length === 1 ? 'sugestão' : 'sugestões'}
                   </button>

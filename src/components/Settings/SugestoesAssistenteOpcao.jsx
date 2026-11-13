@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import { statusSugestoesImportacao } from '../../lib/sugestoesImportacaoApi'
+import { useStatusSugestoesIa, ESPERAS_STATUS_MS } from '../../hooks/useStatusSugestoesIa'
 import HelpCampo from '../shared/HelpCampo'
 
 // Configurações › Geral › "Sugestões do Assistente na importação" (Etapa 6c). Recurso CONTRATADO:
@@ -8,14 +8,9 @@ import HelpCampo from '../shared/HelpCampo'
 // central, conferido no servidor). Sem liberação, nada aparece — nem desabilitado.
 export const TEXTO_SUGESTOES_IA = 'A descrição, o valor e a data das compras da fatura são enviados ao serviço de IA (Anthropic) só para gerar a sugestão. A descrição do banco pode conter o nome da loja ou de uma pessoa (ex.: Pix). Não enviamos conta, cartão, CPF/CNPJ nem saldo. Nada é gravado sem você confirmar.'
 
-export default function SugestoesAssistenteOpcao({ somenteLeitura = false, carregarStatus = statusSugestoesImportacao }) {
+export default function SugestoesAssistenteOpcao({ somenteLeitura = false, carregarStatus = statusSugestoesImportacao, esperasMs = ESPERAS_STATUS_MS }) {
   const { settings, updateSettings } = useApp()
-  const [liberado, setLiberado] = useState(false)
-  useEffect(() => {
-    let vivo = true
-    carregarStatus().then(st => { if (vivo) setLiberado(st.liberado === true) })
-    return () => { vivo = false }
-  }, [carregarStatus])
+  const { liberado } = useStatusSugestoesIa(carregarStatus, esperasMs)
   if (!liberado) return null
   return (
     <label data-testid="opcao-sugestoes-ia" data-help-id="importarFatura.sugestoesIa" className="flex items-start gap-2.5 cursor-pointer mt-4 pt-4 border-t border-borda">

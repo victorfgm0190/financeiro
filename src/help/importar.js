@@ -182,7 +182,7 @@ export const campos = {
   'revisaoFatura.categoria': {
     titulo: 'Categoria',
     paraQueServe: 'Categoria da compra.',
-    relacaoComTela: 'Escolher aprende a classificação para as próximas faturas e oferece aplicar às compras iguais. Pode preencher o grupo gerencial padrão da categoria.',
+    relacaoComTela: 'A escolha vira regra para as próximas faturas só quando a importação é confirmada (cancelar não ensina nada). Oferece aplicar às compras iguais e pode preencher o grupo gerencial padrão da categoria.',
     obrigatorio: false,
   },
   'revisaoFatura.grupo': {

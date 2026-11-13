@@ -115,3 +115,47 @@ describe('aceitar e desfazer só mexem na tela; o aprendizado é SÓ no Confirma
     }])
   })
 })
+
+describe('"Aceitar N sugestões" só leva confiança alta e média', () => {
+  it('baixa fica de fora do lote (conferir uma a uma)', async () => {
+    const { aceitaEmLote } = await import('./sugestaoAssistente.js')
+    expect(['alta', 'media', 'baixa'].map(c => aceitaEmLote({ confianca: c }))).toEqual([true, true, false])
+    expect(aceitaEmLote(null)).toBe(false)
+  })
+})
+
+describe('escolha MANUAL de categoria aprende só no Confirmar', () => {
+  it('trocar à mão e cancelar: nenhuma regra (a troca só marca a linha)', async () => {
+    const { marcaEscolhaManual } = await import('./sugestaoAssistente.js')
+    const r = { ...linha('m1'), categoryId: 'c_mercado', ...marcaEscolhaManual() }
+    expect(r._aprender).toBe('manual')
+    expect(regrasDaConfirmacao([])).toEqual([]) // cancelar = nada gravado
+  })
+  it('trocar à mão e confirmar: regra criada, do jeito de sempre (dia e valor da compra)', async () => {
+    const { marcaEscolhaManual } = await import('./sugestaoAssistente.js')
+    const r = { ...linha('m1', { description: 'PADARIA EXEMPLO', amount: 18.5, date: '2026-11-07' }), categoryId: 'c_mercado', ...marcaEscolhaManual() }
+    expect(regrasDaConfirmacao([r])).toEqual([{ description: 'PADARIA EXEMPLO', categoryId: 'c_mercado', payee: '',
+      opcoes: { dayOfMonth: 7, amountApprox: 18.5, grupoGerencial: 'grp_D', reservaFuncaoId: null } }])
+  })
+  it('trocar duas vezes e confirmar: vale a última; sugestão aceita e depois troca manual = manual', async () => {
+    const { marcaEscolhaManual } = await import('./sugestaoAssistente.js')
+    let r = { ...linha('m1'), categoryId: 'c_mercado', ...marcaEscolhaManual() }
+    r = { ...r, categoryId: 'c_assin', ...marcaEscolhaManual() }
+    expect(regrasDaConfirmacao([r]).map(x => x.categoryId)).toEqual(['c_assin'])
+    const sug = { linhaId: 'n1', categoriaId: 'c_assin', confianca: 'alta', motivo: 'x' }
+    let s = { ...linha('n1'), ...aceitarSugestaoNovo(linha('n1'), sug) }
+    expect(s._aprender).toBe('ia')
+    s = { ...s, categoryId: 'c_mercado', ...marcaEscolhaManual() }
+    expect(regrasDaConfirmacao([s])).toEqual([expect.objectContaining({ categoryId: 'c_mercado', opcoes: expect.objectContaining({ amountApprox: 10 }) })])
+  })
+  it('linha sem marca (Preencher em Lote, Cat → Ger, Classificar Auto) não gera regra por aqui', () => {
+    expect(regrasDaConfirmacao([linha('x', { categoryId: 'c_mercado', _catEdit: true })])).toEqual([])
+  })
+  it('desfazer a sugestão aceita tira a marca de aprender', () => {
+    const sug = { linhaId: 'n1', categoriaId: 'c_assin', confianca: 'alta', motivo: 'x' }
+    const aceita = { ...linha('n1'), ...aceitarSugestaoNovo(linha('n1'), sug) }
+    const volta = { ...aceita, ...desfazerSugestaoNovo(aceita) }
+    expect(volta._aprender).toBeNull()
+    expect(regrasDaConfirmacao([volta])).toEqual([])
+  })
+})

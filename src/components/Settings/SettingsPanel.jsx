@@ -8,7 +8,7 @@ import RodapeIdentidade from '../Layout/RodapeIdentidade'
 import VersaoAmbiente from '../Layout/VersaoAmbiente'
 import IdentidadeAmbiente from './IdentidadeAmbiente'
 import SugestoesAssistenteOpcao from './SugestoesAssistenteOpcao'
-import { statusSugestoesImportacao } from '../../lib/sugestoesImportacaoApi'
+import { useStatusSugestoesIa } from '../../hooks/useStatusSugestoesIa'
 import VarreduraRateio from './VarreduraRateio'
 import { noAmbientePrincipal } from '../../lib/api'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
@@ -579,8 +579,7 @@ export default function SettingsPanel() {
   // Configurações do sistema; Cadastros/Regras = Cadastros (operador vê, não edita).
   const ehAdmin = pode('usuarios', 'ver')
   // Seção "Assistente": só com recurso contratado liberado no central (conferido no servidor).
-  const [recursoIaLiberado, setRecursoIaLiberado] = useState(false)
-  useEffect(() => { let vivo = true; statusSugestoesImportacao().then(st => { if (vivo) setRecursoIaLiberado(st.liberado) }); return () => { vivo = false } }, [])
+  const recursoIaLiberado = useStatusSugestoesIa().liberado
   // Seção `todos` (Dados › Dados deste aparelho) aparece mesmo sem acesso ao módulo da aba.
   const abas = CONFIG_ABAS
     .map(a => {

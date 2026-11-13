@@ -24,7 +24,8 @@ export const NOVIDADES = [
     itens: [
       'Recurso contratado à parte: quando liberado para você, aparece em Configurações › Geral › Assistente. Vem desligado; você decide se usa.',
       'Ligado, o Assistente sugere a resposta dos cartões “É este?” e a categoria, o grupo e o favorecido das compras novas que as suas regras não classificaram.',
-      'Cada sugestão tem Aceitar e Ignorar; nos Novos há “Aceitar todas”. Nada é gravado sem o Confirmar, e o Finup só aprende a classificação das compras que você confirmar.',
+      'Cada sugestão tem Aceitar e Ignorar. Nos Novos, “Aceitar N sugestões” leva só as de confiança alta e média; as de confiança baixa ficam para você conferir uma a uma.',
+      'Nada é gravado sem o Confirmar. A categoria que você escolhe (à mão ou aceitando uma sugestão) só vira regra para as próximas faturas quando a importação é confirmada; cancelar não ensina nada.',
     ],
   },
   {
