@@ -62,6 +62,7 @@ import EntrarComCodigo from './pages/EntrarComCodigo'
 import Instalar from './pages/Instalar'
 import AvisoUsarComoApp from './components/Layout/UsarComoApp'
 import AvisoAtualizacao from './components/Layout/AvisoAtualizacao'
+import { lerTelaGuardada, definirTelaAtual } from './lib/telaAposAtualizar'
 import OQueMudou from './components/Ajuda/Novidades'
 import DefinirSenha from './pages/DefinirSenha'
 import { AMBIENTE_PRINCIPAL } from './lib/ambienteHost'
@@ -77,11 +78,14 @@ import { podeVerModuloMobile } from './lib/permissoes'
 function AppContent() {
   // #config/<aba>/<seção> na URL abre Configurações direto — vale no reload e em links internos.
   // #ajuda/<tela>/<item> abre a Central de Ajuda já na seção.
-  const [activePage, setActivePage] = useState(() => (ehHashConfig(window.location.hash) ? 'settings' : ehHashAjuda(window.location.hash) ? 'ajuda' : 'dashboard'))
+  // Depois de "Atualizar agora": abre na tela em que a pessoa estava (lib/telaAposAtualizar).
+  const [telaGuardada] = useState(() => lerTelaGuardada())
+  const [activePage, setActivePage] = useState(() => (ehHashConfig(window.location.hash) ? 'settings' : ehHashAjuda(window.location.hash) ? 'ajuda' : telaGuardada?.page || 'dashboard'))
   // Mobile: módulo aberto no MobileShell (id de src/mobile/modules.js). Acompanha activePage quando
   // um painel navega por página (ex.: "Ver alertas" → Alertas).
   const isMobile = useIsMobile()
-  const [mobileAtivo, setMobileAtivo] = useState(() => (ehHashConfig(window.location.hash) ? 'configuracoes' : ehHashAjuda(window.location.hash) ? 'ajuda' : 'inicio'))
+  const [mobileAtivo, setMobileAtivo] = useState(() => (ehHashConfig(window.location.hash) ? 'configuracoes' : ehHashAjuda(window.location.hash) ? 'ajuda' : telaGuardada?.mobile || 'inicio'))
+  useEffect(() => { definirTelaAtual({ page: activePage, mobile: mobileAtivo }) }, [activePage, mobileAtivo])
   useEffect(() => {
     const onHash = () => {
       const page = ehHashConfig(window.location.hash) ? 'settings' : ehHashAjuda(window.location.hash) ? 'ajuda' : null

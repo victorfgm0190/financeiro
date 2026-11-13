@@ -64,6 +64,7 @@ import { listarPreLancamentos } from '../../lib/assistenteApi'
 import AvisoParecidos from './AvisoParecidos'
 import { controleGerencialAtivo, grupoComChaveDesligada, travaGerencial } from '../../lib/controleGerencial'
 import { contaCentralDoPerfil, contaCentralPara } from '../../lib/contaCentral'
+import { useTrabalhoEmAndamento, useAlteradoDesdeAbertura } from '../../hooks/useTrabalhoEmAndamento'
 
 const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita', atalho: 'lancamento.tipoReceita' },
@@ -264,6 +265,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     // original, então o diff, a pergunta de escopo da série e o histórico são os de sempre.
     ...(initial?.id && ajustes ? Object.fromEntries(Object.entries(ajustes).filter(([k]) => ['amount', 'date', 'dateCartao'].includes(k))) : {}),
   })
+  // Trabalho em andamento (aviso de atualização / fechar a aba): formulário alterado e não salvo.
+  const formAlterado = useAlteradoDesdeAbertura(form)
+  useTrabalhoEmAndamento('form-lancamento', formAlterado, form.type === 'transfer' ? 'uma transferência que ainda não foi salva' : 'um lançamento que ainda não foi salvo')
 
   const [step, setStep] = useState('form')
   // Cada passo (parecidos, série, parcelas, reserva…) começa no topo do corpo do modal.

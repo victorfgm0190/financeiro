@@ -74,3 +74,30 @@ describe('src/novidades.js (o arquivo de verdade)', () => {
     for (const t of ['Transferências entre perfis', 'Backup completo e backup ao sair', 'Importar Fatura mais inteligente', 'Use o Finup como aplicativo no computador']) expect(titulos).toContain(t)
   })
 })
+
+describe('novidades de recurso contratado', () => {
+  const n = (id, extra = {}) => ({ id, data: '2026-11-12', titulo: id, publico: 'todos', itens: ['x'], ...extra })
+  const LISTA = [n('2026.11.12-5', { recurso: 'ia_sugestoes_importacao' }), n('2026.11.12-4'), n('2026.11.11')]
+  it('sem o campo vale para todos; com o campo, só com o recurso liberado', async () => {
+    const { paraRecursos, semRecurso } = await import('./novidades.js')
+    expect(paraRecursos(LISTA, {}).map(x => x.id)).toEqual(['2026.11.12-4', '2026.11.11'])
+    expect(paraRecursos(LISTA, { ia_sugestoes_importacao: true }).map(x => x.id)).toEqual(['2026.11.12-5', '2026.11.12-4', '2026.11.11'])
+    expect(semRecurso(LISTA).map(x => x.id)).toEqual(['2026.11.12-4', '2026.11.11'])
+  })
+  it('a marca "última vista" não engole a de recurso; ela tem "já vi" próprio', async () => {
+    const { novidadesNaoVistas, novidadesDeRecursoNaoVistas } = await import('./novidades.js')
+    expect(novidadesNaoVistas(LISTA, '2026.11.11').map(x => x.id)).toEqual(['2026.11.12-4'])
+    expect(novidadesDeRecursoNaoVistas(LISTA, [], { ia_sugestoes_importacao: true }).map(x => x.id)).toEqual(['2026.11.12-5'])
+    expect(novidadesDeRecursoNaoVistas(LISTA, ['2026.11.12-5'], { ia_sugestoes_importacao: true })).toEqual([])
+    expect(novidadesDeRecursoNaoVistas(LISTA, [], {})).toEqual([])
+  })
+  it('o arquivo de verdade: a 2026.11.12-4 é só a parte geral; a do Assistente tem id próprio e o recurso', async () => {
+    const { NOVIDADES } = await import('../novidades.js')
+    const geral = NOVIDADES.find(x => x.id === '2026.11.12-4')
+    expect(geral.recurso).toBeUndefined()
+    expect(geral.itens).toEqual(['Na Importar Fatura, a categoria escolhida só vira regra para as próximas faturas quando a importação é confirmada; cancelar não ensina nada.'])
+    const assist = NOVIDADES.find(x => x.recurso === 'ia_sugestoes_importacao')
+    expect(assist.id).not.toBe('2026.11.12-4')
+    expect(assist.itens.join(' ')).toMatch(/Configurações › Geral › Assistente.*Aceitar N sugestões/s)
+  })
+})

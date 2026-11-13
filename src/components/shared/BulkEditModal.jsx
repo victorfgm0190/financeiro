@@ -9,6 +9,7 @@ import { filtrarCategoriasPorPerfil } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { tipoVisual, ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import HelpCampo from './HelpCampo'
+import { useTrabalhoEmAndamento } from '../../hooks/useTrabalhoEmAndamento'
 
 // Paleta acessível (sem verde/vermelho): receita=azul, despesa=laranja, transferência=cinza.
 const TYPE_META = {
@@ -38,6 +39,8 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
   const [categoryId, setCategoryId] = useState('')
   const [motivo, setMotivo] = useState('') // vai para o histórico de alterações (mesmo lote)
   const [error, setError] = useState('')
+  // Trabalho em andamento (aviso de atualização / fechar a aba): edição em lote começada e não aplicada.
+  useTrabalhoEmAndamento('edicao-lote', stage !== 'review' || !!date || !!categoryId, 'uma edição em lote de lançamentos')
 
   const removeItem = (id) => setItems(prev => prev.filter(t => t.id !== id))
 

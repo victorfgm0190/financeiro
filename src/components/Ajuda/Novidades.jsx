@@ -8,8 +8,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { NOVIDADES } from '../../novidades'
-import { maisNovaPrimeiro, novidadesNaoVistas, versaoMaisNova, visivelPara } from '../../lib/novidades'
-import { assinarBoasVindas, estadoBoasVindas, marcarNovidadeVista } from '../../lib/boasVindasApi'
+import { maisNovaPrimeiro, novidadesNaoVistas, versaoMaisNova, visivelPara, paraRecursos, semRecurso, novidadesDeRecursoNaoVistas } from '../../lib/novidades'
+import { assinarBoasVindas, estadoBoasVindas, marcarNovidadeVista, marcarNovidadesRecursoVistas } from '../../lib/boasVindasApi'
+import { useRecursosLiberados } from '../../hooks/useStatusSugestoesIa'
+import { statusSugestoesImportacao } from '../../lib/sugestoesImportacaoApi'
 import { getSessao } from '../../lib/api'
 import { haModalAberto } from '../../lib/recargaRemota'
 import { useTourAtivo } from '../BoasVindas/tourEstado'
@@ -33,10 +35,13 @@ export function NovidadesLista({ novidades }) {
   )
 }
 
-// Ajuda → Novidades: o histórico completo que esta pessoa pode ver.
-export function HistoricoNovidades({ lista = NOVIDADES }) {
+// Ajuda → Novidades: o histórico completo que esta pessoa pode ver (as de recurso contratado só com
+// o recurso liberado).
+export function HistoricoNovidades({ lista = NOVIDADES, carregarStatus = statusSugestoesImportacao }) {
   const admin = ehAdmin()
-  const itens = useMemo(() => maisNovaPrimeiro(lista).filter(n => visivelPara(n, { admin })), [lista, admin])
+  const { recursos } = useRecursosLiberados(carregarStatus)
+  const liberado = Object.values(recursos).some(Boolean)
+  const itens = useMemo(() => paraRecursos(maisNovaPrimeiro(lista), liberado ? recursos : {}).filter(n => visivelPara(n, { admin })), [lista, admin, liberado]) // eslint-disable-line react-hooks/exhaustive-deps
   return <NovidadesLista novidades={itens} />
 }
 
@@ -46,21 +51,32 @@ function useBoasVindas() {
   return e
 }
 
-export default function OQueMudou({ lista = NOVIDADES, espera = 1500 }) {
+export default function OQueMudou({ lista = NOVIDADES, espera = 1500, carregarStatus = statusSugestoesImportacao }) {
   const bv = useBoasVindas()
   const tour = useTourAtivo()
   const passo = usePassoJornadaAtivo()
   const [aberto, setAberto] = useState(false)
   const marcouRef = useRef(false)
 
-  const maisNova = versaoMaisNova(lista)
+  // Novidades gerais: marca "última versão vista". As de RECURSO contratado (só com o recurso liberado)
+  // têm "já vi" próprio — liberado depois, aparecem na próxima abertura; status que falha não as esconde.
+  const { recursos } = useRecursosLiberados(carregarStatus)
+  const liberadoIa = Object.values(recursos).some(Boolean)
+  const maisNova = versaoMaisNova(semRecurso(lista))
   const vista = bv?.progresso?.novidadeVista || null
+  const vistasRecurso = bv?.progresso?.novidadesRecursoVistas
   const usuarioNovo = !!bv && !bv.tourVistoEm && bv.guiasLigados !== false
-  const naoVistas = useMemo(() => (bv ? novidadesNaoVistas(lista, vista, { admin: ehAdmin() }) : []), [bv, lista, vista])
+  const naoVistas = useMemo(() => {
+    if (!bv) return []
+    const gerais = novidadesNaoVistas(lista, vista, { admin: ehAdmin() })
+    const deRecurso = novidadesDeRecursoNaoVistas(lista, vistasRecurso || [], liberadoIa ? recursos : {}, { admin: ehAdmin() })
+    return maisNovaPrimeiro([...gerais, ...deRecurso])
+  }, [bv, lista, vista, vistasRecurso, liberadoIa]) // eslint-disable-line react-hooks/exhaustive-deps
   const quer = !!bv && !usuarioNovo && naoVistas.length > 0
   const { naFrente } = useVezDoAviso('novidades', quer || aberto)
 
   // Nada a mostrar (usuário novo, só itens de administrador, tudo antigo): grava a mais nova como vista.
+  // As de recurso não entram aqui (só são marcadas quando aparecem).
   useEffect(() => {
     if (!bv || marcouRef.current || !maisNova || vista === maisNova) return
     if (usuarioNovo || naoVistas.length === 0) { marcouRef.current = true; marcarNovidadeVista(maisNova) }
@@ -75,7 +91,12 @@ export default function OQueMudou({ lista = NOVIDADES, espera = 1500 }) {
   }, [quer, aberto, bloqueado, espera])
 
   if (!aberto) return null
-  const fechar = () => { setAberto(false); marcouRef.current = true; if (maisNova) marcarNovidadeVista(maisNova) }
+  const fechar = () => {
+    setAberto(false); marcouRef.current = true
+    if (maisNova && vista !== maisNova) marcarNovidadeVista(maisNova)
+    const deRecurso = naoVistas.filter(n => n.recurso).map(n => n.id)
+    if (deRecurso.length) marcarNovidadesRecursoVistas(deRecurso)
+  }
   return (
     <Modal open onClose={fechar} title="O que mudou no Finup" size="md">
       <div className="space-y-3" data-testid="o-que-mudou" data-help-id="novidades.janela">

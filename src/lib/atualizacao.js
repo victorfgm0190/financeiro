@@ -12,6 +12,7 @@
 // Outra janela do Finup atualizou: esta não recarrega no meio do uso — o aviso pede para recarregar.
 import { NOVIDADES } from '../novidades.js'
 import { novidadesDaVersaoNova, obrigatoriaEntre } from './novidades.js'
+import { guardarTelaAtual } from './telaAposAtualizar.js'
 
 export const INTERVALO_PROCURA_MS = 30 * 60 * 1000
 export const ADIAR_MS = 4 * 60 * 60 * 1000
@@ -91,6 +92,8 @@ export function iniciarServiceWorker(registerSW, win = window) {
 
 // Último passo do "Atualizar agora" (as pendências já foram enviadas): SKIP_WAITING e recarrega.
 export async function aplicarAtualizacao(win = window) {
+  // Volta para a mesma tela depois de recarregar (lib/telaAposAtualizar).
+  guardarTelaAtual()
   // Simulação: abre de novo sem o ?simular-atualizacao (senão o aviso voltaria).
   if (estado.simulada) { win.location.replace(win.location.pathname + win.location.hash); return }
   if (estado.outraJanela || !atualizarSW) { win.location.reload(); return }

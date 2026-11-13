@@ -5,18 +5,26 @@
 //   Mais tarde: volta em 4 h (ou na próxima abertura). Obrigatória: sem "Mais tarde", com o motivo.
 // Espera: formulário/janela aberta ou campo em edição, tour/guia/jornada. Um aviso de cada vez
 // (src/lib/filaDeAvisos.js — este passa na frente dos outros).
+// TRABALHO EM ANDAMENTO (lib/trabalhoEmAndamento — importação em revisão, conciliação, formulário
+// alterado…): o aviso diz o que seria perdido e oferece "Atualizar depois" (principal) e "Atualizar
+// mesmo assim" (com confirmação). Vale também para a versão obrigatória: nunca derruba trabalho em
+// andamento. Quando a tarefa termina (Confirmar / Cancelar), o aviso volta: "Pronto! Agora você pode
+// atualizar o Finup."
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { RefreshCw, AlertTriangle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { getSessao } from '../../lib/api'
 import { haModalAberto, campoEmEdicao } from '../../lib/recargaRemota'
-import { linhasDoAviso } from '../../lib/novidades'
+import { linhasDoAviso, paraRecursos } from '../../lib/novidades'
+import { useRecursosLiberados } from '../../hooks/useStatusSugestoesIa'
 import { assinarAtualizacao, estadoAtualizacao, atualizacaoParaAvisar, adiarAtualizacao, aplicarAtualizacao, textoSemRede, textoErroEnvio } from '../../lib/atualizacao'
 import { assinarBoasVindas, estadoBoasVindas } from '../../lib/boasVindasApi'
 import { useTourAtivo } from '../BoasVindas/tourEstado'
 import { usePassoJornadaAtivo } from '../BoasVindas/jornadaEstado'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useVezDoAviso } from '../../hooks/useVezDoAviso'
+import { useTrabalhosEmAndamento } from '../../hooks/useTrabalhoEmAndamento'
+import { fraseDosTrabalhos, permitirSaida } from '../../lib/trabalhoEmAndamento'
 
 // A tela está ocupada (formulário/janela aberta ou campo sendo digitado)? Conferido de tempos em tempos.
 export const INTERVALO_TELA_OCUPADA_MS = 1500
@@ -48,6 +56,19 @@ export default function AvisoAtualizacao({ intervalo = INTERVALO_TELA_OCUPADA_MS
   const boasVindas = useBoasVindasAberto()
   const [etapa, setEtapa] = useState(null) // null | 'enviando' | 'atualizando'
   const [erro, setErro] = useState('')
+  const trabalhos = useTrabalhosEmAndamento()
+  const { recursos } = useRecursosLiberados()
+  const comTrabalho = trabalhos.length > 0
+  const [adiadoPorTrabalho, setAdiadoPorTrabalho] = useState(false) // "Atualizar depois": até a tarefa terminar
+  const [teveTrabalho, setTeveTrabalho] = useState(false)           // para dizer "Pronto!" quando terminar
+  const [confirmando, setConfirmando] = useState(false)             // "Atualizar mesmo assim" → confirmação
+  // Tarefa terminou: o aviso volta sozinho ("Pronto!"). Ajuste durante o render (sem efeito).
+  const [comTrabalhoAntes, setComTrabalhoAntes] = useState(comTrabalho)
+  if (comTrabalho && estado.pronta && !teveTrabalho) setTeveTrabalho(true)
+  if (comTrabalhoAntes !== comTrabalho) {
+    setComTrabalhoAntes(comTrabalho)
+    if (!comTrabalho) { setAdiadoPorTrabalho(false); setConfirmando(false) }
+  }
 
   const quer = atualizacaoParaAvisar(estado, agora)
   useVezDoAviso('atualizacao', quer)
@@ -63,15 +84,18 @@ export default function AvisoAtualizacao({ intervalo = INTERVALO_TELA_OCUPADA_MS
 
   // Durante o envio a tela pode "ocupar" (o próprio botão tem foco): o aviso continua.
   const esperando = !etapa && (ocupada || !!tour || !!passo || boasVindas)
-  if (!quer || esperando) return null
+  if (!quer || esperando || (comTrabalho && adiadoPorTrabalho)) return null
 
   const admin = getSessao()?.nivel === 'admin'
-  const linhas = linhasDoAviso(estado.novas, { admin })
+  // Novidade de recurso contratado só entra para quem tem o recurso liberado.
+  const linhas = linhasDoAviso(paraRecursos(estado.novas, recursos), { admin })
   const obrigatoria = estado.obrigatoria
   const titulo = estado.outraJanela ? 'O Finup foi atualizado' : obrigatoria ? 'Atualização necessária do Finup' : 'Há uma atualização do Finup'
 
   const atualizar = async () => {
     setErro('')
+    // "Atualizar mesmo assim" (já confirmado): a recarga não pergunta de novo no navegador.
+    if (comTrabalho) permitirSaida()
     if (typeof navigator !== 'undefined' && navigator.onLine === false) { setErro(textoSemRede); return }
     setEtapa('enviando')
     let r
@@ -98,9 +122,14 @@ export default function AvisoAtualizacao({ intervalo = INTERVALO_TELA_OCUPADA_MS
         {obrigatoria ? <AlertTriangle size={16} className="text-aviso shrink-0 mt-0.5" aria-hidden="true" /> : <RefreshCw size={16} className="text-primary-fg shrink-0 mt-0.5" aria-hidden="true" />}
         <div className="flex-1 min-w-0">
           <p id="aviso-atualizacao-titulo" className="text-sm font-medium text-texto-1">{titulo}</p>
-          {obrigatoria
-            ? <p className="text-xs text-texto-2 mt-0.5">{estado.motivo}</p>
-            : <p className="text-xs text-texto-2 mt-0.5">Deseja atualizar agora?</p>}
+          {obrigatoria && <p className="text-xs text-texto-2 mt-0.5">{estado.motivo}</p>}
+          {comTrabalho ? (
+            <p className="text-xs text-texto-1 mt-1" data-testid="aviso-atualizacao-trabalho">
+              Você está no meio de {fraseDosTrabalhos(trabalhos)}. Se atualizar agora, o que não foi confirmado será perdido. Termine (Confirmar ou Cancelar) e atualize depois.
+            </p>
+          ) : teveTrabalho ? (
+            <p className="text-xs text-texto-1 mt-0.5 font-medium" data-testid="aviso-atualizacao-pronto">Pronto! Agora você pode atualizar o Finup.</p>
+          ) : !obrigatoria && <p className="text-xs text-texto-2 mt-0.5">Deseja atualizar agora?</p>}
         </div>
       </div>
       {linhas.length > 0 && !estado.outraJanela && (
@@ -111,13 +140,34 @@ export default function AvisoAtualizacao({ intervalo = INTERVALO_TELA_OCUPADA_MS
       {erro && <p role="alert" className="text-xs text-texto-1 bg-aviso/10 border border-aviso/40 rounded-lg px-2 py-1.5">{erro}</p>}
       {etapa === 'enviando' && <p className="text-xs text-texto-2" role="status">Enviando suas alterações antes de atualizar…</p>}
       {etapa === 'atualizando' && <p className="text-xs text-texto-2" role="status">Atualizando…</p>}
+      {comTrabalho && confirmando && (
+        <p role="alert" className="text-xs text-texto-1 bg-aviso/10 border border-aviso/40 rounded-lg px-2 py-1.5" data-testid="aviso-atualizacao-confirmar">
+          Tem certeza? Você vai perder o que não foi confirmado ({fraseDosTrabalhos(trabalhos)}).
+        </p>
+      )}
       <div className="flex flex-wrap gap-1.5 justify-end">
-        {!obrigatoria && (
-          <button type="button" className="btn-secondary text-xs py-1.5" disabled={ocupado} onClick={() => adiarAtualizacao()}>Mais tarde</button>
+        {comTrabalho ? (
+          confirmando ? (
+            <>
+              <button type="button" className="btn-secondary text-xs py-1.5" disabled={ocupado} onClick={() => setConfirmando(false)}>Voltar</button>
+              <button type="button" className="btn-secondary text-xs py-1.5 !text-perigo" disabled={ocupado} onClick={atualizar}>Sim, atualizar mesmo assim</button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn-secondary text-xs py-1.5" disabled={ocupado} onClick={() => setConfirmando(true)}>Atualizar mesmo assim</button>
+              <button type="button" className="btn-primary text-xs py-1.5" disabled={ocupado} onClick={() => setAdiadoPorTrabalho(true)}>Atualizar depois</button>
+            </>
+          )
+        ) : (
+          <>
+            {!obrigatoria && (
+              <button type="button" className="btn-secondary text-xs py-1.5" disabled={ocupado} onClick={() => adiarAtualizacao()}>Mais tarde</button>
+            )}
+            <button type="button" className="btn-primary text-xs py-1.5 inline-flex items-center gap-1.5" disabled={ocupado} onClick={atualizar}>
+              <RefreshCw size={13} aria-hidden="true" /> {estado.outraJanela ? 'Recarregar agora' : 'Atualizar agora'}
+            </button>
+          </>
         )}
-        <button type="button" className="btn-primary text-xs py-1.5 inline-flex items-center gap-1.5" disabled={ocupado} onClick={atualizar}>
-          <RefreshCw size={13} aria-hidden="true" /> {estado.outraJanela ? 'Recarregar agora' : 'Atualizar agora'}
-        </button>
       </div>
     </div>
   )

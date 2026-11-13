@@ -52,6 +52,7 @@ import { ResumoConferencia, CartoesDecisao, BlocoConferencia, ListaJaNoFinup, Li
 import { itensParaIa, sugestoesValidas, aceitarSugestaoNovo, desfazerSugestaoNovo, regrasDaConfirmacao, marcaEscolhaManual, aceitaEmLote } from '../../lib/sugestaoAssistente'
 import { pedirSugestoesImportacao } from '../../lib/sugestoesImportacaoApi'
 import { useStatusSugestoesIa } from '../../hooks/useStatusSugestoesIa'
+import { useTrabalhoEmAndamento } from '../../hooks/useTrabalhoEmAndamento'
 import { hojeSP } from '../../lib/hoje'
 import { aplicarJaLancados, resumoJaLancados, favorecidoDaLinha, patchesJaLancado, termoDescricaoFatura } from '../../lib/casamentoFatura'
 import { listarPreLancamentos, listarApelidos, aprenderApelidos, concluirPreLancamento } from '../../lib/assistenteApi'
@@ -368,6 +369,8 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
   useEffect(() => { listarModelosImportacao().then(setModelos).catch(() => {}) }, [])
 
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
+  // Trabalho em andamento (aviso de atualização / fechar a aba): extrato carregado, não importado.
+  useTrabalhoEmAndamento('importar-conta', parsedRows.length > 0 && !result, 'uma importação de extrato de conta corrente')
 
   useEffect(() => {
     loadAccountMappings().then(maps => setDbMappings(maps))
@@ -1314,6 +1317,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   })
   // Categorias por perfil: o do cartão importado (undefined → chip do topo no CategorySelect).
   const perfilCategorias = selectedAcc?.profileId || undefined
+  // Trabalho em andamento (aviso de atualização / fechar a aba): até Confirmar ou Cancelar.
+  const nomeCartaoTrabalho = selectedAcc?.name ? ` do cartão ${selectedAcc.name}` : ''
+  useTrabalhoEmAndamento('importar-fatura', rows.length > 0,
+    editingImport ? `a revisão de uma importação de fatura${nomeCartaoTrabalho}` : `uma importação de fatura${nomeCartaoTrabalho}`)
+  useTrabalhoEmAndamento('conciliar-fatura', conciliarMode && (concMatched.length + concSoItau.length + concSoSistema.length) > 0,
+    `uma conciliação de fatura${nomeCartaoTrabalho}`)
 
   // Meses do cartão selecionado. Memoizado porque varre todos os lançamentos e a tabela de
   // preview renderiza um select por linha — recalcular a cada linha custaria caro.

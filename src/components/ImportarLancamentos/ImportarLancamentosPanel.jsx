@@ -10,6 +10,7 @@ import {
 } from '../../lib/importacaoApi'
 import Modal from '../shared/Modal'
 import HelpCampo from '../shared/HelpCampo'
+import { useTrabalhoEmAndamento } from '../../hooks/useTrabalhoEmAndamento'
 
 // IMPORTAR LANÇAMENTOS (importação padrão, todos os ambientes): 1) conta de destino (sem cartão —
 // cartão continua no Importar Fatura); 2) gerar o Excel desta conta / enviar o arquivo (.xlsx gerado,
@@ -128,6 +129,8 @@ export default function ImportarLancamentosPanel() {
     listarDepara().then(l => setDepara(Object.fromEntries(l.map(d => [d.nome_origem, d.categoria_id])))).catch(() => {})
   }, [])
 
+  // Trabalho em andamento (aviso de atualização / fechar a aba): arquivo lido, prévia não gravada.
+  useTrabalhoEmAndamento('importar-lancamentos', !!leitura, 'uma importação de lançamentos (planilha/OFX) em revisão')
   // Sair da página no meio da gravação/desfazer → o navegador pergunta.
   useEffect(() => {
     if (!progresso) return undefined

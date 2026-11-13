@@ -48,6 +48,7 @@ import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { baixaNoPeriodo } from '../../lib/conflitoPeriodo'
 import { perguntaFluxoPrincipal, considerarFluxoParaGravar } from '../../lib/fluxoPrincipal'
 import InputMoeda from '../shared/InputMoeda'
+import { useTrabalhoEmAndamento, useAlteradoDesdeAbertura } from '../../hooks/useTrabalhoEmAndamento'
 import {
   ehParcelado, ehUnicaParcelada, frequenciaExibida, normalizarUnica, permiteParcelamento, erroLimiteParcelas,
   textoDivisao, parcelaDaData, valorBaseDaChave, planoParcelamento, temConsumo, situacaoDaOcorrencia,
@@ -280,6 +281,9 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     numeroContrato: ini?.numeroContrato || '',
   })
   const [form, setForm] = useState(() => formDe(initial, serieBase))
+  // Trabalho em andamento (aviso de atualização / fechar a aba): agendamento alterado e não salvo.
+  const agendamentoAlterado = useAlteradoDesdeAbertura(form)
+  useTrabalhoEmAndamento('form-agendamento', agendamentoAlterado || edicoesChip.length > 0, 'um agendamento que ainda não foi salvo')
   // Agendamento mudou FORA deste formulário enquanto ele está aberto? `origem` = o que o formulário
   // mostrava (form) e a versão viva (vivo) na última sincronização. Sem edição do usuário, o
   // formulário passa ao valor novo; com edição, pergunta (Recarregar × Manter a minha edição) e o

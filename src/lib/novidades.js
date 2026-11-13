@@ -15,7 +15,8 @@ export const visivelPara = (n, { admin = false } = {}) => n.publico !== 'admin' 
 // quem chega não recebe o histórico inteiro.
 export const DIAS_SEM_REGISTRO = 30
 export function novidadesNaoVistas(lista, vista, { admin = false, agora = new Date() } = {}) {
-  const visiveis = maisNovaPrimeiro(lista).filter(n => visivelPara(n, { admin }))
+  // As de recurso contratado têm marca própria (novidadesDeRecursoNaoVistas).
+  const visiveis = maisNovaPrimeiro(lista).filter(n => !ehDeRecurso(n) && visivelPara(n, { admin }))
   if (vista && chaveVersao(vista) >= 0) return visiveis.filter(n => chaveVersao(n.id) > chaveVersao(vista))
   const limite = agora.getTime() - DIAS_SEM_REGISTRO * 86400000
   return visiveis.filter(n => new Date(`${n.data}T12:00:00`).getTime() >= limite)
@@ -36,4 +37,18 @@ export function linhasDoAviso(novas = [], { admin = false, max = 3 } = {}) {
 export function obrigatoriaEntre(novas = []) {
   const o = novas.find(n => n.obrigatoria)
   return o ? { obrigatoria: true, motivo: o.motivo || 'Esta versão muda a forma como os dados são guardados; a versão aberta não consegue mais gravar.' } : { obrigatoria: false, motivo: null }
+}
+
+// ── Novidades de RECURSO CONTRATADO (campo `recurso`, ex.: 'ia_sugestoes_importacao') ─────────────
+// Só aparecem para o ambiente com o recurso liberado (`recursos` = { [id]: true }). Ficam FORA da marca
+// "última versão vista" (novidadeVista): cada uma tem o seu "já vi" (progresso.novidadesRecursoVistas)
+// — assim, se o recurso for liberado depois, a novidade aparece na próxima abertura.
+export const ehDeRecurso = (n) => !!n?.recurso
+export const paraRecursos = (lista = [], recursos = {}) => lista.filter(n => !ehDeRecurso(n) || recursos?.[n.recurso] === true)
+export const semRecurso = (lista = []) => lista.filter(n => !ehDeRecurso(n))
+
+// As de recurso liberado que a pessoa ainda não viu (das mais novas para as mais antigas).
+export function novidadesDeRecursoNaoVistas(lista, vistas = [], recursos = {}, { admin = false } = {}) {
+  const ja = new Set(vistas || [])
+  return maisNovaPrimeiro(lista).filter(n => ehDeRecurso(n) && recursos?.[n.recurso] === true && !ja.has(n.id) && visivelPara(n, { admin }))
 }

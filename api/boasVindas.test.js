@@ -111,3 +111,21 @@ describe('/api/boas-vindas', () => {
     expect(chamadas).toHaveLength(2)
   })
 })
+
+describe('/api/boas-vindas: novidades de RECURSO contratado já vistas', () => {
+  it('soma às guardadas sem repetir (Postgres de verdade); id inválido ou lista vazia → null (400)', async () => {
+    const { PGlite } = await import('@electric-sql/pglite')
+    const { DDL_GUIAS_LIGADOS, DDL_PROGRESSO, gravarNovidadesRecursoVistas } = await import('./boas-vindas.js')
+    const db = new PGlite()
+    for (const ddl of [DDL_BOAS_VINDAS, DDL_GUIAS_LIGADOS, DDL_AJUDA_CAMPOS, DDL_JORNADA, DDL_PROGRESSO]) await db.exec(ddl)
+    const q = async (sql, params) => (await db.query(sql, params)).rows
+    await gravarNovidadeVista(q, 'u1', '2026.11.12-4')
+    expect((await gravarNovidadesRecursoVistas(q, 'u1', ['2026.11.12-5'])).progresso).toEqual({ novidadeVista: '2026.11.12-4', novidadesRecursoVistas: ['2026.11.12-5'] })
+    const r = await gravarNovidadesRecursoVistas(q, 'u1', ['2026.11.12-5', '2026.12.01'])
+    expect([...r.progresso.novidadesRecursoVistas].sort()).toEqual(['2026.11.12-5', '2026.12.01'])
+    expect(r.progresso.novidadeVista).toBe('2026.11.12-4')
+    expect((await gravarNovidadesRecursoVistas(q, 'u2', ['2026.11.12-5'])).progresso).toEqual({ novidadesRecursoVistas: ['2026.11.12-5'] })
+    for (const ruim of [[], ['x'], "2026.11.12", [5], ["2026.11.11'; drop"]]) expect(await gravarNovidadesRecursoVistas(q, 'u1', ruim)).toBeNull()
+    await db.close()
+  })
+})

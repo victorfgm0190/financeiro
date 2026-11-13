@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { statusSugestoesImportacao } from '../lib/sugestoesImportacaoApi'
+import { RECURSO_IA_IMPORTACAO } from '../lib/recursosCliente'
 
 // Status das sugestões do Assistente (recurso contratado + opção do cliente) para a tela que monta:
 // Configurações e Importar Fatura. Pede ao MONTAR (voltar para a tela = montar de novo) — nunca a cada
@@ -33,4 +34,11 @@ export function useStatusSugestoesIa(carregar = statusSugestoesImportacao, esper
     return () => { vivo = false; clearTimeout(timer); window.removeEventListener('online', aoVoltarConexao) }
   }, [])
   return st
+}
+
+// Recursos contratados liberados para este ambiente ({ [recurso]: true }) — filtro das novidades de
+// recurso (src/lib/novidades.js). Mesmo status (e mesma nova tentativa) da seção Configurações › Assistente.
+export function useRecursosLiberados(carregar = statusSugestoesImportacao) {
+  const st = useStatusSugestoesIa(carregar)
+  return { recursos: { [RECURSO_IA_IMPORTACAO]: st.liberado }, pronto: st.pronto }
 }

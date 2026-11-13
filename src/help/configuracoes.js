@@ -170,7 +170,7 @@ export const campos = {
   'atualizacao.aviso': {
     titulo: 'Aviso "Há uma atualização do Finup"',
     paraQueServe: 'Avisa que há uma versão nova do Finup e pergunta se você quer atualizar agora.',
-    relacaoComTela: '"Atualizar agora" primeiro envia todas as suas alterações e só então atualiza; sem internet, não atualiza e explica, e nada se perde. "Mais tarde" lembra de novo em 4 horas ou na próxima vez que você abrir o Finup. Quando a atualização é necessária, não há "Mais tarde" e o aviso explica o motivo. O aviso espera você fechar um formulário aberto.',
+    relacaoComTela: '"Atualizar agora" primeiro envia todas as suas alterações e só então atualiza; sem internet, não atualiza e explica, e nada se perde. "Mais tarde" lembra de novo em 4 horas ou na próxima vez que você abrir o Finup. Quando a atualização é necessária, não há "Mais tarde" e o aviso explica o motivo. O aviso espera você fechar um formulário aberto. No meio de uma importação, conciliação ou formulário não salvo, o aviso diz o que seria perdido: "Atualizar depois" espera você terminar (o aviso volta com "Pronto!") e "Atualizar mesmo assim" pede confirmação. Depois de atualizar, você volta para a mesma tela.',
     obrigatorio: false,
   },
   'novidades.janela': {

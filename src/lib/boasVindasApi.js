@@ -125,6 +125,10 @@ export const definirPeriodoFluxo = (pref) => gravar('POST', { fluxoPeriodo: pref
 })
 // "O que mudou": a última versão de src/novidades.js já vista (vale em todos os aparelhos).
 export const marcarNovidadeVista = (id) => gravar('POST', { novidadeVista: id }, (e) => ({ progresso: { ...(e.progresso || {}), novidadeVista: id } }))
+// Novidades de recurso contratado já vistas (cada uma à parte; soma às guardadas).
+export const marcarNovidadesRecursoVistas = (ids) => gravar('POST', { novidadesRecursoVistas: ids }, (e) => ({
+  progresso: { ...(e.progresso || {}), novidadesRecursoVistas: [...new Set([...(e.progresso?.novidadesRecursoVistas || []), ...ids])] },
+}))
 export const definirJornadaLigada =(ligada) => gravar('POST', { jornadaLigada: !!ligada }, () => ({ jornadaLigada: !!ligada }))
 // Zera só as etapas da jornada (`ids`), localmente igual ao servidor.
 export const refazerJornada = (ids = []) => gravar('POST', { jornadaRefazer: true }, (e) => {

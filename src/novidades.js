@@ -11,21 +11,46 @@
 //   titulo      uma linha
 //   itens       1 ou mais frases curtas (as 3 primeiras aparecem no aviso de atualização)
 //   publico     'todos' | 'admin' (só administradores veem)
+//   recurso     (opcional) id de recurso contratado (src/lib/recursosCliente.js): só aparece para o
+//               ambiente com o recurso liberado; tem "já vi" próprio (aparece se for liberado depois)
 //   obrigatoria true quando a versão anterior não pode mais gravar (ex.: o banco mudou): o aviso de
 //               atualização não oferece "Mais tarde". `motivo` explica, em linguagem simples.
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
-    id: '2026.11.12-4',
+    id: '2026.11.12-6',
+    data: '2026-11-12',
+    titulo: 'Atualizar o Finup sem perder o que está fazendo',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'Se sair uma versão nova enquanto você está no meio de uma importação, de uma conciliação ou de um formulário ainda não salvo, o aviso diz o que seria perdido e deixa para atualizar depois.',
+      'Quando você terminar (Confirmar ou Cancelar), o aviso volta: “Pronto! Agora você pode atualizar o Finup.” Depois de atualizar, você volta para a mesma tela.',
+      'Fechar ou recarregar a página com algo não salvo agora pede confirmação.',
+    ],
+  },
+  {
+    id: '2026.11.12-5',
     data: '2026-11-12',
     titulo: 'Importar Fatura: sugestões do Assistente',
     publico: 'todos',
     obrigatoria: false,
+    // Recurso contratado: só aparece para o ambiente com o recurso liberado (src/lib/novidades.js).
+    recurso: 'ia_sugestoes_importacao',
     itens: [
-      'Recurso contratado à parte: quando liberado para você, aparece em Configurações › Geral › Assistente. Vem desligado; você decide se usa.',
-      'Ligado, o Assistente sugere a resposta dos cartões “É este?” e a categoria, o grupo e o favorecido das compras novas que as suas regras não classificaram.',
+      'Ligado em Configurações › Geral › Assistente, o Assistente sugere a resposta dos cartões “É este?” e a categoria, o grupo e o favorecido das compras novas que as suas regras não classificaram.',
       'Cada sugestão tem Aceitar e Ignorar. Nos Novos, “Aceitar N sugestões” leva só as de confiança alta e média; as de confiança baixa ficam para você conferir uma a uma.',
-      'Nada é gravado sem o Confirmar. A categoria que você escolhe (à mão ou aceitando uma sugestão) só vira regra para as próximas faturas quando a importação é confirmada; cancelar não ensina nada.',
+      'Nada é gravado sem o Confirmar.',
+    ],
+  },
+  {
+    id: '2026.11.12-4',
+    data: '2026-11-12',
+    titulo: 'Importar Fatura: a categoria só vira regra quando você confirma',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'Na Importar Fatura, a categoria escolhida só vira regra para as próximas faturas quando a importação é confirmada; cancelar não ensina nada.',
     ],
   },
   {

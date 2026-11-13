@@ -98,9 +98,11 @@ describe('"O que mudou" depois de atualizar', () => {
 
 describe('Ajuda → Novidades', () => {
   it('histórico completo do arquivo de verdade (as entregas desta semana)', () => {
-    render(<HistoricoNovidades />)
-    const visiveis = NOVIDADES.filter(x => x.publico === 'todos')
+    render(<HistoricoNovidades carregarStatus={async () => ({ liberado: false, ligado: false })} />)
+    // As de recurso contratado só aparecem com o recurso liberado (testes abaixo).
+    const visiveis = NOVIDADES.filter(x => x.publico === 'todos' && !x.recurso)
     for (const x of visiveis) expect(screen.getByTestId(`novidade-${x.id}`).textContent).toContain(x.titulo)
+    for (const x of NOVIDADES.filter(y => y.recurso)) expect(screen.queryByTestId(`novidade-${x.id}`)).toBeNull()
     expect(screen.getByText('Importar Fatura mais inteligente')).toBeTruthy()
     expect(screen.queryByText('Backup completo e backup ao sair')).toBeNull() // só administrador
   })
@@ -108,5 +110,53 @@ describe('Ajuda → Novidades', () => {
     sessao.atual = { id: 'u1', nivel: 'admin' }
     render(<HistoricoNovidades />)
     expect(screen.getByText('Backup completo e backup ao sair')).toBeTruthy()
+  })
+})
+
+describe('novidade de RECURSO contratado (ex.: sugestões do Assistente)', () => {
+  const COM_RECURSO = [n('2026.11.12-5', { recurso: 'ia_sugestoes_importacao', titulo: 'Assistente' }), n('2026.11.12-4', { titulo: 'Geral' }), n('2026.11.11')]
+  const status = (liberado) => async () => ({ liberado, ligado: liberado })
+  it('sem liberação: só a parte geral (a do recurso não aparece nem fica marcada)', async () => {
+    await preparar({ progresso: { novidadeVista: '2026.11.11' } })
+    render(<OQueMudou lista={COM_RECURSO} espera={10} carregarStatus={status(false)} />)
+    await screen.findByTestId('o-que-mudou')
+    expect(screen.getByTestId('novidade-2026.11.12-4')).toBeTruthy()
+    expect(screen.queryByTestId('novidade-2026.11.12-5')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Entendi' }))
+    await pausa()
+    expect(posts()).toEqual([{ novidadeVista: '2026.11.12-4' }])
+  })
+  it('com liberação: as duas; "Entendi" marca a geral e a do recurso (à parte)', async () => {
+    await preparar({ progresso: { novidadeVista: '2026.11.11' } })
+    render(<OQueMudou lista={COM_RECURSO} espera={10} carregarStatus={status(true)} />)
+    await screen.findByTestId('novidade-2026.11.12-5')
+    expect(screen.getByTestId('novidade-2026.11.12-4')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Entendi' }))
+    await pausa()
+    expect(posts()).toEqual(expect.arrayContaining([{ novidadeVista: '2026.11.12-4' }, { novidadesRecursoVistas: ['2026.11.12-5'] }]))
+  })
+  it('recurso liberado DEPOIS (a geral já vista): a do recurso aparece na próxima abertura', async () => {
+    await preparar({ progresso: { novidadeVista: '2026.11.12-4' } })
+    render(<OQueMudou lista={COM_RECURSO} espera={10} carregarStatus={status(true)} />)
+    await screen.findByTestId('novidade-2026.11.12-5')
+    expect(screen.queryByTestId('novidade-2026.11.12-4')).toBeNull()
+  })
+  it('status falhando na 1ª chamada não esconde a do recurso de vez', async () => {
+    await preparar({ progresso: { novidadeVista: '2026.11.12-4' } })
+    const carregar = vi.fn()
+      .mockResolvedValueOnce({ liberado: false, ligado: false, falhou: true })
+      .mockResolvedValue({ liberado: true, ligado: true })
+    render(<OQueMudou lista={COM_RECURSO} espera={10} carregarStatus={carregar} />)
+    expect(await screen.findByTestId('novidade-2026.11.12-5', {}, { timeout: 2000 })).toBeTruthy()
+    expect(carregar).toHaveBeenCalledTimes(2)
+  })
+  it('Ajuda → Novidades: a do recurso só com liberação', async () => {
+    await preparar({})
+    const { unmount } = render(<HistoricoNovidades lista={COM_RECURSO} carregarStatus={status(false)} />)
+    await pausa()
+    expect(screen.queryByTestId('novidade-2026.11.12-5')).toBeNull()
+    unmount()
+    render(<HistoricoNovidades lista={COM_RECURSO} carregarStatus={status(true)} />)
+    expect(await screen.findByTestId('novidade-2026.11.12-5')).toBeTruthy()
   })
 })
