@@ -162,7 +162,7 @@
 
     /* Marca-d'água no grafite: opacidade um pouco maior que no celular (no cinza, valor baixo some). */
     --marca-dagua-cor: var(--color-texto-3);
-    --marca-dagua-opacidade-simbolo: 0.10;
+    --marca-dagua-opacidade-simbolo: 0.16;
     --marca-dagua-opacidade-texto: 0.18;
   }
   /* Cartões coloridos da tela Contas (gradiente saturado com texto branco): um pouco menos de
@@ -191,13 +191,13 @@
      visível que o símbolo. Padrão = escuro do celular (fundo #030712); o claro e o escuro do computador
      (bloco "Escuro SUAVE no computador") sobrescrevem. Nunca branco puro: usa o texto apagado. */
   --marca-dagua-cor: var(--color-texto-3);
-  --marca-dagua-opacidade-simbolo: 0.07;
+  --marca-dagua-opacidade-simbolo: 0.12;
   --marca-dagua-opacidade-texto: 0.14;
 }
-/* Claro: o mesmo resultado de antes (texto principal, 8% / 22%). :root[...] para vencer o :root acima. */
+/* Claro: texto principal, símbolo 14% / frase 22%. :root[...] para vencer o :root acima. */
 :root[data-theme="light"] {
   --marca-dagua-cor: var(--color-texto-1);
-  --marca-dagua-opacidade-simbolo: 0.08;
+  --marca-dagua-opacidade-simbolo: 0.14;
   --marca-dagua-opacidade-texto: 0.22;
 }
 

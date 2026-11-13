@@ -45,6 +45,26 @@ describe("marca-d'água", () => {
     expect(simbolo.getAttribute('pointer-events')).toBe('none')
     expect(simbolo.getAttribute('fill')).toBe('currentColor')
   })
+  it.each([['header', true], ['mobile', true], ['login', false]])('variante %s: versão simples = %s', (variant, simples) => {
+    const { container } = render(<MarcaDagua variant={variant} />)
+    const simbolo = marcas(container)[0].querySelector('svg')
+    const circulos = simbolo.querySelectorAll(':scope > circle')
+    if (simples) {
+      // sem estrelas, um círculo só (r=190, traço 14), faixa sólida (máscara da coroa sem aberturas finas)
+      expect(simbolo.querySelectorAll(':scope > path')).toHaveLength(0)
+      expect(circulos).toHaveLength(1)
+      expect([circulos[0].getAttribute('r'), circulos[0].getAttribute('stroke-width')]).toEqual(['190', '14'])
+      expect(simbolo.querySelectorAll('mask')[0].children).toHaveLength(3)
+    } else {
+      expect(simbolo.querySelectorAll(':scope > path')).toHaveLength(12)
+      expect(circulos).toHaveLength(2)
+      expect(simbolo.querySelectorAll('mask')[0].children).toHaveLength(8)
+    }
+    // coroa, cruz, haste e barra iguais nas duas
+    expect(simbolo.querySelector('g[mask] path').getAttribute('d')).toMatch(/^M128 250 L116 170/)
+    expect(simbolo.querySelectorAll('mask')[1].children).toHaveLength(2)
+    expect(simbolo.querySelector(':scope > rect[mask]')).not.toBeNull()
+  })
   it('ids das máscaras únicos por instância e referenciados', () => {
     const { container } = render(<><MarcaDagua /><MarcaDagua variant="login" /></>)
     const ids = [...container.querySelectorAll('mask')].map(m => m.id)

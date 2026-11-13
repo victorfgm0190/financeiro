@@ -15,6 +15,10 @@ import { useId } from 'react'
 // unidades e era cortada no -12..112). O símbolo é quadrado (desenho 400×400) e ocupa a caixa 88×88 em
 // (6, 2) — o mesmo espaço vertical (y 2..90) do símbolo anterior, então tamanho e posição não mudam.
 // Máscaras com id por instância (useId): o componente pode aparecer mais de uma vez na mesma página.
+// Duas versões do símbolo: COMPLETA (12 estrelas, dois círculos, aberturas finas na faixa da coroa) só no
+// login, onde é grande; SIMPLES no cabeçalho do computador e no topo do celular — sem estrelas, um círculo
+// só (r=190, traço 14) e faixa sólida. Em ~40px os detalhes finos viravam borrão. Coroa, cruz, haste e
+// barra são as mesmas nas duas.
 // Login no celular: 90px (no 375x667 o formulário cabe sem rolagem); 120px a partir de md.
 const ALTURA = {
   header: 'h-[52px]',
@@ -38,7 +42,7 @@ const ESTRELAS = [
   'M115.0 43.8 L117.2 49.7 L123.6 50.0 L118.6 53.9 L120.3 60.1 L115.0 56.6 L109.7 60.1 L111.4 53.9 L106.4 50.0 L112.8 49.7 Z',
 ]
 
-export function SimboloCoroa(props) {
+export function SimboloCoroa({ simples = false, ...props }) {
   const base = useId()
   const corteCoroa = `${base}corte-coroa`
   const corteBarra = `${base}corte-barra`
@@ -49,20 +53,30 @@ export function SimboloCoroa(props) {
           <rect width="400" height="400" fill="#fff" />
           <rect x="96" y="203" width="208" height="19" fill="#000" />
           <rect x="189" y="54" width="22" height="202" fill="#000" />
-          <rect x="128" y="254" width="144" height="1.5" fill="#000" />
-          <rect x="128" y="272.5" width="144" height="1.5" fill="#000" />
-          <circle cx="150" cy="264" r="4.5" fill="#000" />
-          <ellipse cx="200" cy="264" rx="9" ry="6" fill="#000" />
-          <circle cx="250" cy="264" r="4.5" fill="#000" />
+          {!simples && (
+            <>
+              <rect x="128" y="254" width="144" height="1.5" fill="#000" />
+              <rect x="128" y="272.5" width="144" height="1.5" fill="#000" />
+              <circle cx="150" cy="264" r="4.5" fill="#000" />
+              <ellipse cx="200" cy="264" rx="9" ry="6" fill="#000" />
+              <circle cx="250" cy="264" r="4.5" fill="#000" />
+            </>
+          )}
         </mask>
         <mask id={corteBarra} maskUnits="userSpaceOnUse" x="0" y="0" width="400" height="400">
           <rect width="400" height="400" fill="#fff" />
           <rect x="189" y="54" width="22" height="202" fill="#000" />
         </mask>
       </defs>
-      <circle cx="200" cy="200" r="195" fill="none" stroke="currentColor" strokeWidth="4" />
-      <circle cx="200" cy="200" r="186" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      {ESTRELAS.map(d => <path key={d} d={d} />)}
+      {simples ? (
+        <circle cx="200" cy="200" r="190" fill="none" stroke="currentColor" strokeWidth="14" />
+      ) : (
+        <>
+          <circle cx="200" cy="200" r="195" fill="none" stroke="currentColor" strokeWidth="4" />
+          <circle cx="200" cy="200" r="186" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          {ESTRELAS.map(d => <path key={d} d={d} />)}
+        </>
+      )}
       <g mask={`url(#${corteCoroa})`}>
         <path d="M128 250 L116 170 Q132 198 140 204 Q150 176 158 152 Q170 188 179 196 Q190 168 200 142 Q210 168 221 196 Q230 188 242 152 Q250 176 260 204 Q268 198 284 170 L272 250 Z" />
         <circle cx="116" cy="165" r="5.5" />
@@ -89,7 +103,7 @@ export default function MarcaDagua({ variant = 'header', className = '' }) {
       data-marca-dagua={variant}
       className={`marca-dagua ${ALTURA[variant] || ALTURA.header} w-auto pointer-events-none select-none print:hidden ${className}`}
     >
-      <SimboloCoroa x="6" y="2" width="88" height="88" className="marca-dagua-simbolo" />
+      <SimboloCoroa simples={variant !== 'login'} x="6" y="2" width="88" height="88" className="marca-dagua-simbolo" />
       <text
         x="50" y="114" textAnchor="middle" fontSize="10.5" letterSpacing="1.8" fill="currentColor" fontWeight="500"
         fontFamily="Georgia, 'Times New Roman', serif"
