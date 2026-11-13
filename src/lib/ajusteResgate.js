@@ -13,6 +13,7 @@
 import { computeOccurrences } from './occurrences.js'
 import { occEfetiva } from './fluxoCaixa.js'
 import { ORIGIN } from './origins.js'
+import { chaveDoResgate } from './resgateVinculado.js'
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 const fmtBRL = (v) => r2(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -52,15 +53,18 @@ const rotuloConta = (conta, funcao) => {
 
 // Pergunta a fazer no Pagar da despesa, ou null. → { tipo: 'complementar'|'devolver'|'ajustar', resgate,
 // chave, de, para, diferenca, texto }
-export function perguntaAjusteResgate({ despesaId, chave, valorPago, schedules = [], transactions = [], accounts = [], reserveFunctions = [] }) {
+export function perguntaAjusteResgate({ despesaId, chave: chaveDespesa, valorPago, schedules = [], transactions = [], accounts = [], reserveFunctions = [] }) {
   const resgate = (schedules || []).find(s => s.agendamentoVinculadoId === despesaId)
+  const despesa = (schedules || []).find(s => s.id === despesaId)
   const pago = r2(valorPago)
-  if (!resgate || !chave || !(pago > 0)) return null
+  if (!resgate || !chaveDespesa || !(pago > 0)) return null
+  // Mesma ocorrência (posição na série), não a mesma data: a série da despesa pode ter mudado.
+  const chave = despesa ? chaveDoResgate(despesa, resgate, chaveDespesa) : chaveDespesa
   const excluidas = Array.isArray(resgate.overrides?._resgateExcluidas) ? resgate.overrides._resgateExcluidas : []
   if (excluidas.includes(chave)) return null
   const conta = (accounts || []).find(a => a.id === resgate.accountId)
   const funcao = resgate.reservaFuncaoId ? (reserveFunctions || []).find(f => f.id === resgate.reservaFuncaoId) : null
-  const base = { resgate, chave, para: pago }
+  const base = { resgate, chave, chaveDespesa, para: pago }
 
   if ((resgate.registered || []).includes(chave)) {
     const de = valorResgatado(resgate, chave, transactions)
@@ -103,12 +107,12 @@ export function txAjusteResgate(p, { data, contaDespesaId, descricaoDespesa = ''
 
 // Ajusta o valor SÓ da ocorrência pendente `chave` do resgate. `_valorDe` = o valor da despesa
 // naquela ocorrência agora: enquanto ele não mudar, vale o ajuste; mudou o da despesa, vale o dela.
-export function ajustarValorDoResgate(resgate, despesa, chave, valor) {
+export function ajustarValorDoResgate(resgate, despesa, chave, valor, chaveDespesa = chave) {
   if (!resgate || !despesa || !chave || (resgate.registered || []).includes(chave)) return resgate
   const atual = resgate.overrides?.[chave]
   const ov = atual && typeof atual === 'object' ? atual : {}
   return {
     ...resgate,
-    overrides: { ...(resgate.overrides || {}), [chave]: { ...ov, amount: r2(valor), _valorDe: r2(occEfetiva(despesa, chave).amount) } },
+    overrides: { ...(resgate.overrides || {}), [chave]: { ...ov, amount: r2(valor), _valorDe: r2(occEfetiva(despesa, chaveDespesa).amount) } },
   }
 }

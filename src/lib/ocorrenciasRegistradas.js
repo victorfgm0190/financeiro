@@ -72,7 +72,8 @@ export function historicoOcorrencias(schedule, transactions = []) {
   const continua = (s.occurrenceType || 'continuous') !== 'installment'
   const total = totalDaSerie(s, continua)
   const registradas = [...new Set((s.registered || []).map(dia))]
-  const puladas = new Set((s.skipped || []).map(dia))
+  const cobertas = new Set(Array.isArray(s.overrides?._resgateCobertas) ? s.overrides._resgateCobertas : [])
+  const puladas = new Set((s.skipped || []).map(dia).filter(d => !cobertas.has(d)))
   const eventos = [...new Set([...registradas, ...puladas])].sort()
   // Vencimentos teóricos desde a Data de Início (série sem baixas/pulos), um por parcela consumida.
   const teoricas = s.startDate
@@ -109,7 +110,7 @@ export function historicoOcorrencias(schedule, transactions = []) {
   const linhas = eventos.map((d, i) => {
     const valorOriginal = r2(occEfetiva(s, d).amount)
     const base = {
-      parcela: i + 1, total, vencimento: teoricas[i] || d, dataRegistro: d, valorOriginal,
+      parcela: i + 1, total, vencimento: (s.agendamentoVinculadoId ? d : teoricas[i]) || d, dataRegistro: d, valorOriginal,
       pagoEm: null, valorPago: null, diferenca: null, accountId: null, payee: null, txId: null, motivo: null,
     }
     if (puladas.has(d) && !registradas.includes(d)) return { ...base, status: STATUS_OCORRENCIA.PULADA }

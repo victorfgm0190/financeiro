@@ -214,6 +214,23 @@ async function resgateJaPago() {
   return { serie: computeOccurrences(resgate(), 400), res0: saldo('res'), cc0: saldo('cc') }
 }
 
+describe('linha do resgate: próxima pendente DELE', () => {
+  it('com as ocorrências 1 e 2 do resgate pagas (despesa ainda na 1ª), a linha mostra a 3ª e "3/3"', async () => {
+    await montar()
+    const [o1, o2, o3] = computeOccurrences(resgate(), 400)
+    act(() => { app.registerScheduleOccurrence(resgate().id, o1, o1) })
+    await waitFor(() => expect(resgate().registered).toEqual([o1]))
+    act(() => { app.registerScheduleOccurrence(resgate().id, o1, o2) })
+    await waitFor(() => expect(resgate().registered).toEqual([o1, o2]))
+    const fmtBR = (d) => d.split('-').reverse().join('/')
+    await waitFor(() => expect(linhaDoResgate().textContent).toMatch(fmtBR(o3)))
+    expect(linhaDoResgate().textContent).toMatch('3/3')
+    expect(linhaDoResgate().textContent).not.toMatch(fmtBR(o2))
+    // A despesa continua na 1ª.
+    expect(linhaDaDespesa().textContent).toMatch(fmtBR(o1))
+  }, 40000)
+})
+
 describe('pagar a despesa por valor diferente do resgate', () => {
   it('(a) resgate pago, pagando MAIS — Sim: resgate complementar da diferença; sem ocorrência nova', async () => {
     const { serie, res0 } = await resgateJaPago()

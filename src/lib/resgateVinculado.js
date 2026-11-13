@@ -19,7 +19,8 @@
 // e resgates COM cardId; este não tem cartão. A despesa não movimenta a reserva (saldoReserva.reserveMovOf
 // ignora despesas); só a transferência do resgate conta.
 
-import { computeOccurrences } from './occurrences.js'
+import { computeOccurrences, datasConsumidas } from './occurrences.js'
+import { ehParcelado } from './parcelasOcorrencia.js'
 import { occEfetiva } from './fluxoCaixa.js'
 
 export const TIPO_RESGATE_VINCULADO = 'resgate_reserva'
@@ -88,73 +89,123 @@ function chaveForaDoResgate(despesa, chave, ctx) {
 // Ocorrência do resgate já efetivada ou vinculada nunca é alterada aqui.
 export const excluidasDoResgate = (r) => (Array.isArray(r?.overrides?._resgateExcluidas) ? r.overrides._resgateExcluidas : [])
 
+// ── Casamento por POSIÇÃO na série ──────────────────────────────────────────────────────────────
+// A despesa e o resgate casam pela ocorrência (1ª, 2ª, 3ª…), não pela data: mudar a série da despesa
+// ("esta e as próximas", dia de vencimento, início) troca as datas-chave das ocorrências pendentes
+// dela, mas o que já foi pago, vinculado ou excluído no resgate continua sendo daquela ocorrência.
+// Posições de um agendamento = ocorrências consumidas (pagas/puladas) + pendentes, em ordem. As
+// "cobertas" do resgate (marca técnica, ver abaixo) não são ocorrências.
+const JANELA_POSICOES = 120
+export function posicoesDaSerie(s) {
+  if (!s?.startDate) return []
+  const cobertas = new Set(Array.isArray(s.overrides?._resgateCobertas) ? s.overrides._resgateCobertas : [])
+  const consumidas = [...new Set(datasConsumidas(s))].filter(k => !cobertas.has(k))
+  return [...new Set([...consumidas, ...computeOccurrences(s, JANELA_POSICOES)])].sort()
+}
+
+// Chave (data-base) da ocorrência da DESPESA que corresponde à ocorrência `chave` do resgate, e o
+// contrário. Sem correspondência → a própria chave.
+export function chaveDaDespesa(despesa, resgate, chaveResgate) {
+  const i = posicoesDaSerie(resgate).indexOf(chaveResgate)
+  return (i >= 0 && posicoesDaSerie(despesa)[i]) || chaveResgate
+}
+export function chaveDoResgate(despesa, resgate, chaveDespesa) {
+  const i = posicoesDaSerie(despesa).indexOf(chaveDespesa)
+  return (i >= 0 && posicoesDaSerie(resgate)[i]) || chaveDespesa
+}
+
 // Estrutura do resgate a partir da despesa (pura). `resgate` = o atual (registered/meta/id/desde e
 // o que o usuário mexeu nele).
+//   • Pago/vinculado no resgate: a chave e a data dele NUNCA mudam; ele ocupa a POSIÇÃO que tinha.
+//   • Pendente: a data e o valor da despesa na mesma posição (com a data/valor mudados à mão no
+//     resgate valendo enquanto a despesa não mudar os dela).
+//   • Excluído à mão / pulado na despesa / fora do resgate / antes do vínculo: posição consumida.
+// A âncora (nextOccurrence) é a 1ª pendente DO RESGATE (não a da despesa).
 export function derivarResgate(despesa, resgate, ctx) {
   const info = despesaGeraResgate(despesa, ctx)
   if (!info) return null
   const desde = resgate?.overrides?._resgateDesde || null
-  const regResgate = new Set(resgate?.registered || [])
-  const excluidas = excluidasDoResgate(resgate).filter(k => !regResgate.has(k))
-  const ovResgate = resgate?.overrides || {}
-  const overrides = {}
-  for (const [k, v] of Object.entries(despesa.overrides || {})) {
-    if (ehChaveData(k)) continue
-    if (k === '_diaVencimento' || k === '_parcelamento') overrides[k] = v
+  const D = posicoesDaSerie(despesa)
+  const antigas = posicoesDaSerie(resgate) // posições do resgate como estava (antes desta mudança)
+  const posAntiga = new Map(antigas.map((k, i) => [k, i]))
+  const posDe = (k) => (posAntiga.has(k) ? posAntiga.get(k) : (D.indexOf(k) >= 0 ? D.indexOf(k) : null))
+  const registered = resgate?.registered || []
+  const regSet = new Set(registered)
+  const pagoNaPos = new Map()
+  for (const k of [...registered].sort()) {
+    const i = posDe(k)
+    if (i != null && !pagoNaPos.has(i)) pagoNaPos.set(i, k)
   }
-  // Datas e valores por ocorrência: as chaves com exceção na despesa ou no resgate.
-  const chaves = new Set([
-    ...Object.keys(despesa.overrides || {}).filter(ehChaveData),
-    ...Object.keys(ovResgate).filter(ehChaveData),
-  ])
-  for (const k of chaves) {
-    if (regResgate.has(k)) {
-      // Efetivada/vinculada: fica como está.
+  const exclNaPos = new Set(excluidasDoResgate(resgate).filter(k => !regSet.has(k)).map(posDe).filter(i => i != null && !pagoNaPos.has(i)))
+  const ovResgate = resgate?.overrides || {}
+  const proprioNaPos = new Map() // exceções do próprio resgate (pendentes) por posição
+  for (const [k, v] of Object.entries(ovResgate)) {
+    if (!ehChaveData(k) || regSet.has(k) || !v || typeof v !== 'object') continue
+    const i = posDe(k)
+    if (i != null) proprioNaPos.set(i, v)
+  }
+  const pulosDespesa = new Set(despesa.skipped || [])
+  const status = D.map((dk, i) => {
+    if (pagoNaPos.has(i)) return 'pago'
+    if (exclNaPos.has(i)) return 'excluida'
+    if (pulosDespesa.has(dk) || chaveForaDoResgate(despesa, dk, ctx) || (desde && dk < desde)) return 'pulada'
+    return 'pendente'
+  })
+
+  // Rótulos (chaves) do resgate por posição. Até a 1ª pendente: a do pago, ou a da despesa. Dali em
+  // diante: a série gerada a partir da âncora (= a da despesa, salvo pendente antiga com o dia de
+  // vencimento mudado depois — aí a data certa vai na exceção de data).
+  const p1 = status.indexOf('pendente') >= 0 ? status.indexOf('pendente') : Math.max(D.length - 1, 0)
+  const ancora = D[p1] || null
+  const base = {
+    frequency: despesa.frequency || 'once', startDate: despesa.startDate, occurrenceType: despesa.occurrenceType || 'continuous',
+    installments: despesa.installments ?? 0, parcelasPorOcorrencia: Number(despesa.parcelasPorOcorrencia) || 1,
+    overrides: Object.fromEntries(Object.entries(despesa.overrides || {}).filter(([k]) => k === '_diaVencimento' || k === '_parcelamento')),
+  }
+  const seq = ancora && !ehParcelado(despesa)
+    ? computeOccurrences({ ...base, nextOccurrence: ancora, registered: [], skipped: [] }, D.length - p1)
+    : []
+  const rotulos = D.map((dk, i) => (i < p1 || ehParcelado(despesa) ? (pagoNaPos.get(i) || dk) : (seq[i - p1] || dk)))
+
+  const overrides = { ...base.overrides }
+  const skipped = new Set()
+  const cobertas = []
+  for (let i = 0; i < D.length; i++) {
+    const st = status[i]
+    const rot = rotulos[i]
+    if (st === 'pago') {
+      const k = pagoNaPos.get(i)
       if (ovResgate[k] !== undefined) overrides[k] = ovResgate[k]
+      // A posição do pago na série gerada tem outra chave: marca como coberta (consumida, sem ser
+      // ocorrência), senão viraria um pendente fantasma.
+      if (i >= p1 && k !== rot) { skipped.add(rot); cobertas.push(rot) }
       continue
     }
-    const vD = despesa.overrides?.[k]
-    const oD = vD && typeof vD === 'object' ? vD : {}
-    const dataDespesa = oD.date || k
+    if (st !== 'pendente') { skipped.add(rot); continue }
+    const ef = occEfetiva(despesa, D[i])
+    const proprio = proprioNaPos.get(i)
     const o = {}
-    const vR = ovResgate[k]
-    const ref = vR && typeof vR === 'object' ? (vR._de || k) : null
-    if (vR?.date && vR.date !== ref && ref === dataDespesa) {
-      o.date = vR.date // data mudada à mão no resgate, e a despesa não mudou a dela desde então
-      o._de = dataDespesa
-    } else if (oD.date) {
-      o.date = oD.date
-      o._de = oD.date
+    if (proprio?.date && proprio._de && proprio.date !== proprio._de && proprio._de === ef.date) {
+      o.date = proprio.date // data mudada à mão no resgate, e a despesa não mudou a dela desde então
+      o._de = proprio._de
+    } else if (ef.date !== rot) {
+      o.date = ef.date
+      o._de = ef.date
     }
     // Valor ajustado só no resgate (Pagar a despesa por valor diferente → "ajustar"): vale enquanto o
     // valor da despesa naquela ocorrência for o de quando ajustou (`_valorDe`); mudou, vale o da despesa.
-    const valorDespesa = Math.round(Number(oD.amount != null ? oD.amount : despesa.amount) * 100) / 100
-    if (vR?._valorDe != null && vR.amount != null && Number(vR._valorDe) === valorDespesa) {
-      o.amount = vR.amount
-      o._valorDe = vR._valorDe
-    } else if (oD.amount != null) o.amount = oD.amount
-    if (Object.keys(o).length) overrides[k] = o
+    const valorDespesa = Math.round(Number(ef.amount) * 100) / 100
+    if (proprio?._valorDe != null && proprio.amount != null && Number(proprio._valorDe) === valorDespesa) {
+      o.amount = proprio.amount
+      o._valorDe = proprio._valorDe
+    } else if (valorDespesa !== Math.round(Number(despesa.amount) * 100) / 100) o.amount = valorDespesa
+    if (Object.keys(o).length) overrides[rot] = o
   }
+  for (const k of regSet) skipped.delete(k)
+  const excluidas = D.map((_, i) => (status[i] === 'excluida' ? rotulos[i] : null)).filter(Boolean)
   if (desde) overrides._resgateDesde = desde
   if (excluidas.length) overrides._resgateExcluidas = [...new Set(excluidas)].sort()
-  // Pulos: os da despesa; as baixas da despesa ANTERIORES ao vínculo (a série do resgate consome as
-  // mesmas datas e o nº de ocorrências fecha igual; nada de resgate retroativo); ocorrências tiradas
-  // do resgate por exceção "só esta" na despesa; as excluídas à mão no resgate. Pagar a despesa NÃO
-  // tira a ocorrência do resgate: ela fica pendente até o resgate ser pago ou vinculado.
-  const skipped = new Set(despesa.skipped || [])
-  for (const d of despesa.registered || []) if (desde && d < desde && !regResgate.has(d)) skipped.add(d)
-  for (const k of Object.keys(despesa.overrides || {})) {
-    if (ehChaveData(k) && !regResgate.has(k) && chaveForaDoResgate(despesa, k, ctx)) skipped.add(k)
-  }
-  for (const k of excluidas) skipped.add(k)
-  for (const d of regResgate) skipped.delete(d)
-  // Âncora da série (nextOccurrence) é a da despesa, que AVANÇA quando ela é paga. O pagamento do
-  // resgate é separado: ocorrência paga na despesa e ainda pendente no resgate não pode ficar para
-  // trás — a âncora do resgate volta para a mais antiga delas (é uma data da mesma série).
-  const pendentesSoNoResgate = (despesa.registered || [])
-    .filter(k => (!desde || k >= desde) && !regResgate.has(k) && !skipped.has(k)).sort()
-  const ancora = despesa.nextOccurrence && pendentesSoNoResgate[0] && pendentesSoNoResgate[0] < despesa.nextOccurrence
-    ? pendentesSoNoResgate[0] : (despesa.nextOccurrence || null)
+  if (cobertas.length) overrides._resgateCobertas = [...new Set(cobertas)].sort()
   const funcaoId = funcaoValida(despesa.reservaFuncaoId, info.conta.id, ctx.reserveFunctions)
   return {
     ...(resgate || {}),
@@ -302,7 +353,7 @@ export function excluirOcorrenciaDoResgate(resgate, chave) {
 // despesa naquele momento: se a despesa mudar a dela depois, vale a da despesa.
 export function mudarDataDoResgate(resgate, despesa, chave, novaData) {
   if (!resgate || !despesa || !chave || !novaData || (resgate.registered || []).includes(chave)) return resgate
-  const dataDespesa = occEfetiva(despesa, chave).date
+  const dataDespesa = occEfetiva(despesa, chaveDaDespesa(despesa, resgate, chave)).date
   const ov = { ...(resgate.overrides?.[chave] || {}) }
   if (novaData === dataDespesa) { delete ov.date; delete ov._de } else { ov.date = novaData; ov._de = dataDespesa }
   const overrides = { ...(resgate.overrides || {}) }

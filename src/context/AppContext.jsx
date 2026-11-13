@@ -3037,7 +3037,7 @@ export function AppProvider({ children }) {
         const r = d.schedules.find(s => s.id === p.resgate.id)
         const despesa = r && d.schedules.find(s => s.id === r.agendamentoVinculadoId)
         if (!r || !despesa) return d
-        return { ...d, schedules: d.schedules.map(s => (s.id === r.id ? ajustarValorDoResgate(s, despesa, p.chave, p.para) : s)) }
+        return { ...d, schedules: d.schedules.map(s => (s.id === r.id ? ajustarValorDoResgate(s, despesa, p.chave, p.para, p.chaveDespesa || p.chave) : s)) }
       })
       return null
     }
