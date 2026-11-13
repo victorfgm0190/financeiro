@@ -22,6 +22,7 @@ import { occEfetiva } from './fluxoCaixa.js'
 import { lancamentosVinculados } from './scheduleBaixa.js'
 import { casaCategoria } from './filtroCategoria.js'
 import { ehParcelado, parcelasDaSerie } from './parcelasOcorrencia.js'
+import { liquidoDosAjustes } from './ajusteResgate.js'
 
 export const STATUS_OCORRENCIA = { PAGA: 'paga', PULADA: 'pulada', BAIXADA: 'baixada', AVULSO: 'avulso' }
 
@@ -114,9 +115,11 @@ export function historicoOcorrencias(schedule, transactions = []) {
     if (puladas.has(d) && !registradas.includes(d)) return { ...base, status: STATUS_OCORRENCIA.PULADA }
     const tx = casado.get(d)
     if (tx) {
-      const valorPago = r2(tx.amount)
+      // Resgate ligado: complementar/devolução da ocorrência (lib/ajusteResgate) → valor pago líquido.
+      const ajuste = s.agendamentoVinculadoId ? liquidoDosAjustes(s, d, transactions) : 0
+      const valorPago = r2(Number(tx.amount) + ajuste)
       return {
-        ...base, status: STATUS_OCORRENCIA.PAGA, pagoEm: dia(tx.date), valorPago,
+        ...base, status: STATUS_OCORRENCIA.PAGA, pagoEm: dia(tx.date), valorPago, ajuste: ajuste || null,
         diferenca: r2(valorPago - valorOriginal), accountId: tx.accountId || null, payee: tx.payee || null, txId: tx.id,
       }
     }

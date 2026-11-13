@@ -28,6 +28,7 @@ import { totaisPorTipo, TIPOS_AGENDAMENTO, filtrarPorTipo, contarPorTipo, lerTip
 import { linhasDosAgendamentos, linhasDosPagos, linhasDasFaturas, specAgendamentos, periodoDoArquivo } from '../../lib/exportarAgendamentos'
 import SeloContrato from '../Contratos/SeloContrato'
 import { temResgateLigado, despesaDoResgate } from '../../lib/resgateVinculado'
+import { perguntaAjusteResgate } from '../../lib/ajusteResgate'
 import { resgatePrimeiro } from '../../lib/ordemResgate'
 import { ExcluirResgateModal, VincularResgateLista } from './ResgateLigado'
 import BotaoComposicaoParcela from '../Contratos/BotaoComposicaoParcela'
@@ -202,7 +203,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
   // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
   const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
-  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados, desfazerPuloOcorrencia, settings, vincularLancamento, accounts: contasPermitidas } = useApp()
+  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados, desfazerPuloOcorrencia, settings, vincularLancamento, accounts: contasPermitidas, ajustarResgateNoPagamento } = useApp()
   // Destino da transferência: também as contas dos outros perfis permitidos (OpcoesDestinoPorPerfil).
   // `accounts` (prop) continua sendo a lista da origem.
   const todasContas = contasPermitidas?.length ? contasPermitidas : accounts
@@ -420,6 +421,11 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   const dataDaAba = tab === 'pagamento' ? payDate : tab === 'recebimento' ? recDate : trfDate
   // Trocar a aba ou a data depois do aviso invalida o aviso (vale para a data em que foi dado).
   const avisoPulo = avisoPuloSel?.chave === `${tab}|${dataDaAba}` ? avisoPuloSel : null
+  // Despesa com resgate ligado paga por valor diferente do resgate da mesma ocorrência
+  // (src/lib/ajusteResgate.js): pergunta antes de gravar. Mudar aba, valor ou data invalida.
+  const [perguntaSel, setPerguntaResgate] = useState(null) // { p, escolha, chave }
+  const chavePergunta = `${tab}|${dataDaAba}|${payAmount}`
+  const perguntaResgate = perguntaSel?.chave === chavePergunta ? perguntaSel : null
 
   // `escolha`: null = conferir o pulo; { tirarPulo: data } = baixa no vencimento pulado (tira o
   // pulo antes); { manter: true } = baixa na próxima pendente mesmo assim.
@@ -431,6 +437,14 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
       const pulado = nextDate ? puloNoPeriodo(scheduleProp, dataDaAba, nextDate) : null
       if (pulado) { setAvisoPulo({ pulado, chave: `${tab}|${dataDaAba}` }); return }
     }
+    // Resgate ligado desta ocorrência com valor diferente do pago: pergunta (Sim/Não) antes de gravar.
+    if (tab === 'pagamento' && escolha?.ajusteResgate === undefined) {
+      const p = perguntaAjusteResgate({
+        despesaId: scheduleProp.id, chave: escolha?.tirarPulo || nextDate || today, valorPago: valorAba,
+        schedules: todosAgendamentos, transactions, accounts: todasContas, reserveFunctions,
+      })
+      if (p) { setPerguntaResgate({ p, escolha, chave: chavePergunta }); return }
+    }
     let regDate = nextDate || today
     if (escolha?.tirarPulo) {
       desfazerPuloOcorrencia(scheduleProp.id, escolha.tirarPulo)
@@ -439,7 +453,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
     // Grupo numerado (≠ G, ≠ D) gera resgate para a Conta central do perfil da conta paga: sem
     // ela, bloqueia o pagamento inteiro antes de gravar.
     const grupoPag = tab === 'pagamento' && payGrupo ? gerencialGroups.find(g => g.id === payGrupo) : null
-    // Resgate agendado junto (ligado a este agendamento): ele é efetivado com a despesa; o resgate
+    // Resgate agendado junto (ligado a este agendamento): pago à parte, na linha dele; o resgate
     // avulso abaixo dobraria a saída da reserva.
     const comResgateLigado = temResgateLigado(scheduleProp.id, todosAgendamentos)
     const precisaCentral = !comResgateLigado && grupoPag && grupoPag.number !== 'D' && grupoPag.number !== 1 && accounts.some(a => a.id === grupoPag.defaultAccountId)
@@ -465,6 +479,10 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
       // Rateio escolhido ANTES da baixa: a baixa só herda o rateio quando o lançamento não tem um.
       if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, ajustarRateio(scheduleRateios, amount, ajusteRateio))
       markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
+      // "Sim" na pergunta do resgate: complementar/devolução ou ajuste do valor da ocorrência pendente.
+      if (escolha?.ajusteResgate && escolha.pergunta) {
+        ajustarResgateNoPagamento(escolha.pergunta, { data: payDate, contaDespesaId: payAccountId, descricaoDespesa: schedule.description })
+      }
       if (payGrupo) {
         const grupo = gerencialGroups.find(g => g.id === payGrupo)
         if (grupo && grupo.number !== 'D') {
@@ -897,6 +915,27 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
           </div>
         )}
 
+        {perguntaResgate && (
+          <div role="alertdialog" aria-label="Resgate desta ocorrência" data-testid="pergunta-ajuste-resgate"
+            className="mx-5 mb-1 rounded-lg border border-reserva/40 bg-reserva/10 px-3 py-2.5 text-xs space-y-2 shrink-0">
+            <p className="text-texto-1 leading-snug">{perguntaResgate.p.texto}</p>
+            {perguntaResgate.p.tipo === 'ajustar' && (
+              <p className="text-texto-2 leading-snug">O resgate continua pendente até você pagá-lo ou vinculá-lo.</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn-primary text-xs py-1.5"
+                onClick={() => { const { p, escolha } = perguntaResgate; setPerguntaResgate(null); handleConfirm({ ...(escolha || {}), ajusteResgate: true, pergunta: p }) }}>
+                Sim
+              </button>
+              <button type="button" className="btn-secondary text-xs py-1.5"
+                onClick={() => { const { escolha } = perguntaResgate; setPerguntaResgate(null); handleConfirm({ ...(escolha || {}), ajusteResgate: false }) }}>
+                {perguntaResgate.p.tipo === 'ajustar' ? 'Não, deixar como está' : 'Não, gravar só a despesa'}
+              </button>
+              <button type="button" className="text-xs py-1.5 px-2 text-texto-2 hover:text-texto-1" onClick={() => setPerguntaResgate(null)}>Voltar</button>
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-3 px-5 py-4 border-t border-borda shrink-0">
           <button className="btn-secondary flex-1" onClick={onClose} disabled={finLoading}>Cancelar</button>
           {parcelaFin ? (
@@ -910,7 +949,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
               {finLoading ? 'Baixando...' : 'Confirmar Pagamento'}
             </button>
           ) : (
-            <button data-guia="baixa-form.confirmar" data-help-salvar="registrarAgendamento" className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40" disabled={!valorOk || !!avisoPulo} onClick={() => handleConfirm()}>
+            <button data-guia="baixa-form.confirmar" data-help-salvar="registrarAgendamento" className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40" disabled={!valorOk || !!avisoPulo || !!perguntaResgate} onClick={() => handleConfirm()}>
               <CheckCircle size={14} /> {duplicado ? 'Registrar mesmo assim' : rotuloConfirmar}
             </button>
           )}

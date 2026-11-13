@@ -126,7 +126,13 @@ export function derivarResgate(despesa, resgate, ctx) {
       o.date = oD.date
       o._de = oD.date
     }
-    if (oD.amount != null) o.amount = oD.amount
+    // Valor ajustado só no resgate (Pagar a despesa por valor diferente → "ajustar"): vale enquanto o
+    // valor da despesa naquela ocorrência for o de quando ajustou (`_valorDe`); mudou, vale o da despesa.
+    const valorDespesa = Math.round(Number(oD.amount != null ? oD.amount : despesa.amount) * 100) / 100
+    if (vR?._valorDe != null && vR.amount != null && Number(vR._valorDe) === valorDespesa) {
+      o.amount = vR.amount
+      o._valorDe = vR._valorDe
+    } else if (oD.amount != null) o.amount = oD.amount
     if (Object.keys(o).length) overrides[k] = o
   }
   if (desde) overrides._resgateDesde = desde

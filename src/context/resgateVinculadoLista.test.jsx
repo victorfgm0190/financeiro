@@ -157,6 +157,8 @@ describe('linha do resgate ligado', () => {
     fireEvent.change(valor, { target: { value: '1.300,50' } })
     await waitFor(() => expect(valor.value).toBe('1.300,50'))
     fireEvent.click(screen.getByRole('button', { name: /Confirmar Pagamento/ }))
+    // Resgate pendente com valor diferente: pergunta se ajusta; aqui, deixar como está.
+    fireEvent.click(within(await screen.findByTestId('pergunta-ajuste-resgate')).getByRole('button', { name: 'Não, deixar como está' }))
     await waitFor(() => expect(app.transactions.some(t => t.type === 'expense' && t.scheduleId === 'sch_esc')).toBe(true))
     await new Promise(r => setTimeout(r, 50))
     expect(app.transactions.find(t => t.scheduleId === 'sch_esc').amount).toBe(1300.5)
@@ -189,6 +191,150 @@ describe('linha do resgate ligado', () => {
     // Nenhum lançamento da despesa (as sombras da reserva, sem conta, são do resgate).
     expect(app.transactions.some(t => t.scheduleId === 'sch_esc')).toBe(false)
     expect(app.transactions.filter(t => t.accountId === 'cc' || t.toAccountId === 'cc').map(t => t.type)).toEqual(['transfer'])
+  }, 40000)
+})
+
+// Pagar a DESPESA por valor diferente do resgate da mesma ocorrência (src/lib/ajusteResgate.js).
+async function pagarDespesaPor(valorTexto) {
+  fireEvent.click(within(linhaDaDespesa()).getByRole('button', { name: 'Pagar' }))
+  await screen.findByRole('button', { name: /Confirmar Pagamento/ })
+  const v = document.querySelector('[data-help-id="registrarAgendamento.valor"] input')
+  fireEvent.change(v, { target: { value: valorTexto } })
+  await waitFor(() => expect(v.value).toBe(valorTexto))
+  fireEvent.click(screen.getByRole('button', { name: /Confirmar Pagamento/ }))
+}
+const pergunta = () => screen.queryByTestId('pergunta-ajuste-resgate')
+const responder = (nome) => fireEvent.click(within(pergunta()).getByRole('button', { name: nome }))
+const despesaPaga = () => waitFor(() => expect(app.transactions.some(t => t.type === 'expense' && t.scheduleId === 'sch_esc')).toBe(true))
+const transfers = () => app.transactions.filter(t => t.type === 'transfer')
+async function resgateJaPago() {
+  await montar()
+  act(() => { app.registerScheduleOccurrence(resgate().id, inicio, inicio) })
+  await waitFor(() => expect(resgate().registered).toEqual([inicio]))
+  return { serie: computeOccurrences(resgate(), 400), res0: saldo('res'), cc0: saldo('cc') }
+}
+
+describe('pagar a despesa por valor diferente do resgate', () => {
+  it('(a) resgate pago, pagando MAIS — Sim: resgate complementar da diferença; sem ocorrência nova', async () => {
+    const { serie, res0 } = await resgateJaPago()
+    await pagarDespesaPor('1.300,00')
+    expect((await screen.findByTestId('pergunta-ajuste-resgate')).textContent)
+      .toMatch(/Você resgatou R\$\s*1\.268,00 para esta despesa e está pagando R\$\s*1\.300,00\. Deseja criar um resgate complementar de R\$\s*32,00\?/)
+    expect(app.transactions.some(t => t.type === 'expense' && t.scheduleId === 'sch_esc')).toBe(false) // nada gravado antes da resposta
+    // Celular 380 px e temas: só cores do tema, botões que quebram linha, sem largura fixa.
+    const classes = [pergunta(), ...pergunta().querySelectorAll('*')].map(el => el.getAttribute('class') || '').join(' ')
+    expect(classes).not.toMatch(/\b(min-)?w-\[|\bwhitespace-nowrap\b|#[0-9a-fA-F]{3,6}\b|\b(text|bg|border)-(red|green|blue|gray|slate|zinc|white|black)\b/)
+    expect(classes).toMatch(/\bflex-wrap\b/)
+    responder('Sim')
+    await despesaPaga()
+    await waitFor(() => expect(transfers()).toHaveLength(2))
+    const aj = transfers().find(t => t.origin === 'resgate_ajuste')
+    expect(aj).toMatchObject({ accountId: 'res', toAccountId: 'cc', amount: 32, sourceScheduleId: resgate().id, dataOcorrencia: inicio, reservaFuncaoId: 'fn_esc' })
+    expect(transfers().some(t => /^Resgate Contas Anuais$/.test(t.description))).toBe(false)
+    expect(saldo('res')).toBe(res0 - 32)
+    expect(resgate().registered).toEqual([inicio])
+    expect(computeOccurrences(resgate(), 400)).toEqual(serie)
+    // Estornar a despesa não desfaz o complementar (o estorno dele é pelo próprio lançamento).
+    const desp = app.transactions.find(t => t.type === 'expense' && t.scheduleId === 'sch_esc')
+    act(() => app.reverseTransaction(desp.id))
+    await waitFor(() => expect(app.schedules.find(s => s.id === 'sch_esc').registered).toEqual([]))
+    expect(transfers().some(t => t.id === aj.id)).toBe(true)
+    expect(resgate().registered).toEqual([inicio])
+  }, 40000)
+
+  it('(a) resgate pago, pagando MAIS — Não: grava só a despesa', async () => {
+    const { res0 } = await resgateJaPago()
+    await pagarDespesaPor('1.300,00')
+    await screen.findByTestId('pergunta-ajuste-resgate')
+    responder('Não, gravar só a despesa')
+    await despesaPaga()
+    await new Promise(r => setTimeout(r, 50))
+    expect(transfers()).toHaveLength(1)
+    expect(saldo('res')).toBe(res0)
+  }, 40000)
+
+  it('(a) resgate pago, pagando MENOS — Sim: devolve a diferença para "conta › função"', async () => {
+    const { res0, cc0, serie } = await resgateJaPago()
+    await pagarDespesaPor('1.200,00')
+    expect((await screen.findByTestId('pergunta-ajuste-resgate')).textContent)
+      .toMatch(/Você resgatou R\$\s*1\.268,00 para esta despesa e está pagando R\$\s*1\.200,00\. Deseja devolver R\$\s*68,00 para Contas Anuais › Escola\?/)
+    responder('Sim')
+    await despesaPaga()
+    await waitFor(() => expect(transfers()).toHaveLength(2))
+    expect(transfers().find(t => t.origin === 'resgate_ajuste')).toMatchObject({ accountId: 'cc', toAccountId: 'res', amount: 68, reservaFuncaoId: 'fn_esc' })
+    expect(saldo('res')).toBe(res0 + 68)
+    expect(saldo('cc')).toBe(cc0 - 1200 - 68)
+    expect(computeOccurrences(resgate(), 400)).toEqual(serie)
+  }, 40000)
+
+  it('(a) resgate pago, pagando MENOS — Não: grava só a despesa', async () => {
+    await resgateJaPago()
+    await pagarDespesaPor('1.200,00')
+    await screen.findByTestId('pergunta-ajuste-resgate')
+    responder('Não, gravar só a despesa')
+    await despesaPaga()
+    await new Promise(r => setTimeout(r, 50))
+    expect(transfers()).toHaveLength(1)
+  }, 40000)
+
+  it('(b) resgate pendente: MAIS com Sim ajusta só esta ocorrência (continua pendente); MENOS com Não deixa como está', async () => {
+    await montar()
+    await pagarDespesaPor('1.300,00')
+    expect((await screen.findByTestId('pergunta-ajuste-resgate')).textContent)
+      .toMatch(/O resgate desta ocorrência está agendado em R\$\s*1\.268,00\. Deseja ajustar para R\$\s*1\.300,00\?/)
+    responder('Sim')
+    await despesaPaga()
+    await waitFor(() => expect(occEfetiva(resgate(), inicio).amount).toBe(1300))
+    expect(resgate().registered).toEqual([])
+    expect(transfers()).toHaveLength(0)
+    const proxima = computeOccurrences(resgate(), 400)[1]
+    expect(occEfetiva(resgate(), proxima).amount).toBe(1268)
+    // Próxima ocorrência da despesa, pagando MENOS → Não: o resgate dela fica como está.
+    await pagarDespesaPor('1.200,00')
+    expect((await screen.findByTestId('pergunta-ajuste-resgate')).textContent).toMatch(/Deseja ajustar para R\$\s*1\.200,00\?/)
+    responder('Não, deixar como está')
+    await waitFor(() => expect(app.schedules.find(s => s.id === 'sch_esc').registered).toHaveLength(2))
+    expect(occEfetiva(resgate(), proxima).amount).toBe(1268)
+  }, 40000)
+
+  it('(b) resgate pendente, pagando MENOS — Sim: ajusta para o valor pago; MAIS — Não: fica como está', async () => {
+    await montar()
+    await pagarDespesaPor('1.200,00')
+    await screen.findByTestId('pergunta-ajuste-resgate')
+    responder('Sim')
+    await waitFor(() => expect(occEfetiva(resgate(), inicio).amount).toBe(1200))
+    expect(resgate().registered).toEqual([])
+    const proxima = computeOccurrences(resgate(), 400)[1]
+    await pagarDespesaPor('1.300,00')
+    await screen.findByTestId('pergunta-ajuste-resgate')
+    responder('Não, deixar como está')
+    await waitFor(() => expect(app.schedules.find(s => s.id === 'sch_esc').registered).toHaveLength(2))
+    expect(occEfetiva(resgate(), proxima).amount).toBe(1268)
+  }, 40000)
+
+  it('valor igual: não pergunta', async () => {
+    await montar()
+    await pagarDespesaPor('1.268,00')
+    await despesaPaga()
+    expect(pergunta()).toBeNull()
+    expect(occEfetiva(resgate(), inicio).amount).toBe(1268)
+  }, 40000)
+
+  it('efetivar em lote com valor diferente: não pergunta, grava só a despesa', async () => {
+    await montar()
+    fireEvent.click(screen.getByRole('button', { name: /Selecionar/ }))
+    fireEvent.click(await screen.findByLabelText('Selecionar ESCOLA EXEMPLO'))
+    fireEvent.click(screen.getByRole('button', { name: /Registrar selecionados/ }))
+    const v = await screen.findByLabelText('Valor de ESCOLA EXEMPLO')
+    fireEvent.change(v, { target: { value: '1.300,00' } })
+    await waitFor(() => expect(v.value).toBe('1.300,00'))
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar Registro/ }))
+    await despesaPaga()
+    await new Promise(r => setTimeout(r, 50))
+    expect(pergunta()).toBeNull()
+    expect(transfers()).toHaveLength(0)
+    expect(app.transactions.find(t => t.scheduleId === 'sch_esc').amount).toBe(1300)
+    expect(occEfetiva(resgate(), inicio).amount).toBe(1268)
   }, 40000)
 })
 

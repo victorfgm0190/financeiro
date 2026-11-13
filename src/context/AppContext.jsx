@@ -30,6 +30,7 @@ import { agendamentoDaEfetivacao, resgateDaEfetivacao } from '../lib/herancaCamp
 import { aplicarEfetivacao, desfazerEfetivacao, situacaoDesfazer, novoIdEfetivacao } from '../lib/efetivacaoProvisao'
 import { faltaRecurso } from '../lib/recursosBanco'
 import { sincronizarResgatesVinculados, criarResgateSeFaltar, excluirOcorrenciaDoResgate, mudarDataDoResgate } from '../lib/resgateVinculado'
+import { txAjusteResgate, ajustarValorDoResgate } from '../lib/ajusteResgate'
 import { comCamposDaOcorrencia, ESCOPO, agendamentoDoMotor } from '../lib/camposSerie'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { casaAgendamento } from '../lib/agendamentoManda'
@@ -3026,6 +3027,22 @@ export function AppProvider({ children }) {
       return { ...d, schedules: d.schedules.map(s => (s.id === resgateId ? mudarDataDoResgate(s, despesa, chave, novaData) : s)) }
     })
   }, [update])
+  // Pagar a despesa por valor diferente do resgate da mesma ocorrência, com "Sim" na pergunta
+  // (src/lib/ajusteResgate.js): complementar/devolução (resgate já pago) ou ajustar o valor da
+  // ocorrência pendente do resgate. `p` = perguntaAjusteResgate(...).
+  const ajustarResgateNoPagamento = useCallback((p, { data, contaDespesaId, descricaoDespesa } = {}) => {
+    if (!p?.resgate) return null
+    if (p.tipo === 'ajustar') {
+      update(d => {
+        const r = d.schedules.find(s => s.id === p.resgate.id)
+        const despesa = r && d.schedules.find(s => s.id === r.agendamentoVinculadoId)
+        if (!r || !despesa) return d
+        return { ...d, schedules: d.schedules.map(s => (s.id === r.id ? ajustarValorDoResgate(s, despesa, p.chave, p.para) : s)) }
+      })
+      return null
+    }
+    return addTransaction(txAjusteResgate(p, { data, contaDespesaId, descricaoDespesa }))
+  }, [update, addTransaction])
   // "Agendar o resgate de novo" (resgate inteiro excluído à mão): tira a marca e cria das pendentes.
   const reativarResgateVinculado = useCallback((despesaId) => {
     if (!despesaId || faltaRecurso(recursosBanco, 'resgateVinculado')) return
@@ -6406,7 +6423,7 @@ export function AppProvider({ children }) {
       addSchedule, updateSchedule, updateSchedulesPayee, salvarFavorecidoDoAgendamento,
       mergeScheduleFromDb,
       deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,
-      garantirResgateVinculado, excluirOcorrenciaResgate, mudarDataResgate, reativarResgateVinculado,
+      garantirResgateVinculado, excluirOcorrenciaResgate, mudarDataResgate, reativarResgateVinculado, ajustarResgateNoPagamento,
       efetivarProvisao, getProximaProvisaoOccurrence, desfazerEfetivacaoProvisao, situacaoDesfazerEfetivacao,
       registerScheduleOccurrence, skipScheduleOccurrence, desfazerPuloOcorrencia,
       addBudget, updateBudget, deleteBudget,

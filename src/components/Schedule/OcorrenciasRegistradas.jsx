@@ -25,6 +25,8 @@ const Selo = ({ l }) => (
     {SELO[l.status].rotulo}{l.status === ST.BAIXADA && l.motivo ? ` · ${l.motivo}` : ''}
   </span>
 )
+// Resgate ligado: o valor pago inclui o complementar (+) ou a devolução (−) da ocorrência.
+const Ajuste = ({ v }) => (v ? <span data-testid="ajuste-resgate" className="block text-[10px] text-texto-3 whitespace-normal">{v > 0 ? 'inclui complementar de ' : 'inclui devolução de '}{fmt(Math.abs(v))}</span> : null)
 const Dif = ({ v }) => (v ? <span className={v > 0 ? 'text-despesa' : 'text-receita'}> ({v > 0 ? '+' : '−'}{fmt(Math.abs(v))})</span> : null)
 
 export default function OcorrenciasRegistradas({ schedule, transactions, accounts }) {
@@ -124,6 +126,7 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
                         {l.valorOriginal != null && <>Original {fmt(l.valorOriginal)}</>}
                         {l.valorPago != null && <> · Pago {fmt(l.valorPago)}<Dif v={l.diferenca} /></>}
                       </p>
+                      <Ajuste v={l.ajuste} />
                       {l.accountId && <p className="text-xs text-texto-3 truncate">{accName(l.accountId)}{l.payee ? ` · ${l.payee}` : ''}</p>}
                     </button>
                   ))}
@@ -151,7 +154,7 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
                             {l.pagoEm ? fmtDate(l.pagoEm) : l.status === ST.BAIXADA ? <span className="text-texto-3">baixada {fmtDate(l.dataRegistro)}</span> : '—'}
                           </td>
                           <td className="px-2 py-1.5 text-texto-2 whitespace-nowrap">{l.valorOriginal != null ? fmt(l.valorOriginal) : '—'}</td>
-                          <td className="px-2 py-1.5 text-texto-1 whitespace-nowrap">{l.valorPago != null ? <>{fmt(l.valorPago)}<Dif v={l.diferenca} /></> : '—'}</td>
+                          <td className="px-2 py-1.5 text-texto-1 whitespace-nowrap">{l.valorPago != null ? <>{fmt(l.valorPago)}<Dif v={l.diferenca} /><Ajuste v={l.ajuste} /></> : '—'}</td>
                           <td className="px-2 py-1.5 text-texto-2 max-w-[8rem] truncate">{l.accountId ? accName(l.accountId) : '—'}</td>
                           <td className="px-2 py-1.5 text-texto-2 max-w-[9rem] truncate">{l.payee || '—'}</td>
                           <td className="px-2 py-1.5 whitespace-nowrap">

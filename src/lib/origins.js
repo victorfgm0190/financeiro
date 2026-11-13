@@ -33,6 +33,10 @@ export const ORIGIN = {
   // Venda de consórcio (api/consorcio-eventos.js): a transferência do bem para a conta que recebeu.
   // Sem espelho: quem aparece nos relatórios é o ganho ou a perda, não o valor inteiro.
   VENDA_BEM: 'venda_bem',
+  // Complementar/devolução do resgate ligado quando a despesa foi paga por valor diferente do resgate
+  // da mesma ocorrência (src/lib/ajusteResgate.js). Ligado à ocorrência por source_schedule_id +
+  // data_ocorrencia, sem schedule_id (não é baixa).
+  RESGATE_AJUSTE: 'resgate_ajuste',
 }
 
 // Equivalências canônico ⇄ legado (valor antigo ainda gravado em linhas históricas).
