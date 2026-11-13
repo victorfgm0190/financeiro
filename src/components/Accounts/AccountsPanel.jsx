@@ -338,7 +338,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
     <>
     <div
       data-guia="accounts.card"
-      className={`relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg cursor-pointer ${isInactive ? 'opacity-50' : ''}`}
+      className={`cartao-conta-cor relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg cursor-pointer ${isInactive ? 'opacity-50' : ''}`}
       style={highlightCard ? { border: '2px solid #185FA5' } : undefined}
       draggable={podeEditar}
       onDragStart={e => {

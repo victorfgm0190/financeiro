@@ -18,6 +18,18 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.13-3',
+    data: '2026-11-13',
+    titulo: 'Tema escuro mais suave no computador',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'No computador, o tema escuro ficou mais confortável para a vista: fundo cinza-escuro em vez de preto, cartões um tom acima, bordas discretas e letras um pouco menos brilhantes.',
+      'As cores de receita, despesa, reserva e avisos continuam as mesmas, só um pouco mais suaves.',
+      'O tema claro e o tema escuro do celular não mudaram.',
+    ],
+  },
+  {
     id: '2026.11.13-2',
     data: '2026-11-13',
     titulo: 'Parcelas marcadas como pagas sem lançamento',

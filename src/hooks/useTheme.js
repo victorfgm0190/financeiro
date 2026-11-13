@@ -145,12 +145,15 @@ function lerCores() {
 // Devolve { tema, ...cores } do tema EFETIVAMENTE aplicado; atualiza quando ele muda
 // (escolha manual, mudança do sistema ou troca de contexto mobile × desktop).
 export function useThemeColors() {
-  const { tema } = useTheme()
+  const { tema, contexto } = useTheme()
   const cores = useMemo(() => {
     // Garante o data-theme no <html> antes de ler (o efeito do useTheme só roda depois do render).
     // Idempotente: grava o mesmo valor que o useTheme gravaria.
     aplicarTema(tema)
     return lerCores()
-  }, [tema])
+    // contexto: o escuro do computador tem tokens próprios (index.css, min-width 768px) —
+    // cruzar o breakpoint com o mesmo tema também troca as cores.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tema, contexto])
   return { tema, ...cores }
 }
