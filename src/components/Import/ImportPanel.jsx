@@ -2402,6 +2402,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const ajustesGravados = resolvedRows.filter(r => r._ajusteValor && !r._jaLancado
       && (r._collisionTx ? colisoesAplicar.includes(r) : r._isDuplicate))
     const historicoResgates = []
+    const historicoGerenciais = []
     let resgatesAcompanharam = 0
     for (const r of ajustesGravados) {
       if (!r._collisionTx) {
@@ -2414,12 +2415,21 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const plano = planoDoAjuste({
         tx: r._dbTx, de: r._ajusteValor.de, para: r._ajusteValor.para, schedules, scheduleReservaFuncoes,
         rateios: r._rateios?.length ? null : rateiosByLancamento?.get?.(r._dbTx.id), hoje: hojeSP(),
+        transactions, gerencialGroups, card: accounts.find(a => a.id === r._dbTx.accountId), gerencialLigado,
       })
       if (plano.rateio) saveRateiosFor(r._dbTx.id, plano.rateio)
       if (plano.resgate) {
         resgatesAcompanharam++
         if (plano.resgate.txAjuste) addTransaction(plano.resgate.txAjuste)
         historicoResgates.push({ r, plano: plano.resgate })
+      }
+      // Grupo G: a etapa A acompanha o novo valor (idempotente com o motor e o applyEnsureGerencial);
+      // devolução já executada → um ajuste com a diferença, na fatura da compra (lib/ajusteValorBanco).
+      if (plano.gerencial) {
+        resgatesAcompanharam++
+        if (Math.abs(plano.gerencial.etapaPara - plano.gerencial.etapaDe) > 0.005) updateTransaction(plano.gerencial.etapa.id, { amount: plano.gerencial.etapaPara })
+        if (plano.gerencial.txAjuste) addTransaction(plano.gerencial.txAjuste)
+        historicoGerenciais.push({ r, plano: plano.gerencial })
       }
       if (r._dbTx.grupoGerencial) gerencialTxIds.push(r._dbTx.id)
     }
@@ -2436,6 +2446,19 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           itens: [{ id: plano.schedule.id, ocorrenciaData: plano.schedule.registered?.[0] || plano.schedule.startDate || null,
             mudancas: [{ campo: 'amount', de: plano.de, para: plano.para }] }],
         })),
+        // Etapa A (Principal → Ger.) e devolução gerencial da fatura da compra.
+        ...historicoGerenciais.flatMap(({ r, plano }) => [
+          ...linhasHistorico({
+            entidade: 'lancamento', loteId: loteAjuste, motivo: `${motivoAjusteValor(r._ajusteValor, fmt)} — etapa A (reserva gerencial)`,
+            itens: [{ id: plano.etapa.id, mudancas: [{ campo: 'amount', de: plano.etapaDe, para: plano.etapaPara }] }],
+          }),
+          ...(plano.devolucao ? linhasHistorico({
+            entidade: 'agendamento', loteId: loteAjuste,
+            motivo: `${motivoAjusteValor(r._ajusteValor, fmt)} — devolução gerencial ${plano.executada ? '(já executada: diferença lançada à parte)' : '(recalculada)'}`,
+            itens: [{ id: plano.devolucao.id, ocorrenciaData: plano.devolucao.registered?.[0] || plano.devolucao.startDate || null,
+              mudancas: [{ campo: 'amount', de: r._ajusteValor.de, para: r._ajusteValor.para }] }],
+          }) : []),
+        ]),
       ]
       registrarEdicao({
         lancamentos: ajustesGravados.map(r => ({ ...r._dbTx, amount: r._ajusteValor.para })), historico, loteId: loteAjuste,
@@ -2772,7 +2795,12 @@ Importar mesmo assim no mês selecionado?`)) return
   const ajustesDeValor = useMemo(() => resumoAjustesDeValor(linhasComAjuste.filter(r => !r._jaLancado)), [linhasComAjuste])
   // Resgate da reserva que acompanha o ajuste (lib/ajusteValorBanco), para a prévia.
   const temResgate = (r) => !!planoDoAjuste({ tx: r._dbTx, de: r._ajusteValor.de, para: r._ajusteValor.para, schedules, scheduleReservaFuncoes }).resgate
-  const resgatesDosAjustes = ajustesDeValor.linhas.filter(temResgate).length
+  // Grupo G: a devolução gerencial da fatura acompanha (pendente: o motor recalcula; executada: ajuste à parte).
+  const temDevolucaoGerencial = (r) => !!planoDoAjuste({
+    tx: r._dbTx, de: r._ajusteValor.de, para: r._ajusteValor.para, schedules, transactions, gerencialGroups,
+    card: accounts.find(a => a.id === r._dbTx?.accountId), gerencialLigado,
+  }).gerencial?.devolucao
+  const resgatesDosAjustes = ajustesDeValor.linhas.filter(r => temResgate(r) || temDevolucaoGerencial(r)).length
   // Fatura do lançamento ajustado já paga: destaca na prévia (como o conciliado).
   const faturaPagaDoAjuste = (r) => {
     const card = accounts.find(a => a.id === selectedAccount)
@@ -4545,7 +4573,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                       return (
                         <li key={r._id} className={`px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 ${destaque ? 'bg-aviso/10' : ''}`}>
                           <span className="text-texto-1 flex-1 min-w-0 truncate">{r.description}</span>
-                          <span className="text-texto-2 whitespace-nowrap">valor ajustado: {fmt(r._ajusteValor.de)} → {fmt(r._ajusteValor.para)}{temResgate(r) ? ' (resgate da reserva também)' : ''}</span>
+                          <span className="text-texto-2 whitespace-nowrap">valor ajustado: {fmt(r._ajusteValor.de)} → {fmt(r._ajusteValor.para)}{temResgate(r) ? ' (resgate da reserva também)' : temDevolucaoGerencial(r) ? ' (devolução gerencial também)' : ''}</span>
                           {destaque && (
                             <span className="text-aviso font-medium whitespace-nowrap">
                               {r._ajusteValor.conciliado ? 'já estava conciliado' : ''}{r._ajusteValor.conciliado && paga ? ' · ' : ''}{paga ? 'fatura já paga' : ''}

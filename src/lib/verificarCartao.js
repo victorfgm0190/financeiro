@@ -10,6 +10,7 @@
 //   f) agendamentos geridos pendentes que o recálculo REMOVERIA (fatura sem gasto)
 //   g) faturas antigas sem pagamento, anteriores à última fatura paga               (não gerencial)
 // O item (b) do motor (computeRevisaoFatura) é assíncrono e vem do AppContext — o modal o junta aqui.
+import { liquidoDosAjustes } from './ajusteResgate.js'
 import { lancamentosSemTipoDeConta } from './tipoDaConta.js'
 import { lancamentosDaFatura, faturaAtualDoCartao, faturaDoLancamento, pagoDaFatura, situacaoDaFatura } from './faturaCartao.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
@@ -89,14 +90,21 @@ export function fantasmasDaGer({ transactions = [], accounts = [], card }) {
   return transactions.filter(tx => tx.toAccountId === ger.id && !tx.faturaRef && !/^tx_ger(A)?_/.test(String(tx.id)))
 }
 
-// (c) Resgate/devolução da fatura cujo detalhamento por função não soma o valor.
-export function detalhamentoDivergente({ schedules = [], scheduleReservaFuncoes = [], card, fatura }) {
+// (c) Resgate/devolução da fatura cujo detalhamento por função não soma o valor. Executado com ajuste
+// ligado (complementar/devolução — lib/ajusteResgate; ajuste ao valor da fatura do banco — lib/
+// ajusteValorBanco): vale o executado mais o líquido dos ajustes, porque o motor refaz o detalhamento
+// com o valor atual de cada lançamento.
+export function detalhamentoDivergente({ schedules = [], scheduleReservaFuncoes = [], transactions = [], card, fatura }) {
   const soma = (id) => r2(scheduleReservaFuncoes.filter(l => l.scheduleId === id).reduce((s, l) => s + (Number(l.valor) || 0), 0))
   const qtd = (id) => scheduleReservaFuncoes.filter(l => l.scheduleId === id).length
+  const valor = (s) => {
+    const chave = (s.registered || [])[0]
+    return chave ? r2(Number(s.amount) + liquidoDosAjustes(s, chave, transactions)) : r2(s.amount)
+  }
   return schedules
     .filter(s => s.cardId === card?.id && s.faturaMesAno === fatura && (s.tipo === 'resgate_reserva' || s.tipo === 'gerencial_devolucao'))
-    .filter(s => Math.abs(r2(s.amount) - soma(s.id)) > 0.01 || (s.tipo === 'gerencial_devolucao' && qtd(s.id) === 0))
-    .map(s => ({ id: s.id, tipo: s.tipo, descricao: s.description, valor: r2(s.amount), soma: soma(s.id), fatura }))
+    .filter(s => Math.abs(valor(s) - soma(s.id)) > 0.01 || (s.tipo === 'gerencial_devolucao' && qtd(s.id) === 0))
+    .map(s => ({ id: s.id, tipo: s.tipo, descricao: s.description, valor: valor(s), soma: soma(s.id), fatura }))
 }
 
 // (d) Competência fora do lugar (o mesmo plano do antigo Revisar, seção 4): em QUALQUER fatura.
@@ -184,7 +192,7 @@ export function verificarCartao({ transactions = [], accounts = [], schedules = 
     }
     out.c = {
       fantasmas: fantasmasDaGer({ transactions, accounts, card }),
-      detalhamento: faturas.flatMap(f => detalhamentoDivergente({ schedules, scheduleReservaFuncoes, card, fatura: f })),
+      detalhamento: faturas.flatMap(f => detalhamentoDivergente({ schedules, scheduleReservaFuncoes, transactions, card, fatura: f })),
     }
     out.e = saldosGerDivergentes({ accounts, transactions, gerencialGroups })
     out.f = agendamentosSemGasto({ schedules, transactions, card, hoje, previstoDe })

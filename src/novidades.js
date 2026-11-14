@@ -18,45 +18,28 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
-    id: '2026.11.14-4',
+    id: '2026.11.14-6',
     data: '2026-11-14',
-    titulo: 'Cartão: parcelas cobradas no mês certo, na tela e nos Alertas',
+    titulo: 'Relatórios organizados e fatura igual à do banco',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'A fatura importada passa a ter o mesmo valor que o banco cobrou, até no centavo.',
+      'O cartão e os relatórios abrem na fatura que falta pagar.',
+      'O menu Relatórios ganhou seções e nomes mais claros.',
+      'O extrato de qualquer conta agora sai em Excel e CSV.',
+    ],
+  },
+  {
+    id: '2026.11.14-5',
+    data: '2026-11-14',
+    titulo: 'Cartão: Verificar e corrigir',
     publico: 'admin',
     obrigatoria: false,
     itens: [
-      'As parcelas de compras antigas passam a ser cobradas para a reserva gerencial quando a fatura delas entra no seu mês financeiro (pelo dia de início do mês que você configurou), e não antes.',
-      'Na tela do cartão, essas parcelas aparecem numa faixa à parte, "prontas para a etapa A", com o botão "Executar agora". A faixa de atenção fica só para o que está realmente faltando.',
-      'O menu Alertas segue a mesma regra: parcela que ainda não chegou ao seu mês não vira alerta, e alertas antigos desse tipo são encerrados na próxima verificação. Um mesmo lançamento não é contado duas vezes na faixa da fatura.',
-    ],
-  },
-  {
-    id: '2026.11.14-3',
-    data: '2026-11-14',
-    titulo: 'Relatórios com nomes novos e em seções; fatura importada vale o valor do banco',
-    publico: 'todos',
-    obrigatoria: false,
-    itens: [
-      'Na importação da fatura do cartão, quando uma compra do arquivo é reconhecida como uma parcela já lançada com centavos de diferença, a parcela passa a ter o valor que o banco cobrou. A prévia mostra "valor ajustado: de → para" e quantas foram ajustadas. O resgate da reserva daquela parcela acompanha o novo valor, e a mudança fica no histórico. Reimportar a fatura corrige as que já estavam gravadas.',
-      'Ao abrir o Extrato da Fatura ou o Relatório da Fatura pelo menu (ou ao trocar de cartão), e ao entrar na tela do cartão, o Finup mostra a fatura que ainda falta pagar; se não houver, a fatura aberta. No seletor, as faturas aparecem como "a pagar", "aberta" e "futura".',
-      'O menu Relatórios agora é dividido em seções — Resultado, Contas e Caixa, Cartão de Crédito, Reservas, Patrimônio e Aluguéis — e os relatórios ganharam nomes mais claros: Resultado por Categoria, Movimentação por Favorecido, Extrato e Fluxo de Caixa por Conta, Patrimônio — Pagamentos por Mês, Aluguéis — Rendimentos e Repasses. As médias viraram "Média Mensal (últimos 6 meses)" e a pizza e o ranking ficaram juntos em "Despesas do Mês por Categoria".',
-      'O extrato do Fluxo Futuro das Reservas passa a se chamar "Fluxo de Caixa da Reserva", igual ao do menu. Na tela do cartão, o botão virou "Relatório Gerencial da Fatura", e a aba de movimentos por data agora se chama "Movimentos do Cartão por Data", mostra só o perfil escolhido e exporta para Excel e CSV.',
-      'Novas exportações: o extrato de qualquer conta (não só das gerenciais) sai em Excel e CSV, com o saldo acumulado. Os CSVs seguem o mesmo padrão em todos os relatórios (ponto e vírgula, vírgula nos centavos) e têm o mesmo nome do Excel. Se algo der errado, aparece uma mensagem.',
-      'Para quem não usa o controle gerencial, somem a aba "Gerencial" de Agendamentos, o botão "Conciliar Gerenciais" e o selo "Gerencial" do extrato da conta. No Relatório da Fatura, os gastos por categoria passam a dividir os lançamentos rateados entre as categorias.',
-      'Na tela do cartão, um só botão, Verificar e corrigir, mostra o que está diferente e só corrige o que você confirmar.',
-    ],
-  },
-  {
-    id: '2026.11.14-2',
-    data: '2026-11-14',
-    titulo: 'Cartão: Extrato da Fatura e Relatório separados; novos relatórios no menu',
-    publico: 'todos',
-    obrigatoria: false,
-    itens: [
-      'Na tela do cartão, o botão "Extrato da Fatura" mostra a fatura como o banco mostra: data, descrição, parcela e valor, com os estornos e o mesmo total da Fatura Selecionada. O pagamento da fatura anterior e as compras ainda só agendadas aparecem à parte, fora do total. Dá para passar de uma fatura para outra e baixar em Excel ou CSV.',
-      'O botão "Relatório Gerencial" abre na fatura que está na tela e mostra todos os lançamentos, com um card por grupo (valor e %), "Sem grupo" e Estornos. Clique num card para ver só aquele grupo. O antigo Extrato Gerencial agora é a aba "Extrato gerencial por data" dentro dele. Sem o controle gerencial, o botão se chama "Relatório da Fatura" e mostra o total e as categorias.',
-      'A exportação do relatório da fatura foi refeita: o Excel traz a fatura inteira, com o grupo de cada lançamento, e uma aba de resumo; também dá para baixar em CSV. Se algo der errado ao exportar, aparece uma mensagem.',
-      'Cartão sem compras lançadas e com compra agendada: a fatura não aparece mais como "Quitada totalmente" ao mesmo tempo que "Falta pagar". As compras agendadas contam no valor a pagar desta fatura e na situação dela; a Dívida Total mostra só o que já foi lançado, com os agendados indicados à parte.',
-      'No menu Relatórios: novos cards "Extrato da Fatura", "Relatório Gerencial da Fatura" e "Fluxo de Caixa da Reserva" (entradas, saídas e saldo de cada função de reserva no período, com a opção "Todas as funções"). Os valores são os mesmos de Reservas › Fluxo Futuro.',
+      'Na tela do cartão, um só botão, Verificar e corrigir (menu Mais), mostra o que está diferente e só corrige o que você confirmar.',
+      'As parcelas são cobradas para a reserva gerencial quando a fatura delas entra no seu mês financeiro; elas aparecem numa faixa à parte, com Executar agora.',
+      'O menu Alertas segue a mesma regra.',
     ],
   },
   {

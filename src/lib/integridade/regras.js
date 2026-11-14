@@ -1036,9 +1036,15 @@ function devolucoesDaFatura(ctx, cardId, ym) {
   return ctx.schedules
     .filter(s => s.tipo === 'gerencial_devolucao' && s.cardId === cardId && s.faturaMesAno === ym)
     .map(s => {
-      const exec = ctx.transactions.find(t => t.type === 'transfer' && t.sourceScheduleId === s.id)
+      // Execução = a transferência da devolução; os ajustes ligados a ela (ajuste ao valor da fatura do
+      // banco depois da devolução feita — origin resgate_ajuste) entram pelo líquido: mesmo sentido da
+      // devolução soma, sentido contrário subtrai.
+      const ligados = ctx.transactions.filter(t => t.type === 'transfer' && t.sourceScheduleId === s.id)
+      const exec = ligados.find(t => t.origin !== ORIGIN.RESGATE_AJUSTE)
+      const ajustes = ligados.filter(t => t.origin === ORIGIN.RESGATE_AJUSTE)
+        .reduce((soma, t) => soma + (t.accountId === s.accountId ? 1 : -1) * (Number(t.amount) || 0), 0)
       const executada = isResgatePago(s.id, ctx.schedules, ctx.transactions)
-      return { s, executada, valor: rb(exec ? exec.amount : s.amount) }
+      return { s, executada, valor: rb((exec ? Number(exec.amount) : Number(s.amount)) + (executada ? ajustes : 0)) }
     })
 }
 
