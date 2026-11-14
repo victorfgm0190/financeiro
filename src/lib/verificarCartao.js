@@ -248,7 +248,9 @@ export function avisoDaFatura({ transactions = [], accounts = [], schedules = []
   const div = executarRegras({ transactions, accounts, schedules, gerencialGroups, faturasFechadas }, { hoje, desde: fatura, regras })
     .filter(d => d.fatura_ref === ref && (d.conta_id === card.id || (ger && d.conta_id === ger.id)))
   const semEtapa = gerencialLigado ? gastosGSemEtapaA({ transactions, gerencialGroups, card, fatura, hoje, faturasFechadas, settings }) : null
-  const totalErro = semTipo.length + div.length + (semEtapa?.faltando.length || 0)
+  // Cada lançamento conta UMA vez (o mesmo gasto pode estar sem tipo de conta E sem etapa A).
+  const lancamentosComErro = new Set([...semTipo.map(t => t.id), ...(semEtapa?.faltando || []).map(t => t.id)])
+  const totalErro = lancamentosComErro.size + div.length
   const erro = totalErro ? {
     total: totalErro,
     secao: semTipo.length ? 'a' : semEtapa?.faltando.length ? 'b' : (SECAO_DA_REGRA[div[0]?.regra] || 'd'),
