@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { comTipoDaConta } from '../lib/tipoDaConta'
 import { registrarContas } from '../lib/rotuloMovimento'
 import { format } from 'date-fns'
 import {
@@ -1757,7 +1758,9 @@ export function AppProvider({ children }) {
             id: txId,
             type: schedule.transactionType,
             accountId: schedule.accountId || null,
-            accountType: schedule.accountType || null,
+            // Tipo da CONTA (lib/tipoDaConta): o account_type do agendamento costuma vir vazio, e gasto
+            // de cartão sem 'credit' fica fora do motor gerencial (sem etapa A).
+            accountType: accounts.find(a => a.id === schedule.accountId)?.type || schedule.accountType || null,
             toAccountId: schedule.toAccountId || null,
             fromAccountId: null,
             amount: occAmount,
@@ -1782,7 +1785,7 @@ export function AppProvider({ children }) {
             accounts = accounts.map(a => a.id === schedule.accountId
               ? { ...a, balance: rb(a.balance + occAmount) } : a)
           } else if (schedule.transactionType === 'expense') {
-            if (schedule.accountType === 'credit') {
+            if (newTx.accountType === 'credit') {
               accounts = accounts.map(a => a.id === schedule.accountId ? {
                 ...a,
                 creditDebt: (a.creditDebt || 0) + occAmount,
@@ -1921,7 +1924,9 @@ export function AppProvider({ children }) {
   }, [update])
 
   // ── Transactions ────────────────────────────────────────────────────────────
-  const addTransaction = useCallback((tx) => {
+  const addTransaction = useCallback((tx0) => {
+    // Tipo da conta sempre o da CONTA (lib/tipoDaConta): Assistente, duplicar, importar, celular…
+    const tx = comTipoDaConta(tx0, dataRef.current.accounts)
     // _fromImport: a importação gera as contas a pagar uma vez no fim (com importId);
     // não disparar o recálculo por lançamento aqui para não quebrar esse vínculo.
     const { _fromImport, ...txClean } = tx
@@ -2400,7 +2405,11 @@ export function AppProvider({ children }) {
     update(d => applyEnsureGerencial(d, lancId))
   }, [update, applyEnsureGerencial])
 
-  const updateTransaction = useCallback((id, changes0) => {
+  const updateTransaction = useCallback((id, changes00) => {
+    // Mudou de conta (ou a correção do tipo): o tipo é o da conta nova (lib/tipoDaConta).
+    const changes0 = changes00?.accountId && !changes00.accountType
+      ? { ...changes00, accountType: dataRef.current.accounts.find(a => a.id === changes00.accountId)?.type || changes00.accountType }
+      : changes00
     // TAREFA 2: se uma despesa de cartão muda de valor ou de fatura, recalcula a(s)
     // conta(s) a pagar afetada(s). Lê o tx antigo do dataRef (síncrono) antes do update.
     const old = dataRef.current.transactions.find(t => t.id === id)
@@ -3256,7 +3265,7 @@ export function AppProvider({ children }) {
           id: 'tx_' + baseTs + '_' + i + '_' + Math.random().toString(36).slice(2),
           type: 'transfer',
           accountId: schedule.accountId,
-          accountType: schedule.accountType,
+          accountType: d.accounts.find(a => a.id === schedule.accountId)?.type || schedule.accountType,
           toAccountId: schedule.toAccountId,
           amount: Number(srf.valor) || 0,
           categoryId: schedule.categoryId,
@@ -3305,7 +3314,8 @@ export function AppProvider({ children }) {
       const tx = {
         type: schedule.transactionType,
         accountId: schedule.accountId,
-        accountType: schedule.accountType,
+        // Tipo da CONTA (lib/tipoDaConta) — não o account_type do agendamento, que costuma vir vazio.
+        accountType: d.accounts.find(a => a.id === schedule.accountId)?.type || schedule.accountType || null,
         toAccountId: schedule.toAccountId,
         // Valor EFETIVO da ocorrência baixada (override da prévia), não o valor base.
         amount: amountArg != null ? Number(amountArg) : (Number(occEfetiva(schedule, occurrenceDate).amount) || 0),

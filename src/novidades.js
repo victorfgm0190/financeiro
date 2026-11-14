@@ -30,6 +30,7 @@ export const NOVIDADES = [
       'O extrato do Fluxo Futuro das Reservas passa a se chamar "Fluxo de Caixa da Reserva", igual ao do menu. Na tela do cartão, o botão virou "Relatório Gerencial da Fatura", e a aba de movimentos por data agora se chama "Movimentos do Cartão por Data", mostra só o perfil escolhido e exporta para Excel e CSV.',
       'Novas exportações: o extrato de qualquer conta (não só das gerenciais) sai em Excel e CSV, com o saldo acumulado. Os CSVs seguem o mesmo padrão em todos os relatórios (ponto e vírgula, vírgula nos centavos) e têm o mesmo nome do Excel. Se algo der errado, aparece uma mensagem.',
       'Para quem não usa o controle gerencial, somem a aba "Gerencial" de Agendamentos, o botão "Conciliar Gerenciais" e o selo "Gerencial" do extrato da conta. No Relatório da Fatura, os gastos por categoria passam a dividir os lançamentos rateados entre as categorias.',
+      'Na tela do cartão, um só botão, Verificar e corrigir, mostra o que está diferente e só corrige o que você confirmar.',
     ],
   },
   {
