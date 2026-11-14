@@ -13,7 +13,7 @@
 import { lancamentosSemTipoDeConta } from './tipoDaConta.js'
 import { lancamentosDaFatura, faturaAtualDoCartao, faturaDoLancamento, pagoDaFatura, situacaoDaFatura } from './faturaCartao.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
-import { executarRegras, REGRAS_COMPETENCIA } from './integridade/regras.js'
+import { executarRegras, REGRAS_COMPETENCIA, aberturaFatura } from './integridade/regras.js'
 import { planejarCorrecoesCompetencia } from './revisaoCompetencia.js'
 import { isAutomacaoOrigin } from './origins.js'
 
@@ -42,19 +42,31 @@ export function contaGerDoCartao(accounts, card) {
 // ao gasto por sourceExpenseId.
 const ehEtapaA = (t) => t?.type === 'transfer' && t.sourceExpenseId && /^tx_ger(A)?_/.test(String(t.id))
 
+// Etapa A DEVIDA na fatura: a MESMA regra do motor de integridade (GER_ETAPA_A_FALTANDO — "na fatura
+// já aberta"): a fatura já abriu (dia seguinte ao fechamento da anterior, aberturaFatura ≤ hoje) e não
+// está fechada. Parcela de fatura que ainda não abriu está AGUARDANDO a vez — a etapa A das parcelas
+// 2..N é criada quando chega a fatura delas (motor do ciclo / Executar Gerenciais), nunca antes.
+export const etapaADevida = (card, fatura, hoje, faturasFechadas = {}) =>
+  !!card && !!fatura && !!hoje && aberturaFatura(fatura, card) <= hoje && !faturaEstaFechada(faturasFechadas, card.id, fatura)
+
 // (b) Gastos do grupo G da fatura SEM etapa A — por qualquer motivo, inclusive sem o tipo da conta
 // (que o motor não enxerga). Não depende de accountType: o cartão é a conta do lançamento.
-export function gastosGSemEtapaA({ transactions = [], gerencialGroups = [], card, fatura }) {
+// `hoje`: só conta como faltando a etapa A DEVIDA (etapaADevida); o resto vai para `aguardando`.
+export function gastosGSemEtapaA({ transactions = [], gerencialGroups = [], card, fatura, hoje = null, faturasFechadas = {} }) {
   const grupoG = gerencialGroups.find(g => g.number === 1)
-  if (!grupoG || !card || !fatura) return { itens: [], totalG: 0, totalEtapas: 0, diferenca: 0 }
+  const vazio = { itens: [], totalG: 0, totalEtapas: 0, diferenca: 0, aguardando: [], valorAguardando: 0 }
+  if (!grupoG || !card || !fatura) return vazio
   const etapaDe = new Map()
   for (const t of transactions) if (ehEtapaA(t)) etapaDe.set(t.sourceExpenseId, t)
   const gastos = transactions.filter(t => t.accountId === card.id && t.type === 'expense' && t.grupoGerencial === grupoG.id
     && !isAutomacaoOrigin(t) && faturaDoLancamento(t, card) === fatura)
-  const itens = gastos.filter(t => !etapaDe.has(t.id))
+  const semEtapa = gastos.filter(t => !etapaDe.has(t.id))
+  if (hoje && !etapaADevida(card, fatura, hoje, faturasFechadas)) {
+    return { ...vazio, aguardando: semEtapa, valorAguardando: r2(semEtapa.reduce((s, t) => s + (Number(t.amount) || 0), 0)) }
+  }
   const totalG = r2(gastos.reduce((s, t) => s + (Number(t.amount) || 0), 0))
   const totalEtapas = r2(gastos.filter(t => etapaDe.has(t.id)).reduce((s, t) => s + (Number(etapaDe.get(t.id).amount) || 0), 0))
-  return { itens, totalG, totalEtapas, diferenca: r2(totalG - totalEtapas) }
+  return { ...vazio, itens: semEtapa, totalG, totalEtapas, diferenca: r2(totalG - totalEtapas) }
 }
 
 // (c) Fantasmas: entradas na conta Ger. do cartão sem fatura e com id que o motor não reconhece.
@@ -103,8 +115,10 @@ export function saldosGerDivergentes({ accounts = [], transactions = [], gerenci
 }
 
 // (f) Agendamentos geridos PENDENTES (nada registrado nem pulado) de faturas do cartão sem gasto: o
-// recálculo os removeria. Fatura de ciclo passado o motor preserva — `hoje` corta essas.
-export function agendamentosSemGasto({ schedules = [], transactions = [], card, hoje }) {
+// recálculo os removeria. Fatura de ciclo passado o motor preserva — `hoje` corta essas. Fatura com
+// compra AGENDADA (previstoDe(fatura) > 0 — agendamentosPrevistosDaFatura, a regra dos previstos da
+// tela) NÃO é "sem gasto": o motor monta o resgate dela com os previstos e o mantém.
+export function agendamentosSemGasto({ schedules = [], transactions = [], card, hoje, previstoDe = () => 0 }) {
   if (!card) return []
   const comGasto = new Set(transactions
     .filter(t => t.accountId === card.id && t.type === 'expense' && !isAutomacaoOrigin(t))
@@ -112,7 +126,8 @@ export function agendamentosSemGasto({ schedules = [], transactions = [], card, 
   const aberta = faturaAtualDoCartao(card, hoje)
   return schedules
     .filter(s => s.cardId === card.id && GERIDOS.has(s.tipo) && s.faturaMesAno && s.faturaMesAno >= aberta
-      && !(s.registered || []).length && !(s.skipped || []).length && !comGasto.has(s.faturaMesAno))
+      && !(s.registered || []).length && !(s.skipped || []).length && !comGasto.has(s.faturaMesAno)
+      && !(previstoDe(s.faturaMesAno) > 0))
     .map(s => ({ id: s.id, tipo: s.tipo, descricao: s.description, valor: r2(s.amount), fatura: s.faturaMesAno }))
 }
 
@@ -137,7 +152,7 @@ export function faturasAntigasSemPagamento({ transactions = [], schedules = [], 
 
 // Tudo o que é síncrono, por seção. `faturas` = as faturas em verificação (a da tela ou todas).
 export function verificarCartao({ transactions = [], accounts = [], schedules = [], scheduleReservaFuncoes = [], gerencialGroups = [],
-  faturasFechadas = {}, card, faturas = [], hoje, gerencialLigado = true }) {
+  faturasFechadas = {}, card, faturas = [], hoje, gerencialLigado = true, previstoDe = () => 0 }) {
   const naFatura = (t) => faturas.includes(faturaDoLancamento(t, card))
   const out = {
     a: lancamentosSemTipoDeConta(transactions, accounts, card?.id).filter(naFatura),
@@ -145,14 +160,19 @@ export function verificarCartao({ transactions = [], accounts = [], schedules = 
     g: faturasAntigasSemPagamento({ transactions, schedules, card, hoje, faturasFechadas }),
   }
   if (gerencialLigado) {
-    const porFatura = faturas.map(f => ({ fatura: f, ...gastosGSemEtapaA({ transactions, gerencialGroups, card, fatura: f }) }))
-    out.b = { semEtapa: porFatura.filter(x => x.itens.length), diferenca: r2(porFatura.reduce((s, x) => s + x.diferenca, 0)) }
+    const porFatura = faturas.map(f => ({ fatura: f, ...gastosGSemEtapaA({ transactions, gerencialGroups, card, fatura: f, hoje, faturasFechadas }) }))
+    out.b = {
+      semEtapa: porFatura.filter(x => x.itens.length),
+      diferenca: r2(porFatura.reduce((s, x) => s + x.diferenca, 0)),
+      // Informativo (sem caixa): parcelas de faturas que ainda não abriram, aguardando a vez da etapa A.
+      aguardando: { qtd: porFatura.reduce((s, x) => s + x.aguardando.length, 0), valor: r2(porFatura.reduce((s, x) => s + x.valorAguardando, 0)) },
+    }
     out.c = {
       fantasmas: fantasmasDaGer({ transactions, accounts, card }),
       detalhamento: faturas.flatMap(f => detalhamentoDivergente({ schedules, scheduleReservaFuncoes, card, fatura: f })),
     }
     out.e = saldosGerDivergentes({ accounts, transactions, gerencialGroups })
-    out.f = agendamentosSemGasto({ schedules, transactions, card, hoje })
+    out.f = agendamentosSemGasto({ schedules, transactions, card, hoje, previstoDe })
   }
   return out
 }
@@ -185,7 +205,7 @@ export function avisoDaFatura({ transactions = [], accounts = [], schedules = []
   // O motor de integridade não lê accountType: o lançamento sem o tipo aparece nas regras do grupo G.
   const div = executarRegras({ transactions, accounts, schedules, gerencialGroups, faturasFechadas }, { hoje, desde: fatura, regras })
     .filter(d => d.fatura_ref === ref && (d.conta_id === card.id || (ger && d.conta_id === ger.id)))
-  const semEtapa = gerencialLigado ? gastosGSemEtapaA({ transactions, gerencialGroups, card, fatura }) : null
+  const semEtapa = gerencialLigado ? gastosGSemEtapaA({ transactions, gerencialGroups, card, fatura, hoje, faturasFechadas }) : null
   const total = semTipo.length + div.length
   if (!total) return null
   const secao = semTipo.length ? 'a' : (SECAO_DA_REGRA[div[0].regra] || 'd')

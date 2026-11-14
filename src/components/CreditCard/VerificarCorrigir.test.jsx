@@ -35,7 +35,7 @@ const base = (o = {}) => {
     settings: { faturasFechadas: {} }, pode: () => true, getOccurrencesProjecao: () => [],
     revisarMovimentosFatura: vi.fn(async () => ({ acoes: [], resumo: { total: 0 } })),
     recalcularAgendamentosFatura: vi.fn(), reconciliarGerencial: vi.fn(async () => ({})), ensureGerencialState: vi.fn(),
-    updateTransaction: vi.fn(), deleteTransaction: vi.fn(), fecharFatura: vi.fn(), abrirFatura: vi.fn(), registrarEdicao: vi.fn(async () => ({})),
+    updateTransaction: vi.fn(), deleteTransaction: vi.fn(), fecharFatura: vi.fn(), executarProvisoesGerenciais: vi.fn(), abrirFatura: vi.fn(), registrarEdicao: vi.fn(async () => ({})),
     isFaturaFechada: () => false, creditUsage: () => 0, addTransaction: vi.fn(), setReconciled: vi.fn(),
     ...o,
   })
@@ -113,6 +113,24 @@ describe('Verificar e corrigir — prévia e aplicação', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Confirmar e aplicar/ })) })
     expect(app.deleteTransaction).toHaveBeenCalledWith('fant')
     expect(app.recalcularAgendamentosFatura).toHaveBeenCalledWith('card', '2026', '12')
+  })
+
+  it('(b) parcela 2..N devida sem etapa A: corrigida como no Executar Gerenciais; parcela de fatura futura só informa', async () => {
+    base({ profileTransactions: [
+      g({ id: 'p5', grupoGerencial: 'grp_1', date: '2026-10-15', amount: 31.49, faturaMonthYear: '2026-11', installmentNum: 5, installmentTotal: 7, description: 'Htm Bruna 5/7' }),
+      g({ id: 'p6', grupoGerencial: 'grp_1', date: '2027-01-15', amount: 31.49, faturaMonthYear: '2027-02', installmentNum: 7, installmentTotal: 7, description: 'Htm Bruna 7/7' }),
+    ] })
+    render(<VerificarCorrigirModal card={CARD} billKey="2026-11" onClose={vi.fn()} />)
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Verificar todas as faturas deste cartão' }))
+    await act(async () => {})
+    expect(within(screen.getByTestId('secao-b')).queryByText('Htm Bruna 7/7')).toBeNull()
+    expect(screen.getByTestId('b-aguardando').textContent).toMatch(/1 parcela de fatura futura aguardando/)
+    marcar('Htm Bruna 5/7')
+    fireEvent.click(screen.getByRole('button', { name: /Corrigir selecionados/ }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Confirmar e aplicar/ })) })
+    expect(app.executarProvisoesGerenciais).toHaveBeenCalledWith(['p5'])
+    expect(app.ensureGerencialState).not.toHaveBeenCalled()
   })
 
   it('controle gerencial desligado: só as seções a, d e g', async () => {

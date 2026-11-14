@@ -119,3 +119,29 @@ describe('aviso automático da fatura', () => {
     expect(a).toMatchObject({ secao: 'a', semEtapa: 0, semTipo: 1 })
   })
 })
+
+describe('falsos alarmes (teste no teste1, 14/11)', () => {
+  // Hoje 14/11/2026, fechamento dia 13: a fatura 11/2026 abriu em 14/10 (devida); a 12/2026 abre em
+  // 14/11 (devida a partir de hoje); a 01/2027 abre em 14/12 (ainda não).
+  const parcelas = [
+    gasto({ id: 'p11', date: '2026-10-15', amount: 10, faturaMonthYear: '2026-11', installmentNum: 5, installmentTotal: 12 }),
+    gasto({ id: 'p01', date: '2026-12-15', amount: 39.95, faturaMonthYear: '2027-01', installmentNum: 7, installmentTotal: 12, description: 'Vindi *Finclasssp 7/12' }),
+    gasto({ id: 'p03', date: '2027-02-15', amount: 39.95, faturaMonthYear: '2027-03', installmentNum: 9, installmentTotal: 12 }),
+  ]
+  it('B: parcela de fatura futura (não devida) não aparece nem conta na diferença; a devida aparece', () => {
+    const v = verificarCartao({ transactions: parcelas, accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD, faturas: ['2026-11', '2027-01', '2027-03'], hoje: HOJE })
+    expect(v.b.semEtapa.flatMap(x => x.itens.map(t => t.id))).toEqual(['p11'])
+    expect(v.b.diferenca).toBe(10)
+    expect(v.b.aguardando).toEqual({ qtd: 2, valor: 79.9 })
+    // Aviso da fatura futura: nada de etapa A.
+    expect(avisoDaFatura({ transactions: parcelas, accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD, fatura: '2027-01', hoje: HOJE })?.semEtapa || 0).toBe(0)
+  })
+  it('F: fatura futura com compra AGENDADA não é "sem gasto"; sem nada (nem lançado nem agendado) aparece', () => {
+    const schedules = [
+      { id: 'res_nov27', tipo: 'resgate_reserva', cardId: 'card', faturaMesAno: '2027-11', amount: 48.29, registered: [], description: 'Resgate Reserva Card - Fatura 11/2027' },
+      { id: 'pag_dez27', tipo: 'pagamento_fatura', cardId: 'card', faturaMesAno: '2027-12', amount: 20, registered: [], description: 'Pagamento Fatura Card 12/2027' },
+    ]
+    const previstoDe = (f) => (f === '2027-11' ? 48.29 : 0) // compra mensal agendada cai em 11/2027
+    expect(agendamentosSemGasto({ schedules, transactions: [], card: CARD, hoje: HOJE, previstoDe }).map(s => s.id)).toEqual(['pag_dez27'])
+  })
+})

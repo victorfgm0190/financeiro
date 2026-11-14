@@ -4,12 +4,13 @@ import Modal from '../shared/Modal'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, today } from '../shared/utils'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
-import { faturaDoLancamento } from '../../lib/faturaCartao'
+import { faturaDoLancamento, previstoDaFaturaFn } from '../../lib/faturaCartao'
 import {
-  verificarCartao, TITULO_SECAO, SECOES, SECOES_NAO_GERENCIAIS, ymParaRef,
+  verificarCartao, TITULO_SECAO, SECOES, SECOES_NAO_GERENCIAIS, ymParaRef, etapaADevida,
 } from '../../lib/verificarCartao'
 import { acoesDoPlano, linhasHistoricoRevisao } from '../../lib/revisaoCompetencia'
 import { linhasHistorico, novoLoteId } from '../../lib/historico'
+import { isParcelaGeradaOrigin } from '../../lib/origins'
 
 const ROTULO_ACAO = {
   REMOVER_GERENCIAL: 'Remover etapa A', CRIAR_GERENCIAL: 'Criar etapa A', ATUALIZAR_GERENCIAL: 'Atualizar etapa A',
@@ -21,6 +22,8 @@ const ROTULO_COMPETENCIA = {
   mover: (it) => `Mudar para a fatura ${ymParaRef(it.mover?.para)}`,
   excluir_reserva: () => 'Excluir a reserva gerencial (o gasto de origem fica)',
 }
+// Parcela 2..N (mesmo critério do applyEnsureGerencial, que não cria a etapa A delas).
+const ehParcela2aN = (t) => Number(t.installmentNum) > 1 || t.parentTxId != null || isParcelaGeradaOrigin(t)
 const valorAcao = (a) => (a.valor != null ? fmt(a.valor) : `${fmt(a.valor_anterior)} → ${fmt(a.valor_novo)}`)
 
 // VERIFICAR E CORRIGIR — substitui "Atualizar", "Revisar Movimentos Automáticos" e "Reconciliar
@@ -34,7 +37,7 @@ export default function VerificarCorrigirModal({ card, billKey, secaoInicial = n
     profileTransactions: transactions = [], profileAccounts: accounts = [], profileSchedules: schedules = [],
     scheduleReservaFuncoes = [], gerencialGroups = [], settings,
     revisarMovimentosFatura, recalcularAgendamentosFatura, reconciliarGerencial, ensureGerencialState,
-    updateTransaction, deleteTransaction, fecharFatura, registrarEdicao,
+    updateTransaction, deleteTransaction, fecharFatura, registrarEdicao, getOccurrencesProjecao, executarProvisoesGerenciais,
   } = useApp()
   const gerencialLigado = controleGerencialAtivo(settings)
   const [todas, setTodas] = useState(false)
@@ -51,7 +54,9 @@ export default function VerificarCorrigirModal({ card, billKey, secaoInicial = n
   const v = useMemo(() => verificarCartao({
     transactions, accounts, schedules, scheduleReservaFuncoes, gerencialGroups,
     faturasFechadas: settings?.faturasFechadas || {}, card, faturas, hoje, gerencialLigado,
-  }), [transactions, accounts, schedules, scheduleReservaFuncoes, gerencialGroups, settings, card, faturas, hoje, gerencialLigado])
+    // Compras agendadas que vão cair na fatura (a regra dos previstos da tela): fatura com previsto não é "sem gasto".
+    previstoDe: previstoDaFaturaFn({ schedules, card, getOccurrences: getOccurrencesProjecao }),
+  }), [transactions, accounts, schedules, scheduleReservaFuncoes, gerencialGroups, settings, card, faturas, hoje, gerencialLigado, getOccurrencesProjecao])
 
   // (b) Prévia do motor por fatura (o antigo Revisar, dryRun): o que o recálculo mudaria.
   useEffect(() => {
@@ -68,7 +73,7 @@ export default function VerificarCorrigirModal({ card, billKey, secaoInicial = n
     const out = []
     for (const t of v.a || []) out.push({ chave: `a:${t.id}`, secao: 'a', tx: t, titulo: t.description || '(sem descrição)', detalhe: `${fmtDate(t.date)} · fatura ${ymParaRef(faturaDoLancamento(t, card))} · corrigir para cartão de crédito${t.grupoGerencial ? ' (o motor cria a etapa A em seguida)' : ''}`, valor: t.amount })
     for (const f of v.b?.semEtapa || []) {
-      for (const t of f.itens) out.push({ chave: `b:etapa:${t.id}`, secao: 'b', tx: t, fatura: f.fatura, titulo: t.description || '(sem descrição)', detalhe: `${fmtDate(t.date)} · fatura ${ymParaRef(f.fatura)} · sem etapa A${t.accountType !== 'credit' ? ' (corrija antes o tipo da conta — seção a)' : ''}`, valor: t.amount })
+      for (const t of f.itens) out.push({ chave: `b:etapa:${t.id}`, secao: 'b', tx: t, fatura: f.fatura, titulo: t.description || '(sem descrição)', detalhe: `${fmtDate(t.date)} · fatura ${ymParaRef(f.fatura)} · sem etapa A${ehParcela2aN(t) ? ' · parcela: criada como no "Executar Gerenciais"' : ''}${t.accountType !== 'credit' ? ' (corrija antes o tipo da conta — seção a)' : ''}`, valor: t.amount })
     }
     for (const r of revisao) {
       out.push({ chave: `b:motor:${r.fatura}`, secao: 'b', fatura: r.fatura, acoes: r.acoes,
@@ -136,13 +141,21 @@ export default function VerificarCorrigirModal({ card, billKey, secaoInicial = n
         else if (i.fatura) recalcular.add(i.fatura)
       }
       // b) etapas A que faltavam (ensure por gasto) e o recálculo do motor por fatura
+      // Parcela 2..N: a etapa A é a do "Executar Gerenciais" (o ensure não cria a de 2..N); à vista /
+      // parcela 1: o ensure. Só de fatura já aberta (etapaADevida) — nunca antes da hora.
+      const parcelas2aN = []
       for (const i of sec('b')) {
-        if (i.tx) { garantirEtapa.add(i.tx.id); recalcular.add(i.fatura) }
+        if (i.tx && etapaADevida(card, i.fatura, hoje, settings?.faturasFechadas || {})) {
+          if (ehParcela2aN(i.tx)) parcelas2aN.push(i.tx.id)
+          else garantirEtapa.add(i.tx.id)
+          recalcular.add(i.fatura)
+        }
         else if (i.fatura) recalcular.add(i.fatura)
       }
       // f) agendamentos de fatura sem gasto: o recálculo daquela fatura os remove
       for (const i of sec('f')) recalcular.add(i.fatura)
       for (const id of garantirEtapa) ensureGerencialState(id)
+      if (parcelas2aN.length && typeof executarProvisoesGerenciais === 'function') executarProvisoesGerenciais(parcelas2aN)
       for (const f of recalcular) { const [y, m] = f.split('-'); recalcularAgendamentosFatura(card.id, y, m) }
       // e) saldo das contas Ger. — o passo B do reconciliador (regrava as contas listadas)
       if (sec('e').length) await reconciliarGerencial(card.id, [...recalcular].length ? [...recalcular] : [billKey])
@@ -185,6 +198,11 @@ export default function VerificarCorrigirModal({ card, billKey, secaoInicial = n
             Verificar todas as faturas deste cartão
           </label>
           {itens.length === 0 && <p className="text-sm text-texto-2 flex items-center gap-2"><CheckCircle2 size={16} className="text-primary-fg" /> Nada diferente encontrado.</p>}
+          {gerencialLigado && v.b?.aguardando?.qtd > 0 && (
+            <p className="text-xs text-texto-3" data-testid="b-aguardando">
+              {v.b.aguardando.qtd} {v.b.aguardando.qtd === 1 ? 'parcela de fatura futura aguardando' : 'parcelas de faturas futuras aguardando'} a vez da etapa A ({fmt(v.b.aguardando.valor)}). Não é pendência: a etapa A nasce quando chega a fatura de cada parcela.
+            </p>
+          )}
           {secoesVisiveis.map(s => {
             const lista = porSecao(s)
             if (!lista.length) return null
