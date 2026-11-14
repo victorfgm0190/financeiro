@@ -78,7 +78,9 @@ export function fixtureBug() {
   transactions.push(jimNovo, farmNovo, mercado, posto, etapaA(mercado),
     etapaA(posto, { id: 'tx_ger_1789000000000_abc123', origin: 'gerencial_auto', parentTxId: posto.id }))
   schedules.push(devolucao('2026-10', [jimNovo, farmNovo, mercado, posto]))
-  return { transactions, schedules, accounts: CONTAS, gerencialGroups: GRUPOS }
+  // Mês financeiro do caso real (começa no dia 15): em 30/09 o ciclo é 15/09–14/10 e a fatura 10/2026
+  // (fecha 05/10) já está nele — as parcelas "3/3" dela já têm etapa A devida (lib/etapaACiclo).
+  return { transactions, schedules, accounts: CONTAS, gerencialGroups: GRUPOS, settings: { financialMonthStartDay: 15, financialMonthMode: 'custom' } }
 }
 
 export const porRegra = (divs) => divs.reduce((m, d) => { (m[d.regra] ||= []).push(d); return m }, {})

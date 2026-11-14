@@ -18,6 +18,18 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.14-4',
+    data: '2026-11-14',
+    titulo: 'Cartão: parcelas cobradas no mês certo, na tela e nos Alertas',
+    publico: 'admin',
+    obrigatoria: false,
+    itens: [
+      'As parcelas de compras antigas passam a ser cobradas para a reserva gerencial quando a fatura delas entra no seu mês financeiro (pelo dia de início do mês que você configurou), e não antes.',
+      'Na tela do cartão, essas parcelas aparecem numa faixa à parte, "prontas para a etapa A", com o botão "Executar agora". A faixa de atenção fica só para o que está realmente faltando.',
+      'O menu Alertas segue a mesma regra: parcela que ainda não chegou ao seu mês não vira alerta, e alertas antigos desse tipo são encerrados na próxima verificação. Um mesmo lançamento não é contado duas vezes na faixa da fatura.',
+    ],
+  },
+  {
     id: '2026.11.14-3',
     data: '2026-11-14',
     titulo: 'Relatórios com nomes novos e em seções; fatura importada vale o valor do banco',

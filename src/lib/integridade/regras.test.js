@@ -125,6 +125,8 @@ describe('Etapa A é verificada por gasto', () => {
       accounts: CONTAS, gerencialGroups: GRUPOS,
       transactions: [p1, p2, etapaA(p1)],
       schedules: [devolucao('2026-09', [p1]), devolucao('2026-10', [p2])],
+      // Mês começando dia 15: em 30/09 a fatura 10 (fecha 05/10) está no ciclo → etapa A da 2/2 devida.
+      settings: { financialMonthStartDay: 15, financialMonthMode: 'custom' },
     }
     const r = porRegra(executarRegras(d, OPC))
     expect(r.GER_ETAPA_A_FALTANDO.map(x => x.origem_id)).toEqual(['tx_p2'])

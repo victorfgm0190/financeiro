@@ -104,12 +104,14 @@ async function carregarDados() {
     query('SELECT * FROM contas'),
     query('SELECT * FROM agendamentos'),
     query('SELECT * FROM reservas_funcoes'),
-    query('SELECT faturas_fechadas FROM configuracoes WHERE id = 1'),
+    query('SELECT faturas_fechadas, financial_month_start_day, financial_month_mode FROM configuracoes WHERE id = 1'),
     carregarMarcos(),
   ])
   // Mesmo dado do botão "Fechar Fatura" (settings.faturasFechadas no app).
   const faturasFechadas = cfg?.faturas_fechadas || {}
-  return { ...dadosDeLinhas({ lancamentos, contas, agendamentos, grupos, marcos }), faturasFechadas }
+  // Início do mês financeiro do cliente: a regra do ciclo da etapa A de parcela 2..N (lib/etapaACiclo).
+  const settings = { financialMonthStartDay: cfg?.financial_month_start_day ?? 1, financialMonthMode: cfg?.financial_month_mode || 'custom' }
+  return { ...dadosDeLinhas({ lancamentos, contas, agendamentos, grupos, marcos }), faturasFechadas, settings }
 }
 
 // "Aceitar saldo atual como correto": recalcula a regra AGORA (não confia no valor da varredura

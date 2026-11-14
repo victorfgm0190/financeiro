@@ -14,8 +14,7 @@ import { lancamentosSemTipoDeConta } from './tipoDaConta.js'
 import { lancamentosDaFatura, faturaAtualDoCartao, faturaDoLancamento, pagoDaFatura, situacaoDaFatura } from './faturaCartao.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
 import { executarRegras, REGRAS_COMPETENCIA } from './integridade/regras.js'
-import { cicloFinanceiroAtual } from './cicloFinanceiro.js'
-import { isParcelaGeradaOrigin } from './origins.js'
+import { ehParcela2aN, fechamentoDaFatura, situacaoDaEtapaA } from './etapaACiclo.js'
 import { planejarCorrecoesCompetencia } from './revisaoCompetencia.js'
 import { isAutomacaoOrigin } from './origins.js'
 
@@ -44,31 +43,9 @@ export function contaGerDoCartao(accounts, card) {
 // ao gasto por sourceExpenseId.
 const ehEtapaA = (t) => t?.type === 'transfer' && t.sourceExpenseId && /^tx_ger(A)?_/.test(String(t.id))
 
-// Parcela 2..N (mesmo critério do applyEnsureGerencial, que não cria a etapa A delas).
-export const ehParcela2aN = (t) => Number(t?.installmentNum) > 1 || t?.parentTxId != null || isParcelaGeradaOrigin(t)
+// Regra do ciclo (parcela 2..N): lib/etapaACiclo — a mesma do motor de integridade.
+export { ehParcela2aN, fechamentoDaFatura, situacaoDaEtapaA }
 
-const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-// Dia em que a fatura 'AAAA-MM' FECHA: o dia de fechamento do cartão no mês da fatura (limitado ao
-// último dia do mês) — a fatura do mês M fecha no dia F de M.
-export function fechamentoDaFatura(fatura, card) {
-  const [y, m] = fatura.split('-').map(Number)
-  const ultimo = new Date(y, m, 0).getDate()
-  return `${fatura}-${String(Math.min(card?.closingDay || 14, ultimo)).padStart(2, '0')}`
-}
-
-// Quando a etapa A da PARCELA 2..N é devida — decisão de 14/11/2026: quando a fatura dela entra no
-// CICLO FINANCEIRO ATUAL do cliente (cicloFinanceiroAtual, a função do motor da fatura, com o início
-// do mês financeiro de cada cliente), pelo FECHAMENTO da fatura. Ex.: mês começando no dia 15 e
-// fatura 12/2026 fechando em 13/12 → em 14/11 (ciclo 15/10–14/11) aguarda; a partir de 15/11 (ciclo
-// 15/11–14/12) é devida.
-//   'passada'  → o fechamento é anterior ao ciclo atual: a etapa A já devia existir (erro);
-//   'mes'      → o fechamento cai no ciclo atual: tarefa do mês ("Executar Gerenciais");
-//   'futura'   → o fechamento é depois do ciclo atual: aguardando a vez.
-export function situacaoDaEtapaA(card, fatura, hoje, settings) {
-  const { start, end } = cicloFinanceiroAtual(settings, new Date(`${hoje}T12:00:00`))
-  const fecha = fechamentoDaFatura(fatura, card)
-  return fecha < iso(start) ? 'passada' : fecha <= iso(end) ? 'mes' : 'futura'
-}
 // Etapa A devida (para aplicar): à vista / parcela 1 sempre (nasce na compra); 2..N quando a fatura
 // já entrou no ciclo (passada ou do mês). Fatura fechada pelo usuário: nada.
 export function etapaADevida(card, fatura, hoje, faturasFechadas = {}, settings = {}, tx = null) {
@@ -231,29 +208,53 @@ export function contarPendencias(v, revisao = []) {
 
 // AVISO ao abrir a fatura. Dois tons:
 //   erro → lançamento sem tipo de conta, etapa A faltando (à vista / parcela 1, ou parcela de ciclo
-//          passado) e as divergências das regras do motor de integridade para esta fatura;
+//          passado) e as divergências das regras do motor de integridade para esta fatura — inclusive
+//          GER_ETAPA_A_FALTANDO e GER_FECHAMENTO_FATURA, que usam a MESMA regra do ciclo (lib/etapaACiclo);
 //   mes  → parcelas 2..N do cartão cuja fatura entrou no ciclo atual ("Executar Gerenciais" do mês).
-// As regras de etapa A do motor de integridade (GER_ETAPA_A_FALTANDO e o fechamento, que a acompanha)
-// usam a ABERTURA da fatura; aqui vale o ciclo financeiro (decisão de 14/11) — por isso a etapa A é
-// contada por gastosGSemEtapaA e essas duas regras ficam fora. Gerencial desligado: só o não gerencial.
-// → { erro: { total, secao, semEtapa, semTipo } | null, mes: { qtd, valor, fatura, ids } | null } | null
-const REGRAS_AVISO_GERENCIAL = ['GER_ETAPA_A_VALOR', 'NUM_RESGATE_FALTANDO', 'NUM_RESGATE_VALOR', 'GER_SALDO_SUBCONTA']
-const SECAO_DA_REGRA = { GER_ETAPA_A_VALOR: 'b', NUM_RESGATE_FALTANDO: 'b', NUM_RESGATE_VALOR: 'b', GER_SALDO_SUBCONTA: 'e' }
+// Contagem: cada LANÇAMENTO conta uma vez (sem tipo de conta e/ou etapa A faltando), mais uma por
+// divergência de fatura (fechamento, saldo, resgate, competência). Gerencial desligado: só o não gerencial.
+// → { erro: { total, secao, semEtapa, semTipo, regras } | null, mes: { qtd, valor, fatura, ids } | null } | null
+const REGRAS_AVISO_GERENCIAL = ['GER_ETAPA_A_FALTANDO', 'GER_ETAPA_A_VALOR', 'GER_FECHAMENTO_FATURA', 'NUM_RESGATE_FALTANDO', 'NUM_RESGATE_VALOR', 'GER_SALDO_SUBCONTA']
+const SECAO_DA_REGRA = { GER_ETAPA_A_FALTANDO: 'b', GER_ETAPA_A_VALOR: 'b', GER_FECHAMENTO_FATURA: 'b', NUM_RESGATE_FALTANDO: 'b', NUM_RESGATE_VALOR: 'b', GER_SALDO_SUBCONTA: 'e' }
+// Pendências do motor de integridade para a fatura (a mesma conta do menu Alertas, só desta fatura).
+export function pendenciasDaFatura({ transactions = [], accounts = [], schedules = [], gerencialGroups = [], faturasFechadas = {}, card, fatura, hoje, gerencialLigado = true, settings = {} }) {
+  const ger = contaGerDoCartao(accounts, card)
+  const regras = [...REGRAS_COMPETENCIA, ...(gerencialLigado ? REGRAS_AVISO_GERENCIAL : [])]
+  return executarRegras({ transactions, accounts, schedules, gerencialGroups, faturasFechadas, settings }, { hoje, desde: fatura, regras })
+    .filter(d => d.fatura_ref === ymParaRef(fatura) && (d.conta_id === card.id || (ger && d.conta_id === ger.id)))
+}
+const quase = (a, b) => Math.abs(r2(a) - r2(b)) <= 0.005
+export function soPorFaltaDeEtapaA(d) {
+  const e = d?.encontrado || {}
+  if (d?.regra === 'GER_FECHAMENTO_FATURA') {
+    if (!(e.soma_sem_etapa_a > 0) || !quase(e.diferenca_g_etapa_a, e.soma_sem_etapa_a)) return false
+    // A devolução acompanha as etapas A que existem (o motor a refaz quando a etapa nasce) ou já inclui os gastos.
+    const ag = e.soma_aguardando || 0
+    return e.devolucao != null && (quase(r2(e.soma_etapas_a + ag), e.devolucao) || quase(r2(e.soma_etapas_a + e.soma_sem_etapa_a + ag), e.devolucao))
+  }
+  if (d?.regra === 'GER_SALDO_SUBCONTA') return e.sem_etapa_a > 0 && quase(r2(e.diferenca + e.sem_etapa_a), 0)
+  return false
+}
 export function avisoDaFatura({ transactions = [], accounts = [], schedules = [], gerencialGroups = [], faturasFechadas = {}, card, fatura, hoje, gerencialLigado = true, settings = {} }) {
   if (!card || !fatura) return null
-  const ref = ymParaRef(fatura)
-  const ger = contaGerDoCartao(accounts, card)
   const semTipo = lancamentosSemTipoDeConta(transactions, accounts, card.id).filter(t => faturaDoLancamento(t, card) === fatura)
-  const regras = [...REGRAS_COMPETENCIA, ...(gerencialLigado ? REGRAS_AVISO_GERENCIAL : [])]
-  const div = executarRegras({ transactions, accounts, schedules, gerencialGroups, faturasFechadas }, { hoje, desde: fatura, regras })
-    .filter(d => d.fatura_ref === ref && (d.conta_id === card.id || (ger && d.conta_id === ger.id)))
+  const div = pendenciasDaFatura({ transactions, accounts, schedules, gerencialGroups, faturasFechadas, card, fatura, hoje, gerencialLigado, settings })
   const semEtapa = gerencialLigado ? gastosGSemEtapaA({ transactions, gerencialGroups, card, fatura, hoje, faturasFechadas, settings }) : null
-  // Cada lançamento conta UMA vez (o mesmo gasto pode estar sem tipo de conta E sem etapa A).
-  const lancamentosComErro = new Set([...semTipo.map(t => t.id), ...(semEtapa?.faltando || []).map(t => t.id)])
-  const totalErro = lancamentosComErro.size + div.length
+  // Cada lançamento conta UMA vez: sem tipo de conta, etapa A faltando (nossa conta e a regra do motor).
+  // Parcela "do mês" (fatura no ciclo atual, ainda sem etapa A) é a tarefa do mês: vai para a faixa
+  // neutra, não para a de erro — no motor ela é a mesma GER_ETAPA_A_FALTANDO.
+  const doMes = new Set((semEtapa?.doMes || []).map(t => t.id))
+  const porLancamento = new Set([
+    ...semTipo.map(t => t.id), ...(semEtapa?.faltando || []).map(t => t.id),
+    ...div.filter(d => d.regra === 'GER_ETAPA_A_FALTANDO' && !doMes.has(d.origem_id)).map(d => d.origem_id),
+  ])
+  // Fechamento da fatura e saldo da Ger. que só diferem por causa desses mesmos lançamentos sem etapa A
+  // não contam de novo (é o mesmo lançamento visto pelo total da fatura / pelo saldo da subconta).
+  const porFatura = div.filter(d => d.regra !== 'GER_ETAPA_A_FALTANDO' && !soPorFaltaDeEtapaA(d))
+  const totalErro = porLancamento.size + porFatura.length
   const erro = totalErro ? {
     total: totalErro,
-    secao: semTipo.length ? 'a' : semEtapa?.faltando.length ? 'b' : (SECAO_DA_REGRA[div[0]?.regra] || 'd'),
+    secao: semTipo.length ? 'a' : (semEtapa?.faltando.length || div.some(d => d.regra === 'GER_ETAPA_A_FALTANDO')) ? 'b' : (SECAO_DA_REGRA[porFatura[0]?.regra] || 'd'),
     semEtapa: semEtapa?.diferenca || 0, semTipo: semTipo.length, regras: div.map(d => d.regra),
   } : null
   // Tarefa do mês: a fatura do cartão que entrou no ciclo atual (vale qualquer que seja a fatura na tela).

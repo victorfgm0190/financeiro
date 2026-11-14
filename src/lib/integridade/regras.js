@@ -15,6 +15,7 @@
 //
 // Todas as imports com extensão .js: este módulo é carregado pelo Node ESM das funções da Vercel.
 
+import { ehParcela2aN, situacaoDaEtapaA, configDoCiclo } from '../etapaACiclo.js'
 import { detectInstallment, normalizeInstallmentBase } from '../installments.js'
 import { isAutomacaoOrigin, isGerencialAutoOrigin, isParcelaGeradaOrigin, ORIGIN } from '../origins.js'
 import { isResgatePago, isResgatePagoParaGasto } from '../resgates.js'
@@ -198,6 +199,13 @@ export function montarContexto(dados, opcoes = {}) {
 
   const noEscopo = (ym) => !desde || (!!ym && ym >= desde)
   const faturaAberta = (ym, card) => aberturaFatura(ym, card) <= hoje
+  // Etapa A DEVIDA do gasto (lib/etapaACiclo — a mesma regra do "Verificar e corrigir", decisão de
+  // 14/11/2026): à vista / parcela 1 → a fatura já abriu (como sempre); parcela 2..N → a fatura entrou
+  // no ciclo financeiro atual do cliente, pelo fechamento (configuração do mês financeiro de cada um).
+  const cicloCfg = configDoCiclo(dados)
+  const etapaADevida = (g) => (ehParcela2aN(g.tx)
+    ? situacaoDaEtapaA(g.card, g.fatura, hoje, cicloCfg) !== 'futura'
+    : faturaAberta(g.fatura, g.card))
   const fechada = (cardId, ym) => faturaEstaFechada(faturasFechadas, cardId, ym)
   // Avaliável = dentro da janela e não fechada.
   const avalia = (cardId, ym) => noEscopo(ym) && !fechada(cardId, ym)
@@ -226,7 +234,7 @@ export function montarContexto(dados, opcoes = {}) {
   const ctx = {
     [CTX]: true, hoje, desde, transactions, accounts, schedules, gerencialGroups,
     grupos, contas, cartoes, txById, subcontaIds, subcontaDoCartao, contaPrincipalDoCartao, classeDoTx,
-    gastos, gastoById, etapas, etapasPorGasto, gastosPorFatura, noEscopo, faturaAberta,
+    gastos, gastoById, etapas, etapasPorGasto, gastosPorFatura, noEscopo, faturaAberta, etapaADevida,
     faturasFechadas, fechada, avalia, faturaAbertaMaisAntiga, marcosSaldo,
   }
   return ctx
@@ -503,7 +511,7 @@ const GER_ETAPA_A_FALTANDO = {
     const ctx = montarContexto(dados)
     const out = []
     for (const g of ctx.gastos) {
-      if (g.classe !== 'G' || !ctx.avalia(g.card.id, g.fatura) || !ctx.faturaAberta(g.fatura, g.card)) continue
+      if (g.classe !== 'G' || !ctx.avalia(g.card.id, g.fatura) || !ctx.etapaADevida(g)) continue
       if ((ctx.etapasPorGasto.get(g.tx.id) || []).length > 0) continue
       const p = infoParcela(g.tx)
       // Só informativo: irmãs da mesma descrição/valor que TÊM etapa A. É exatamente o que NÃO pode
@@ -1050,7 +1058,14 @@ const GER_FECHAMENTO_FATURA = {
       const [cardId, ym] = chave.split('|')
       const card = ctx.cartoes.get(cardId)
       if (!ctx.avalia(cardId, ym) || !ctx.faturaAberta(ym, card)) continue
-      const gastosG = (ctx.gastosPorFatura.get(chave) || []).filter(g => g.classe === 'G')
+      const todosG = (ctx.gastosPorFatura.get(chave) || []).filter(g => g.classe === 'G')
+      // Parcela 2..N cuja etapa A ainda não é devida (fatura fora do ciclo — lib/etapaACiclo) e que ainda
+      // não tem etapa A: fica fora de "gastos G × etapas A". A devolução gerencial, que o motor monta
+      // com TODOS os gastos G confirmados, é comparada com as etapas + essas parcelas aguardando.
+      const aguardando = todosG.filter(g => !ctx.etapaADevida(g) && !(ctx.etapasPorGasto.get(g.tx.id) || []).length)
+      const idsAguardando = new Set(aguardando.map(g => g.tx.id))
+      const gastosG = todosG.filter(g => !idsAguardando.has(g.tx.id))
+      const somaAguardando = rb(aguardando.reduce((s, g) => s + (Number(g.tx.amount) || 0), 0))
       const idsG = new Set(gastosG.map(g => g.tx.id))
       const etapasF = new Map()
       for (const e of ctx.etapas) {
@@ -1062,19 +1077,21 @@ const GER_FECHAMENTO_FATURA = {
       const somaDev = rb(devs.reduce((s, d) => s + d.valor, 0))
       const semDevolucao = devs.length === 0
       const divGxA = difere(somaG, somaEtapas)
-      const divAxDev = semDevolucao ? somaG > 0 : difere(somaEtapas, somaDev)
+      const divAxDev = semDevolucao ? somaG > 0 : difere(rb(somaEtapas + somaAguardando), somaDev)
       if (!divGxA && !divAxDev) continue
       const semEtapa = gastosG.filter(g => !(ctx.etapasPorGasto.get(g.tx.id) || []).length)
       const partes = [`gastos G ${brl(somaG)}`, `etapas A ${brl(somaEtapas)}`, semDevolucao ? 'sem devolução' : `devolução ${brl(somaDev)}`]
       out.push(divergencia(this, {
         origem_id: chave, conta_id: cardId, fatura_ref: ymParaRef(ym),
         descricao: `Fatura ${ymParaRef(ym)} do ${nomeConta(ctx, cardId)} não fecha: ${partes.join(' × ')} (diferença ${brl(somaG - somaEtapas)})`,
-        esperado: { soma_gastos_g: somaG, soma_etapas_a: somaG, devolucao: somaG },
+        esperado: { soma_gastos_g: somaG, soma_etapas_a: somaG, devolucao: rb(somaG + somaAguardando) },
         encontrado: {
           soma_gastos_g: somaG, soma_etapas_a: somaEtapas, devolucao: semDevolucao ? null : somaDev,
           diferenca_g_etapa_a: rb(somaG - somaEtapas),
           diferenca_etapa_a_devolucao: semDevolucao ? null : rb(somaEtapas - somaDev),
           gastos_sem_etapa_a: ordenarIds(semEtapa.map(resumoGasto)),
+          soma_sem_etapa_a: rb(semEtapa.reduce((s, g) => s + (Number(g.tx.amount) || 0), 0)),
+          soma_aguardando: somaAguardando,
           devolucoes: devs.map(d => ({ id: d.s.id, valor: d.valor, executada: d.executada })).sort((a, b) => a.id.localeCompare(b.id)),
         },
       }))
@@ -1111,12 +1128,15 @@ export function esperadoDasFaturas(ctx, card) {
   const porFatura = new Map()
   for (const g of ctx.gastos) {
     if (g.card.id !== card.id || g.classe !== 'G') continue
-    const provisionado = (ctx.etapasPorGasto.get(g.tx.id) || []).length > 0 || ctx.faturaAberta(g.fatura, card)
+    // Provisionado: tem etapa A, ou a etapa A já é devida (à vista / parcela 1: fatura aberta; parcela
+    // 2..N: fatura no ciclo financeiro atual — lib/etapaACiclo, a mesma regra do "Verificar e corrigir").
+    const provisionado = (ctx.etapasPorGasto.get(g.tx.id) || []).length > 0 || ctx.etapaADevida(g)
     if (!provisionado) continue
     if (!porFatura.has(g.fatura)) porFatura.set(g.fatura, [])
     porFatura.get(g.fatura).push(g)
   }
   let total = 0
+  let semEtapa = 0 // parte do esperado que ainda depende de etapa A não criada (é a pendência GER_ETAPA_A_FALTANDO)
   const detalhe = []
   for (const [ym, gs] of [...porFatura].sort()) {
     if (ctx.fechada(card.id, ym)) continue
@@ -1125,8 +1145,9 @@ export function esperadoDasFaturas(ctx, card) {
     if (!v) continue
     detalhe.push({ fatura: ymParaRef(ym), valor: v, gastos: gs.length })
     total += v
+    semEtapa += gs.filter(g => !(ctx.etapasPorGasto.get(g.tx.id) || []).length).reduce((s, g) => s + (Number(g.tx.amount) || 0), 0)
   }
-  return { total: rb(total), detalhe }
+  return { total: rb(total), detalhe, semEtapa: rb(semEtapa) }
 }
 
 // Saldo da subconta Ger. × esperado.
@@ -1158,7 +1179,7 @@ const GER_SALDO_SUBCONTA = {
           saldo: esperado, faturas_abertas: faturas.total, por_fatura: faturas.detalhe,
           marco: marco ? { id: marco.id || null, data: marco.data, saldo: rb(marco.saldo), diferenca_aceita: aceita } : null,
         },
-        encontrado: { saldo, saldo_gravado: rb(sub.balance), diferenca: rb(saldo - esperado), subconta_id: sub.id, subconta: sub.name },
+        encontrado: { saldo, saldo_gravado: rb(sub.balance), diferenca: rb(saldo - esperado), subconta_id: sub.id, subconta: sub.name, sem_etapa_a: faturas.semEtapa },
       }))
     }
     return out

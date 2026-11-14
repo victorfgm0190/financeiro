@@ -103,7 +103,10 @@ describe('aviso automático da fatura', () => {
   ]
   it('com pendência: conta, aponta a seção a e o valor sem etapa A (o mesmo lançamento conta uma vez)', () => {
     const a = avisoDaFatura({ transactions: txs, accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD, fatura: '2026-11', hoje: HOJE })
-    expect(a.erro.total - a.erro.regras.length).toBe(1) // VIVO: sem tipo E sem etapa A → 1
+    // VIVO (sem tipo E sem etapa A; também GER_ETAPA_A_FALTANDO no motor) conta 1; o saldo da Ger. só
+    // difere por ele e não conta de novo; o fechamento da fatura conta (não há devolução nenhuma).
+    expect(a.erro.regras).toEqual(['GER_ETAPA_A_FALTANDO', 'GER_FECHAMENTO_FATURA', 'GER_SALDO_SUBCONTA'])
+    expect(a.erro.total).toBe(2)
     expect(a.erro.secao).toBe('a')
     expect(a.erro.semEtapa).toBe(216)
     expect(a.mes).toBeNull()
@@ -184,7 +187,7 @@ describe('etapa A das parcelas 2..N pelo CICLO FINANCEIRO (fechamento da fatura)
   it('faixas: erro e tarefa do mês ao mesmo tempo, cada uma com o seu conteúdo', () => {
     const a = avisoDaFatura({ transactions: [avista, dez], accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD13, fatura: '2026-11', hoje: '2026-11-15', settings: S15 })
     expect(a.erro).toMatchObject({ semEtapa: 216, secao: 'b' })
-    expect(a.erro.total - a.erro.regras.length).toBe(1)
+    expect(a.erro.total).toBe(2) // à vista sem etapa A (1x) + fatura sem devolução; saldo da Ger. não conta de novo
     expect(a.mes).toEqual({ qtd: 1, valor: 49.37, fatura: '2026-12', ids: ['dez9'] })
     // Em 14/11 a parcela de 12/2026 ainda aguarda: só a faixa de erro.
     expect(avisoDaFatura({ transactions: [avista, dez], accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD13, fatura: '2026-11', hoje: '2026-11-14', settings: S15 }).mes).toBeNull()

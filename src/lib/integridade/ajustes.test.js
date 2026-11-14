@@ -32,7 +32,7 @@ describe('Ajuste de GER_ETAPA_A_FALTANDO', () => {
     expect(plano.ok).toBe(true)
     expect(plano.texto).toBe(
       'Criar transferência R$ 41,94 — Conta Corrente (acc_cc) → Ger. Itaupers (acc_ger_itaupers), ' +
-      `fatura 10/2026, data 2026-09-01, id tx_gerA_${FARM}`)
+      `fatura 10/2026, data 2026-09-15, id tx_gerA_${FARM}`) // início do ciclo (mês começando dia 15)
   })
 
   it('cria exatamente 1 etapa A por gasto, sem mexer em saldo', () => {
