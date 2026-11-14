@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import { subMonths, format, startOfMonth, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileSpreadsheet, Users, Wallet, Landmark } from 'lucide-react'
+import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileSpreadsheet, Users, Wallet, Landmark, FileText, PiggyBank } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, aplicacaoAccountIds, countsAsReportExpense, reservaDespesaFuncIds } from '../shared/utils'
 import { regraDosConjuntos, totaisDoDemonstrativo } from '../../lib/regraDemonstrativo'
@@ -14,6 +14,10 @@ import { useModoDespesas } from '../../hooks/useDespesasPorCategoria'
 import { MODO_OPTS } from '../../lib/despesasPorCategoria'
 import { Segmentado } from '../Dashboard/DespesasCategoria'
 import RelatorioFatura from '../CreditCard/RelatorioFatura'
+import ExtratoFatura from '../CreditCard/ExtratoFatura'
+import ExtratoReservaModal from '../Reservas/ExtratoReservaModal'
+import { useDadosExtratoReserva } from '../Reservas/dadosExtratoReserva'
+import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import DemonstrativoFinanceiro from './DemonstrativoFinanceiro'
 import RelatorioPorFavorecido from './RelatorioPorFavorecido'
 import RelatorioRendimentos from './RelatorioRendimentos'
@@ -39,7 +43,12 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function ReportsPanel() {
-  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, reserveFunctions, abridorDeRepasse, contratos, contratosHabilitado } = useApp()
+  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, reserveFunctions, abridorDeRepasse, contratos, contratosHabilitado, settings, pode } = useApp()
+  const gerencialLigado = controleGerencialAtivo(settings)
+  // Fluxo de Caixa da Reserva: o MESMO Extrato da função de Reservas › Fluxo Futuro, com os mesmos dados.
+  const dadosReserva = useDadosExtratoReserva()
+  // Card só aparece com função de reserva ligada a uma conta e acesso a Reservas (sem isso não há o que mostrar).
+  const temReserva = dadosReserva.funcoes.length > 0 && (typeof pode !== 'function' || pode('reservas', 'ver'))
   const cor = useThemeColors()
   const isMobile = useIsMobile()
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
@@ -58,6 +67,8 @@ export default function ReportsPanel() {
   const [modoValor, setModoValor] = useState(MODO_VALOR_PADRAO)
   const [porComposicao, setPorComposicao] = useState(false)
   const [showRelatorioFatura, setShowRelatorioFatura] = useState(false)
+  const [showExtratoFatura, setShowExtratoFatura] = useState(false)
+  const [showFluxoReserva, setShowFluxoReserva] = useState(false)
   const [showDemonstrativo, setShowDemonstrativo] = useState(false)
   const [showFavorecido, setShowFavorecido] = useState(false)
   const [showFluxoConta, setShowFluxoConta] = useState(false)
@@ -108,6 +119,33 @@ export default function ReportsPanel() {
           <ArrowLeft size={14} /> Voltar aos Relatórios
         </button>
         <RelatorioFatura />
+      </div>
+    )
+  }
+
+  if (showExtratoFatura) {
+    return (
+      <div className="space-y-4">
+        <button data-guia="reports:extrato-fatura.voltar" className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors" onClick={() => setShowExtratoFatura(false)}>
+          <ArrowLeft size={14} /> Voltar aos Relatórios
+        </button>
+        <ExtratoFatura />
+      </div>
+    )
+  }
+
+  if (showFluxoReserva) {
+    return (
+      <div className="space-y-4">
+        <button data-guia="reports:fluxo-reserva.voltar" className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors" onClick={() => setShowFluxoReserva(false)}>
+          <ArrowLeft size={14} /> Voltar aos Relatórios
+        </button>
+        <ExtratoReservaModal
+          pagina seletorFuncao funcao={null}
+          funcoes={dadosReserva.funcoes} saldoInicialDe={dadosReserva.saldoInicialDe}
+          previstosDoPeriodo={dadosReserva.previstosDoPeriodo} realizadosDe={dadosReserva.realizadosDe}
+          periodoInicial={dadosReserva.periodoInicial} atual={dadosReserva.atual} hoje={dadosReserva.hoje}
+        />
       </div>
     )
   }
@@ -179,7 +217,7 @@ export default function ReportsPanel() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Demonstrativo Financeiro</p>
-          <p className="text-xs text-texto-3 mt-0.5">Relatório hierárquico por categoria com filtros de período e exportação CSV</p>
+          <p className="text-xs text-texto-3 mt-0.5">Relatório hierárquico por categoria com filtros de período e exportação para Excel e CSV</p>
         </div>
         <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
       </button>
@@ -194,7 +232,7 @@ export default function ReportsPanel() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Relatório por Favorecido</p>
-          <p className="text-xs text-texto-3 mt-0.5">Análise sintética e analítica por favorecido com exportação CSV</p>
+          <p className="text-xs text-texto-3 mt-0.5">Análise sintética e analítica por favorecido com exportação para Excel e CSV</p>
         </div>
         <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
       </button>
@@ -246,6 +284,40 @@ export default function ReportsPanel() {
         </button>
       )}
 
+      {temReserva && (
+        <button
+          data-guia="reports.fluxo-reserva"
+          className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
+          onClick={() => setShowFluxoReserva(true)}
+        >
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
+            <PiggyBank size={16} className="text-primary-fg" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Fluxo de Caixa da Reserva</p>
+            <p className="text-xs text-texto-3 mt-0.5">Entradas, saídas e saldo de cada função de reserva no período escolhido</p>
+          </div>
+          <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
+        </button>
+      )}
+
+      {hasCredit && (
+        <button
+          data-guia="reports.extrato-fatura"
+          className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
+          onClick={() => setShowExtratoFatura(true)}
+        >
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
+            <FileText size={16} className="text-primary-fg" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Extrato da Fatura</p>
+            <p className="text-xs text-texto-3 mt-0.5">A fatura do cartão como o banco mostra: lançamentos, parcelas, estornos e total, com exportação para Excel e CSV</p>
+          </div>
+          <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
+        </button>
+      )}
+
       {hasCredit && (
         <button
           data-guia="reports.fatura"
@@ -256,8 +328,10 @@ export default function ReportsPanel() {
             <CreditCard size={16} className="text-primary-fg" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Relatório de Fatura</p>
-            <p className="text-xs text-texto-3 mt-0.5">Análise gerencial de faturas do cartão de crédito com exportação CSV</p>
+            <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">{gerencialLigado ? 'Relatório Gerencial da Fatura' : 'Relatório da Fatura'}</p>
+            <p className="text-xs text-texto-3 mt-0.5">{gerencialLigado
+              ? 'A fatura separada por grupo gerencial, com valor e %, e o extrato gerencial por data — exportação para Excel e CSV'
+              : 'A fatura com o total e os gastos por categoria — exportação para Excel e CSV'}</p>
           </div>
           <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
         </button>

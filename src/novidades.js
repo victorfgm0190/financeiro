@@ -18,6 +18,20 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.14-2',
+    data: '2026-11-14',
+    titulo: 'Cartão: Extrato da Fatura e Relatório separados; novos relatórios no menu',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'Na tela do cartão, o botão "Extrato da Fatura" mostra a fatura como o banco mostra: data, descrição, parcela e valor, com os estornos e o mesmo total da Fatura Selecionada. O pagamento da fatura anterior e as compras ainda só agendadas aparecem à parte, fora do total. Dá para passar de uma fatura para outra e baixar em Excel ou CSV.',
+      'O botão "Relatório Gerencial" abre na fatura que está na tela e mostra todos os lançamentos, com um card por grupo (valor e %), "Sem grupo" e Estornos. Clique num card para ver só aquele grupo. O antigo Extrato Gerencial agora é a aba "Extrato gerencial por data" dentro dele. Sem o controle gerencial, o botão se chama "Relatório da Fatura" e mostra o total e as categorias.',
+      'A exportação do relatório da fatura foi refeita: o Excel traz a fatura inteira, com o grupo de cada lançamento, e uma aba de resumo; também dá para baixar em CSV. Se algo der errado ao exportar, aparece uma mensagem.',
+      'Cartão sem compras lançadas e com compra agendada: a fatura não aparece mais como "Quitada totalmente" ao mesmo tempo que "Falta pagar". As compras agendadas contam no valor a pagar desta fatura e na situação dela; a Dívida Total mostra só o que já foi lançado, com os agendados indicados à parte.',
+      'No menu Relatórios: novos cards "Extrato da Fatura", "Relatório Gerencial da Fatura" e "Fluxo de Caixa da Reserva" (entradas, saídas e saldo de cada função de reserva no período, com a opção "Todas as funções"). Os valores são os mesmos de Reservas › Fluxo Futuro.',
+    ],
+  },
+  {
     id: '2026.11.14',
     data: '2026-11-14',
     titulo: 'Extrato da reserva no Fluxo Futuro',

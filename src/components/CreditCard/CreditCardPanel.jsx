@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
-import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, classifyFatura } from '../shared/utils'
+import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView } from '../shared/utils'
 import { ORIGIN } from '../../lib/origins'
 import { executarRegras, REGRAS_COMPETENCIA, ymParaRef, refParaYM } from '../../lib/integridade/regras'
 import { planejarCorrecoesCompetencia, resumirPlano, acoesDoPlano, linhasHistoricoRevisao } from '../../lib/revisaoCompetencia'
@@ -34,8 +34,9 @@ import BulkEditModal from '../shared/BulkEditModal'
 import TransactionForm from '../Transactions/TransactionForm'
 import AccountForm from '../Accounts/AccountForm'
 import DuplicateButton from '../shared/DuplicateButton'
-import ExtratoGerencial from './ExtratoGerencial'
+import ExtratoFatura from './ExtratoFatura'
 import RelatorioFatura from './RelatorioFatura'
+import { lancamentosDaFatura, situacaoDaFatura } from '../../lib/faturaCartao'
 import InputMoeda from '../shared/InputMoeda'
 import SeloCambio from '../shared/SeloCambio'
 import HelpCampo from '../shared/HelpCampo'
@@ -47,11 +48,7 @@ import HelpCampo from '../shared/HelpCampo'
 // Fonte única (lib/fatura): mesmo fechamento padrão do resto do app.
 const getBillKey = (date, card) => faturaDoCartao(date, card)
 
-// Fatura de um lançamento: usa o faturaMonthYear explícito (importação/gerencial)
-// quando presente; senão deriva da data pelo dia de fechamento.
-function txBillKey(tx, card) {
-  return tx.faturaMonthYear || getBillKey(tx.date, card)
-}
+// Fatura de um lançamento: lib/faturaCartao faturaDoLancamento (fonte única).
 
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
@@ -119,9 +116,10 @@ function InstallmentBadge({ num, total, dataCompra = null }) {
 
 // Indicador informativo da diferença entre o pago e o total da fatura (diferenca = pago − fatura).
 // Sempre par cor+ícone (sem verde/vermelho). Tolerância de 1 centavo evita "pago a mais R$0,00".
-function DiferencaPagamento({ diferenca, compact = false, className = '' }) {
+function DiferencaPagamento({ diferenca, semValor = false, compact = false, className = '' }) {
   let label, color, Icon
-  if (diferenca > 0.01) { label = `Pago a mais ${fmt(diferenca)}`; color = 'text-receita'; Icon = ArrowUpCircle }
+  if (semValor) { label = 'Nada a pagar'; color = 'text-texto-3'; Icon = CheckCircle2 }
+  else if (diferenca > 0.01) { label = `Pago a mais ${fmt(diferenca)}`; color = 'text-receita'; Icon = ArrowUpCircle }
   else if (diferenca < -0.01) { label = `Falta pagar ${fmt(-diferenca)}`; color = 'text-aviso'; Icon = AlertTriangle }
   else { label = 'Quitada totalmente'; color = 'text-texto-2'; Icon = CheckCircle2 }
   return (
@@ -581,37 +579,21 @@ export default function CreditCardPanel() {
   }
 
   // ── Transactions for selected bill ───────────────────────────────────────
-  const billTxs = useMemo(() => {
-    if (!selectedCard || !billKey) return []
-    return transactions
-      .filter(tx =>
-        tx.accountId === selectedCard.id &&
-        tx.type === 'expense' &&
-        txBillKey(tx, selectedCard) === billKey
-      )
-      .sort((a, b) => b.date.localeCompare(a.date))
-  }, [transactions, selectedCard, billKey])
+  // Fonte ÚNICA (lib/faturaCartao): a mesma do Extrato da Fatura e do Relatório Gerencial.
+  const fatura = useMemo(() => lancamentosDaFatura(transactions, selectedCard, billKey), [transactions, selectedCard, billKey])
+  const billTxs = useMemo(() => [...fatura.despesas].sort((a, b) => b.date.localeCompare(a.date)), [fatura])
 
   // Estornos da fatura (receitas lançadas no cartão) — abatem do total e aparecem
   // em linha separada no totalizador gerencial. Pagamentos de fatura (credit_payment)
   // não entram aqui (e billTxs já é só despesa).
-  const billEstornos = useMemo(() => {
-    if (!selectedCard || !billKey) return []
-    return transactions.filter(tx =>
-      tx.accountId === selectedCard.id &&
-      tx.type === 'income' &&
-      txBillKey(tx, selectedCard) === billKey
-    )
-  }, [transactions, selectedCard, billKey])
-
-  const estornoTotal = billEstornos.reduce((s, t) => s + (Number(t.amount) || 0), 0)
-  // Total da fatura = despesas - estornos
-  const billTotal = billTxs.reduce((s, t) => s + t.amount, 0) - estornoTotal
+  const billEstornos = fatura.estornos
+  // Total da fatura = despesas − estornos (lib/faturaCartao).
+  const billTotal = fatura.total
   // Lançamentos alimentados ao totalizador gerencial: despesas + estornos.
   const totalizerTxs = useMemo(() => [...billTxs, ...billEstornos], [billTxs, billEstornos])
   // Lista EXIBIDA da fatura: despesas + estornos numa lista só, ordenada por data.
   // Só afeta exibição/seleção/reconciliação — billTotal e o abatimento dos estornos
-  // seguem calculados sobre billTxs/estornoTotal acima.
+  // seguem calculados pela lib/faturaCartao.
   const billLancamentos = useMemo(
     () => [...billTxs, ...billEstornos].sort((a, b) => b.date.localeCompare(a.date)),
     [billTxs, billEstornos]
@@ -624,19 +606,9 @@ export default function CreditCardPanel() {
   // ── Pagamentos da fatura selecionada ─────────────────────────────────────
   // Lançamentos credit_payment do cartão atual cuja fatura_ref OU mês da data caem na
   // fatura selecionada. Não entram no totalizador gerencial nem no billTotal.
-  const billPayments = useMemo(() => {
-    if (!selectedCard || !billKey) return []
-    return transactions
-      .filter(tx =>
-        // credit_payment do cartão (casado por fatura_ref ou mês da data)
-        (tx.type === 'credit_payment' &&
-          tx.accountId === selectedCard.id &&
-          ((tx.faturaMonthYear && tx.faturaMonthYear === billKey) || (tx.date || '').slice(0, 7) === billKey))
-        // pagamento REAL via transferência vinculada (destino = cartão + fatura_month_year)
-        || (tx.type === 'transfer' && tx.toAccountId === selectedCard.id && tx.faturaMonthYear === billKey)
-      )
-      .sort((a, b) => b.date.localeCompare(a.date))
-  }, [transactions, selectedCard, billKey])
+  // credit_payment do cartão (casado por fatura_ref ou mês da data) e pagamento REAL via
+  // transferência vinculada (destino = cartão + fatura_month_year) — lib/faturaCartao.
+  const billPayments = useMemo(() => [...fatura.pagamentos].sort((a, b) => b.date.localeCompare(a.date)), [fatura])
 
   // Agendamentos tipo='pagamento_fatura' já registrados (ocorrências) deste cartão/fatura.
   const scheduledPaidTotal = useMemo(() => {
@@ -672,12 +644,15 @@ export default function CreditCardPanel() {
     () => totalPagoReal > 0 ? totalPagoReal : Math.round(scheduledPaidTotal * 100) / 100,
     [totalPagoReal, scheduledPaidTotal]
   )
-  const { saldoRestante, isFaturaPaga, isFaturaParcial } = classifyFatura(billTotal, totalPago)
-  // Saldo a Pagar e total da fatura EXIBIDOS no KPI incluem as despesas ainda agendadas
-  // (totalPrevisto) → total real previsto. Não afetam billTotal nem a classificação de
-  // pagamento (isFaturaPaga/isFaturaParcial), que seguem baseados só nos lançamentos efetivados.
-  const saldoAPagarComPrevistos = saldoRestante + totalPrevisto
-  const billTotalComPrevistos = billTotal + totalPrevisto
+  // REGRA DOS PREVISTOS (lib/faturaCartao situacaoDaFatura): as compras agendadas que ainda não
+  // viraram lançamento contam em tudo o que fala DESTA fatura — total a pagar, Saldo a Pagar,
+  // situação (Paga/Parcial/Não paga) e a diferença, no card e nas barras. A Dívida Total (uso do
+  // limite) mostra só o já lançado, com os previstos à parte. Fatura sem valor: "Nada a pagar".
+  const situacao = situacaoDaFatura({ total: billTotal, previsto: totalPrevisto, pago: totalPago })
+  const isFaturaPaga = situacao.paga
+  const isFaturaParcial = situacao.parcial
+  const saldoAPagarComPrevistos = situacao.saldoRestante
+  const billTotalComPrevistos = situacao.aPagar
 
   // Dívida Total / Limite Disponível: em aberto do cartão inteiro (todas as faturas não pagas),
   // independente do seletor de fatura. Não usa creditDebt (acumulador que infla com o tempo).
@@ -695,9 +670,9 @@ export default function CreditCardPanel() {
     abrirFatura(selectedCard.id, billKey)
     setToast('🔓 Fatura aberta.')
   }
-  // Diferença pago − fatura. NUNCA armazenada: recalculada no render a partir de totalPago e
-  // billTotal (ambos reativos a `transactions`), então reage a reimportações que mudem o billTotal.
-  const diferencaPagamento = Math.round((totalPago - billTotal) * 100) / 100
+  // Diferença pago − (fatura + previstos). NUNCA armazenada: recalculada no render, então reage a
+  // reimportações que mudem o total.
+  const diferencaPagamento = situacao.diferenca
 
   // Filtros em tempo real — afetam só as linhas exibidas; o Total da Fatura segue
   // calculado sobre a fatura completa (billTotal).
@@ -789,7 +764,7 @@ export default function CreditCardPanel() {
     )
   }
 
-  if (showExtrato && !isMobile) {
+  if (showExtrato) {
     return (
       <div className="space-y-4">
         <button
@@ -798,7 +773,7 @@ export default function CreditCardPanel() {
         >
           <ArrowLeft size={14} /> Voltar ao Cartão
         </button>
-        <ExtratoGerencial initialCardId={selectedCardId} />
+        <ExtratoFatura initialCardId={selectedCard?.id} initialBillKey={billKey} />
       </div>
     )
   }
@@ -812,7 +787,7 @@ export default function CreditCardPanel() {
         >
           <ArrowLeft size={14} /> Voltar ao Cartão
         </button>
-        <RelatorioFatura initialCardId={selectedCardId} />
+        <RelatorioFatura initialCardId={selectedCard?.id} initialBillKey={billKey} />
       </div>
     )
   }
@@ -870,22 +845,24 @@ export default function CreditCardPanel() {
 
         {/* Links auxiliares */}
         <div className="flex items-center gap-3 shrink-0 ml-auto">
-          {/* Extrato Gerencial: só no computador (grupos gerenciais fora do mobile). */}
-          {!isMobile && gerencialLigado && (
-            <button
-              data-guia="credit.extrato"
-              onClick={() => { saveScroll(); setShowExtrato(true) }}
-              className="btn-amber"
-            >
-              <FileText size={13} /> Extrato
-            </button>
-          )}
+          {/* Extrato da Fatura: a fatura como o banco mostra (sem grupo gerencial). */}
+          <button
+            data-guia="credit.extrato"
+            onClick={() => { saveScroll(); setShowExtrato(true) }}
+            className="btn-amber"
+            title="A fatura como o banco mostra: lançamentos, parcelas, estornos e o total, sem grupos gerenciais"
+          >
+            <FileText size={13} /> Extrato da Fatura
+          </button>
           <button
             data-guia="credit.relatorio"
             onClick={() => { saveScroll(); setShowRelatorio(true) }}
             className="btn-amber"
+            title={gerencialLigado
+              ? 'A fatura separada por grupo gerencial (cards com valor e %), e o extrato gerencial por data'
+              : 'A fatura com o total e os gastos por categoria'}
           >
-            <FileBarChart size={13} /> Relatório
+            <FileBarChart size={13} /> {gerencialLigado ? 'Relatório Gerencial' : 'Relatório da Fatura'}
           </button>
         </div>
       </div>
@@ -893,7 +870,7 @@ export default function CreditCardPanel() {
       {/* Diferença de pagamento — compacta no header (mobile; rola junto com o cabeçalho) */}
       <div className="md:hidden flex items-center justify-between gap-2 bg-surface-2/60 border border-borda-forte rounded-lg px-3 py-1.5">
         <span className="text-[11px] uppercase tracking-wide text-texto-3">Diferença</span>
-        <DiferencaPagamento diferenca={diferencaPagamento} compact />
+        <DiferencaPagamento diferenca={diferencaPagamento} semValor={situacao.semValor} compact />
       </div>
 
       {/* ── KPIs + botões de ação ── */}
@@ -935,6 +912,11 @@ export default function CreditCardPanel() {
           </div>
           <p className="text-2xl font-bold text-texto-1">{fmt(usoLimite)}</p>
           <p className="text-xs text-texto-3 mt-1">Fecha dia {selectedCard?.closingDay || '—'} · Vence dia {selectedCard?.dueDay || '—'}</p>
+          {totalPrevisto > 0 && (
+            <p className="text-xs text-texto-3 mt-0.5" title="A Dívida Total é o que já foi lançado no cartão. As compras agendadas entram quando viram lançamento.">
+              + {fmt(totalPrevisto)} previstos nesta fatura (ainda não lançados)
+            </p>
+          )}
         </div>
         <div data-guia="credit.pagamento" className="card">
           <div className="flex items-center gap-2 mb-2 text-texto-2">
@@ -945,9 +927,9 @@ export default function CreditCardPanel() {
             {fmt(totalPago === 0 ? saldoAPagarComPrevistos : totalPago)}
           </p>
           <p className="text-xs text-texto-3 mt-1">
-            de {fmt(billTotalComPrevistos)} · {isFaturaPaga ? 'Paga ✓' : isFaturaParcial ? 'Parcialmente paga' : 'Não paga'}
+            de {fmt(billTotalComPrevistos)} · {situacao.semValor ? 'Nada a pagar' : isFaturaPaga ? 'Paga ✓' : isFaturaParcial ? 'Parcialmente paga' : 'Não paga'}
           </p>
-          <DiferencaPagamento diferenca={diferencaPagamento - totalPrevisto} className="mt-1.5" />
+          <DiferencaPagamento diferenca={diferencaPagamento} semValor={situacao.semValor} className="mt-1.5" />
           {podeEditar && <button
             data-guia="credit.fechar"
             onClick={faturaFechada ? handleAbrirFatura : handleFecharFatura}
@@ -1023,9 +1005,10 @@ export default function CreditCardPanel() {
         <div className="px-4 py-2 border-b border-borda flex items-center justify-between gap-3 flex-wrap">
           <span className="text-xs text-texto-3">
             Fatura <span className="text-texto-2 font-medium">{fmt(billTotal)}</span>
+            {totalPrevisto > 0 && <> + previstos <span className="text-texto-2 font-medium">{fmt(totalPrevisto)}</span></>}
             {' · '}Pago <span className="text-texto-2 font-medium">{fmt(totalPago)}</span>
           </span>
-          <DiferencaPagamento diferenca={diferencaPagamento} />
+          <DiferencaPagamento diferenca={diferencaPagamento} semValor={situacao.semValor} />
         </div>
         <div className="px-4 py-3 border-b border-borda flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-texto-2">

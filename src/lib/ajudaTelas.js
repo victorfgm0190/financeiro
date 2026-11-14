@@ -337,10 +337,10 @@ export const AJUDA_TELAS = {
         detalhe: 'Abre o cadastro do cartão: limite, dias de fechamento e vencimento, finais e a conta que paga a fatura. É o mesmo cadastro da tela Contas.', exemplo: 'Exemplo: o banco mudou o vencimento para o dia 15; abra o lápis e troque o Dia de Vencimento.', modulo: 'pode:contas:editar' },
       { chave: 'fatura', rotulo: 'Mês da fatura', texto: 'Use as setas para ir para a fatura anterior ou a próxima.',
         detalhe: 'Mostra o mês da fatura que está na tela. As setas levam para a fatura anterior ou a próxima, inclusive faturas futuras com parcelas.', exemplo: 'Exemplo: clique na seta da direita para ver quanto das parcelas já cai na fatura do mês que vem.' },
-      { chave: 'extrato', rotulo: 'Extrato', texto: 'Abre o extrato gerencial do cartão, com os grupos e o saldo corrido. Só no computador.',
-        detalhe: 'Abre o extrato gerencial do cartão: todas as movimentações de um período, com o grupo gerencial e o saldo corrido. Só no computador.', exemplo: 'Exemplo: veja tudo o que passou pelo cartão de janeiro a março numa lista só.', modulo: 'gerencial' },
-      { chave: 'relatorio', rotulo: 'Relatório', texto: 'Abre o relatório da fatura, pronto para conferir ou exportar.',
-        detalhe: 'Mostra a fatura organizada para conferir e exportar, com os totais por categoria.', exemplo: 'Exemplo: abra o relatório para ver quanto da fatura foi de restaurante.' },
+      { chave: 'extrato', rotulo: 'Extrato da Fatura', texto: 'A fatura como o banco mostra: lançamentos, parcelas, estornos e o total, sem grupos.',
+        detalhe: 'Mostra a fatura escolhida do jeito que o banco mostra: data, descrição, parcela e valor, com estornos e tarifas. O total é o mesmo da Fatura Selecionada. O pagamento da fatura anterior e as compras ainda só agendadas aparecem à parte, fora do total. Dá para exportar em Excel e CSV.', exemplo: 'Exemplo: abra o extrato de novembro para conferir linha a linha com o PDF do banco.' },
+      { chave: 'relatorio', rotulo: 'Relatório Gerencial', texto: 'A fatura separada por grupo, com valor e porcentagem de cada um. Sem o controle gerencial, chama "Relatório da Fatura" e mostra as categorias.',
+        detalhe: 'Mostra a mesma fatura, com o mesmo total, separada por grupo gerencial (cards com valor e %). Clique num card para ver só os lançamentos daquele grupo. Na aba "Extrato gerencial por data" fica a lista de movimentos por período, com o saldo corrido. Sem o controle gerencial, o botão se chama "Relatório da Fatura" e mostra o total e as categorias.', exemplo: 'Exemplo: veja quanto da fatura de novembro foi das Contas Anuais.' },
       { chave: 'fatura-selecionada', rotulo: 'Fatura Selecionada', texto: 'O total da fatura e quantos lançamentos ela tem, somando os agendamentos previstos quando houver.',
         detalhe: 'O total das compras da fatura que está na tela e quantos lançamentos ela tem. Se há despesas agendadas para entrar nela, o card mostra os "previstos" e o total com eles.', exemplo: 'Exemplo: R$ 1.200,00 em 18 lançamentos, + R$ 100,00 previstos = R$ 1.300,00 total.' },
       { chave: 'limite', rotulo: 'Limite Disponível', texto: 'Quanto do limite do cartão ainda está livre.',
@@ -381,8 +381,8 @@ export const AJUDA_TELAS = {
     ],
   },
   'credit:extrato': {
-    titulo: 'Extrato Gerencial',
-    descricao: 'Todas as movimentações do cartão num período, com o saldo corrido depois de cada uma.',
+    titulo: 'Extrato gerencial por data',
+    descricao: 'Aba do Relatório Gerencial: todas as movimentações do cartão num período, com o saldo corrido depois de cada uma.',
     itens: [
       { chave: 'cartao', rotulo: 'Cartão', texto: 'Escolha o cartão do extrato.',
         detalhe: 'Escolha de qual cartão você quer o extrato. A lista e o saldo mudam na hora.', exemplo: 'Exemplo: escolha o cartão da empresa para ver só as movimentações dele.' },
@@ -399,6 +399,7 @@ export const AJUDA_TELAS = {
     ],
     dicas: [
       'Use "Voltar ao Cartão", no alto, para voltar à fatura.',
+      'Aqui o filtro é pela data da compra. Para ver a fatura como o banco mostra, use "Extrato da Fatura".',
     ],
     errosComuns: [
       'Lista vazia: confira se as datas De e Até cobrem o período que você quer ver.',
@@ -921,8 +922,12 @@ export const AJUDA_TELAS = {
         detalhe: 'Abre o extrato com saldo acumulado de uma conta, de um grupo ou das contas principais, podendo somar o que ainda está agendado.', exemplo: 'Exemplo: veja como o saldo da conta da empresa fica até o fim do mês.' },
       { chave: 'bens', rotulo: 'Bens e investimentos — saídas por mês', texto: 'Quanto saiu de caixa por bem e por mês, com principal, juros, terceiros e devoluções.',
         detalhe: 'Abre o relatório do que saiu das suas contas para pagar cada bem, mês a mês.', exemplo: 'Exemplo: veja quanto o carro custou em caixa neste ano.' },
-      { chave: 'fatura', rotulo: 'Relatório de Fatura', texto: 'Análise das faturas do cartão de crédito. Só aparece se houver cartão cadastrado.',
-        detalhe: 'Abre a análise das faturas do cartão, com os gastos por grupo e categoria.', exemplo: 'Exemplo: compare a fatura deste mês com a do mês passado.' },
+      { chave: 'fluxo-reserva', rotulo: 'Fluxo de Caixa da Reserva', texto: 'Entradas, saídas e saldo de cada função de reserva no período escolhido.',
+        detalhe: 'Abre o extrato de uma função de reserva (ou de todas, com o subtotal de cada uma) como fluxo de caixa: saldo inicial, cada entrada e saída e o saldo de cada mês. É o mesmo extrato de Reservas › Fluxo Futuro. Só aparece quando há função de reserva ligada a uma conta.', exemplo: 'Exemplo: veja como fica o saldo da reserva do IPVA até o pagamento em janeiro.' },
+      { chave: 'extrato-fatura', rotulo: 'Extrato da Fatura', texto: 'A fatura do cartão como o banco mostra. Só aparece se houver cartão cadastrado.',
+        detalhe: 'Abre a fatura escolhida com data, descrição, parcela e valor, os estornos e o total igual ao do banco. Pagamento e compras ainda agendadas ficam à parte.', exemplo: 'Exemplo: confira a fatura de novembro linha a linha com o PDF do banco.' },
+      { chave: 'fatura', rotulo: 'Relatório Gerencial da Fatura', texto: 'A fatura separada por grupo, com valor e %. Sem o controle gerencial, chama "Relatório da Fatura" e mostra as categorias.',
+        detalhe: 'Abre a fatura com o mesmo total do Extrato da Fatura, separada por grupo gerencial, e a aba "Extrato gerencial por data". Sem o controle gerencial, mostra o total e as categorias.', exemplo: 'Exemplo: veja quanto da fatura deste mês foi das Contas Anuais.' },
       { chave: 'medias', rotulo: 'Médias dos 6 meses', texto: 'A média mensal de receitas, despesas e saldo dos últimos 6 meses.',
         detalhe: 'Mostra a média mensal de receitas, despesas e saldo dos últimos 6 meses. Ajuda a saber quanto você costuma gastar.', exemplo: 'Exemplo: média de despesas de R$ 4.200,00 por mês.' },
       { chave: 'evolucao', rotulo: 'Evolução dos Últimos 6 Meses', texto: 'Gráfico com o que entrou e saiu em cada mês.',
@@ -940,7 +945,8 @@ export const AJUDA_TELAS = {
       'Cada relatório tem botão para exportar a planilha, pronta para imprimir ou enviar.',
     ],
     errosComuns: [
-      'Não vejo o Relatório de Fatura: ele só aparece quando há pelo menos um cartão de crédito cadastrado.',
+      'Não vejo o Extrato ou o Relatório da Fatura: eles só aparecem quando há pelo menos um cartão de crédito cadastrado.',
+      'Não vejo o Fluxo de Caixa da Reserva: ele só aparece quando há função de reserva ligada a uma conta.',
     ],
   },
   'reports:demonstrativo': {

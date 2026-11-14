@@ -23,7 +23,7 @@ import FunctionForm from './FuncaoReservaForm'
 import { isoLocal } from '../../lib/hoje'
 import { erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
 import { ehAjusteDeRendimento } from '../../lib/rendimentoReserva'
-import { previsoesDasFuncoes } from '../../lib/previsaoReserva'
+import { buildFluxoWindow, computeScheduledByFunction } from '../../lib/fluxoReservaProjecao'
 import { totaisFluxoFuturo, funcoesReservaNoPerfil, linhasDasFuncoesNoPerfil } from '../../lib/fluxoReservaTotais'
 import { mesDaData, somarMeses, periodoDaPreferencia, preferenciaDoPeriodo, janelaDoPeriodo } from '../../lib/fluxoPeriodo'
 import { carregarBoasVindas, assinarBoasVindas, estadoBoasVindas, definirPeriodoFluxo } from '../../lib/boasVindasApi'
@@ -34,8 +34,6 @@ import ProfileBadge from '../shared/ProfileBadge'
 import AvisosCaixaReserva from './AvisosCaixaReserva'
 import { parseValorBR } from '../../lib/valorBR'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
-
-const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
 // Relatórios exportados (layout em lib/exportExcel). Período do arquivo = mês atual (AAAA-MM).
 const mesAtualArquivo = () => isoLocal(new Date()).slice(0, 7)
@@ -1334,61 +1332,6 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
 // ── Fluxo Futuro: janela + projeção de dep/res/prov por função (lógica compartilhada) ──
 // Extraídos para serem reusados tanto pelo FluxoTab quanto pelo Resumo (colunas Mov. Futuros /
 // Saldo Futuro) — fonte única, sem duplicar o cálculo.
-
-// Janela deslizante: do mês ANTERIOR ao atual (índice 0 = saldo de hoje) por `meses` meses. O Resumo
-// usa 12 (até +10); o Fluxo Futuro vai até o "Até" do período escolhido (src/lib/fluxoPeriodo.js).
-function buildFluxoWindow(meses = 12) {
-  const now = new Date()
-  const base = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const windowMonths = Array.from({ length: meses }, (_, i) => {
-    const d = new Date(base.getFullYear(), base.getMonth() + i, 1)
-    return { year: d.getFullYear(), month0: d.getMonth(), label: MONTH_LABELS[d.getMonth()], isYearStart: d.getMonth() === 0 && i > 0 }
-  })
-  const winStart = `${windowMonths[0].year}-${String(windowMonths[0].month0 + 1).padStart(2, '0')}-01`
-  const lastWm = windowMonths[windowMonths.length - 1]
-  const winEndDate = new Date(lastWm.year, lastWm.month0 + 1, 0)
-  const winEnd = `${winEndDate.getFullYear()}-${String(winEndDate.getMonth() + 1).padStart(2, '0')}-${String(winEndDate.getDate()).padStart(2, '0')}`
-  const winIndexOf = (dateStr) => {
-    const d = new Date(dateStr + 'T00:00:00')
-    return (d.getFullYear() - windowMonths[0].year) * 12 + (d.getMonth() - windowMonths[0].month0)
-  }
-  return { windowMonths, winStart, winEnd, winIndexOf }
-}
-
-// Dep/Res/Prov por função/mês (um valor por mês da janela) a partir dos AGENDAMENTOS reais + provisões.
-// Resgates com detalhamento (schedule_reserva_funcoes) projetam UMA saída por função (valor da
-// linha); os demais usam reservaFuncaoId único + schedule.amount. Ver comentários originais.
-function computeScheduledByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win) {
-  const { winStart, winEnd, winIndexOf } = win
-  const n = win.windowMonths.length
-  const round2 = (x) => Math.round(x * 100) / 100
-  // Janela longa: mais ocorrências por agendamento (semanal ≈ 4,4 por mês). Até 2 anos segue 140.
-  const ocorrencias = Math.max(140, n * 5)
-  const previsoes = previsoesDasFuncoes(linked, { accounts, schedules, scheduleReservaFuncoes, getNextOccurrences }, { ini: winStart, fim: winEnd, ocorrencias })
-  const result = {}
-  for (const f of linked) {
-    const deps = new Array(n).fill(0)
-    const ress = new Array(n).fill(0)
-    const provs = new Array(n).fill(0)
-    // Itens individuais (ocorrências) para o modal de detalhamento. Coletados só para os meses
-    // FUTUROS (idx >= 1; idx 0 é o mês anterior/referência) — casam com o total dos arrays.
-    const depItems = []  // { date, label, amount }
-    const resItems = []  // { date, label, amount, resgateScheduleId? } (resgates reais + provisões)
-    // Extrato da função: as mesmas ocorrências, na MESMA ordem em que entram nas colunas, com o
-    // tipo e o índice do mês — o extrato refaz a conta da grade a partir delas (lib/extratoReserva).
-    const movs = []      // { ...itemFluxo, tipo, idx }
-    for (const p of previsoes[f.id] || []) {
-      const idx = winIndexOf(p.date)
-      if (idx < 0 || idx > n - 1) continue
-      const coluna = p.tipo === 'deposito' ? deps : p.tipo === 'resgate' ? ress : provs
-      coluna[idx] = round2(coluna[idx] + p.amount)
-      if (idx >= 1) (p.tipo === 'deposito' ? depItems : resItems).push(p.itemFluxo)
-      if (idx >= 1) movs.push({ ...p.itemFluxo, amount: p.amount, tipo: p.tipo, idx })
-    }
-    result[f.id] = { deps, ress, provs, depItems, resItems, movs }
-  }
-  return result
-}
 
 // Movimentos FUTUROS por função na janela do Fluxo Futuro (meses futuros, índice >= 1). Retorna
 // { [functionId]: { liquido, deps, ress, totalDeps, totalRess } } — deps/ress são as ocorrências

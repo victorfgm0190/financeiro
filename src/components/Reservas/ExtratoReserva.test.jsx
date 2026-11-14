@@ -23,6 +23,17 @@ vi.mock('../../lib/boasVindasApi', async (orig) => ({
   definirPeriodoFluxo: vi.fn(),
 }))
 const { default: ReservasPanel } = await import('./ReservasPanel.jsx')
+const { default: ExtratoReservaModal } = await import('./ExtratoReservaModal.jsx')
+const { useDadosExtratoReserva } = await import('./dadosExtratoReserva.js')
+
+// Como o menu Relatórios abre o "Fluxo de Caixa da Reserva": o MESMO componente, em página.
+function PeloMenu() {
+  const d = useDadosExtratoReserva()
+  return (
+    <ExtratoReservaModal pagina seletorFuncao funcao={null} funcoes={d.funcoes} saldoInicialDe={d.saldoInicialDe}
+      previstosDoPeriodo={d.previstosDoPeriodo} realizadosDe={d.realizadosDe} periodoInicial={d.periodoInicial} atual={d.atual} hoje={d.hoje} />
+  )
+}
 
 // Ocorrências: mensal a partir de startDate (n por agendamento); 'once' = só a data.
 const somarMes = (d, k) => {
@@ -179,5 +190,26 @@ describe('Extrato da função — os números batem com a grade', () => {
     fireEvent.click(screen.getAllByTitle('Ver os agendamentos que compõem este valor')[0])
     expect(screen.getByText(/Entradas previstas — /)).toBeTruthy()
     expect(screen.queryByTestId('extrato-reserva')).toBeNull()
+  })
+
+  it('menu Relatórios (Fluxo de Caixa da Reserva): mesmos valores de Reservas › Fluxo Futuro, por função e em "Todas"', async () => {
+    await abrirFluxo()
+    const porReservas = {}
+    for (const [id, nome] of [['f1', 'IPVA'], ['f2', 'Seguro Residencial'], ['total', 'TOTAL GERAL']]) {
+      fireEvent.click(screen.getAllByRole('button', { name: `Extrato: ${nome}` })[0])
+      porReservas[id] = { sub: subtotais(), fim: texto(screen.getByTestId('extrato-saldo-final')) }
+      fechar()
+    }
+    cleanup()
+    render(<PeloMenu />)
+    const seletor = screen.getByLabelText('Função de reserva')
+    expect(seletor.value).toBe('')
+    expect(subtotais()).toEqual(porReservas.total.sub)
+    expect(screen.getByTestId('extrato-por-funcao').textContent).toMatch('IPVA')
+    for (const id of ['f1', 'f2']) {
+      fireEvent.change(seletor, { target: { value: id } })
+      expect(subtotais()).toEqual(porReservas[id].sub)
+      expect(texto(screen.getByTestId('extrato-saldo-final'))).toBe(porReservas[id].fim)
+    }
   })
 })

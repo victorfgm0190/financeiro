@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, FileSpreadsheet } from 'lucide-react'
+import { AlertTriangle, FileSpreadsheet, Download } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { fmt, fmtDate } from '../shared/utils'
-import { exportarExcel } from '../../lib/exportExcel'
+import { exportarExcel, entregarArquivo, nomeArquivoFinup } from '../../lib/exportExcel'
+import { gerarCsv } from '../../lib/csvFinup'
 import { isoLocal } from '../../lib/hoje'
 import { extratoDaFuncao, juntarExtratos, atalhosExtrato, agruparRendimentos } from '../../lib/extratoReserva'
 import { erroPeriodo, rotuloPeriodo, rotuloMes } from '../../lib/fluxoPeriodo'
@@ -15,33 +16,42 @@ const ymDe = (wm) => `${wm.year}-${String(wm.month0 + 1).padStart(2, '0')}`
 // `previstosDoPeriodo` (o MESMO cálculo da grade, ver FluxoTab) e os realizados de `realizadosDe`
 // (os mesmos lançamentos do saldo). O saldo de fim de mês é igual ao da grade.
 //   funcao: a função clicada, ou null para TOTAL GERAL (todas as `funcoes` da tela)
+// O MESMO componente abre em dois lugares:
+//   • Reservas › Fluxo Futuro: modal, já na função clicada;
+//   • menu Relatórios ("Fluxo de Caixa da Reserva"): `pagina` (sem modal) + `seletorFuncao`, com a
+//     opção "Todas as funções" e um resumo por função. Dados de useDadosExtratoReserva (mesmo cálculo).
 export default function ExtratoReservaModal({
   funcao, funcoes, saldoInicialDe, previstosDoPeriodo, realizadosDe, periodoInicial, atual, hoje, onClose,
+  pagina = false, seletorFuncao = false,
 }) {
+  const [funcaoSel, setFuncaoSel] = useState(funcao ?? null)
   const [periodo, setPeriodo] = useState(periodoInicial)
   const [rascunho, setRascunho] = useState(periodoInicial)
   // "Agrupar rendimentos" (ligada por padrão): só muda a lista; faixas, totais e saldos ficam iguais.
   const [agrupar, setAgrupar] = useState(true)
   const erro = erroPeriodo(rascunho, atual)
-  const todas = !funcao
+  const todas = !funcaoSel
 
-  const { extrato: extratoDia, rotulos } = useMemo(() => {
+  const { extrato: extratoDia, rotulos, resumoPorFuncao } = useMemo(() => {
     const { win, ini, sched } = previstosDoPeriodo(periodo)
     const meses = win.windowMonths.slice(ini).map((wm, k) => ({ ...wm, idx: ini + k }))
     const desde = `${ymDe(meses[0])}-01`
-    const lista = funcao ? [funcao] : funcoes
+    const lista = funcaoSel ? [funcaoSel] : funcoes
     const porFuncao = lista.map(f => extratoDaFuncao({
       id: f.id, nome: f.name, saldoHoje: saldoInicialDe(f),
       realizados: realizadosDe(f, desde), previstos: sched[f.id]?.movs || [], meses,
     }))
-    const ext = funcao ? porFuncao[0] : juntarExtratos(porFuncao)
+    const ext = funcaoSel ? porFuncao[0] : juntarExtratos(porFuncao)
+    const resumoPorFuncao = funcaoSel ? [] : porFuncao.map((e, k) => ({
+      nome: lista[k].name, saldoInicial: round2(e.saldoInicial), entradas: e.entradas, saidas: e.saidas, saldoFinal: round2(e.saldoFinal),
+    }))
     const rot = {}
     for (const m of meses) rot[m.idx] = rotuloMes(ymDe(m))
     // Seção dos realizados: no índice 0 ela É a coluna do mês do período aberto na grade.
     rot.hoje = meses[0].idx === 0 ? `${rot[0]} · saldo de hoje (${fmtDate(hoje)})` : `Realizado até hoje (${fmtDate(hoje)})`
     if (ext.dataInicial == null) ext.dataInicial = desde
-    return { extrato: ext, rotulos: rot }
-  }, [periodo, funcao, funcoes, saldoInicialDe, previstosDoPeriodo, realizadosDe, hoje])
+    return { extrato: ext, rotulos: rot, resumoPorFuncao }
+  }, [periodo, funcaoSel, funcoes, saldoInicialDe, previstosDoPeriodo, realizadosDe, hoje])
   // A tela e o Excel usam o mesmo `extrato` (agrupado ou dia a dia, como estiver na tela).
   const extrato = useMemo(() => (agrupar ? agruparRendimentos(extratoDia) : extratoDia), [agrupar, extratoDia])
 
@@ -50,12 +60,12 @@ export default function ExtratoReservaModal({
     setRascunho(p)
     setPeriodo(p)
   }
-  const nome = funcao ? funcao.name : 'Todas as funções'
+  const nome = funcaoSel ? funcaoSel.name : 'Todas as funções'
   const negativoTexto = extrato.negativoEm
     ? `Fica negativo em ${fmtDate(extrato.negativoEm).slice(0, 5)}`
     : extrato.negativoSecao != null ? `Fica negativo em ${rotulos[extrato.negativoSecao]}` : null
 
-  const exportar = () => {
+  const linhasExport = () => {
     const linhas = [{ data: extrato.dataInicial, descricao: 'Saldo inicial', saldo: extrato.saldoInicial, _estilo: 'grupo' }]
     for (const s of extrato.secoes) {
       for (const it of s.itens) {
@@ -66,7 +76,21 @@ export default function ExtratoReservaModal({
       }
       linhas.push({ descricao: `Subtotal ${rotulos[s.chave]}`, entrada: s.entradas, saida: s.saidas, saldo: s.saldoFim, _estilo: 'subtotal' })
     }
-    exportarExcel({
+    return linhas
+  }
+  const exportar = () => {
+    const linhas = linhasExport()
+    const abaPorFuncao = resumoPorFuncao.length ? [{
+      nome: 'Por função', titulo: `Por função — ${rotuloPeriodo(periodo)}`,
+      colunas: [
+        { chave: 'nome', titulo: 'Função' }, { chave: 'saldoInicial', titulo: 'Saldo inicial', tipo: 'moeda' },
+        { chave: 'entradas', titulo: 'Entradas', tipo: 'moeda', cor: () => 'receita' }, { chave: 'saidas', titulo: 'Saídas', tipo: 'moeda', cor: () => 'despesa' },
+        { chave: 'saldoFinal', titulo: 'Saldo final', tipo: 'moeda', cor: (l) => (l.saldoFinal < 0 ? 'despesa' : null) },
+      ],
+      linhas: resumoPorFuncao,
+      totais: { titulo: 'TOTAL', rotulo: () => '', somar: ['saldoInicial', 'entradas', 'saidas', 'saldoFinal'] },
+    }] : []
+    exportarExcel({ abas: [{
       titulo: `Reservas — Extrato da função: ${nome}`, nome: 'Extrato',
       filtros: [`Período: ${rotuloPeriodo(periodo)}`, ...(negativoTexto ? [negativoTexto] : [])],
       resumo: [
@@ -87,18 +111,40 @@ export default function ExtratoReservaModal({
       ],
       linhas,
       totais: false,
-      nomeArquivo: { relatorio: `Extrato-Reserva-${nome}`, periodo: isoLocal(new Date()).slice(0, 7) },
+    }, ...abaPorFuncao], nomeArquivo: { relatorio: `Extrato-Reserva-${nome}`, periodo: isoLocal(new Date()).slice(0, 7) },
     }).catch(err => window.alert(`Não consegui exportar: ${err?.message || err}`))
+  }
+  const exportarCsv = async () => {
+    try {
+      const csv = gerarCsv(
+        ['Data', ...(todas ? ['Função'] : []), 'Descrição', 'Tipo', 'Situação', 'Entrada', 'Saída', 'Saldo'],
+        linhasExport().map(l => [l.data ? fmtDate(l.data) : '', ...(todas ? [l.funcao || ''] : []), l.descricao || '', l.tipo || '', l.situacao || '',
+          l.entrada ?? '', l.saida ?? '', l.saldo ?? '']),
+      )
+      await entregarArquivo(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }),
+        nomeArquivoFinup(`Extrato-Reserva-${nome}`, isoLocal(new Date()).slice(0, 7)).replace(/\.xlsx$/, '.csv'), { tipo: 'text/csv' })
+    } catch (err) {
+      window.alert(`Não consegui exportar o CSV: ${err?.message || err}`)
+    }
   }
 
   const valorCls = (neg) => (neg ? 'text-despesa font-semibold' : 'text-texto-2')
   const sinalSaida = (it) => (it.provisorio ? '~' : '')
 
-  return (
-    <Modal open onClose={onClose} title={`Extrato da função — ${nome}`} size="2xl" voltarNoCelular>
+  const conteudo = (
       <div className="space-y-3" data-testid="extrato-reserva">
-        {/* Topo: período, atalhos, aviso de negativo e Excel */}
+        {/* Topo: função (menu Relatórios), período, atalhos, aviso de negativo e exportação */}
         <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+          {seletorFuncao && (
+            <label className="text-xs text-texto-2 space-y-1">
+              <span className="block">Função</span>
+              <select aria-label="Função de reserva" className="input text-xs py-1.5 w-56" value={funcaoSel?.id || ''}
+                onChange={e => setFuncaoSel(funcoes.find(f => f.id === e.target.value) || null)}>
+                <option value="">Todas as funções</option>
+                {funcoes.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </label>
+          )}
           <label className="text-xs text-texto-2 space-y-1">
             <span className="block">De</span>
             <input type="month" aria-label="Mês inicial" className="input text-xs py-1.5 w-36" value={rascunho.de} min={atual}
@@ -111,7 +157,10 @@ export default function ExtratoReservaModal({
           </label>
           <button type="button" className="btn-primary text-xs py-1.5" disabled={!!erro || (rascunho.de === periodo.de && rascunho.ate === periodo.ate)}
             onClick={() => aplicar(rascunho)}>Aplicar</button>
-          <button type="button" onClick={exportar} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 ml-auto">
+          <button type="button" onClick={exportarCsv} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 ml-auto">
+            <Download size={12} /> CSV
+          </button>
+          <button type="button" onClick={exportar} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
             <FileSpreadsheet size={12} /> Excel
           </button>
         </div>
@@ -221,10 +270,46 @@ export default function ExtratoReservaModal({
             </p>
           </div>
         </div>
+        {resumoPorFuncao.length > 0 && (
+          <div className="rounded-lg border border-borda-forte/60 overflow-x-auto" data-testid="extrato-por-funcao">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left [&>th]:px-3 [&>th]:py-2 [&>th]:text-texto-2 [&>th]:font-medium [&>th]:border-b [&>th]:border-borda">
+                  <th>Subtotal por função</th><th className="text-right">Saldo inicial</th><th className="text-right">Entradas</th>
+                  <th className="text-right">Saídas</th><th className="text-right">Saldo final</th>
+                </tr>
+              </thead>
+              <tbody className="[&>tr>td]:px-3 [&>tr>td]:py-1.5 [&>tr>td]:border-b [&>tr>td]:border-borda/40">
+                {resumoPorFuncao.map(r => (
+                  <tr key={r.nome}>
+                    <td className="text-texto-1">{r.nome}</td>
+                    <td className="text-right text-texto-2">{fmt(r.saldoInicial)}</td>
+                    <td className="text-right text-receita">{fmt(r.entradas)}</td>
+                    <td className="text-right text-despesa">{fmt(r.saidas)}</td>
+                    <td className={`text-right font-semibold ${r.saldoFinal < 0 ? 'text-despesa' : 'text-texto-1'}`}>{fmt(r.saldoFinal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         <p className="text-[11px] text-texto-3">
           “Previsto” = agendamento ainda não realizado; “~” = resgate provisório (provisão de despesa). O saldo de cada mês é o mesmo da grade do Fluxo Futuro.
         </p>
       </div>
+  )
+
+  if (pagina) {
+    return (
+      <div className="card space-y-3">
+        <h2 className="text-sm font-semibold text-texto-2">Fluxo de Caixa da Reserva — {nome}</h2>
+        {conteudo}
+      </div>
+    )
+  }
+  return (
+    <Modal open onClose={onClose} title={`Extrato da função — ${nome}`} size="2xl" voltarNoCelular>
+      {conteudo}
     </Modal>
   )
 }
