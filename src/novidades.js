@@ -28,6 +28,7 @@ export const NOVIDADES = [
       'Toque em "TOTAL GERAL" para ver o extrato de todas as funções juntas, com o nome da função em cada linha.',
       'O extrato junta o que já aconteceu e o que está agendado; o que ainda vai acontecer aparece marcado como "Previsto". Se o saldo ficar negativo, a linha fica destacada e o topo avisa a data.',
       'Dá para escolher o período (ou usar "Este mês", "Próximos 3 meses" e "Próximos 12 meses") e baixar em Excel. O saldo de cada fim de mês é o mesmo da tabela do Fluxo Futuro.',
+      'Para a lista não ficar cheia de rendimentos do dia a dia, a opção "Agrupar rendimentos" (ligada no começo) junta os rendimentos seguidos numa linha só, como "Rendimentos de 16/10 a 29/10". Se houver um depósito ou resgate no meio, eles ficam em linhas separadas, antes e depois dele. No extrato de todas as funções, cada função tem a sua linha. Desligue a opção para ver dia a dia; os saldos e os totais não mudam, e o Excel sai do jeito que está na tela.',
     ],
   },
   {

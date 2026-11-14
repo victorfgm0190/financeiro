@@ -1,7 +1,7 @@
 // Extrato da função de reserva (lib/extratoReserva): a conta do fim de mês é a mesma da grade do
 // Fluxo Futuro (saldo de hoje + Σ Dep − Res − Prov, round2 por mês), por função e somada. Dados FICTÍCIOS.
 import { describe, it, expect } from 'vitest'
-import { extratoDaFuncao, juntarExtratos, realizadosDaFuncao } from './extratoReserva.js'
+import { extratoDaFuncao, juntarExtratos, realizadosDaFuncao, agruparRendimentos } from './extratoReserva.js'
 import { indexarReserva, saldoDaFuncao } from './saldoReserva.js'
 import { totaisFluxoFuturo } from './fluxoReservaTotais.js'
 
@@ -83,5 +83,53 @@ describe('realizadosDaFuncao', () => {
     const ext = extratoDaFuncao({ id: 'f1', nome: 'F', saldoHoje: saldo, realizados: r, previstos: [], meses: MESES.slice(0, 2) })
     expect(ext.saldoInicial).toBe(250)
     expect(ext.secoes[0].itens.at(-1).saldo).toBe(round2(saldo))
+  })
+})
+
+describe('agruparRendimentos', () => {
+  const rend = (date, v, fid = 'f1') => ({ date, label: 'Rendimento', tipo: 'Rendimento', entrada: v, saida: 0, functionId: fid, funcao: fid })
+  const dep = (date, v, fid = 'f1') => ({ date, label: 'Depósito', tipo: 'Depósito', entrada: v, saida: 0, functionId: fid, funcao: fid })
+  const extratoCom = (itens, fid = 'f1', saldoHoje) => extratoDaFuncao({
+    id: fid, nome: fid, saldoHoje, realizados: { corte: '2026-10-15', itens }, meses: MESES.slice(0, 3),
+    previstos: [{ idx: 1, date: '2026-11-20', label: 'Prov', amount: 100, tipo: 'deposito' }, { idx: 2, date: '2026-12-10', label: 'Res', amount: 30.5, tipo: 'resgate' }],
+  })
+  const ITENS = [rend('2026-10-16', 2.22), rend('2026-10-20', 1.09), rend('2026-10-29', 1.06), dep('2026-11-01', 142), rend('2026-11-05', 2.21), rend('2026-11-10', 1.33), rend('2026-11-11', 0.49)]
+  const mesmosNumeros = (a, b) => {
+    expect(a.secoes.map(s => [s.chave, s.entradas, s.saidas, s.saldoFim])).toEqual(b.secoes.map(s => [s.chave, s.entradas, s.saidas, s.saldoFim]))
+    expect([a.saldoInicial, a.entradas, a.saidas, a.saldoFinal, a.negativoEm]).toEqual([b.saldoInicial, b.entradas, b.saidas, b.saldoFinal, b.negativoEm])
+  }
+
+  it('outro movimento no meio quebra em dois grupos; saldo de cada linha exato; números iguais aos do dia a dia', () => {
+    const dia = extratoCom(ITENS, 'f1', 1650.49)
+    const ag = agruparRendimentos(dia)
+    mesmosNumeros(ag, dia)
+    const hoje = ag.secoes[0].itens
+    expect(hoje.map(i => [i.date, i.label, i.entrada])).toEqual([
+      ['2026-10-29', 'Rendimentos de 16/10 a 29/10', 4.37],
+      ['2026-11-01', 'Depósito', 142],
+      ['2026-11-11', 'Rendimentos de 05/11 a 11/11', 4.03],
+    ])
+    // Saldo da linha agrupada = saldo depois do último rendimento do grupo (dia a dia).
+    const porData = Object.fromEntries(dia.secoes[0].itens.map(i => [i.date, i.saldo]))
+    hoje.forEach(i => expect(i.saldo).toBe(porData[i.date]))
+    expect(hoje.at(-1).saldo).toBe(1650.49)
+  })
+
+  it('rendimento sozinho fica como está (sem "Rendimentos de")', () => {
+    const ag = agruparRendimentos(extratoCom([rend('2026-10-16', 2.22), dep('2026-10-20', 10), rend('2026-10-25', 1)], 'f1', 500))
+    expect(ag.secoes[0].itens.map(i => i.label)).toEqual(['Rendimento', 'Depósito', 'Rendimento'])
+  })
+
+  it('TOTAL GERAL: uma linha agrupada por função; fim da sequência e números iguais', () => {
+    const ea = extratoCom([rend('2026-10-16', 1, 'A'), rend('2026-10-17', 1.5, 'A')], 'A', 100)
+    const eb = extratoCom([rend('2026-10-16', 2, 'B'), rend('2026-10-17', 2.5, 'B')], 'B', 50)
+    const dia = juntarExtratos([ea, eb])
+    const ag = agruparRendimentos(dia)
+    mesmosNumeros(ag, dia)
+    expect(ag.secoes[0].itens.map(i => [i.funcao, i.label, i.entrada])).toEqual([
+      ['A', 'Rendimentos de 16/10 a 17/10', 2.5],
+      ['B', 'Rendimentos de 16/10 a 17/10', 4.5],
+    ])
+    expect(ag.secoes[0].itens.at(-1).saldo).toBe(dia.secoes[0].itens.at(-1).saldo)
   })
 })

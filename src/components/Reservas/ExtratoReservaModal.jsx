@@ -4,7 +4,7 @@ import Modal from '../shared/Modal'
 import { fmt, fmtDate } from '../shared/utils'
 import { exportarExcel } from '../../lib/exportExcel'
 import { isoLocal } from '../../lib/hoje'
-import { extratoDaFuncao, juntarExtratos, atalhosExtrato } from '../../lib/extratoReserva'
+import { extratoDaFuncao, juntarExtratos, atalhosExtrato, agruparRendimentos } from '../../lib/extratoReserva'
 import { erroPeriodo, rotuloPeriodo, rotuloMes } from '../../lib/fluxoPeriodo'
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100
@@ -20,10 +20,12 @@ export default function ExtratoReservaModal({
 }) {
   const [periodo, setPeriodo] = useState(periodoInicial)
   const [rascunho, setRascunho] = useState(periodoInicial)
+  // "Agrupar rendimentos" (ligada por padrão): só muda a lista; faixas, totais e saldos ficam iguais.
+  const [agrupar, setAgrupar] = useState(true)
   const erro = erroPeriodo(rascunho, atual)
   const todas = !funcao
 
-  const { extrato, rotulos } = useMemo(() => {
+  const { extrato: extratoDia, rotulos } = useMemo(() => {
     const { win, ini, sched } = previstosDoPeriodo(periodo)
     const meses = win.windowMonths.slice(ini).map((wm, k) => ({ ...wm, idx: ini + k }))
     const desde = `${ymDe(meses[0])}-01`
@@ -40,6 +42,8 @@ export default function ExtratoReservaModal({
     if (ext.dataInicial == null) ext.dataInicial = desde
     return { extrato: ext, rotulos: rot }
   }, [periodo, funcao, funcoes, saldoInicialDe, previstosDoPeriodo, realizadosDe, hoje])
+  // A tela e o Excel usam o mesmo `extrato` (agrupado ou dia a dia, como estiver na tela).
+  const extrato = useMemo(() => (agrupar ? agruparRendimentos(extratoDia) : extratoDia), [agrupar, extratoDia])
 
   const aplicar = (p) => {
     if (erroPeriodo(p, atual)) return
@@ -122,6 +126,12 @@ export default function ExtratoReservaModal({
             )
           })}
           <span className="text-xs text-texto-3 ml-1">{rotuloPeriodo(periodo)}</span>
+          <label className="ml-auto inline-flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
+            <span>Agrupar rendimentos</span>
+            <input type="checkbox" role="switch" aria-checked={agrupar} className="sr-only peer" checked={agrupar}
+              onChange={e => setAgrupar(e.target.checked)} />
+            <span aria-hidden="true" className="relative w-8 h-4 rounded-full bg-borda-campo transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/50 after:absolute after:top-0.5 after:left-0.5 after:w-3 after:h-3 after:rounded-full after:bg-surface after:transition-transform peer-checked:after:translate-x-4" />
+          </label>
         </div>
         {erro && <p role="alert" className="text-xs text-despesa">{erro}</p>}
         {negativoTexto && (

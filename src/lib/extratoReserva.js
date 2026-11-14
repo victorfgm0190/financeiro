@@ -179,6 +179,51 @@ function correr({ saldoInicial, dataInicial, secoes }) {
   }
 }
 
+// "Agrupar rendimentos": em cada faixa (seção), cada sequência de rendimentos SEM outro movimento no
+// meio vira uma linha por função — "Rendimentos de DD/MM a DD/MM", data e posição do último, entrada =
+// soma. Outro movimento no meio quebra o grupo, então o saldo de cada linha continua exato. Um
+// rendimento sozinho fica como está. Só muda a LISTA: saldo inicial, faixas, totais e o aviso de
+// negativo são os do extrato dia a dia.
+const ddmm = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
+export function agruparRendimentos(extrato) {
+  const ehRend = (it) => it.tipo === 'Rendimento' && !it.previsto
+  const secoes = extrato.secoes.map(s => {
+    const itens = []
+    let k = 0
+    while (k < s.itens.length) {
+      if (!ehRend(s.itens[k])) { itens.push(s.itens[k]); k++; continue }
+      let fim = k
+      while (fim < s.itens.length && ehRend(s.itens[fim])) fim++
+      const seq = s.itens.slice(k, fim)
+      const antes = round2(seq[0].saldo - seq[0].entrada + seq[0].saida)
+      // Uma linha por função, na ordem do último rendimento de cada uma.
+      const porFuncao = new Map()
+      seq.forEach((it, ordem) => {
+        const g = porFuncao.get(it.functionId) || { itens: [], ultima: 0 }
+        g.itens.push(it)
+        g.ultima = ordem
+        porFuncao.set(it.functionId, g)
+      })
+      let saldo = antes
+      for (const g of [...porFuncao.values()].sort((a, b) => a.ultima - b.ultima)) {
+        const ult = g.itens[g.itens.length - 1]
+        const linha = g.itens.length === 1 ? { ...ult } : {
+          ...ult,
+          label: `Rendimentos de ${ddmm(g.itens[0].date)} a ${ddmm(ult.date)}`,
+          entrada: round2(g.itens.reduce((t, x) => t + x.entrada - x.saida, 0)), saida: 0,
+          agrupados: g.itens.length,
+        }
+        if (linha.entrada < 0) { linha.saida = -linha.entrada; linha.entrada = 0 }
+        saldo = round2(saldo + linha.entrada - linha.saida)
+        itens.push({ ...linha, saldo, neg: saldo < 0 })
+      }
+      k = fim
+    }
+    return { ...s, itens }
+  })
+  return { ...extrato, secoes }
+}
+
 // Atalhos do período do extrato, contados do mês do período aberto (`atual`, como no Fluxo Futuro).
 export const atalhosExtrato = (atual) => [
   { id: 'mes', rotulo: 'Este mês', de: atual, ate: atual },

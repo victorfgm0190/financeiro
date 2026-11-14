@@ -64,7 +64,14 @@ const base = () => {
       { id: 'p1', function_id: 'f1', data_inicio: '2026-10-15', saldo_inicial: 500 },
       { id: 'p2', function_id: 'f2', data_inicio: '2026-10-15', saldo_inicial: 120.5 },
     ],
-    reserveAdjustments: [{ id: 'a1', function_id: 'f2', data: '2026-11-01', valor: 3.33, lancamento_id: 'rend1', observacao: 'Rendimento out' }],
+    reserveAdjustments: [
+      { id: 'a1', function_id: 'f2', data: '2026-11-01', valor: 3.33, lancamento_id: 'rend1', observacao: 'Rendimento out' },
+      // IPVA: dois rendimentos, o depósito de 20/10 no meio, mais dois → dois grupos.
+      { id: 'a2', function_id: 'f1', data: '2026-10-16', valor: 1, lancamento_id: 'rend2', observacao: 'Rendimento' },
+      { id: 'a3', function_id: 'f1', data: '2026-10-18', valor: 0.5, lancamento_id: 'rend3', observacao: 'Rendimento' },
+      { id: 'a4', function_id: 'f1', data: '2026-11-02', valor: 0.25, lancamento_id: 'rend4', observacao: 'Rendimento' },
+      { id: 'a5', function_id: 'f1', data: '2026-11-03', valor: 0.75, lancamento_id: 'rend5', observacao: 'Rendimento' },
+    ],
     reserveSnapshots: [],
     addReservePeriod: vi.fn(), addReserveAdjustment: vi.fn(), updateReserveAdjustment: vi.fn(), deleteReserveAdjustment: vi.fn(),
     recarregarHistoricoReservas: vi.fn(async () => {}), reserveHistoryLoaded: true,
@@ -147,6 +154,24 @@ describe('Extrato da função — os números batem com a grade', () => {
     expect(texto(screen.getByTestId('extrato-saldo-inicial'))).toBe(grade[2])
     fechar()
     expect(screen.queryByTestId('extrato-reserva')).toBeNull()
+  })
+
+  it('Agrupar rendimentos: ligada por padrão, quebra no depósito, e os números não mudam ao desligar', async () => {
+    await abrirFluxo()
+    const grade = gradeDe('f1')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Extrato: IPVA' })[0])
+    const dlg = screen.getByTestId('extrato-reserva')
+    const chave = within(dlg).getByRole('switch', { name: 'Agrupar rendimentos' })
+    expect(chave.checked).toBe(true)
+    expect(within(dlg).getAllByText('Rendimentos de 16/10 a 18/10').length).toBeGreaterThan(0)
+    expect(within(dlg).getAllByText('Rendimentos de 02/11 a 03/11').length).toBeGreaterThan(0)
+    const ligada = { sub: subtotais(), fim: texto(screen.getByTestId('extrato-saldo-final')), ini: texto(screen.getByTestId('extrato-saldo-inicial')) }
+    grade.forEach((v, mi) => expect(ligada.sub[chaveDoMes(mi)]).toBe(v))
+    fireEvent.click(chave)
+    expect(within(dlg).queryAllByText(/^Rendimentos de /)).toHaveLength(0)
+    expect(subtotais()).toEqual(ligada.sub)
+    expect(texto(screen.getByTestId('extrato-saldo-final'))).toBe(ligada.fim)
+    expect(texto(screen.getByTestId('extrato-saldo-inicial'))).toBe(ligada.ini)
   })
 
   it('clicar na célula do mês continua abrindo o detalhamento de antes', async () => {
