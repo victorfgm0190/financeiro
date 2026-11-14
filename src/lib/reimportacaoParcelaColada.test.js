@@ -111,9 +111,12 @@ describe('conciliado reconhecido na reimportação nunca é alterado', () => {
     expect(mudancasDaColisao(rowP8, P8, patchDe(rowP8, P8))).toEqual([])
     expect(diferencasDoConciliado(rowP8, P8)).toEqual([]) // valor, data do cartão e descrição iguais
   })
-  it('conciliado com diferença real (valor, data do cartão): vira informação, não mudança; descrição diferente não conta (12/11/2026)', () => {
+  it('conciliado com valor diferente: assume o valor do banco e a data do cartão (14/11/2026, vale o valor da fatura do banco); descrição diferente não conta', () => {
     const row = { ...rowP8, _dateCartao: '2026-10-30', description: 'Seguradora Parc8 Outra', amount: 205.62 }
-    expect(mudancasDaColisao(row, P8, patchDe(row, P8))).toEqual([])
+    expect(mudancasDaColisao(row, P8, patchDe(row, P8))).toEqual(['amount', 'dateCartao'])
+    // Sem diferença de valor, o conciliado continua intocado (só informação).
+    const soData = { ...rowP8, _dateCartao: '2026-10-30' }
+    expect(mudancasDaColisao(soData, P8, patchDe(soData, P8))).toEqual([])
     expect(diferencasDoConciliado(row, P8).map(d => d.campo)).toEqual(['valor', 'dataCartao'])
     // Só a descrição diferente (o Finup guarda o nome que o usuário escreveu): nenhuma diferença.
     expect(diferencasDoConciliado({ ...rowP8, description: 'Nome escrito pelo usuario' }, P8)).toEqual([])

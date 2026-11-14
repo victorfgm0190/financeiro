@@ -9,6 +9,9 @@ import { isoLocal } from '../../lib/hoje'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 import { rotuloDoTipo } from '../../lib/rotuloMovimento'
 import HelpCampo from '../shared/HelpCampo'
+import { Download } from 'lucide-react'
+import { exportarExcel } from '../../lib/exportExcel'
+import { exportarCsv } from '../../lib/csvFinup'
 
 function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
@@ -26,13 +29,16 @@ function getBillLabel(date, card) {
   return ym ? `${ym.slice(5, 7)}/${ym.slice(0, 4)}` : ''
 }
 
+// MOVIMENTOS DO CARTÃO POR DATA (aba do Relatório Gerencial da Fatura): todas as movimentações do
+// cartão num período de DATA, com o saldo corrido. Respeita o filtro de perfil, como o resto do app
+// (lançamentos e cartões do perfil ativo; só cartões ativos). Excel e CSV no padrão do Finup.
 export default function ExtratoGerencial({ initialCardId }) {
-  const { accounts, transactions, gerencialGroups, updateTransaction, pode } = useApp()
+  const { profileAccounts: accounts = [], profileTransactions: transactions = [], gerencialGroups, updateTransaction, pode } = useApp()
   const podeEditar = pode('cartao', 'editar')
   useScrollScope('credit:extrato')
   useSubtelaGuia('credit:extrato')
 
-  const creditCards = accounts.filter(a => a.type === 'credit')
+  const creditCards = accounts.filter(a => a.type === 'credit' && a.active !== false)
   const [selectedCardId, setSelectedCardId] = useState(initialCardId || creditCards[0]?.id || '')
 
   const now = new Date()
@@ -77,16 +83,58 @@ export default function ExtratoGerencial({ initialCardId }) {
     })
   }, [rows, selectedCardId])
 
+  // Exportação: as mesmas colunas da tela (Nº, Movimentação, Favorecido, Ger, Fatura, R, Pagamento,
+  // Depósito, Saldo); o mesmo nome no Excel e no CSV.
+  const nomeCartao = card ? (card.apelido || card.name) : ''
+  const nomeArquivoMov = { relatorio: `Movimentos-do-Cartao-por-Data-${nomeCartao}`, periodo: `${from}_${to}` }
+  const linhasMov = () => rowsWithBalance.map(tx => ({
+    n: String(tx._seq), data: tx.date, desc: tx.description || '',
+    mov: tx.type === 'expense' ? 'Compra' : tx.type === 'income' ? 'Crédito' : rotuloDoTipo(tx, accounts),
+    fav: tx.payee || '', ger: gerencialGroups.find(g => g.id === tx.grupoGerencial)?.alias || '',
+    fatura: getBillLabel(tx.date, card), r: tx.reconciled ? 'Conferido' : '',
+    pagamento: tx._pagamento || null, deposito: tx._deposito || null, saldo: tx._balance,
+  }))
+  const exportarXlsxMov = () => exportarExcel({
+    titulo: `Movimentos do Cartão por Data — ${nomeCartao}`, nome: 'Movimentos',
+    filtros: [`Cartão: ${nomeCartao}`, `Período: ${fmtDate(from)} a ${fmtDate(to)}`],
+    colunas: [
+      { chave: 'n', titulo: 'Nº' }, { chave: 'data', titulo: 'Data', tipo: 'data' }, { chave: 'desc', titulo: 'Descrição' },
+      { chave: 'mov', titulo: 'Movimentação' }, { chave: 'fav', titulo: 'Favorecido' }, { chave: 'ger', titulo: 'Ger' },
+      { chave: 'fatura', titulo: 'Fatura' }, { chave: 'r', titulo: 'R' },
+      { chave: 'pagamento', titulo: 'Pagamento', tipo: 'moeda', cor: () => 'despesa' },
+      { chave: 'deposito', titulo: 'Depósito', tipo: 'moeda', cor: () => 'receita' },
+      { chave: 'saldo', titulo: 'Saldo', tipo: 'moeda', cor: (l) => (l.saldo < 0 ? 'despesa' : 'receita') },
+    ],
+    linhas: linhasMov(),
+    totais: { rotulo: (n) => `${n} ${n === 1 ? 'movimento' : 'movimentos'}`, somar: ['pagamento', 'deposito'] },
+    nomeArquivo: nomeArquivoMov,
+  }).catch(err => window.alert(`Não consegui exportar o Excel: ${err?.message || err}`))
+  const exportarCsvMov = () => exportarCsv({
+    nomeArquivo: nomeArquivoMov,
+    cabecalho: ['Nº', 'Data', 'Descrição', 'Movimentação', 'Favorecido', 'Ger', 'Fatura', 'R', 'Pagamento', 'Depósito', 'Saldo'],
+    linhas: linhasMov().map(l => [l.n, fmtDate(l.data), l.desc, l.mov, l.fav, l.ger, l.fatura, l.r, l.pagamento ?? '', l.deposito ?? '', Number(l.saldo) || 0]),
+  })
+
   return (
     <div className="space-y-4">
       <div className="card">
-        <h2 className="text-sm font-semibold text-texto-2 mb-4">Extrato Gerencial</h2>
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <h2 className="text-sm font-semibold text-texto-2">Movimentos do Cartão por Data</h2>
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn-secondary flex items-center gap-1.5 text-xs" onClick={exportarCsvMov} disabled={!rowsWithBalance.length}>
+              <Download size={13} /> CSV
+            </button>
+            <button type="button" className="btn-primary flex items-center gap-1.5 text-xs" onClick={exportarXlsxMov} disabled={!rowsWithBalance.length}>
+              <Download size={13} /> Excel
+            </button>
+          </div>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-help-form="filtrosExtratoGerencial">
           <div data-help-id="filtroGerencial.cartao">
             <label className="label">Cartão<HelpCampo campo="filtroGerencial.cartao" /></label>
             <select data-guia="credit:extrato.cartao" className="input" value={selectedCardId} onChange={e => setSelectedCardId(e.target.value)}>
               <option value="">Selecione...</option>
-              {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {creditCards.map(c => <option key={c.id} value={c.id}>{c.apelido || c.name}</option>)}
             </select>
           </div>
           <div data-guia="credit:extrato.de" data-help-id="filtroGerencial.dataDe">

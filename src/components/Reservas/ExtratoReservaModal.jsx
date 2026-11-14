@@ -2,9 +2,8 @@ import { useMemo, useState } from 'react'
 import { AlertTriangle, FileSpreadsheet, Download } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { fmt, fmtDate } from '../shared/utils'
-import { exportarExcel, entregarArquivo, nomeArquivoFinup } from '../../lib/exportExcel'
-import { gerarCsv } from '../../lib/csvFinup'
-import { isoLocal } from '../../lib/hoje'
+import { exportarExcel } from '../../lib/exportExcel'
+import { exportarCsv } from '../../lib/csvFinup'
 import { extratoDaFuncao, juntarExtratos, atalhosExtrato, agruparRendimentos } from '../../lib/extratoReserva'
 import { erroPeriodo, rotuloPeriodo, rotuloMes } from '../../lib/fluxoPeriodo'
 
@@ -65,6 +64,8 @@ export default function ExtratoReservaModal({
     ? `Fica negativo em ${fmtDate(extrato.negativoEm).slice(0, 5)}`
     : extrato.negativoSecao != null ? `Fica negativo em ${rotulos[extrato.negativoSecao]}` : null
 
+  // Mesmo nome no Excel e no CSV, com o PERÍODO escolhido (não o mês de hoje).
+  const nomeArquivo = () => ({ relatorio: `Fluxo-de-Caixa-da-Reserva-${nome}`, periodo: `${periodo.de}_a_${periodo.ate}` })
   const linhasExport = () => {
     const linhas = [{ data: extrato.dataInicial, descricao: 'Saldo inicial', saldo: extrato.saldoInicial, _estilo: 'grupo' }]
     for (const s of extrato.secoes) {
@@ -91,7 +92,7 @@ export default function ExtratoReservaModal({
       totais: { titulo: 'TOTAL', rotulo: () => '', somar: ['saldoInicial', 'entradas', 'saidas', 'saldoFinal'] },
     }] : []
     exportarExcel({ abas: [{
-      titulo: `Reservas — Extrato da função: ${nome}`, nome: 'Extrato',
+      titulo: `Fluxo de Caixa da Reserva — ${nome}`, nome: 'Fluxo de Caixa',
       filtros: [`Período: ${rotuloPeriodo(periodo)}`, ...(negativoTexto ? [negativoTexto] : [])],
       resumo: [
         { rotulo: 'Saldo inicial', valor: round2(extrato.saldoInicial) },
@@ -111,22 +112,15 @@ export default function ExtratoReservaModal({
       ],
       linhas,
       totais: false,
-    }, ...abaPorFuncao], nomeArquivo: { relatorio: `Extrato-Reserva-${nome}`, periodo: isoLocal(new Date()).slice(0, 7) },
+    }, ...abaPorFuncao], nomeArquivo: nomeArquivo(),
     }).catch(err => window.alert(`Não consegui exportar: ${err?.message || err}`))
   }
-  const exportarCsv = async () => {
-    try {
-      const csv = gerarCsv(
-        ['Data', ...(todas ? ['Função'] : []), 'Descrição', 'Tipo', 'Situação', 'Entrada', 'Saída', 'Saldo'],
-        linhasExport().map(l => [l.data ? fmtDate(l.data) : '', ...(todas ? [l.funcao || ''] : []), l.descricao || '', l.tipo || '', l.situacao || '',
-          l.entrada ?? '', l.saida ?? '', l.saldo ?? '']),
-      )
-      await entregarArquivo(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }),
-        nomeArquivoFinup(`Extrato-Reserva-${nome}`, isoLocal(new Date()).slice(0, 7)).replace(/\.xlsx$/, '.csv'), { tipo: 'text/csv' })
-    } catch (err) {
-      window.alert(`Não consegui exportar o CSV: ${err?.message || err}`)
-    }
-  }
+  const exportarCsvExtrato = () => exportarCsv({
+    nomeArquivo: nomeArquivo(),
+    cabecalho: ['Data', ...(todas ? ['Função'] : []), 'Descrição', 'Tipo', 'Situação', 'Entrada', 'Saída', 'Saldo'],
+    linhas: linhasExport().map(l => [l.data ? fmtDate(l.data) : '', ...(todas ? [l.funcao || ''] : []), l.descricao || '', l.tipo || '', l.situacao || '',
+      l.entrada ?? '', l.saida ?? '', l.saldo ?? '']),
+  })
 
   const valorCls = (neg) => (neg ? 'text-despesa font-semibold' : 'text-texto-2')
   const sinalSaida = (it) => (it.provisorio ? '~' : '')
@@ -157,7 +151,7 @@ export default function ExtratoReservaModal({
           </label>
           <button type="button" className="btn-primary text-xs py-1.5" disabled={!!erro || (rascunho.de === periodo.de && rascunho.ate === periodo.ate)}
             onClick={() => aplicar(rascunho)}>Aplicar</button>
-          <button type="button" onClick={exportarCsv} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 ml-auto">
+          <button type="button" onClick={exportarCsvExtrato} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 ml-auto">
             <Download size={12} /> CSV
           </button>
           <button type="button" onClick={exportar} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
@@ -308,7 +302,7 @@ export default function ExtratoReservaModal({
     )
   }
   return (
-    <Modal open onClose={onClose} title={`Extrato da função — ${nome}`} size="2xl" voltarNoCelular>
+    <Modal open onClose={onClose} title={`Fluxo de Caixa da Reserva — ${nome}`} size="2xl" voltarNoCelular>
       {conteudo}
     </Modal>
   )

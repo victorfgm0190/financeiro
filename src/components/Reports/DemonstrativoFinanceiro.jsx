@@ -14,6 +14,7 @@ import { filtrarCategoriasPorPerfil, categoriasComMovimento } from '../../lib/ca
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { isoLocal } from '../../lib/hoje'
 import { exportarExcel } from '../../lib/exportExcel'
+import { exportarCsv } from '../../lib/csvFinup'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 import SeletorModoValor from '../Contratos/SeletorModoValor'
 import { lancamentosNoModo, CATEGORIA_ADMINISTRADORA } from '../../lib/contratos/despesaReal'
@@ -174,60 +175,13 @@ export function buildReport(transactions, categories, from, to, accountIds, cate
   }
 }
 
-function exportCSV(report, showTx, from, to) {
-  const sep = ';'
-  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`
-  // Valor no padrão pt-BR: vírgula decimal + ponto de milhar (ex.: 16000 → "16.000,00").
-  const num = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const rows = [['Seção', 'Grupo', 'Subcategoria', 'Data', 'Descrição', 'Favorecido', 'Valor'].map(q).join(sep)]
-
-  // Espelha a tela: linha de SEÇÃO (com total), depois GRUPO (com total), SUBCATEGORIA
-  // (apenas quando o grupo tem subcategorias, igual à tela) e, quando "Exibir lançamentos"
-  // está ativo, os lançamentos individuais — tudo na ordem em que está no `report`.
-  const addSection = (label, groups, total) => {
-    if (groups.length === 0) return
-    rows.push([label, '', '', '', '', '', num(total)].map(q).join(sep))
-    groups.forEach(g => {
-      rows.push(['', g.name, '', '', '', '', num(g.total)].map(q).join(sep))
-      g.subcats.forEach(s => {
-        if (!g.isFlat) rows.push(['', g.name, s.name, '', '', '', num(s.total)].map(q).join(sep))
-        if (showTx) {
-          s.txs.forEach(tx => {
-            // Resgate que abate a categoria de despesa → valor negativo no CSV.
-            const v = (label === 'DESPESAS' && tx.type === 'income' && isResgateReservaSombra(tx)) ? -tx.amount : tx.amount
-            rows.push(['', g.name, g.isFlat ? '' : s.name, fmtDate(tx.date), tx.description || '', tx.payee || '', num(v)].map(q).join(sep))
-          })
-        }
-      })
-    })
-  }
-
-  // Mesma ordem da tela: Receitas → Despesas → totais.
-  addSection('RECEITAS', report.income, report.totalIncome)
-  addSection('DESPESAS', report.expenses, report.totalExpense)
-  rows.push(['RESULTADO', '', '', '', '', '', num(report.totalIncome - report.totalExpense)].map(q).join(sep))
-  if (report.hasReservas) {
-    rows.push(['Reservas Feitas', '', '', '', '', '', num(-report.totalReservasFeitas)].map(q).join(sep))
-    rows.push(['Reservas Utilizadas', '', '', '', '', '', num(report.totalReservasUtilizadas)].map(q).join(sep))
-    rows.push(['Líquido de Reservas', '', '', '', '', '', num(report.liquidoReservas)].map(q).join(sep))
-    rows.push(['LÍQUIDO GERAL', '', '', '', '', '', num((report.totalIncome - report.totalExpense) + report.liquidoReservas)].map(q).join(sep))
-  }
-
-  const csv = '﻿' + rows.join('\r\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `demonstrativo_${from}_${to}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 // Exporta o Demonstrativo para Excel (layout em lib/exportExcel). Percorre o MESMO `report` na
 // mesma ordem do CSV: seção, grupo e subcategoria viram linhas de agrupamento (fora das somas);
 // os lançamentos seguem o toggle "Exibir lançamentos". Valores com sinal (despesa negativa).
 const MES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-async function exportExcel(report, showTx, from, to, filtros = []) {
+// Linhas exportadas (Excel e CSV, as MESMAS): seção, grupo e subcategoria como agrupamento; os
+// lançamentos seguem o "Exibir lançamentos"; reservas feitas/utilizadas e o líquido geral no fim.
+function linhasDoResultado(report, showTx) {
   const linhas = []
   const agrup = (estilo, item, sub, valor) => linhas.push({ item, sub, valor, _estilo: estilo })
   const detalhe = (g, s, tx, valor) => linhas.push({ item: g, sub: s, data: tx.date, desc: tx.description || '—', fav: tx.payee || '', valor })
@@ -257,9 +211,26 @@ async function exportExcel(report, showTx, from, to, filtros = []) {
     agrup('total', 'Líquido de Reservas', '', report.liquidoReservas)
     agrup('total', 'LÍQUIDO GERAL', '', resultado + report.liquidoReservas)
   }
+  return linhas
+}
+const NOME_ARQUIVO = 'Resultado-por-Categoria'
+
+// CSV no padrão do Finup (lib/csvFinup): as mesmas linhas e o mesmo nome do Excel. Erro vira mensagem.
+function exportCSV(report, showTx, from, to) {
+  const linhas = linhasDoResultado(report, showTx)
+  return exportarCsv({
+    nomeArquivo: { relatorio: NOME_ARQUIVO, periodo: `${from}_${to}` },
+    cabecalho: ['Seção / Grupo', 'Subcategoria', 'Data', 'Descrição', 'Favorecido', 'Valor'],
+    linhas: linhas.map(l => [l.item || '', l.sub || '', l.data ? fmtDate(l.data) : '', l.desc || '', l.fav || '', Number(l.valor) || 0]),
+  })
+}
+
+async function exportExcel(report, showTx, from, to, filtros = []) {
+  const linhas = linhasDoResultado(report, showTx)
+  const resultado = report.totalIncome - report.totalExpense
   const [ty, tm] = (from || '').split('-')
   await exportarExcel({
-    titulo: `Demonstrativo Financeiro — ${MES_ABREV[Number(tm) - 1] || ''} ${ty || ''}`.trim(), nome: 'Demonstrativo',
+    titulo: `Resultado por Categoria — ${MES_ABREV[Number(tm) - 1] || ''} ${ty || ''}`.trim(), nome: 'Resultado',
     filtros: [`Período: ${fmtDate(from)} a ${fmtDate(to)}`, ...filtros, showTx ? 'Com lançamentos' : 'Sem lançamentos'],
     resumo: [
       { rotulo: 'Receitas', valor: report.totalIncome, cor: 'verde' },
@@ -274,7 +245,7 @@ async function exportExcel(report, showTx, from, to, filtros = []) {
     ],
     linhas,
     totais: false,
-    nomeArquivo: { relatorio: 'Demonstrativo', periodo: `${from}_${to}` },
+    nomeArquivo: { relatorio: NOME_ARQUIVO, periodo: `${from}_${to}` },
   })
 }
 
@@ -609,7 +580,7 @@ export default function DemonstrativoFinanceiro() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h3 className="text-sm font-semibold text-texto-2 flex items-center gap-2">
             <FileSpreadsheet size={14} className="text-texto-2" />
-            Demonstrativo Financeiro
+            Resultado por Categoria
           </h3>
           <div className="flex items-center gap-4 flex-wrap">
             <label data-guia="reports:demonstrativo.entre-perfis" data-help-id="filtroDemo.entrePerfis" className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">

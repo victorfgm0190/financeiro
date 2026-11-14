@@ -298,9 +298,11 @@ export const AJUDA_TELAS = {
       { chave: 'reconciliar', rotulo: 'Reconciliar', texto: 'Abre a lista do período para marcar como conferido o que bate com o banco. Só no computador.',
         detalhe: 'Abre a lista do período ao lado do que o banco mostra, para você ir marcando como conferido o que bate. Só no computador.', exemplo: 'Exemplo: com o extrato do banco aberto, marque cada lançamento igual como conferido.', modulo: 'pode:lancamentos:editar' },
       { chave: 'conciliar-gerenciais', rotulo: 'Conciliar Gerenciais', texto: 'Marca como conferidos, de uma vez, os lançamentos pendentes do período que envolvem uma conta gerencial.',
-        detalhe: 'Marca como conferidos, de uma só vez, os lançamentos pendentes do período que envolvem uma conta gerencial. Poupa o trabalho de marcar um por um.', exemplo: 'Exemplo: no fim do mês, clique para conferir todas as transferências de controle de uma vez.', modulo: 'pode:lancamentos:editar' },
-      { chave: 'excel', rotulo: 'Excel', texto: 'Baixa o extrato do mês, com os filtros aplicados, em planilha. Aparece em contas gerenciais.',
-        detalhe: 'Baixa uma planilha com o extrato do mês, do jeito que está filtrado na tela.', exemplo: 'Exemplo: filtre só as saídas e clique em Excel para mandar a lista ao contador.', modulo: 'gerencial' },
+        detalhe: 'Marca como conferidos, de uma só vez, os lançamentos pendentes do período que envolvem uma conta gerencial. Poupa o trabalho de marcar um por um.', exemplo: 'Exemplo: no fim do mês, clique para conferir todas as transferências de controle de uma vez.', modulo: ['gerencial', 'pode:lancamentos:editar'] },
+      { chave: 'excel', rotulo: 'Excel', texto: 'Baixa o extrato do mês, com os filtros aplicados e o saldo acumulado, em planilha.',
+        detalhe: 'Baixa uma planilha com o extrato do mês, do jeito que está filtrado na tela, com o saldo depois de cada linha.', exemplo: 'Exemplo: filtre só as saídas e clique em Excel para mandar a lista ao contador.' },
+      { chave: 'csv', rotulo: 'CSV', texto: 'Baixa o mesmo extrato em CSV, para abrir em qualquer planilha.',
+        detalhe: 'Baixa as mesmas linhas do Excel em CSV (separado por ponto e vírgula, com vírgula decimal).', exemplo: 'Exemplo: importe o extrato do mês em outro programa.' },
       { chave: 'novo', rotulo: 'Novo Lançamento', texto: 'Registra uma receita, despesa ou transferência já nesta conta.',
         detalhe: 'Abre o formulário de lançamento já com esta conta escolhida. Serve para receita, despesa ou transferência.', exemplo: 'Exemplo: lance uma despesa de R$ 120,00 de farmácia direto nesta conta.', modulo: 'pode:lancamentos:incluir' },
       { chave: 'saldos', rotulo: 'Saldos do mês', texto: 'Saldo Atual, Saldo Futuro (quando há lançamentos com data à frente), Entradas e Saídas do mês.',
@@ -339,8 +341,8 @@ export const AJUDA_TELAS = {
         detalhe: 'Mostra o mês da fatura que está na tela. As setas levam para a fatura anterior ou a próxima, inclusive faturas futuras com parcelas.', exemplo: 'Exemplo: clique na seta da direita para ver quanto das parcelas já cai na fatura do mês que vem.' },
       { chave: 'extrato', rotulo: 'Extrato da Fatura', texto: 'A fatura como o banco mostra: lançamentos, parcelas, estornos e o total, sem grupos.',
         detalhe: 'Mostra a fatura escolhida do jeito que o banco mostra: data, descrição, parcela e valor, com estornos e tarifas. O total é o mesmo da Fatura Selecionada. O pagamento da fatura anterior e as compras ainda só agendadas aparecem à parte, fora do total. Dá para exportar em Excel e CSV.', exemplo: 'Exemplo: abra o extrato de novembro para conferir linha a linha com o PDF do banco.' },
-      { chave: 'relatorio', rotulo: 'Relatório Gerencial', texto: 'A fatura separada por grupo, com valor e porcentagem de cada um. Sem o controle gerencial, chama "Relatório da Fatura" e mostra as categorias.',
-        detalhe: 'Mostra a mesma fatura, com o mesmo total, separada por grupo gerencial (cards com valor e %). Clique num card para ver só os lançamentos daquele grupo. Na aba "Extrato gerencial por data" fica a lista de movimentos por período, com o saldo corrido. Sem o controle gerencial, o botão se chama "Relatório da Fatura" e mostra o total e as categorias.', exemplo: 'Exemplo: veja quanto da fatura de novembro foi das Contas Anuais.' },
+      { chave: 'relatorio', rotulo: 'Relatório Gerencial da Fatura', texto: 'A fatura separada por grupo, com valor e porcentagem de cada um. Sem o controle gerencial, chama "Relatório da Fatura" e mostra as categorias.',
+        detalhe: 'Mostra a mesma fatura, com o mesmo total, separada por grupo gerencial (cards com valor e %). Clique num card para ver só os lançamentos daquele grupo. Na aba "Movimentos do Cartão por Data" fica a lista de movimentos por período, com o saldo corrido. Sem o controle gerencial, o botão se chama "Relatório da Fatura" e mostra o total e as categorias.', exemplo: 'Exemplo: veja quanto da fatura de novembro foi das Contas Anuais.' },
       { chave: 'fatura-selecionada', rotulo: 'Fatura Selecionada', texto: 'O total da fatura e quantos lançamentos ela tem, somando os agendamentos previstos quando houver.',
         detalhe: 'O total das compras da fatura que está na tela e quantos lançamentos ela tem. Se há despesas agendadas para entrar nela, o card mostra os "previstos" e o total com eles.', exemplo: 'Exemplo: R$ 1.200,00 em 18 lançamentos, + R$ 100,00 previstos = R$ 1.300,00 total.' },
       { chave: 'limite', rotulo: 'Limite Disponível', texto: 'Quanto do limite do cartão ainda está livre.',
@@ -381,8 +383,8 @@ export const AJUDA_TELAS = {
     ],
   },
   'credit:extrato': {
-    titulo: 'Extrato gerencial por data',
-    descricao: 'Aba do Relatório Gerencial: todas as movimentações do cartão num período, com o saldo corrido depois de cada uma.',
+    titulo: 'Movimentos do Cartão por Data',
+    descricao: 'Aba do Relatório Gerencial da Fatura: todas as movimentações do cartão num período de data, com o saldo corrido depois de cada uma. Exporta para Excel e CSV.',
     itens: [
       { chave: 'cartao', rotulo: 'Cartão', texto: 'Escolha o cartão do extrato.',
         detalhe: 'Escolha de qual cartão você quer o extrato. A lista e o saldo mudam na hora.', exemplo: 'Exemplo: escolha o cartão da empresa para ver só as movimentações dele.' },
@@ -912,49 +914,51 @@ export const AJUDA_TELAS = {
   },
   reports: {
     titulo: 'Relatórios',
-    descricao: 'Relatórios para analisar o dinheiro por período, conta, categoria ou favorecido, com exportação para Excel.',
+    descricao: 'Relatórios em seções — Resultado, Contas e Caixa, Cartão de Crédito, Reservas, Patrimônio e Aluguéis —, com exportação para Excel e CSV.',
     itens: [
-      { chave: 'demonstrativo', rotulo: 'Demonstrativo Financeiro', texto: 'Receitas e despesas agrupadas por categoria no período que você escolher.',
+      { chave: 'demonstrativo', rotulo: 'Resultado por Categoria', texto: 'Receitas e despesas agrupadas por categoria no período que você escolher.',
         detalhe: 'Abre o relatório de receitas e despesas por grupo e categoria, com filtros de período, contas e categorias e exportação para planilha.', exemplo: 'Exemplo: veja quanto foi gasto em cada categoria nos últimos 3 meses.' },
-      { chave: 'favorecido', rotulo: 'Relatório por Favorecido', texto: 'Quanto você pagou e recebeu de cada pessoa ou empresa.',
+      { chave: 'favorecido', rotulo: 'Movimentação por Favorecido', texto: 'Quanto você pagou e recebeu de cada pessoa ou empresa.',
         detalhe: 'Abre o relatório com quanto foi pago e recebido de cada pessoa ou empresa, com os lançamentos de cada uma.', exemplo: 'Exemplo: descubra quanto você pagou à escola no ano.' },
-      { chave: 'fluxo-conta', rotulo: 'Fluxo de Caixa por Conta', texto: 'Movimentos e saldo acumulado de uma conta, de um grupo ou das contas principais, com o que está agendado.',
+      { chave: 'fluxo-conta', rotulo: 'Extrato e Fluxo de Caixa por Conta', texto: 'Movimentos e saldo acumulado de uma conta, de um grupo ou das contas principais, com o que está agendado.',
         detalhe: 'Abre o extrato com saldo acumulado de uma conta, de um grupo ou das contas principais, podendo somar o que ainda está agendado.', exemplo: 'Exemplo: veja como o saldo da conta da empresa fica até o fim do mês.' },
-      { chave: 'bens', rotulo: 'Bens e investimentos — saídas por mês', texto: 'Quanto saiu de caixa por bem e por mês, com principal, juros, terceiros e devoluções.',
+      { chave: 'bens', rotulo: 'Patrimônio — Pagamentos por Mês', texto: 'Quanto saiu de caixa por bem e por mês, com principal, juros, terceiros e devoluções.',
         detalhe: 'Abre o relatório do que saiu das suas contas para pagar cada bem, mês a mês.', exemplo: 'Exemplo: veja quanto o carro custou em caixa neste ano.' },
+      { chave: 'rendimentos', rotulo: 'Aluguéis — Rendimentos e Repasses', texto: 'Por contrato a receber e por ano: aluguel bruto, deduções, base tributável, repasses e conferência com o informe.',
+        detalhe: 'Abre o relatório dos aluguéis recebidos por contrato e por ano, com o que entra no imposto e o que foi repassado. Só aparece para quem tem contrato a receber.', exemplo: 'Exemplo: confira os aluguéis de 2026 com o informe de rendimentos da imobiliária.', modulo: 'contratos' },
       { chave: 'fluxo-reserva', rotulo: 'Fluxo de Caixa da Reserva', texto: 'Entradas, saídas e saldo de cada função de reserva no período escolhido.',
         detalhe: 'Abre o extrato de uma função de reserva (ou de todas, com o subtotal de cada uma) como fluxo de caixa: saldo inicial, cada entrada e saída e o saldo de cada mês. É o mesmo extrato de Reservas › Fluxo Futuro. Só aparece quando há função de reserva ligada a uma conta.', exemplo: 'Exemplo: veja como fica o saldo da reserva do IPVA até o pagamento em janeiro.' },
       { chave: 'extrato-fatura', rotulo: 'Extrato da Fatura', texto: 'A fatura do cartão como o banco mostra. Só aparece se houver cartão cadastrado.',
         detalhe: 'Abre a fatura escolhida com data, descrição, parcela e valor, os estornos e o total igual ao do banco. Pagamento e compras ainda agendadas ficam à parte.', exemplo: 'Exemplo: confira a fatura de novembro linha a linha com o PDF do banco.' },
       { chave: 'fatura', rotulo: 'Relatório Gerencial da Fatura', texto: 'A fatura separada por grupo, com valor e %. Sem o controle gerencial, chama "Relatório da Fatura" e mostra as categorias.',
-        detalhe: 'Abre a fatura com o mesmo total do Extrato da Fatura, separada por grupo gerencial, e a aba "Extrato gerencial por data". Sem o controle gerencial, mostra o total e as categorias.', exemplo: 'Exemplo: veja quanto da fatura deste mês foi das Contas Anuais.' },
-      { chave: 'medias', rotulo: 'Médias dos 6 meses', texto: 'A média mensal de receitas, despesas e saldo dos últimos 6 meses.',
+        detalhe: 'Abre a fatura com o mesmo total do Extrato da Fatura, separada por grupo gerencial, e a aba "Movimentos do Cartão por Data". Sem o controle gerencial, mostra o total e as categorias.', exemplo: 'Exemplo: veja quanto da fatura deste mês foi das Contas Anuais.' },
+      { chave: 'medias', rotulo: 'Média Mensal (últimos 6 meses)', texto: 'A média mensal de receitas, despesas e saldo dos últimos 6 meses.',
         detalhe: 'Mostra a média mensal de receitas, despesas e saldo dos últimos 6 meses. Ajuda a saber quanto você costuma gastar.', exemplo: 'Exemplo: média de despesas de R$ 4.200,00 por mês.' },
       { chave: 'evolucao', rotulo: 'Evolução dos Últimos 6 Meses', texto: 'Gráfico com o que entrou e saiu em cada mês.',
         detalhe: 'Gráfico de barras com o que entrou e o que saiu em cada um dos últimos 6 meses.', exemplo: 'Exemplo: perceber que as despesas sobem todo fim de ano.' },
-      { chave: 'despesas-categoria', rotulo: 'Despesas por Categoria', texto: 'Pizza com as categorias em que mais se gastou no mês escolhido.',
+      { chave: 'despesas-categoria', rotulo: 'Despesas do Mês por Categoria', texto: 'Pizza e ranking das categorias em que mais se gastou no mês escolhido.',
         detalhe: 'Gráfico de pizza com a participação de cada categoria nas despesas do mês escolhido.', exemplo: 'Exemplo: ver que Moradia é a maior fatia do mês.' },
       { chave: 'modo-valor', rotulo: 'Despesa real / Valor pago', texto: 'Para contratos: mostra o gasto real (sem os créditos do proprietário) ou o valor que saiu da conta.',
         detalhe: 'Só para quem usa Contratos. "Despesa real" desconta os créditos que são do proprietário; "Valor pago" mostra o que saiu da conta de fato.', exemplo: 'Exemplo: o boleto foi R$ 1.800,00, mas R$ 200,00 eram do proprietário; a despesa real é R$ 1.600,00.', modulo: 'contratos' },
       { chave: 'mes', rotulo: 'Mês', texto: 'Escolha o mês da pizza e do ranking.',
         detalhe: 'Escolhe o mês usado na pizza e no ranking de despesas.', exemplo: 'Exemplo: escolha o mês anterior para comparar com o atual.' },
-      { chave: 'ranking', rotulo: 'Ranking de Despesas', texto: 'As 10 categorias com mais gasto no mês, com a porcentagem de cada uma.',
+      { chave: 'ranking', rotulo: 'Ranking (Despesas do Mês por Categoria)', texto: 'As 10 categorias com mais gasto no mês, com a porcentagem de cada uma.',
         detalhe: 'Lista as 10 categorias com mais gasto no mês, com o valor e a porcentagem de cada uma.', exemplo: 'Exemplo: Supermercado em 1º lugar, com 22% das despesas.' },
     ],
     dicas: [
       'Cada relatório tem botão para exportar a planilha, pronta para imprimir ou enviar.',
     ],
     errosComuns: [
-      'Não vejo o Extrato ou o Relatório da Fatura: eles só aparecem quando há pelo menos um cartão de crédito cadastrado.',
+      'Não vejo o Extrato da Fatura ou o Relatório da Fatura: eles só aparecem quando há pelo menos um cartão de crédito cadastrado.',
       'Não vejo o Fluxo de Caixa da Reserva: ele só aparece quando há função de reserva ligada a uma conta.',
     ],
   },
   'reports:demonstrativo': {
-    titulo: 'Demonstrativo Financeiro',
+    titulo: 'Resultado por Categoria',
     descricao: 'Receitas e despesas do período, agrupadas por categoria e subcategoria, com exportação para planilha.',
     itens: [
       { chave: 'voltar', rotulo: 'Voltar aos Relatórios', texto: 'Volta para a lista de relatórios.',
-        detalhe: 'Fecha o Demonstrativo e volta para a lista de relatórios.', exemplo: 'Exemplo: depois de exportar, volte para abrir o Relatório por Favorecido.' },
+        detalhe: 'Fecha o Resultado por Categoria e volta para a lista de relatórios.', exemplo: 'Exemplo: depois de exportar, volte para abrir a Movimentação por Favorecido.' },
       { chave: 'entre-perfis', rotulo: 'Incluir transferências entre perfis', texto: 'Conta como receita ou despesa o dinheiro passado entre pessoas ou empresas suas.',
         detalhe: 'Normalmente, dinheiro passado entre perfis seus não conta como receita nem despesa. Ligue para que conte.', exemplo: 'Exemplo: ver o pró-labore que a empresa pagou para você como despesa da empresa.' },
       { chave: 'ocultar-reserva', rotulo: 'Ocultar movimentos de reserva', texto: 'Tira do relatório os depósitos e resgates de reserva.',
@@ -989,11 +993,11 @@ export const AJUDA_TELAS = {
     ],
   },
   'reports:favorecido': {
-    titulo: 'Relatório por Favorecido',
+    titulo: 'Movimentação por Favorecido',
     descricao: 'Quanto você pagou e recebeu de cada pessoa ou empresa no período, com os lançamentos de cada uma.',
     itens: [
       { chave: 'voltar', rotulo: 'Voltar aos Relatórios', texto: 'Volta para a lista de relatórios.',
-        detalhe: 'Fecha este relatório e volta para a lista de relatórios.', exemplo: 'Exemplo: volte para abrir o Demonstrativo Financeiro.' },
+        detalhe: 'Fecha este relatório e volta para a lista de relatórios.', exemplo: 'Exemplo: volte para abrir o Resultado por Categoria.' },
       { chave: 'periodo', rotulo: 'Período', texto: 'Atalhos para escolher rapidamente os últimos meses.',
         detalhe: 'Botões rápidos que preenchem as datas com os últimos meses.', exemplo: 'Exemplo: clique em "12 meses" para ver o último ano.' },
       { chave: 'datas', rotulo: 'Data Inicial e Data Final', texto: 'Ou escolha as datas exatas do relatório.',
@@ -1016,7 +1020,7 @@ export const AJUDA_TELAS = {
     dicas: [],
   },
   'reports:bens': {
-    titulo: 'Bens e investimentos — saídas por mês',
+    titulo: 'Patrimônio — Pagamentos por Mês',
     descricao: 'Quanto saiu das suas contas para pagar cada bem, mês a mês, separando o que um terceiro pagou e as devoluções.',
     itens: [
       { chave: 'voltar', rotulo: 'Voltar aos Relatórios', texto: 'Volta para a lista de relatórios.',
@@ -1035,7 +1039,7 @@ export const AJUDA_TELAS = {
     dicas: [],
   },
   'reports:fluxo-conta': {
-    titulo: 'Fluxo de Caixa por Conta',
+    titulo: 'Extrato e Fluxo de Caixa por Conta',
     descricao: 'Os movimentos e o saldo acumulado de uma conta, de um grupo ou das contas principais, incluindo o que está agendado.',
     itens: [
       { chave: 'voltar', rotulo: 'Voltar aos Relatórios', texto: 'Volta para a lista de relatórios.',
@@ -1743,6 +1747,8 @@ export const ajudaDaTela = (tela) => AJUDA_TELAS[tela] || null
 export function itemVisivel(item, ctx) {
   const m = item?.modulo
   if (!m || !ctx) return true
+  // Lista: todas as condições valem (ex.: ['gerencial', 'pode:lancamentos:editar']).
+  if (Array.isArray(m)) return m.every(x => itemVisivel({ modulo: x }, ctx))
   if (m === 'gerencial') return !!ctx.gerencialAtivo
   if (m === 'ia') return !!ctx.iaAtiva
   if (m === 'contratos') return !!ctx.podeVer?.('contratos')

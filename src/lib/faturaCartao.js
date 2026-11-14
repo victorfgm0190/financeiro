@@ -10,6 +10,7 @@
 //     são informativos e NÃO entram no total.
 import { faturaDoCartao } from './fatura.js'
 import { totaisGerenciais, sortKey } from './gerencialTotais.js'
+import { agendamentosPrevistosDaFatura } from './gerencialPrevistos.js'
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -61,20 +62,56 @@ export function lancamentosDaFatura(transactions, card, billKey) {
   }
 }
 
-// Faturas para o seletor: as que têm lançamento do cartão + a atual, em ordem decrescente, com a
-// atual marcada e as posteriores a ela como "futura".
-export function faturasDoCartao(transactions, card, hoje) {
-  if (!card) return []
-  const atual = faturaAtualDoCartao(card, hoje)
-  const chaves = new Set([atual])
+// Chaves das faturas com lançamento do cartão + a aberta.
+function chavesDasFaturas(transactions, card, aberta) {
+  const chaves = new Set([aberta])
   for (const tx of transactions || []) {
     if (tx.accountId !== card.id || (tx.type !== 'expense' && tx.type !== 'income') || !tx.date) continue
     chaves.add(faturaDoLancamento(tx, card))
   }
-  return [...chaves].filter(Boolean).sort((a, b) => b.localeCompare(a)).map(key => ({
-    key, atual: key === atual, futura: key > atual,
-    rotulo: `${rotuloFaturaCurto(key)}${key === atual ? ' · atual' : key > atual ? ' · futura' : ''}`,
-  }))
+  return [...chaves].filter(Boolean)
+}
+
+// Quanto foi pago da fatura — a MESMA regra da tela do cartão: pagamentos reais (credit_payment e
+// transferência vinculada); sem eles, as ocorrências registradas do agendamento pagamento_fatura.
+export function pagoDaFatura(transactions, schedules, card, billKey, fatura = null) {
+  if (!card || !billKey) return 0
+  const f = fatura || lancamentosDaFatura(transactions, card, billKey)
+  const real = round2(f.pagamentos.reduce((s, t) => s + (Number(t.amount) || 0), 0))
+  if (real > 0) return real
+  return round2((schedules || [])
+    .filter(s => s.tipo === 'pagamento_fatura' && s.cardId === card.id && s.faturaMesAno === billKey)
+    .reduce((sum, s) => sum + (s.registered?.length || 0) * (Number(s.amount) || 0), 0))
+}
+
+// FATURA PADRÃO (tela do cartão, Extrato e Relatório pelo menu, troca de cartão): a FECHADA mais
+// antiga que ainda NÃO FOI PAGA (situacaoDaFatura, a mesma regra dos cards, com os previstos) DEPOIS
+// da última fatura paga; se não houver, a ABERTA (a que contém hoje). Fatura antiga anterior a uma
+// paga conta como resolvida — nos dados reais são restos de 1–2 lançamentos de antes de as faturas
+// serem acompanhadas, e a tela abriria meses atrás. `previstoDe(key)` = compras agendadas na fatura.
+export function faturaPadraoDoCartao({ transactions, schedules, card, hoje, previstoDe = () => 0 }) {
+  if (!card) return ''
+  const aberta = faturaAtualDoCartao(card, hoje)
+  const fechadas = chavesDasFaturas(transactions, card, aberta).filter(k => k < aberta).sort()
+  const situacoes = fechadas.map(key => {
+    const f = lancamentosDaFatura(transactions, card, key)
+    return { key, s: situacaoDaFatura({ total: f.total, previsto: previstoDe(key), pago: pagoDaFatura(transactions, schedules, card, key, f) }) }
+  })
+  let ultimaPaga = -1
+  situacoes.forEach((x, i) => { if (x.s.paga) ultimaPaga = i })
+  const aPagar = situacoes.slice(ultimaPaga + 1).find(x => !x.s.semValor && !x.s.paga)
+  return aPagar ? aPagar.key : aberta
+}
+
+// Faturas para o seletor, em ordem decrescente: "· aberta" (a que contém hoje), "· a pagar" (a fatura
+// padrão quando é uma fechada não paga) e "· futura" (depois da aberta).
+export function faturasDoCartao(transactions, card, hoje, aPagar = null) {
+  if (!card) return []
+  const aberta = faturaAtualDoCartao(card, hoje)
+  return chavesDasFaturas(transactions, card, aberta).sort((a, b) => b.localeCompare(a)).map(key => {
+    const sufixo = key === aberta ? ' · aberta' : key > aberta ? ' · futura' : key === aPagar ? ' · a pagar' : ''
+    return { key, atual: key === aberta, aberta: key === aberta, aPagar: key === aPagar && key !== aberta, futura: key > aberta, rotulo: `${rotuloFaturaCurto(key)}${sufixo}` }
+  })
 }
 
 // Resumo por grupo gerencial da fatura (cards do Relatório Gerencial). Mesma soma da linha de resumo
@@ -110,3 +147,9 @@ export function situacaoDaFatura({ total, previsto = 0, pago = 0 }) {
   const parcial = pago > 0 && !paga
   return { aPagar, diferenca, semValor, paga, parcial, saldoRestante: Math.max(0, round2(aPagar - pago)) }
 }
+
+// Total das compras agendadas (previstas) de cada fatura do cartão — o mesmo cálculo da tela.
+export const previstoDaFaturaFn = ({ schedules, card, getOccurrences }) => (key) => (card && typeof getOccurrences === 'function'
+  ? round2(agendamentosPrevistosDaFatura({ schedules, cardId: card.id, billKey: key, getOccurrences, billKeyOf: d => faturaDoCartao(d, card) })
+    .reduce((s, p) => s + p.amount, 0))
+  : 0)

@@ -51,7 +51,7 @@ export const campos = {
   'financiamento.aberturaParcelas': {
     titulo: 'Parcelas já pagas antes do Finup',
     paraQueServe: 'Quantas parcelas foram pagas antes de você usar o Finup.',
-    relacaoComTela: 'Essas primeiras parcelas ficam pagas e somam no bem, sem lançamento em conta e sem entrar no Demonstrativo, e não ganham agendamento. Preencha junto com o valor total pago e a data de referência.',
+    relacaoComTela: 'Essas primeiras parcelas ficam pagas e somam no bem, sem lançamento em conta e sem entrar no Resultado por Categoria, e não ganham agendamento. Preencha junto com o valor total pago e a data de referência.',
     obrigatorio: false,
     quandoUsar: 'Financiamento que já estava em andamento quando você começou a usar o Finup.',
   },
@@ -175,7 +175,7 @@ export const campos = {
   'consorcio.cotaAberturaParcelas': {
     titulo: 'Parcelas já pagas antes do Finup',
     paraQueServe: 'Quantas parcelas desta cota foram pagas antes de usar o Finup.',
-    relacaoComTela: 'Viram histórico de abertura: somam no bem, sem lançamento em conta e sem Demonstrativo. Preencha junto com o valor total e a data de referência.',
+    relacaoComTela: 'Viram histórico de abertura: somam no bem, sem lançamento em conta e sem entrar no Resultado por Categoria. Preencha junto com o valor total e a data de referência.',
     obrigatorio: false,
   },
   'consorcio.cotaAberturaValor': {
@@ -315,14 +315,14 @@ export const campos = {
   },
   'baixaBem.gerarReceita': {
     titulo: 'Gerar a receita de benefício',
-    paraQueServe: 'Registra no Demonstrativo o valor pago pelo terceiro como receita sua.',
+    paraQueServe: 'Registra no Resultado por Categoria o valor pago pelo terceiro como receita sua.',
     relacaoComTela: 'Marcada, pede a categoria e lança a receita na conta do próprio bem. Nenhuma conta corrente muda.',
     obrigatorio: false,
   },
   'baixaBem.categoria': {
     titulo: 'Categoria da receita',
     paraQueServe: 'Categoria de receita do benefício pago pelo terceiro.',
-    relacaoComTela: 'É onde a receita aparece no Demonstrativo.',
+    relacaoComTela: 'É onde a receita aparece no Resultado por Categoria.',
     obrigatorio: true,
   },
   'baixaBem.observacao': {
@@ -366,7 +366,7 @@ export const campos = {
   'vendaCota.custosCategoria': {
     titulo: 'Categoria dos custos',
     paraQueServe: 'Categoria de despesa dos custos da venda.',
-    relacaoComTela: 'É onde os custos aparecem no Demonstrativo.',
+    relacaoComTela: 'É onde os custos aparecem no Resultado por Categoria.',
     obrigatorio: true,
   },
   'vendaCota.custoCota': {
@@ -422,7 +422,7 @@ export const campos = {
   'vendaBem.custosCategoria': {
     titulo: 'Categoria dos custos',
     paraQueServe: 'Categoria de despesa dos custos da venda.',
-    relacaoComTela: 'É onde os custos aparecem no Demonstrativo.',
+    relacaoComTela: 'É onde os custos aparecem no Resultado por Categoria.',
     obrigatorio: true,
   },
   'vendaBem.observacao': {
@@ -540,7 +540,7 @@ export const campos = {
   'parametrizarBem.categoriaJuros': {
     titulo: 'Taxa de financiamento (juros)',
     paraQueServe: 'Categoria da parte de juros das parcelas do financiamento.',
-    relacaoComTela: 'É onde os juros pagos aparecem no Demonstrativo.',
+    relacaoComTela: 'É onde os juros pagos aparecem no Resultado por Categoria.',
     obrigatorio: true,
   },
 

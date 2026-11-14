@@ -104,13 +104,26 @@ describe('Relatório Gerencial da Fatura', () => {
     expect(screen.getAllByTestId('relatorio-fatura-linha')).toHaveLength(5)
   })
 
-  it('pelo menu (sem fatura recebida): abre na fatura ATUAL, nunca na última futura; seletor marca atual e futura', () => {
+  it('pelo menu (sem fatura recebida): sem fechada a pagar, abre na ABERTA (nunca na última futura)', () => {
     render(<RelatorioFatura />)
     const sel = screen.getByLabelText(/^Fatura/)
     expect(sel.value).toBe('2026-11')
     const rotulos = [...sel.options].map(o => o.textContent)
     expect(rotulos[0]).toBe('Out/2027 · futura')
-    expect(rotulos).toContain('Nov/2026 · atual')
+    expect(rotulos).toContain('Nov/2026 · aberta')
+  })
+
+  it('pelo menu, com a fatura de novembro fechada e não paga: abre nela ("a pagar"), não na aberta', () => {
+    vi.setSystemTime(new Date(2026, 10, 20, 12, 0, 0)) // 20/11: Nov/2026 fechou dia 13; aberta = Dez/2026
+    render(<RelatorioFatura />)
+    const sel = screen.getByLabelText(/^Fatura/)
+    expect(sel.value).toBe('2026-11')
+    const rotulos = [...sel.options].map(o => o.textContent)
+    expect(rotulos).toContain('Nov/2026 · a pagar')
+    expect(rotulos).toContain('Dez/2026 · aberta')
+    cleanup()
+    render(<ExtratoFatura />)
+    expect(screen.getByTestId('extrato-fatura-rotulo').textContent).toMatch('Novembro/2026 · a pagar')
   })
 
   it('Excel: fatura inteira com a coluna do grupo + aba Resumo', async () => {
@@ -123,10 +136,23 @@ describe('Relatório Gerencial da Fatura', () => {
     expect(Math.round(resumo.linhas.reduce((s, l) => s + l.valor, 0) * 100) / 100).toBe(172.99)
   })
 
-  it('aba "Extrato gerencial por data" mostra o extrato por período', () => {
+  it('aba "Movimentos do Cartão por Data" mostra o extrato por período, com exportação', async () => {
     render(<RelatorioFatura initialCardId="c1" initialBillKey="2026-11" />)
-    fireEvent.click(screen.getByRole('tab', { name: 'Extrato gerencial por data' }))
-    expect(screen.getByText('Extrato Gerencial')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Movimentos do Cartão por Data' }))
+    expect(screen.getByRole('heading', { name: 'Movimentos do Cartão por Data' })).toBeTruthy()
+    // Período padrão = mês de calendário (01–30/11): Estorno de 05/11 e compras de 02 e 03/11.
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: /CSV/ }).at(-1)) })
+    expect(exportados.arquivos.at(-1).nome).toMatch(/^Finup_Movimentos-do-Cartao-por-Data-TESTE_.*\.csv$/)
+  })
+
+  it('controle gerencial desligado: cards por categoria consideram o rateio', () => {
+    const rateios = new Map([['a', [{ categoriaId: 'cat_casa', valor: 60 }, { categoriaId: 'cat_mercado', valor: 40 }]]])
+    base({ settings: { controleGerencial: false }, rateiosByLancamento: rateios,
+      categories: [{ id: 'cat_casa', name: 'Casa' }, { id: 'cat_mercado', name: 'Mercado' }] })
+    render(<RelatorioFatura initialCardId="c1" initialBillKey="2026-11" />)
+    const cards = screen.getAllByRole('button').map(b => b.textContent)
+    expect(cards.some(t => /Casa.*60,00/.test(t))).toBe(true)
+    expect(cards.some(t => /Mercado.*40,00/.test(t))).toBe(true)
   })
 
   it('controle gerencial desligado: "Relatório da Fatura", sem cards de grupo, coluna Ger. nem aba gerencial', () => {

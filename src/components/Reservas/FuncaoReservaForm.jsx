@@ -199,7 +199,7 @@ export default function FuncaoReservaForm({ initial, accounts, categories = [], 
           <option value="">Sem categoria vinculada</option>
           {categoryOpts.map(c => <option key={c.id} value={c.id}>{`${c.icon || ''} ${c.name}`.trim()}</option>)}
         </select>
-        <p className="text-xs text-texto-3 mt-1">As sombras de reserva (depósitos e resgates) herdam esta categoria no Demonstrativo</p>
+        <p className="text-xs text-texto-3 mt-1">As sombras de reserva (depósitos e resgates) herdam esta categoria no Resultado por Categoria</p>
       </div>
       <div data-help-id="reserva.contarComoDespesa">
         <label className="flex items-center gap-2 cursor-pointer">

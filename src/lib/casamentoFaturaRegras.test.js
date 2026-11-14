@@ -172,9 +172,12 @@ describe('mesmo lançamento automático, perguntas e novos', () => {
     expect(contarRevisaoFatura([cent]).decisao.qtd).toBe(0)
     // A confirmação grava o valor do arquivo na previsão…
     expect(patchColisao(cent, p2, { saveDate: '2026-10-15' })).toMatchObject({ amount: 100.3 })
-    // … e a diferença aparece na conferência como ajuste da previsão.
+    // … e o total projetado já é o do arquivo (14/11/2026: vale o valor da fatura do banco; o ajuste
+    // aparece no bloco "Ajustados ao valor do banco", não como divergência).
     const conf = projetarTotalFatura([cent], { fatura: '2026-11', accountId: CARD, transactions: [p2], closingDay: 13 })
-    expect(conf.itens).toEqual([expect.objectContaining({ tipo: 'valor_diferente', motivo: expect.stringMatching(/^previsão ajustada de R\$\s100,00 para R\$\s100,30$/) })])
+    expect(conf.itens).toEqual([])
+    expect(conf.projetado).toBe(100.3)
+    expect(cent._ajusteValor).toMatchObject({ de: 100, para: 100.3 })
     // Centavos contra parcela de OUTRA série ou além de R$ 0,50: não é candidato — novo.
     expect(status(revisar([{ ...row, amount: 100.3, _serieExistente: 'serie_outra' }], [p2])[0])).toBe('novo')
     expect(status(revisar([{ ...row, amount: 101 }], [p2])[0])).toBe('novo')

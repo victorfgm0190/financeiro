@@ -53,8 +53,8 @@ describe('Relatório de saídas por mês', () => {
     const linhas = [{ bem: 'Carro', mes: '2026-02', principal: 5000, juros: 1000, total: 6000, terceiros: 0, devolucoes: 0 }]
     const spec = specRelatorioBens(linhas, { de: '2026-01-01', ate: '2026-12-31', totais: { total: 6000, terceiros: 0, devolucoes: 0 } })
     const wb = montarPlanilha(ExcelJS, spec)
-    expect(wb.worksheets[0].name).toBe('Bens e investimentos')
-    expect(spec.nomeArquivo.relatorio).toBe('BensInvestimentos')
+    expect(wb.worksheets[0].name).toBe('Pagamentos por Mês')
+    expect(spec.nomeArquivo.relatorio).toBe('Patrimonio-Pagamentos-por-Mes')
   })
 })
 

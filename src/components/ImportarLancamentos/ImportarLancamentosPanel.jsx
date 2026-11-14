@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileSpreadsheet, Upload, AlertTriangle, Check, Undo2, RefreshCw, Loader2, FileDown, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { entregarArquivo } from '../../lib/exportExcel'
 import { getSessao } from '../../lib/api'
 import { ORIGIN } from '../../lib/origins'
 import { TIPOS_CONTA_IMPORTAVEIS, rotulosCategorias, fmtDataBR, fmtValorBR } from '../../lib/importacaoPadrao/comum'
@@ -157,12 +158,10 @@ export default function ImportarLancamentosPanel() {
     try {
       const [{ default: ExcelJS }, { gerarExcelImportacao, nomeArquivoExcel }] = await Promise.all([import('exceljs'), import('../../lib/importacaoPadrao/excel')])
       const buf = await gerarExcelImportacao(ExcelJS, { conta, ambiente, categorias: categories, favorecidos: payees || [] })
-      const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = nomeArquivoExcel(conta)
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      // Mesma entrega dos outros arquivos do Finup (no celular, compartilha).
+      await entregarArquivo(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), nomeArquivoExcel(conta))
+    } catch (err) {
+      window.alert(`Não consegui gerar o Excel para preencher: ${err?.message || err}`)
     } finally {
       setGerando(false)
     }

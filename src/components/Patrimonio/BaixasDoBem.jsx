@@ -43,7 +43,7 @@ export default function BaixasDoBem({ baixas = [], onMudou }) {
                 {b.quantidade_parcelas > 1 && <span className="text-texto-3"> · {b.quantidade_parcelas} parcelas</span>}
               </p>
               <p className="text-xs text-texto-3 truncate">
-                {[fmtDate(b.data), b.cota_numero && `Cota ${b.cota_numero}`, b.favorecido, b.descricao, b.lancamento_id && 'com receita no Demonstrativo'].filter(Boolean).join(' · ')}
+                {[fmtDate(b.data), b.cota_numero && `Cota ${b.cota_numero}`, b.favorecido, b.descricao, b.lancamento_id && 'com receita no Resultado por Categoria'].filter(Boolean).join(' · ')}
               </p>
             </div>
             {podeEditar && b.tipo === 'benfeitoria' && <span className="text-[11px] text-texto-3 shrink-0">Altere na composição do contrato</span>}

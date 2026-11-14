@@ -1,7 +1,7 @@
 // Fonte única da fatura de cartão (lib/faturaCartao). Dados FICTÍCIOS.
 import { describe, it, expect } from 'vitest'
 import {
-  lancamentosDaFatura, faturasDoCartao, faturaAtualDoCartao, resumoGerencialDaFatura, situacaoDaFatura, parcelaPorExtenso, chaveDoGrupo,
+  lancamentosDaFatura, faturasDoCartao, faturaAtualDoCartao, faturaPadraoDoCartao, pagoDaFatura, resumoGerencialDaFatura, situacaoDaFatura, parcelaPorExtenso, chaveDoGrupo,
 } from './faturaCartao.js'
 
 const CARD = { id: 'c1', type: 'credit', closingDay: 13 }
@@ -35,9 +35,25 @@ describe('lancamentosDaFatura', () => {
 describe('faturasDoCartao / fatura atual', () => {
   it('ordem decrescente, atual marcada, futuras com rótulo', () => {
     expect(faturaAtualDoCartao(CARD, '2026-11-14')).toBe('2026-12')
-    const l = faturasDoCartao(TXS, CARD, '2026-11-14')
-    expect(l.map(x => x.rotulo)).toEqual(['Dez/2026 · atual', 'Nov/2026'])
-    expect(faturasDoCartao(TXS, CARD, '2026-11-05').map(x => x.rotulo)).toEqual(['Dez/2026 · futura', 'Nov/2026 · atual'])
+    const l = faturasDoCartao(TXS, CARD, '2026-11-14', '2026-11')
+    expect(l.map(x => x.rotulo)).toEqual(['Dez/2026 · aberta', 'Nov/2026 · a pagar'])
+    expect(faturasDoCartao(TXS, CARD, '2026-11-05').map(x => x.rotulo)).toEqual(['Dez/2026 · futura', 'Nov/2026 · aberta'])
+  })
+
+  it('fatura padrão: fechada não paga (depois da última paga); senão a aberta', () => {
+    // Nov/2026 fechou dia 13 e o pagamento "p" (R$ 5.000) cobre: padrão = a aberta (Dez).
+    expect(faturaPadraoDoCartao({ transactions: TXS, schedules: [], card: CARD, hoje: '2026-11-14' })).toBe('2026-12')
+    // Sem o pagamento: Nov/2026 ainda a pagar.
+    const semPag = TXS.filter(t => t.id !== 'p')
+    expect(faturaPadraoDoCartao({ transactions: semPag, schedules: [], card: CARD, hoje: '2026-11-14' })).toBe('2026-11')
+    // Resto antigo sem pagamento ANTES de uma fatura paga: considerado resolvido.
+    const comResto = [...semPag, tx({ id: 'velho', date: '2024-05-02', amount: 9.9 }),
+      tx({ id: 'out', date: '2026-10-01', amount: 40 }), { id: 'pOut', type: 'credit_payment', accountId: 'c1', date: '2026-10-20', amount: 40, faturaMonthYear: '2026-10' }]
+    expect(faturaPadraoDoCartao({ transactions: comResto, schedules: [], card: CARD, hoje: '2026-11-14' })).toBe('2026-11')
+    // Pago pelo agendamento pagamento_fatura registrado (mesma regra da tela).
+    const ag = [{ tipo: 'pagamento_fatura', cardId: 'c1', faturaMesAno: '2026-11', amount: 172.99, registered: ['2026-11-20'] }]
+    expect(pagoDaFatura(semPag, ag, CARD, '2026-11')).toBe(172.99)
+    expect(faturaPadraoDoCartao({ transactions: semPag, schedules: ag, card: CARD, hoje: '2026-11-14' })).toBe('2026-12')
   })
 })
 

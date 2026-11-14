@@ -356,8 +356,9 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
         .sort((a, b) => diffValor(a, r) - diffValor(b, r) || (chaveEstavel(a) < chaveEstavel(b) ? -1 : 1))[0] || null
     }
     if (!tx) continue
-    if (valorCompativel(r, tx)) marcarColisao(r, tx)
-    else if (podePerguntar(tx)) marcarColisao(r, tx, false, true)
+    // VALE O VALOR DA FATURA DO BANCO (14/11/2026): casada por tolerância, a parcela assume o valor
+    // do arquivo — também conciliada ou de fatura fechada/paga (a prévia destaca esses casos).
+    marcarColisao(r, tx, false, diffValor(r, tx) > 0.005)
   }
 
   // 2. Já existe, em silêncio. Primeiro os CONCILIADOS (reimportação da mesma fatura): mesmo tipo,
@@ -454,16 +455,41 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
     })
     r._tambemEm = iguais.map(t => ({ fatura: faturaDe(t), tx: t })).sort((a, b) => a.fatura.localeCompare(b.fatura))
   }
+  for (const r of out) {
+    if (r._generated || !(r._collisionTx || (r._isDuplicate && r._dbTx))) continue
+    r._ajusteValor = ajusteDeValorDaLinha(r, r._dbTx)
+  }
   return out
+}
+
+// VALE O VALOR DA FATURA DO BANCO: linha do arquivo casada com um lançamento gravado (colisão "No
+// banco ↻" ou "já existe") com valor diferente → o lançamento passa a ter o valor do arquivo. Só
+// aquele lançamento (as outras parcelas e o agendamento não mudam). → null | { de, para, diferenca,
+// conciliado }. `conciliado` = já conferido antes: ajusta mesmo assim, mas a prévia destaca.
+export function ajusteDeValorDaLinha(row, tx) {
+  if (!row || !tx || tipoDe(row) !== tipoDe(tx)) return null
+  const de = r2(tx.amount)
+  const para = r2(row.amount)
+  if (Math.abs(para - de) <= 0.005) return null
+  return { de, para, diferenca: r2(para - de), conciliado: !!tx.reconciled }
+}
+
+// Motivo gravado no histórico de alterações.
+export const motivoAjusteValor = (a, fmt = (v) => `R$ ${Number(v).toFixed(2).replace('.', ',')}`) =>
+  `Ajustado ao valor da fatura do banco (${fmt(a.de)} → ${fmt(a.para)})`
+
+// Resumo da prévia: "N lançamentos ajustados ao valor do banco (diferença total R$ Z)".
+export function resumoAjustesDeValor(rows) {
+  const lista = (rows || []).filter(r => r._ajusteValor && !r._ajusteIgnorado)
+  return { qtd: lista.length, diferenca: r2(lista.reduce((s, r) => s + r._ajusteValor.diferenca, 0)), linhas: lista }
 }
 
 // Campos que a confirmação grava no lançamento do banco quando a linha colide com ele (UPDATE em
 // vez de INSERT). `amount` só entra no ajuste de centavos da previsão (_ajustarValor).
 export function patchColisao(row, tx, { saveDate, faturaRef, serieId }) {
   return {
-    // Só a previsão NÃO conciliada da mesma parcela com centavos (passo 1, _ajustarValor) recebe o
-    // valor do arquivo; nas demais colisões o valor do banco é o confirmado.
-    ...(row._ajustarValor && !tx.reconciled ? { amount: Math.round((Number(row.amount) || 0) * 100) / 100 } : {}),
+    // Vale o valor da fatura do banco: diferente do gravado → o do arquivo (ajusteDeValorDaLinha).
+    ...(ajusteDeValorDaLinha(row, tx) ? { amount: r2(row.amount) } : {}),
     date: saveDate,
     dateCartao: row._dateCartao || tx.dateCartao || null,
     // Regra A: a descrição real é a do extrato (a gerada antes podia ser "Parc2 11/12").
@@ -497,8 +523,21 @@ export function camposAlteradosColisao(patch, tx, row = null) {
 // reimportação nunca é alterado: nada a gravar (nem pré-marcado) — diferenças reais aparecem só como
 // informação (diferencasDoConciliado).
 export function mudancasDaColisao(row, tx, patch) {
-  if (!tx || tx.reconciled) return []
-  return camposAlteradosColisao(patch, tx, row)
+  if (!tx) return []
+  return camposAlteradosColisao(patchAplicavel(row, tx, patch), tx, tx.reconciled ? null : row)
+}
+
+// Campos que a colisão GRAVA de fato. Lançamento CONCILIADO só muda quando o valor do arquivo é
+// outro: aí recebe o que vem do BANCO — valor, data do cartão e fatura (a referência da fatura só se
+// a fatura mudar). Nada de descrição, categoria, grupo ou data de sistema (o Finup guarda o que o
+// usuário escreveu e a regra de data das parcelas); sem diferença de valor, nada.
+const CAMPOS_DO_BANCO = ['amount', 'dateCartao', 'faturaMonthYear']
+export function patchAplicavel(row, tx, patch) {
+  if (!tx?.reconciled) return patch
+  if (!ajusteDeValorDaLinha(row, tx)) return {}
+  const out = Object.fromEntries(CAMPOS_DO_BANCO.filter(k => k in patch).map(k => [k, patch[k]]))
+  if ('faturaMonthYear' in out && out.faturaMonthYear !== tx.faturaMonthYear && 'faturaRef' in patch) out.faturaRef = patch.faturaRef
+  return out
 }
 
 // Diferenças REAIS entre a linha do arquivo e um lançamento conciliado: valor e data do cartão.
@@ -520,8 +559,12 @@ export function textoResumoImportacao(r) {
   const pl = (n, um, varios) => `${n} ${n === 1 ? um : varios}`
   const conc = r.conciliados > 0 ? ` · ${pl(r.conciliados, 'lançamento marcado como conciliado', 'lançamentos marcados como conciliados')}` : ''
   if (r.salvos != null) return `${pl(r.salvos, 'lançamento salvo', 'lançamentos salvos')}${conc || '.'}`
-  if (r.novos === 0 && r.atualizados === 0) return `Nenhum lançamento novo — a fatura já estava no banco.${conc}`
-  return `${pl(r.novos, 'novo importado', 'novos importados')} · ${pl(r.existiam, 'já existia', 'já existiam')} · ${pl(r.atualizados, 'atualizado', 'atualizados')}${conc}`
+  const fmtV = (v) => `R$ ${Math.abs(v).toFixed(2).replace('.', ',')}`
+  const aj = r.ajustados > 0
+    ? ` · ${pl(r.ajustados, 'lançamento ajustado', 'lançamentos ajustados')} ao valor do banco (diferença total ${r.ajusteDiferenca < 0 ? '−' : ''}${fmtV(r.ajusteDiferenca || 0)})${r.resgatesAcompanharam > 0 ? ` · ${pl(r.resgatesAcompanharam, 'resgate acompanhou', 'resgates acompanharam')}` : ''}`
+    : ''
+  if (r.novos === 0 && r.atualizados === 0) return `Nenhum lançamento novo — a fatura já estava no banco.${aj}${conc}`
+  return `${pl(r.novos, 'novo importado', 'novos importados')} · ${pl(r.existiam, 'já existia', 'já existiam')} · ${pl(r.atualizados, 'atualizado', 'atualizados')}${aj}${conc}`
 }
 
 // Lançamentos JÁ gravados que bateram com uma linha do arquivo: "já existe" e colisões ("No banco ↻",
@@ -601,6 +644,8 @@ export function projetarTotalFatura(resolvedRows, { fatura, accountId, transacti
     if (tx && faturaDoLancamento(tx, closingDay) === fatura) {
       representados.add(tx.id)
       const d = r2(v - valorComSinal(tx))
+      // Ajuste ao valor do banco que a confirmação vai gravar: o projetado já é o do arquivo.
+      if (Math.abs(d) > 0.005 && r._ajusteValor && !r._ajusteIgnorado) { projetado += d; continue }
       if (Math.abs(d) > 0.005) {
         itens.push({
           tipo: 'valor_diferente', linha: r, tx, valor: d,

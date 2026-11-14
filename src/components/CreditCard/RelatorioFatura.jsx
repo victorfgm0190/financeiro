@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { categoriaParaExportar } from '../../lib/rateio'
+import { categoriaParaExportar, linhasDoLancamento } from '../../lib/rateio'
 import { Download, FileBarChart, AlertTriangle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useScrollScope } from '../../hooks/useScrollRestoration'
@@ -7,12 +7,12 @@ import { fmt, fmtDate, today } from '../shared/utils'
 import { faturaDoCartao } from '../../lib/fatura'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import {
-  lancamentosDaFatura, faturasDoCartao, faturaAtualDoCartao, rotuloFatura, resumoGerencialDaFatura, chaveDoGrupo,
+  lancamentosDaFatura, faturasDoCartao, faturaPadraoDoCartao, previstoDaFaturaFn, rotuloFatura, resumoGerencialDaFatura, chaveDoGrupo,
 } from '../../lib/faturaCartao'
 import { agendamentosPrevistosDaFatura } from '../../lib/gerencialPrevistos'
 import SeloCambio from '../shared/SeloCambio'
-import { exportarExcel, entregarArquivo, nomeArquivoFinup } from '../../lib/exportExcel'
-import { gerarCsv } from '../../lib/csvFinup'
+import { exportarExcel } from '../../lib/exportExcel'
+import { exportarCsv } from '../../lib/csvFinup'
 import HelpCampo from '../shared/HelpCampo'
 import ExtratoGerencial from './ExtratoGerencial'
 
@@ -53,7 +53,7 @@ function CardResumo({ titulo, valor, total, cor = 'text-texto-2', borda = '', at
 //     cartão, a fatura ATUAL (a que contém hoje), nunca a última futura.
 //   • Cards: G, grupos 2..N, D, "Sem grupo" e Estornos — a mesma soma da linha de resumo da tela do
 //     cartão. Σ grupos + sem grupo − estornos = total; se não fechar, aviso com a diferença.
-//   • Aba "Extrato gerencial por data": o antigo Extrato Gerencial (ExtratoGerencial), só mudou de lugar.
+//   • Aba "Movimentos do Cartão por Data": o antigo Extrato Gerencial (ExtratoGerencial), só mudou de lugar.
 export default function RelatorioFatura({ initialCardId, initialBillKey }) {
   const {
     profileAccounts: accounts = [], profileTransactions: transactions = [], profileSchedules: schedules = [],
@@ -66,17 +66,19 @@ export default function RelatorioFatura({ initialCardId, initialBillKey }) {
   const creditCards = useMemo(() => accounts.filter(a => a.type === 'credit' && a.active !== false), [accounts])
   const [cardId, setCardId] = useState(initialCardId || creditCards[0]?.id || '')
   const card = accounts.find(a => a.id === cardId) || null
-  const [billKey, setBillKey] = useState(() => initialBillKey || faturaAtualDoCartao(card, today()))
+  // Fatura padrão (pelo menu e ao trocar de cartão): a fechada não paga; senão a aberta (lib/faturaCartao).
+  const padraoDe = (c) => faturaPadraoDoCartao({ transactions, schedules, card: c, hoje: today(), previstoDe: previstoDaFaturaFn({ schedules, card: c, getOccurrences: getOccurrencesProjecao }) })
+  const [billKey, setBillKey] = useState(() => initialBillKey || padraoDe(card))
   const [filtro, setFiltro] = useState(null) // id do grupo | 'sem' | 'estorno' | id da categoria
   const [aba, setAba] = useState('fatura')
 
   const trocarCartao = (id) => {
     setCardId(id)
-    setBillKey(faturaAtualDoCartao(accounts.find(a => a.id === id), today()))
+    setBillKey(padraoDe(accounts.find(a => a.id === id)))
     setFiltro(null)
   }
 
-  const faturas = useMemo(() => faturasDoCartao(transactions, card, today()), [transactions, card])
+  const faturas = useMemo(() => faturasDoCartao(transactions, card, today(), padraoDe(card)), [transactions, schedules, card]) // eslint-disable-line react-hooks/exhaustive-deps
   const fatura = useMemo(() => lancamentosDaFatura(transactions, card, billKey), [transactions, card, billKey])
   const resumo = useMemo(() => resumoGerencialDaFatura(fatura, gerencialGroups), [fatura, gerencialGroups])
   const grupoPorId = useMemo(() => new Map(gerencialGroups.map(g => [g.id, g])), [gerencialGroups])
@@ -90,26 +92,32 @@ export default function RelatorioFatura({ initialCardId, initialBillKey }) {
     if (r?.length) return categoriaParaExportar(tx, r, categories)
     return categories.find(c => c.id === tx.categoryId)?.name || ''
   }
-  // Sem controle gerencial: total por categoria (despesas; estornos à parte).
+  // Sem controle gerencial: total por categoria (despesas; estornos à parte). Lançamento RATEADO
+  // divide o valor entre as categorias das linhas (lib/rateio linhasDoLancamento, como no Resultado
+  // por Categoria).
   const porCategoria = useMemo(() => {
     const m = new Map()
     for (const tx of fatura.despesas) {
-      const k = tx.categoryId || 'sem'
-      m.set(k, round2((m.get(k) || 0) + (Number(tx.amount) || 0)))
+      for (const l of linhasDoLancamento(tx, rateiosByLancamento?.get?.(tx.id))) {
+        const k = l.categoriaId || 'sem'
+        m.set(k, round2((m.get(k) || 0) + (Number(l.valor) || 0)))
+      }
     }
     return [...m.entries()].map(([id, valor]) => ({ id, valor, nome: categories.find(c => c.id === id)?.name || 'Sem categoria' }))
       .sort((a, b) => b.valor - a.valor)
-  }, [fatura, categories])
+  }, [fatura, categories, rateiosByLancamento])
 
   const linhasTabela = useMemo(() => {
     if (!filtro) return fatura.lancamentos
     if (gerencialLigado) return fatura.lancamentos.filter(tx => chaveDoGrupo(tx, gerencialGroups) === filtro)
     if (filtro === 'estorno') return fatura.estornos
-    return fatura.despesas.filter(tx => (tx.categoryId || 'sem') === filtro)
-  }, [fatura, filtro, gerencialLigado, gerencialGroups])
+    return fatura.despesas.filter(tx => linhasDoLancamento(tx, rateiosByLancamento?.get?.(tx.id)).some(l => (l.categoriaId || 'sem') === filtro))
+  }, [fatura, filtro, gerencialLigado, gerencialGroups, rateiosByLancamento])
   const alternar = (k) => setFiltro(f => (f === k ? null : k))
   const grupoDe = (tx) => (tx.type === 'income' ? null : grupoPorId.get(tx.grupoGerencial) || null)
   const nomeCartao = card ? (card.apelido || card.name) : ''
+  // O mesmo nome no Excel e no CSV (só muda a extensão).
+  const nomeArquivoRelatorio = { relatorio: `${gerencialLigado ? 'Relatorio-Gerencial' : 'Relatorio'}-da-Fatura-${nomeCartao}`, periodo: billKey }
 
   const linhasExport = () => fatura.lancamentos.map(tx => {
     const g = grupoDe(tx)
@@ -163,25 +171,20 @@ export default function RelatorioFatura({ initialCardId, initialBillKey }) {
             totais: { titulo: 'TOTAL DA FATURA', rotulo: () => '', somar: ['valor'] },
           },
         ],
-        nomeArquivo: { relatorio: `${gerencialLigado ? 'Relatorio-Gerencial' : 'Relatorio'}-Fatura-${nomeCartao}`, periodo: billKey },
+        nomeArquivo: nomeArquivoRelatorio,
       })
     } catch (err) {
       window.alert(`Não consegui exportar o Excel: ${err?.message || err}`)
     }
   }
 
-  const exportarCsv = async () => {
-    try {
-      const cab = ['Data', 'Descrição', 'Descrição original', 'Fatura', 'Categoria', 'Favorecido', ...(gerencialLigado ? ['Grupo Gerencial'] : []), 'Parcela', 'Valor']
-      const csv = gerarCsv(cab, linhasExport().map(l => [
-        fmtDate(l.data), l.desc, l.descOrig, l.fatura, l.categoria, l.favorecido, ...(gerencialLigado ? [l.grupo] : []), l.parcela, l.valor,
-      ]))
-      await entregarArquivo(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }),
-        nomeArquivoFinup(`Relatorio-Fatura-${nomeCartao}`, billKey).replace(/\.xlsx$/, '.csv'), { tipo: 'text/csv' })
-    } catch (err) {
-      window.alert(`Não consegui exportar o CSV: ${err?.message || err}`)
-    }
-  }
+  const exportarCsvRelatorio = () => exportarCsv({
+    nomeArquivo: nomeArquivoRelatorio,
+    cabecalho: ['Data', 'Descrição', 'Descrição original', 'Fatura', 'Categoria', 'Favorecido', ...(gerencialLigado ? ['Grupo Gerencial'] : []), 'Parcela', 'Valor'],
+    linhas: linhasExport().map(l => [
+      fmtDate(l.data), l.desc, l.descOrig, l.fatura, l.categoria, l.favorecido, ...(gerencialLigado ? [l.grupo] : []), l.parcela, l.valor,
+    ]),
+  })
 
   const colunas = gerencialLigado ? 6 : 5
   return (
@@ -203,7 +206,7 @@ export default function RelatorioFatura({ initialCardId, initialBillKey }) {
               {faturas.map(f => <option key={f.key} value={f.key}>{f.rotulo}</option>)}
             </select>
           </div>
-          <button className="btn-secondary flex items-center gap-2" onClick={exportarCsv} disabled={!fatura.lancamentos.length}>
+          <button className="btn-secondary flex items-center gap-2" onClick={exportarCsvRelatorio} disabled={!fatura.lancamentos.length}>
             <Download size={14} /> Exportar CSV
           </button>
           <button className="btn-primary flex items-center gap-2" onClick={exportarXlsx} disabled={!fatura.lancamentos.length}
@@ -215,7 +218,7 @@ export default function RelatorioFatura({ initialCardId, initialBillKey }) {
 
       {gerencialLigado && (
         <div className="flex items-center gap-1 border-b border-borda" role="tablist">
-          {[['fatura', 'Fatura por grupo'], ['gerencial', 'Extrato gerencial por data']].map(([id, rot]) => (
+          {[['fatura', 'Fatura por grupo'], ['gerencial', 'Movimentos do Cartão por Data']].map(([id, rot]) => (
             <button key={id} role="tab" aria-selected={aba === id} onClick={() => setAba(id)}
               className={`px-3 pb-2 text-sm font-medium border-b-2 -mb-px ${aba === id ? 'border-primary text-primary-fg' : 'border-transparent text-texto-3 hover:text-texto-2'}`}>
               {rot}

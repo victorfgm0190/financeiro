@@ -141,10 +141,10 @@ export const TODAS_AS_TAREFAS = [
   {
     id: 'reports.exportar', tela: 'reports',
     titulo: 'Abrir um relatório e exportar para Excel',
-    descricao: 'Monte o Demonstrativo Financeiro do período e baixe a planilha.',
+    descricao: 'Monte o Resultado por Categoria do período e baixe a planilha.',
     requer: ['pode:relatorios:ver'],
     passos: [
-      { alvo: 'reports.demonstrativo', espera: 'clique', texto: 'Clique em "Demonstrativo Financeiro".' },
+      { alvo: 'reports.demonstrativo', espera: 'clique', texto: 'Clique em "Resultado por Categoria".' },
       { alvo: 'reports:demonstrativo.periodo', espera: 'clique', texto: 'Escolha um período rápido, como os últimos 3 meses.' },
       { alvo: 'reports:demonstrativo.contas', espera: 'nenhuma', texto: 'Se quiser, escolha só algumas contas. Sem nada marcado, todas entram.' },
       { alvo: 'reports:demonstrativo.atualizar', espera: 'clique', texto: 'Clique em "Atualizar" para montar o relatório.' },

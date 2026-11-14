@@ -8,6 +8,8 @@ import DateInput from '../shared/DateInput'
 import { isoLocal } from '../../lib/hoje'
 import { specRelatorioFavorecido } from '../../lib/relatorioFavorecidoExcel'
 import { exportarExcel } from '../../lib/exportExcel'
+import { exportarCsv } from '../../lib/csvFinup'
+import { categoriaParaExportar } from '../../lib/rateio'
 import { useSubtelaGuia } from '../BoasVindas/subtelaGuia'
 import HelpCampo from '../shared/HelpCampo'
 
@@ -70,42 +72,27 @@ function MultiSelectPanel({ items, selected, onChange }) {
   )
 }
 
-// ─── CSV export ───────────────────────────────────────────────────────────────
+// ─── CSV export (padrão lib/csvFinup: ";", vírgula decimal, mesmo nome do Excel, erro vira mensagem) ───
 
-function doExport(filtered, totals, accounts, categories, applied, analytic) {
-  const sep = ';'
-  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`
-  const rows = []
-
+function doExport(filtered, totals, accounts, categories, applied, analytic, rateios) {
+  const periodo = `${applied.from}_${applied.to}`
   if (analytic) {
-    rows.push(['Favorecido', 'Data', 'Descrição', 'Conta', 'Categoria', 'Tipo', 'Valor'].map(q).join(sep))
+    const linhas = []
     filtered.forEach(d => {
       ;[...d.txs].sort((a, b) => b.date.localeCompare(a.date)).forEach(tx => {
         const acc = accounts.find(a => a.id === tx.accountId)
-        const cat = categories.find(c => c.id === tx.categoryId)
-        rows.push([
-          d.payee, tx.date, tx.description || '', acc?.apelido || acc?.name || '',
-          cat?.name || '', tx.type === 'income' ? 'Receita' : 'Despesa', tx.amount.toFixed(2),
-        ].map(q).join(sep))
+        const r = rateios?.get?.(tx.id)
+        const cat = r?.length ? categoriaParaExportar(tx, r, categories) : (categories.find(c => c.id === tx.categoryId)?.name || '')
+        linhas.push([d.payee, fmtDate(tx.date), tx.description || '', acc?.apelido || acc?.name || '', cat, tx.type === 'income' ? 'Receita' : 'Despesa', Number(tx.amount) || 0])
       })
     })
-  } else {
-    rows.push(['Favorecido', 'Total Pago', 'Total Recebido', 'Saldo', 'Qtd'].map(q).join(sep))
-    filtered.forEach(d => {
-      rows.push([d.payee, d.pago.toFixed(2), d.recebido.toFixed(2), (d.recebido - d.pago).toFixed(2), d.txs.length].map(q).join(sep))
-    })
-    rows.push(['TOTAL', totals.pago.toFixed(2), totals.recebido.toFixed(2), (totals.recebido - totals.pago).toFixed(2), totals.qtd].map(q).join(sep))
+    return exportarCsv({ nomeArquivo: { relatorio: `${NOME_ARQUIVO}-Analitico`, periodo }, cabecalho: ['Favorecido', 'Data', 'Descrição', 'Conta', 'Categoria', 'Tipo', 'Valor'], linhas })
   }
-
-  const csv = '﻿' + rows.join('\r\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `favorecidos_${analytic ? 'analitico' : 'sintetico'}_${applied.from}_${applied.to}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  const linhas = filtered.map(d => [d.payee, d.pago, d.recebido, d.recebido - d.pago, String(d.txs.length)])
+  linhas.push(['TOTAL', totals.pago, totals.recebido, totals.recebido - totals.pago, String(totals.qtd)])
+  return exportarCsv({ nomeArquivo: { relatorio: `${NOME_ARQUIVO}-Sintetico`, periodo }, cabecalho: ['Favorecido', 'Total Pago', 'Total Recebido', 'Saldo', 'Qtd'], linhas })
 }
+const NOME_ARQUIVO = 'Movimentacao-por-Favorecido'
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
@@ -194,7 +181,7 @@ export default function RelatorioPorFavorecido() {
       <div className="card space-y-4" data-help-form="filtrosRelatorioFavorecido">
         <h3 className="text-sm font-semibold text-texto-2 flex items-center gap-2">
           <Users size={14} className="text-texto-2" />
-          Relatório por Favorecido
+          Movimentação por Favorecido
         </h3>
 
         <div data-help-id="filtroFavorecido.periodo">
@@ -238,10 +225,10 @@ export default function RelatorioPorFavorecido() {
           </button>
           {filtered.length > 0 && (
             <>
-              <button data-guia="reports:favorecido.csv-sintetico" onClick={() => doExport(filtered, totals, accounts, categories, applied, false)} className="btn-secondary flex items-center gap-2 text-xs">
+              <button data-guia="reports:favorecido.csv-sintetico" onClick={() => doExport(filtered, totals, accounts, categories, applied, false, rateiosByLancamento)} className="btn-secondary flex items-center gap-2 text-xs">
                 <Download size={12} /> CSV Sintético
               </button>
-              <button data-guia="reports:favorecido.csv-analitico" onClick={() => doExport(filtered, totals, accounts, categories, applied, true)} className="btn-secondary flex items-center gap-2 text-xs">
+              <button data-guia="reports:favorecido.csv-analitico" onClick={() => doExport(filtered, totals, accounts, categories, applied, true, rateiosByLancamento)} className="btn-secondary flex items-center gap-2 text-xs">
                 <Download size={12} /> CSV Analítico
               </button>
               <button

@@ -96,7 +96,7 @@ export default function MarcarPagaModal({ bemId, alvo = {}, rotulo = '', valorSu
           </div>
           <label data-help-id="baixaBem.gerarReceita" className="flex items-center gap-2 text-sm text-texto-2 cursor-pointer">
             <input type="checkbox" className="accent-primary" checked={form.gerar_receita} onChange={e => setForm(f => ({ ...f, gerar_receita: e.target.checked }))} />
-            Gerar a receita de benefício no Demonstrativo<HelpCampo campo="baixaBem.gerarReceita" />
+            Gerar a receita de benefício no Resultado por Categoria<HelpCampo campo="baixaBem.gerarReceita" />
           </label>
           {form.gerar_receita && (
             <div data-help-id="baixaBem.categoria">

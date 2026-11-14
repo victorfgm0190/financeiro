@@ -4,7 +4,7 @@ const rotuloMes = (mes) => { const [a, m] = mes.split('-'); return `${m}/${a}` }
 
 export function specRelatorioBens(linhas, { de, ate, filtros = [], totais }) {
   return {
-    titulo: 'Bens e investimentos — saídas por mês', nome: 'Bens e investimentos',
+    titulo: 'Patrimônio — Pagamentos por Mês', nome: 'Pagamentos por Mês',
     filtros: [`Período: ${fmtData(de)} a ${fmtData(ate)}`, ...filtros],
     resumo: [
       { rotulo: 'Saiu de caixa', valor: totais.total, cor: 'vermelho' },
@@ -24,6 +24,6 @@ export function specRelatorioBens(linhas, { de, ate, filtros = [], totais }) {
       rotulo: (n) => `${n} ${n === 1 ? 'linha' : 'linhas'}`,
       somar: ['principal', 'juros', 'total', 'terceiros', 'devolucoes'],
     },
-    nomeArquivo: { relatorio: 'BensInvestimentos', periodo: `${de}_${ate}` },
+    nomeArquivo: { relatorio: 'Patrimonio-Pagamentos-por-Mes', periodo: `${de}_${ate}` },
   }
 }

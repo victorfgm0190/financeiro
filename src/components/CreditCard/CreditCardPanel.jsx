@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import EscolhaBaixaExclusao from '../shared/EscolhaBaixaExclusao'
 import {
   CreditCard, DollarSign, Calendar, FileText, FileBarChart, ArrowLeft,
@@ -36,7 +36,7 @@ import AccountForm from '../Accounts/AccountForm'
 import DuplicateButton from '../shared/DuplicateButton'
 import ExtratoFatura from './ExtratoFatura'
 import RelatorioFatura from './RelatorioFatura'
-import { lancamentosDaFatura, situacaoDaFatura } from '../../lib/faturaCartao'
+import { lancamentosDaFatura, situacaoDaFatura, faturaPadraoDoCartao, previstoDaFaturaFn, pagoDaFatura } from '../../lib/faturaCartao'
 import InputMoeda from '../shared/InputMoeda'
 import SeloCambio from '../shared/SeloCambio'
 import HelpCampo from '../shared/HelpCampo'
@@ -462,6 +462,19 @@ export default function CreditCardPanel() {
     const card = creditCards[0]
     return card ? getBillKey(today(), card) : ''
   })
+  // Fatura inicial = a fatura padrão do cartão (lib/faturaCartao faturaPadraoDoCartao, a MESMA do
+  // Extrato e do Relatório pelo menu): a fechada não paga; senão a aberta. Escolhida uma vez, quando
+  // os lançamentos chegam; "Ir para a fatura" (faturaInicial) e a navegação do usuário mandam.
+  const faturaPadraoEscolhida = useRef(!!faturaInicial?.faturaMesAno)
+  useEffect(() => {
+    if (faturaPadraoEscolhida.current || !transactions.length) return
+    const card = accounts.find(a => a.id === selectedCardId) || creditCards[0]
+    if (!card) return
+    faturaPadraoEscolhida.current = true
+    // Uma vez só, quando os dados chegam (não é estado derivado: depois o usuário navega livremente).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBillKey(faturaPadraoDoCartao({ transactions, schedules, card, hoje: today(), previstoDe: previstoDaFaturaFn({ schedules, card, getOccurrences: getNextOccurrences }) }))
+  }, [transactions, schedules, accounts, selectedCardId, creditCards, getNextOccurrences])
   const [showExtrato, setShowExtrato] = useState(false)
   const [showRelatorio, setShowRelatorio] = useState(false)
   const saveScroll = useScrollSaver()
@@ -611,12 +624,6 @@ export default function CreditCardPanel() {
   const billPayments = useMemo(() => [...fatura.pagamentos].sort((a, b) => b.date.localeCompare(a.date)), [fatura])
 
   // Agendamentos tipo='pagamento_fatura' já registrados (ocorrências) deste cartão/fatura.
-  const scheduledPaidTotal = useMemo(() => {
-    if (!selectedCard || !billKey) return 0
-    return (schedules || [])
-      .filter(s => s.tipo === 'pagamento_fatura' && s.cardId === selectedCard.id && s.faturaMesAno === billKey)
-      .reduce((sum, s) => sum + (s.registered?.length || 0) * (Number(s.amount) || 0), 0)
-  }, [schedules, selectedCard, billKey])
 
   // Despesas AGENDADAS (manuais) do cartão cujas próximas ocorrências PENDENTES caem na fatura
   // selecionada — projeção do que ainda vai entrar. getNextOccurrences já exclui ocorrências
@@ -633,16 +640,12 @@ export default function CreditCardPanel() {
   ), [schedules, selectedCard, billKey, getNextOccurrences])
   const totalPrevisto = agendamentosPrevistos.reduce((sum, a) => sum + a.amount, 0)
 
-  // Pagamentos REAIS (credit_payment + transferências vinculadas) da fatura.
-  const totalPagoReal = useMemo(
-    () => Math.round(billPayments.reduce((s, t) => s + (Number(t.amount) || 0), 0) * 100) / 100,
-    [billPayments]
-  )
-  // Prevalência: havendo pagamento real, ele PREVALECE sobre o valor abstrato do agendamento
-  // pagamento_fatura (anti-duplicidade). Sem pagamento real, mantém o abstrato (faturas históricas).
+  // Pago da fatura (lib/faturaCartao pagoDaFatura — a MESMA regra da fatura padrão): pagamentos
+  // REAIS (credit_payment + transferências vinculadas) prevalecem; sem eles, as ocorrências
+  // registradas do agendamento pagamento_fatura (faturas históricas). Anti-duplicidade.
   const totalPago = useMemo(
-    () => totalPagoReal > 0 ? totalPagoReal : Math.round(scheduledPaidTotal * 100) / 100,
-    [totalPagoReal, scheduledPaidTotal]
+    () => pagoDaFatura(transactions, schedules, selectedCard, billKey, fatura),
+    [transactions, schedules, selectedCard, billKey, fatura]
   )
   // REGRA DOS PREVISTOS (lib/faturaCartao situacaoDaFatura): as compras agendadas que ainda não
   // viraram lançamento contam em tudo o que fala DESTA fatura — total a pagar, Saldo a Pagar,
@@ -862,7 +865,7 @@ export default function CreditCardPanel() {
               ? 'A fatura separada por grupo gerencial (cards com valor e %), e o extrato gerencial por data'
               : 'A fatura com o total e os gastos por categoria'}
           >
-            <FileBarChart size={13} /> {gerencialLigado ? 'Relatório Gerencial' : 'Relatório da Fatura'}
+            <FileBarChart size={13} /> {gerencialLigado ? 'Relatório Gerencial da Fatura' : 'Relatório da Fatura'}
           </button>
         </div>
       </div>

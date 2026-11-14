@@ -42,7 +42,7 @@ export const campos = {
   'reserva.categoria': {
     titulo: 'Categoria',
     paraQueServe: 'Categoria da despesa coberta pela função. Os depósitos aparecem nela nos relatórios.',
-    relacaoComTela: 'As sombras de reserva (depósitos e resgates) herdam esta categoria no Demonstrativo.',
+    relacaoComTela: 'As sombras de reserva (depósitos e resgates) herdam esta categoria no Resultado por Categoria.',
     obrigatorio: false,
   },
   'reserva.contarComoDespesa': {

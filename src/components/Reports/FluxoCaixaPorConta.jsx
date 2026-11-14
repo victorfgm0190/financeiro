@@ -415,7 +415,7 @@ export default function FluxoCaixaPorConta() {
     const grupo = visao === 'grupo' ? (accountGroups || []).find(g => g.id === groupId)?.name : ''
     const base = round2(saldoAnteriorComAgendamentos)
     exportarExcel({
-      titulo: 'Fluxo de Caixa por Conta', nome: 'Fluxo de Caixa',
+      titulo: 'Extrato e Fluxo de Caixa por Conta', nome: 'Fluxo de Caixa',
       filtros: [
         `Período: ${fmtDate(start)} a ${fmtDate(end)}`,
         `Visão: ${VISOES.find(v => v.id === visao)?.label || visao}`,
@@ -440,7 +440,7 @@ export default function FluxoCaixaPorConta() {
       ],
       linhas,
       totais: { rotulo: (n) => `${n} ${n === 1 ? 'lançamento' : 'lançamentos'}`, somar: ['entrada', 'saida'] },
-      nomeArquivo: { relatorio: `Fluxo-de-Caixa_${VISAO_FILE[visao] || visao}`, periodo: `${start}_${end}` },
+      nomeArquivo: { relatorio: `Extrato-e-Fluxo-de-Caixa_${VISAO_FILE[visao] || visao}`, periodo: `${start}_${end}` },
     }).catch(err => setToast({ message: `Não consegui exportar: ${err?.message || err}`, variant: 'error' }))
   }
 

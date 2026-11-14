@@ -59,7 +59,7 @@ function AberturaFinanciamentoForm({ financiamento, onCancel, onSuccess }) {
   return (
     <form onSubmit={enviar} className="space-y-3" data-help-form="aberturaFinanciamento">
       <p className="text-xs text-texto-3">
-        As primeiras parcelas ficam pagas e somam no bem. Não cria lançamento, não entra no Demonstrativo e os agendamentos delas são removidos.
+        As primeiras parcelas ficam pagas e somam no bem. Não cria lançamento, não entra no Resultado por Categoria e os agendamentos delas são removidos.
       </p>
       <div data-help-id="financiamento.aberturaParcelas">
         <label className="label" htmlFor="abertura-parcelas">Parcelas já pagas antes do Finup *<HelpCampo campo="financiamento.aberturaParcelas" /></label>

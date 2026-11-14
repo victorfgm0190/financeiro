@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  patchAplicavel, ajusteDeValorDaLinha, motivoAjusteValor, resumoAjustesDeValor, mudancasDaColisao,
   resolverLinhasRevisao, projetarTotalFatura, compararNaFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos,
   aguardandoLancamentoDoBanco, avaliarConferencia,
 } from './revisaoImportacao'
@@ -113,10 +114,15 @@ describe('resolverLinhasRevisao — casos da fatura 10/2026', () => {
     expect(patchColisao(arred, projecao, { saveDate: '2026-10-05' }).amount).toBe(33.37)
     // Colisão exata não mexe no valor.
     expect(patchColisao(resolver([row], [projecao])[0], projecao, { saveDate: '2026-10-05' })).not.toHaveProperty('amount')
-    // Conciliada: nunca é alterada nem proposta.
-    const conc = resolver([{ ...row, amount: 33.37 }], [{ ...projecao, reconciled: true }])[0]
-    expect(conc._collisionTx).toBeNull()
+    // Conciliada (regra de 14/11/2026, vale o valor da fatura do banco): casa e assume o valor do
+    // arquivo — só valor, data e fatura; a prévia destaca (_ajusteValor.conciliado).
+    const projConc = { ...projecao, reconciled: true }
+    const conc = resolver([{ ...row, amount: 33.37 }], [projConc])[0]
+    expect(conc._collisionTx).toBe(projConc)
     expect(conc._dupLevel).toBeNull()
+    expect(conc._ajusteValor).toMatchObject({ de: 33.34, para: 33.37, conciliado: true })
+    expect(Object.keys(patchAplicavel(conc, projConc, patchColisao(conc, projConc, { saveDate: '2026-10-05' }))).sort())
+      .toEqual(['amount', 'dateCartao', 'faturaMonthYear'].sort())
   })
 
   it('casa 1:1 — duas linhas idênticas e um só lançamento gravado: a segunda é nova', () => {
@@ -379,5 +385,59 @@ describe('"Também em outra fatura": só não conciliado e de fatura aberta', ()
     expect(resolver([linhaClinica], [{ ...outra, reconciled: true }])[0]._tambemEm).toEqual([])
     const fechada = resolverLinhasRevisao([linhaClinica], { accountId: CARTAO, transactions: [outra], closingDay: 13, faturasFechadas: { [`${CARTAO}_2026-09`]: true } })
     expect(fechada[0]._tambemEm).toEqual([])
+  })
+})
+
+// VALE O VALOR DA FATURA DO BANCO (14/11/2026). Dados fictícios, no formato do caso real: parcela 4/5
+// prevista com R$ 74,30 e o banco cobrando R$ 74,29.
+describe('importação: vale o valor da fatura do banco', () => {
+  const inst = (num, total) => ({ num, total, base: 'Seguro Parc', matchStr: `${num}/${total}` })
+  const serie = [3, 4, 5].map(n => tx({ id: `s${n}`, description: `Seguro Parc${n}`, amount: 74.3, faturaMonthYear: `2026-${8 + n}`.replace('2026-13', '2027-01'), installmentNum: n, installmentTotal: 5, serieId: 'serie1' }))
+  const parc4 = serie[1]
+  const linha4 = (amount, o = {}) => linha({ _id: 4, description: 'Seguro Parc4', amount, faturaMonthYear: parc4.faturaMonthYear, _installment: inst(4, 5), ...o })
+
+  it('casamento exato: nada muda', () => {
+    const [r] = resolver([linha4(74.3)], serie)
+    expect(r._collisionTx).toBe(parc4)
+    expect(r._ajusteValor).toBeNull()
+    expect(patchColisao(r, parc4, { saveDate: parc4.date })).not.toHaveProperty('amount')
+  })
+
+  it('por tolerância (R$ 0,01): assume o valor do banco, com motivo para o histórico', () => {
+    const [r] = resolver([linha4(74.29)], serie)
+    expect(r._collisionTx).toBe(parc4)
+    expect(r._ajusteValor).toEqual({ de: 74.3, para: 74.29, diferenca: -0.01, conciliado: false })
+    expect(patchColisao(r, parc4, { saveDate: parc4.date }).amount).toBe(74.29)
+    expect(motivoAjusteValor(r._ajusteValor)).toBe('Ajustado ao valor da fatura do banco (R$ 74,30 → R$ 74,29)')
+    const res = resumoAjustesDeValor([r])
+    expect([res.qtd, res.diferenca]).toEqual([1, -0.01])
+  })
+
+  it('parcela de série: só a parcela casada muda; as outras ficam como estão', () => {
+    const [r] = resolver([linha4(74.29)], serie)
+    expect(r._dbTx.id).toBe('s4')
+    // O ajuste é do lançamento casado (_dbTx); as outras parcelas não têm linha nem ajuste.
+    expect(ajusteDeValorDaLinha(r, r._dbTx)).toMatchObject({ de: 74.3, para: 74.29 })
+    expect(serie.filter(t => t.id !== 's4').every(t => t.amount === 74.3)).toBe(true)
+  })
+
+  it('reimportação: o lançamento já conciliado com o valor previsto é corrigido (e destacado)', () => {
+    const conciliada = serie.map(t => (t.id === 's4' ? { ...t, reconciled: true } : t))
+    const [r] = resolver([linha4(74.29)], conciliada)
+    expect(r._collisionTx.id).toBe('s4')
+    expect(r._ajusteValor.conciliado).toBe(true)
+    const patch = patchColisao(r, r._collisionTx, { saveDate: r._collisionTx.date, faturaRef: null })
+    expect(mudancasDaColisao(r, r._collisionTx, patch)).toEqual(['amount'])
+    expect(patchAplicavel(r, r._collisionTx, patch)).not.toHaveProperty('description')
+  })
+
+  it('o total projetado da fatura fica igual ao do arquivo', () => {
+    const rows = resolver([linha4(74.29)], serie)
+    const p = projetarTotalFatura(rows, { fatura: parc4.faturaMonthYear, accountId: CARTAO, transactions: serie, closingDay: 13 })
+    expect(p.projetado).toBe(74.29)
+    expect(p.diferenca).toBe(0)
+    // Colisão desmarcada ("não atualizar"): o ajuste não é gravado e a diferença aparece.
+    const p2 = projetarTotalFatura(rows.map(r => ({ ...r, _ajusteIgnorado: true })), { fatura: parc4.faturaMonthYear, accountId: CARTAO, transactions: serie, closingDay: 13 })
+    expect(p2.diferenca).toBe(-0.01)
   })
 })

@@ -24,11 +24,11 @@ const celulas = (ws) => {
   return out
 }
 
-describe('Relatório por Favorecido em Excel', () => {
+describe('Movimentação por Favorecido em Excel', () => {
   it('grupo, lançamentos e subtotal por fórmula; total e resumo sem somar os subtotais', async () => {
     const spec = specRelatorioFavorecido(grupos, { accounts: [{ id: 'cc', name: 'Conta' }], from: '2026-10-01', to: '2026-10-31', filtros: ['Contas: todas'] })
-    expect(spec.titulo).toBe('Relatório por Favorecido')
-    expect(nomeArquivoFinup(spec.nomeArquivo.relatorio, spec.nomeArquivo.periodo)).toBe('Finup_RelatorioFavorecido_2026-10-01_2026-10-31.xlsx')
+    expect(spec.titulo).toBe('Movimentação por Favorecido')
+    expect(nomeArquivoFinup(spec.nomeArquivo.relatorio, spec.nomeArquivo.periodo)).toBe('Finup_Movimentacao-por-Favorecido_2026-10-01_2026-10-31.xlsx')
     const ws = await ler(spec)
     const todas = celulas(ws)
     const formulas = todas.filter(c => c.v && c.v.formula)

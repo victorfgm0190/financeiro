@@ -23,7 +23,7 @@ export function specRelatorioFavorecido(grupos, { accounts = [], categories = []
   }
   const maior = grupos.reduce((m, g) => (!m || g.pago + g.recebido > m.pago + m.recebido ? g : m), null)
   return {
-    titulo: 'Relatório por Favorecido', nome: 'Por Favorecido',
+    titulo: 'Movimentação por Favorecido', nome: 'Por Favorecido',
     filtros: [`Período: ${fmtData(from)} a ${fmtData(to)}`, ...filtros],
     resumo: [
       { rotulo: 'Total geral', partes: [{ sinal: 1, soma: 'pago' }, { sinal: 1, soma: 'recebido' }] },
@@ -39,6 +39,6 @@ export function specRelatorioFavorecido(grupos, { accounts = [], categories = []
     ],
     linhas,
     totais: { rotulo: (n) => `${n} ${n === 1 ? 'lançamento' : 'lançamentos'}`, somar: ['pago', 'recebido'] },
-    nomeArquivo: { relatorio: 'RelatorioFavorecido', periodo: `${from}_${to}` },
+    nomeArquivo: { relatorio: 'Movimentacao-por-Favorecido', periodo: `${from}_${to}` },
   }
 }

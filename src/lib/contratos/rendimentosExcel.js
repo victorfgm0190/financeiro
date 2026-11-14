@@ -42,7 +42,7 @@ function abaDoContrato(item, { ano, referencia }) {
     for (const [k, v] of tipos) linhas.push({ mes: TIPOS_DEDUCAO[k] || k, totalDedutiveis: v.dedutivel, naoDedutiveis: v.naoDedutivel, _estilo: 'subtotal' })
   }
   return {
-    nome: rotulo, titulo: `Rendimentos de aluguel ${ano} — ${rotulo}`,
+    nome: rotulo, titulo: `Aluguéis — Rendimentos e Repasses ${ano} — ${rotulo}`,
     filtros: [`Ano: ${ano}`, `Mês de referência: ${rotuloRef(referencia)}`, 'Repasse recebido: mês em que caiu na conta',
       ...(rel.saldoInicioAno != null ? [`Saldo com a administradora no início do ano: ${brl(rel.saldoInicioAno)}`] : []),
       textoConferencia(conferencia), AVISO_CONTADOR].filter(Boolean),
@@ -61,7 +61,7 @@ function abaDoContrato(item, { ano, referencia }) {
 //   itens: [{ rotulo, rel, conferencia }] (um por contrato); total: somarRelatorios (ou o único).
 export function specRendimentos(itens, { ano, referencia, total, perfil = '' }) {
   const resumo = {
-    nome: 'Resumo', titulo: `Rendimentos de aluguel ${ano} — resumo`,
+    nome: 'Resumo', titulo: `Aluguéis — Rendimentos e Repasses ${ano} — resumo`,
     filtros: [`Ano: ${ano}`, `Mês de referência: ${rotuloRef(referencia)}`, perfil ? `Perfil: ${perfil}` : null, AVISO_CONTADOR].filter(Boolean),
     resumo: [
       { rotulo: 'Aluguel bruto', valor: total.totais.bruto, cor: 'verde' },
@@ -94,8 +94,8 @@ export function specRendimentos(itens, { ano, referencia, total, perfil = '' }) 
     },
   }
   return {
-    titulo: `Rendimentos de aluguel ${ano}`,
+    titulo: `Aluguéis — Rendimentos e Repasses ${ano}`,
     abas: [resumo, ...itens.map(i => abaDoContrato(i, { ano, referencia }))],
-    nomeArquivo: { relatorio: 'RendimentosAluguel', periodo: String(ano) },
+    nomeArquivo: { relatorio: 'Alugueis-Rendimentos-e-Repasses', periodo: String(ano) },
   }
 }

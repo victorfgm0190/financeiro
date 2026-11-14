@@ -205,239 +205,154 @@ export default function ReportsPanel() {
     )
   }
 
+  // Card de um relatório do menu (mesmo visual para todos).
+  const card = ({ guia, Icone, titulo, descricao, onClick }) => (
+    <button key={guia} data-guia={guia} onClick={onClick}
+      className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group">
+      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
+        <Icone size={16} className="text-primary-fg" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">{titulo}</p>
+        <p className="text-xs text-texto-3 mt-0.5">{descricao}</p>
+      </div>
+      <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
+    </button>
+  )
+  // Menu em SEÇÕES. Seção sem nenhum card visível para o cliente não aparece.
+  const secoes = [
+    { titulo: 'Resultado', cards: [
+      card({ guia: 'reports.demonstrativo', Icone: FileSpreadsheet, titulo: 'Resultado por Categoria', descricao: 'Receitas, despesas e resultado do período, por grupo e categoria — Excel e CSV', onClick: () => setShowDemonstrativo(true) }),
+      card({ guia: 'reports.favorecido', Icone: Users, titulo: 'Movimentação por Favorecido', descricao: 'Quanto foi pago e recebido de cada pessoa ou empresa, no total e lançamento a lançamento — Excel e CSV', onClick: () => setShowFavorecido(true) }),
+    ] },
+    { titulo: 'Contas e Caixa', cards: [
+      card({ guia: 'reports.fluxo-conta', Icone: Wallet, titulo: 'Extrato e Fluxo de Caixa por Conta', descricao: 'Movimentações e saldo acumulado por conta, grupo ou contas principais — com agendamentos futuros', onClick: () => setShowFluxoConta(true) }),
+    ] },
+    { titulo: 'Cartão de Crédito', cards: hasCredit ? [
+      card({ guia: 'reports.extrato-fatura', Icone: FileText, titulo: 'Extrato da Fatura', descricao: 'A fatura do cartão como o banco mostra: lançamentos, parcelas, estornos e total — Excel e CSV', onClick: () => setShowExtratoFatura(true) }),
+      card({ guia: 'reports.fatura', Icone: CreditCard, titulo: gerencialLigado ? 'Relatório Gerencial da Fatura' : 'Relatório da Fatura', descricao: gerencialLigado
+        ? 'A fatura separada por grupo gerencial, com valor e %, e os movimentos do cartão por data — Excel e CSV'
+        : 'A fatura com o total e os gastos por categoria — Excel e CSV', onClick: () => setShowRelatorioFatura(true) }),
+    ] : [] },
+    { titulo: 'Reservas', cards: temReserva ? [
+      card({ guia: 'reports.fluxo-reserva', Icone: PiggyBank, titulo: 'Fluxo de Caixa da Reserva', descricao: 'Entradas, saídas e saldo de cada função de reserva no período escolhido', onClick: () => setShowFluxoReserva(true) }),
+    ] : [] },
+    { titulo: 'Patrimônio e Aluguéis', cards: [
+      card({ guia: 'reports.bens', Icone: Landmark, titulo: 'Patrimônio — Pagamentos por Mês', descricao: 'Quanto saiu de caixa por bem e por mês, com principal, juros, terceiros e devoluções', onClick: () => setShowBens(true) }),
+      ...(temContratoReceber ? [card({ guia: 'reports.rendimentos', Icone: FileSpreadsheet, titulo: 'Aluguéis — Rendimentos e Repasses', descricao: 'Por contrato a receber e por ano: aluguel bruto, deduções, base tributável, repasses e conferência com o informe', onClick: () => setShowRendimentos(true) })] : []),
+    ] },
+  ].filter(sc => sc.cards.length > 0)
+  const totalMes = categoryData.reduce((s, c) => s + c.value, 0)
+
   return (
     <div className="space-y-4">
-      <button
-        data-guia="reports.demonstrativo"
-        className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
-        onClick={() => setShowDemonstrativo(true)}
-      >
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
-          <FileSpreadsheet size={16} className="text-primary-fg" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Demonstrativo Financeiro</p>
-          <p className="text-xs text-texto-3 mt-0.5">Relatório hierárquico por categoria com filtros de período e exportação para Excel e CSV</p>
-        </div>
-        <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
-      </button>
-
-      <button
-        data-guia="reports.favorecido"
-        className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
-        onClick={() => setShowFavorecido(true)}
-      >
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
-          <Users size={16} className="text-primary-fg" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Relatório por Favorecido</p>
-          <p className="text-xs text-texto-3 mt-0.5">Análise sintética e analítica por favorecido com exportação para Excel e CSV</p>
-        </div>
-        <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
-      </button>
-
-      <button
-        data-guia="reports.fluxo-conta"
-        className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
-        onClick={() => setShowFluxoConta(true)}
-      >
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
-          <Wallet size={16} className="text-primary-fg" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Fluxo de Caixa por Conta</p>
-          <p className="text-xs text-texto-3 mt-0.5">Movimentações e saldo acumulado por conta, grupo ou contas principais — com agendamentos futuros</p>
-        </div>
-        <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
-      </button>
-
-      <button
-        data-guia="reports.bens"
-        className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
-        onClick={() => setShowBens(true)}
-      >
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
-          <Landmark size={16} className="text-primary-fg" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Bens e investimentos — saídas por mês</p>
-          <p className="text-xs text-texto-3 mt-0.5">Quanto saiu de caixa por bem e por mês, com principal, juros, terceiros e devoluções</p>
-        </div>
-        <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
-      </button>
-
-      {temContratoReceber && (
-        <button
-          data-guia="reports.rendimentos"
-          className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
-          onClick={() => setShowRendimentos(true)}
-        >
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
-            <FileSpreadsheet size={16} className="text-primary-fg" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Rendimentos de aluguel</p>
-            <p className="text-xs text-texto-3 mt-0.5">Por contrato a receber e por ano: aluguel bruto, deduções, base tributável, repasses e conferência com o informe</p>
-          </div>
-          <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
-        </button>
-      )}
-
-      {temReserva && (
-        <button
-          data-guia="reports.fluxo-reserva"
-          className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
-          onClick={() => setShowFluxoReserva(true)}
-        >
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
-            <PiggyBank size={16} className="text-primary-fg" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Fluxo de Caixa da Reserva</p>
-            <p className="text-xs text-texto-3 mt-0.5">Entradas, saídas e saldo de cada função de reserva no período escolhido</p>
-          </div>
-          <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
-        </button>
-      )}
-
-      {hasCredit && (
-        <button
-          data-guia="reports.extrato-fatura"
-          className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
-          onClick={() => setShowExtratoFatura(true)}
-        >
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
-            <FileText size={16} className="text-primary-fg" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">Extrato da Fatura</p>
-            <p className="text-xs text-texto-3 mt-0.5">A fatura do cartão como o banco mostra: lançamentos, parcelas, estornos e total, com exportação para Excel e CSV</p>
-          </div>
-          <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
-        </button>
-      )}
-
-      {hasCredit && (
-        <button
-          data-guia="reports.fatura"
-          className="w-full card flex items-center gap-3 text-left hover:bg-surface-hover transition-colors group"
-          onClick={() => setShowRelatorioFatura(true)}
-        >
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15">
-            <CreditCard size={16} className="text-primary-fg" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-texto-1 group-hover:text-texto-1 transition-colors">{gerencialLigado ? 'Relatório Gerencial da Fatura' : 'Relatório da Fatura'}</p>
-            <p className="text-xs text-texto-3 mt-0.5">{gerencialLigado
-              ? 'A fatura separada por grupo gerencial, com valor e %, e o extrato gerencial por data — exportação para Excel e CSV'
-              : 'A fatura com o total e os gastos por categoria — exportação para Excel e CSV'}</p>
-          </div>
-          <span className="text-texto-3 group-hover:text-texto-2 transition-colors text-lg">›</span>
-        </button>
-      )}
-
-      <div data-guia="reports.medias" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="card">
-          <div className="flex items-center gap-2 mb-1 text-receita">
-            <ArrowDownCircle size={14} />
-            <p className="text-xs text-texto-2 uppercase tracking-wide">Média Receitas (6m)</p>
-          </div>
-          <p className="text-xl font-bold text-receita">{fmt(totalIncome)}</p>
-        </div>
-        <div className="card">
-          <div className="flex items-center gap-2 mb-1 text-despesa">
-            <ArrowUpCircle size={14} />
-            <p className="text-xs text-texto-2 uppercase tracking-wide">Média Despesas (6m)</p>
-          </div>
-          <p className="text-xl font-bold text-despesa">{fmt(totalExpense)}</p>
-        </div>
-        <div className="card">
-          <p className="text-xs text-texto-2 uppercase tracking-wide">Média Saldo (6m)</p>
-          <p className={`text-xl font-bold mt-1 ${totalIncome - totalExpense >= 0 ? 'text-receita' : 'text-despesa'}`}>
-            {fmtSinal(totalIncome - totalExpense)}
-          </p>
-        </div>
-      </div>
-
-      <div data-guia="reports.evolucao" className="card">
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <h2 className="text-sm font-semibold text-texto-2">Evolução dos Últimos 6 Meses</h2>
-          <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
-        </div>
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={last6Months} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={cor.chartGrade} />
-            <XAxis dataKey="label" tick={{ fill: cor.chartEixo, fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis tick={{ fill: cor.chartEixo, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: cor.surface2 }} />
-            <Legend wrapperStyle={{ fontSize: 12, color: cor.texto2 }} />
-            <Bar dataKey="income" name="Receitas" fill={cor.receita} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="expense" name="Despesas" fill={cor.despesa} radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div data-guia="reports.despesas-categoria" className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-texto-2">Despesas por Categoria</h2>
-            <SeletorModoValor value={modoValor} onChange={setModoValor} porComposicao={porComposicao} onPorComposicao={setPorComposicao} />
-            <span className="inline-flex items-center gap-1" data-help-form="filtroDespesasCategoria" data-help-id="filtroRelatorio.mes">
-              <select
-                data-guia="reports.mes"
-                className="input w-auto text-xs py-1.5"
-                value={selectedMonth}
-                onChange={e => setSelectedMonth(Number(e.target.value))}
-              >
-                {last6Months.map((m, i) => (
-                  <option key={m.label} value={5 - i}>{m.label}</option>
-                ))}
-              </select>
-              <HelpCampo campo="filtroRelatorio.mes" />
-            </span>
-          </div>
-          {categoryData.length === 0 ? (
-            <p className="text-texto-3 text-sm text-center py-8">Sem dados de despesas neste período</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={categoryData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name, percent, x, y, textAnchor }) => (percent > 0.05
-                  ? <text x={x} y={y} textAnchor={textAnchor} dominantBaseline="central" fill={cor.texto2} fontSize={11}>{isMobile ? '' : `${name} `}{(percent * 100).toFixed(0)}%</text>
-                  : null)} labelLine={false}>
-                  {categoryData.map((_, i) => <Cell key={i} fill={corSerie(cor.tema, i)} />)}
-                </Pie>
-                <Tooltip formatter={(v) => fmt(v)} {...estiloTooltip(cor)} itemStyle={{ color: cor.texto1 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        <div data-guia="reports.ranking" className="card">
-          <h2 className="text-sm font-semibold text-texto-2 mb-4">Ranking de Despesas</h2>
-          {categoryData.length === 0 ? (
-            <p className="text-texto-3 text-sm text-center py-8">Sem dados neste período</p>
-          ) : (
-            <div className="space-y-2">
-              {categoryData.map((item, i) => {
-                const total = categoryData.reduce((s, c) => s + c.value, 0)
-                const pct = total > 0 ? (item.value / total) * 100 : 0
-                return (
-                  <div key={item.name}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-texto-2">{item.name}</span>
-                      <span className="text-texto-2">{fmt(item.value)} ({pct.toFixed(0)}%)</span>
+      {secoes.map(sc => (
+        <section key={sc.titulo} className="space-y-3" aria-label={sc.titulo} data-testid="secao-relatorios">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-texto-3 pt-2">{sc.titulo}</h2>
+          {sc.cards}
+          {/* Resultado: as visões rápidas dos últimos 6 meses ficam na própria seção. */}
+          {sc.titulo === 'Resultado' && (
+            <>
+              <div data-guia="reports.medias" className="card space-y-3">
+                <h3 className="text-sm font-semibold text-texto-2">Média Mensal (últimos 6 meses)</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1 text-receita">
+                      <ArrowDownCircle size={14} />
+                      <p className="text-xs text-texto-2 uppercase tracking-wide">Receitas</p>
                     </div>
-                    <div className="h-1.5 bg-surface-2 rounded-full">
-                      <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: corSerie(cor.tema, i) }} />
+                    <p className="text-xl font-bold text-receita">{fmt(totalIncome)}</p>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1 text-despesa">
+                      <ArrowUpCircle size={14} />
+                      <p className="text-xs text-texto-2 uppercase tracking-wide">Despesas</p>
+                    </div>
+                    <p className="text-xl font-bold text-despesa">{fmt(totalExpense)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-texto-2 uppercase tracking-wide">Saldo</p>
+                    <p className={`text-xl font-bold mt-1 ${totalIncome - totalExpense >= 0 ? 'text-receita' : 'text-despesa'}`}>
+                      {fmtSinal(totalIncome - totalExpense)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div data-guia="reports.evolucao" className="card">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h3 className="text-sm font-semibold text-texto-2">Evolução dos Últimos 6 Meses</h3>
+                  <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
+                </div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={last6Months} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={cor.chartGrade} />
+                    <XAxis dataKey="label" tick={{ fill: cor.chartEixo, fontSize: 11 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: cor.chartEixo, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: cor.surface2 }} />
+                    <Legend wrapperStyle={{ fontSize: 12, color: cor.texto2 }} />
+                    <Bar dataKey="income" name="Receitas" fill={cor.receita} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="expense" name="Despesas" fill={cor.despesa} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Despesas do Mês por Categoria: pizza e ranking num bloco só. */}
+              <div data-guia="reports.despesas-categoria" className="card">
+                <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
+                  <h3 className="text-sm font-semibold text-texto-2">Despesas do Mês por Categoria</h3>
+                  <SeletorModoValor value={modoValor} onChange={setModoValor} porComposicao={porComposicao} onPorComposicao={setPorComposicao} />
+                  <span className="inline-flex items-center gap-1" data-help-form="filtroDespesasCategoria" data-help-id="filtroRelatorio.mes">
+                    <select
+                      data-guia="reports.mes"
+                      className="input w-auto text-xs py-1.5"
+                      value={selectedMonth}
+                      onChange={e => setSelectedMonth(Number(e.target.value))}
+                    >
+                      {last6Months.map((m, i) => (
+                        <option key={m.label} value={5 - i}>{m.label}</option>
+                      ))}
+                    </select>
+                    <HelpCampo campo="filtroRelatorio.mes" />
+                  </span>
+                </div>
+                {categoryData.length === 0 ? (
+                  <p className="text-texto-3 text-sm text-center py-8">Sem dados de despesas neste período</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 items-center">
+                    <ResponsiveContainer width="100%" height={260}>
+                      <PieChart>
+                        <Pie data={categoryData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name, percent, x, y, textAnchor }) => (percent > 0.05
+                          ? <text x={x} y={y} textAnchor={textAnchor} dominantBaseline="central" fill={cor.texto2} fontSize={11}>{isMobile ? '' : `${name} `}{(percent * 100).toFixed(0)}%</text>
+                          : null)} labelLine={false}>
+                          {categoryData.map((_, i) => <Cell key={i} fill={corSerie(cor.tema, i)} />)}
+                        </Pie>
+                        <Tooltip formatter={(v) => fmt(v)} {...estiloTooltip(cor)} itemStyle={{ color: cor.texto1 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div data-guia="reports.ranking" className="space-y-2">
+                      {categoryData.map((item, i) => {
+                        const pct = totalMes > 0 ? (item.value / totalMes) * 100 : 0
+                        return (
+                          <div key={item.name}>
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-texto-2">{item.name}</span>
+                              <span className="text-texto-2">{fmt(item.value)} ({pct.toFixed(0)}%)</span>
+                            </div>
+                            <div className="h-1.5 bg-surface-2 rounded-full">
+                              <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: corSerie(cor.tema, i) }} />
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
-                )
-              })}
-            </div>
+                )}
+              </div>
+            </>
           )}
-        </div>
-      </div>
+        </section>
+      ))}
     </div>
   )
 }

@@ -57,7 +57,7 @@ export default function RelatorioBens() {
   return (
     <div className="space-y-4">
       <div className="card">
-        <h2 className="text-sm font-semibold text-texto-1 mb-1">Bens e investimentos — saídas por mês</h2>
+        <h2 className="text-sm font-semibold text-texto-1 mb-1">Patrimônio — Pagamentos por Mês</h2>
         <p className="text-xs text-texto-3 mb-3">
           O que saiu das suas contas para pagar cada bem. O que um terceiro pagou e as devoluções ficam em
           colunas próprias, fora do total. Bem dado na troca e ajuste de avaliação não são caixa e não aparecem.

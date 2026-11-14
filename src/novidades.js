@@ -18,6 +18,21 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.14-3',
+    data: '2026-11-14',
+    titulo: 'Relatórios com nomes novos e em seções; fatura importada vale o valor do banco',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'Na importação da fatura do cartão, quando uma compra do arquivo é reconhecida como uma parcela já lançada com centavos de diferença, a parcela passa a ter o valor que o banco cobrou. A prévia mostra "valor ajustado: de → para" e quantas foram ajustadas. O resgate da reserva daquela parcela acompanha o novo valor, e a mudança fica no histórico. Reimportar a fatura corrige as que já estavam gravadas.',
+      'Ao abrir o Extrato da Fatura ou o Relatório da Fatura pelo menu (ou ao trocar de cartão), e ao entrar na tela do cartão, o Finup mostra a fatura que ainda falta pagar; se não houver, a fatura aberta. No seletor, as faturas aparecem como "a pagar", "aberta" e "futura".',
+      'O menu Relatórios agora é dividido em seções — Resultado, Contas e Caixa, Cartão de Crédito, Reservas, Patrimônio e Aluguéis — e os relatórios ganharam nomes mais claros: Resultado por Categoria, Movimentação por Favorecido, Extrato e Fluxo de Caixa por Conta, Patrimônio — Pagamentos por Mês, Aluguéis — Rendimentos e Repasses. As médias viraram "Média Mensal (últimos 6 meses)" e a pizza e o ranking ficaram juntos em "Despesas do Mês por Categoria".',
+      'O extrato do Fluxo Futuro das Reservas passa a se chamar "Fluxo de Caixa da Reserva", igual ao do menu. Na tela do cartão, o botão virou "Relatório Gerencial da Fatura", e a aba de movimentos por data agora se chama "Movimentos do Cartão por Data", mostra só o perfil escolhido e exporta para Excel e CSV.',
+      'Novas exportações: o extrato de qualquer conta (não só das gerenciais) sai em Excel e CSV, com o saldo acumulado. Os CSVs seguem o mesmo padrão em todos os relatórios (ponto e vírgula, vírgula nos centavos) e têm o mesmo nome do Excel. Se algo der errado, aparece uma mensagem.',
+      'Para quem não usa o controle gerencial, somem a aba "Gerencial" de Agendamentos, o botão "Conciliar Gerenciais" e o selo "Gerencial" do extrato da conta. No Relatório da Fatura, os gastos por categoria passam a dividir os lançamentos rateados entre as categorias.',
+    ],
+  },
+  {
     id: '2026.11.14-2',
     data: '2026-11-14',
     titulo: 'Cartão: Extrato da Fatura e Relatório separados; novos relatórios no menu',

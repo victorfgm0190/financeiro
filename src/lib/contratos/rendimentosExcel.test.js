@@ -21,7 +21,7 @@ describe('rendimentos em Excel', () => {
 
   it('aba Resumo + uma aba por contrato; nome do arquivo padrão', async () => {
     expect(spec.abas.map(a => a.nome)).toEqual(['Resumo', 'Imóvel Exemplo'])
-    expect(nomeArquivoFinup(spec.nomeArquivo.relatorio, spec.nomeArquivo.periodo)).toBe('Finup_RendimentosAluguel_2026.xlsx')
+    expect(nomeArquivoFinup(spec.nomeArquivo.relatorio, spec.nomeArquivo.periodo)).toBe('Finup_Alugueis-Rendimentos-e-Repasses_2026.xlsx')
     const wb = new ExcelJS.Workbook()
     await wb.xlsx.load(await montarPlanilha(ExcelJS, spec, { ident }).xlsx.writeBuffer())
     expect(wb.worksheets.map(w => w.name)).toEqual(['Resumo', 'Imóvel Exemplo'])

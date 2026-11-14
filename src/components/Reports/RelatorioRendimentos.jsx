@@ -92,7 +92,7 @@ export default function RelatorioRendimentos() {
       <div className="card space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h3 className="text-sm font-semibold text-texto-2 flex items-center gap-2">
-            <FileSpreadsheet size={14} /> Rendimentos de aluguel
+            <FileSpreadsheet size={14} /> Aluguéis — Rendimentos e Repasses
           </h3>
           <button type="button" className="btn-secondary text-xs flex items-center gap-1.5" onClick={exportar} disabled={exportando || !total}>
             {exportando ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />} Exportar Excel

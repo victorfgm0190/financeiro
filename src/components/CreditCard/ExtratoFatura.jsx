@@ -4,11 +4,11 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, today } from '../shared/utils'
 import { faturaDoCartao } from '../../lib/fatura'
 import {
-  lancamentosDaFatura, faturaAtualDoCartao, rotuloFatura, deslocarFatura, parcelaPorExtenso,
+  lancamentosDaFatura, faturaAtualDoCartao, faturaPadraoDoCartao, previstoDaFaturaFn, rotuloFatura, deslocarFatura, parcelaPorExtenso,
 } from '../../lib/faturaCartao'
 import { agendamentosPrevistosDaFatura } from '../../lib/gerencialPrevistos'
-import { exportarExcel, entregarArquivo, nomeArquivoFinup } from '../../lib/exportExcel'
-import { gerarCsv } from '../../lib/csvFinup'
+import { exportarExcel } from '../../lib/exportExcel'
+import { exportarCsv } from '../../lib/csvFinup'
 import SeloCambio from '../shared/SeloCambio'
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100
@@ -24,11 +24,16 @@ export default function ExtratoFatura({ initialCardId, initialBillKey }) {
   const cartoes = useMemo(() => accounts.filter(a => a.type === 'credit' && a.active !== false), [accounts])
   const [cardId, setCardId] = useState(initialCardId || cartoes[0]?.id || '')
   const card = accounts.find(a => a.id === cardId) || null
-  const [billKey, setBillKey] = useState(() => initialBillKey || faturaAtualDoCartao(card, today()))
+  // Fatura padrão (pelo menu e ao trocar de cartão): a fechada não paga; senão a aberta.
+  const padraoDe = (c) => faturaPadraoDoCartao({ transactions, schedules, card: c, hoje: today(), previstoDe: previstoDaFaturaFn({ schedules, card: c, getOccurrences: getOccurrencesProjecao }) })
+  const [billKey, setBillKey] = useState(() => initialBillKey || padraoDe(card))
   const trocarCartao = (id) => {
     setCardId(id)
-    setBillKey(faturaAtualDoCartao(accounts.find(a => a.id === id), today()))
+    setBillKey(padraoDe(accounts.find(a => a.id === id)))
   }
+  const aberta = faturaAtualDoCartao(card, today())
+  const aPagar = useMemo(() => padraoDe(card), [transactions, schedules, card]) // eslint-disable-line react-hooks/exhaustive-deps
+  const etiqueta = billKey === aberta ? 'aberta' : billKey > aberta ? 'futura' : billKey === aPagar ? 'a pagar' : ''
 
   const fatura = useMemo(() => lancamentosDaFatura(transactions, card, billKey), [transactions, card, billKey])
   const anterior = billKey ? deslocarFatura(billKey, -1) : ''
@@ -87,18 +92,11 @@ export default function ExtratoFatura({ initialCardId, initialBillKey }) {
     }
   }
 
-  const exportarCsv = async () => {
-    try {
-      const csv = gerarCsv(
-        ['Data', 'Descrição', 'Parcela', 'Tipo', 'Valor'],
-        linhas.map(l => [fmtDate(l.data), l.descricao, l.parcela, l.tipo, l.valor]),
-      )
-      await entregarArquivo(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }),
-        nomeArquivoFinup(`Extrato-Fatura-${nomeCartao}`, billKey).replace(/\.xlsx$/, '.csv'), { tipo: 'text/csv' })
-    } catch (err) {
-      window.alert(`Não consegui exportar o CSV: ${err?.message || err}`)
-    }
-  }
+  const exportarCsvExtrato = () => exportarCsv({
+    nomeArquivo: { relatorio: `Extrato-Fatura-${nomeCartao}`, periodo: billKey },
+    cabecalho: ['Data', 'Descrição', 'Parcela', 'Tipo', 'Valor'],
+    linhas: linhas.map(l => [fmtDate(l.data), l.descricao, l.parcela, l.tipo, l.valor]),
+  })
 
   return (
     <div className="space-y-4" data-testid="extrato-fatura">
@@ -114,13 +112,13 @@ export default function ExtratoFatura({ initialCardId, initialBillKey }) {
             <button type="button" aria-label="Fatura anterior" onClick={() => setBillKey(k => deslocarFatura(k, -1))}
               className="p-1.5 text-texto-2 hover:text-texto-1 hover:bg-surface-hover rounded"><ChevronLeft size={14} /></button>
             <span className="text-sm font-medium text-texto-1 px-3 whitespace-nowrap min-w-[150px] text-center" data-testid="extrato-fatura-rotulo">
-              Fatura {rotuloFatura(billKey)}
+              Fatura {rotuloFatura(billKey)}{etiqueta && <span className="text-xs text-texto-3"> · {etiqueta}</span>}
             </span>
             <button type="button" aria-label="Próxima fatura" onClick={() => setBillKey(k => deslocarFatura(k, +1))}
               className="p-1.5 text-texto-2 hover:text-texto-1 hover:bg-surface-hover rounded"><ChevronRight size={14} /></button>
           </div>
           <div className="flex items-center gap-2 ml-auto">
-            <button type="button" className="btn-secondary flex items-center gap-1.5 text-xs" onClick={exportarCsv} disabled={!linhas.length}>
+            <button type="button" className="btn-secondary flex items-center gap-1.5 text-xs" onClick={exportarCsvExtrato} disabled={!linhas.length}>
               <Download size={13} /> CSV
             </button>
             <button type="button" className="btn-primary flex items-center gap-1.5 text-xs" onClick={exportarXlsx} disabled={!linhas.length}>

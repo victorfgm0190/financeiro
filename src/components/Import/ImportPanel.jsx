@@ -10,7 +10,7 @@ import { useApp } from '../../context/AppContext'
 import { tipoVisual, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import { noAmbientePrincipal, getSessao } from '../../lib/api'
 import { contarRevisaoFatura, agruparEstornosCentavos, conferenciaDaFatura, rotuloFatura } from '../../lib/contagemRevisaoFatura'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, creditBillStatus } from '../shared/utils'
 import { loadAccountMappings, fetchTransactionHistory, fetchFaturaConferencia } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
@@ -21,7 +21,7 @@ import { decodificarOfx } from '../../lib/importacaoPadrao/ofx'
 import { listarModelosImportacao, salvarModeloImportacao, migrarMapeamentosAntigos } from '../../lib/importLayoutsApi'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, crossMatchConciliacao, idsConciliacaoConferidos, parearConciliacao } from '../../lib/conciliacaoMatch'
-import { indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, mudancasDaColisao, diferencasDoConciliado, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, precisaDecisao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia, faturaEstaAberta, podeExcluirSoNoSistema } from '../../lib/revisaoImportacao'
+import { indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, patchAplicavel, mudancasDaColisao, motivoAjusteValor, resumoAjustesDeValor, diferencasDoConciliado, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, precisaDecisao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia, faturaEstaAberta, podeExcluirSoNoSistema } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante, dataRegistroParcela, dataCompraDaParcela } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
@@ -54,6 +54,7 @@ import { pedirSugestoesImportacao } from '../../lib/sugestoesImportacaoApi'
 import { useStatusSugestoesIa } from '../../hooks/useStatusSugestoesIa'
 import { useTrabalhoEmAndamento } from '../../hooks/useTrabalhoEmAndamento'
 import { hojeSP } from '../../lib/hoje'
+import { planoDoAjuste } from '../../lib/ajusteValorBanco'
 import { aplicarJaLancados, resumoJaLancados, favorecidoDaLinha, patchesJaLancado, termoDescricaoFatura } from '../../lib/casamentoFatura'
 import { listarPreLancamentos, listarApelidos, aprenderApelidos, concluirPreLancamento } from '../../lib/assistenteApi'
 import { ESCOPO } from '../../lib/camposSerie'
@@ -1183,7 +1184,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     reserveFunctions, settings, updateSettings, data,
     isFaturaFechada, syncing, atualizarCamposLancamentos,
     getProvisoesPendentes, getFaturasProvisaoGerencial, executarProvisoesGerenciais,
-    updateSchedule, registrarEdicao, pode,
+    updateSchedule, registrarEdicao, pode, scheduleReservaFuncoes,
   } = useApp()
   const favorecidoAliases = data?.favorecidoAliases || []
 
@@ -2363,9 +2364,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const saveDate = saveDateExistente(row, tx)
       addFaturaAfetada(row.faturaMonthYear, saveDate)
       const novaDescricao = row.description || tx.description
-      updateTransaction(tx.id, patchColisao(row, tx, {
+      updateTransaction(tx.id, patchAplicavel(row, tx, patchColisao(row, tx, {
         saveDate, faturaRef: faturaRefFromMY(row.faturaMonthYear), serieId: serieAlvo.get(row._id),
-      }))
+      })))
+      // Conciliado: a colisão só corrige valor/data/fatura do banco (nada de rateio, grupo ou descrição).
+      if (tx.reconciled) { serieBackfill.delete(tx.id); return }
       if (row._rateios?.length > 0) saveRateiosFor(tx.id, row._rateios)
       if (row.grupoGerencial) registrarReservaFuncao(row.faturaMonthYear, row.grupoGerencial, row._reservaFuncaoId, row.amount)
       serieBackfill.delete(tx.id)
@@ -2391,6 +2394,52 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (!row._preId) continue
       const txId = rowTxId.get(row._id)
       if (txId) concluirPreLancamento(row._preId, 'efetivado', txId).catch(err => console.warn('[importar] pré-lançamento não baixado:', err.message))
+    }
+
+    // VALE O VALOR DA FATURA DO BANCO: "já existe" casado com centavos de diferença também assume o
+    // valor do arquivo (as colisões já foram gravadas acima). Cada ajuste vai para o histórico de
+    // alterações com o motivo "Ajustado ao valor da fatura do banco (R$ X → R$ Y)".
+    const ajustesGravados = resolvedRows.filter(r => r._ajusteValor && !r._jaLancado
+      && (r._collisionTx ? colisoesAplicar.includes(r) : r._isDuplicate))
+    const historicoResgates = []
+    let resgatesAcompanharam = 0
+    for (const r of ajustesGravados) {
+      if (!r._collisionTx) {
+        addFaturaAfetada(r.faturaMonthYear, r._dbTx.date)
+        updateTransaction(r._dbTx.id, { amount: r._ajusteValor.para })
+      }
+      // O que depende do valor DESTA parcela acompanha (lib/ajusteValorBanco): rateio reescalado e
+      // resgate da reserva da mesma ocorrência. Pendente: o motor o recalcula no passo 4 (abaixo).
+      // Executado: complementar/devolução da diferença, ligado ao resgate e à função.
+      const plano = planoDoAjuste({
+        tx: r._dbTx, de: r._ajusteValor.de, para: r._ajusteValor.para, schedules, scheduleReservaFuncoes,
+        rateios: r._rateios?.length ? null : rateiosByLancamento?.get?.(r._dbTx.id), hoje: hojeSP(),
+      })
+      if (plano.rateio) saveRateiosFor(r._dbTx.id, plano.rateio)
+      if (plano.resgate) {
+        resgatesAcompanharam++
+        if (plano.resgate.txAjuste) addTransaction(plano.resgate.txAjuste)
+        historicoResgates.push({ r, plano: plano.resgate })
+      }
+      if (r._dbTx.grupoGerencial) gerencialTxIds.push(r._dbTx.id)
+    }
+    if (ajustesGravados.length > 0) {
+      const loteAjuste = novoLoteId()
+      const historico = [
+        ...ajustesGravados.flatMap(r => linhasHistorico({
+          entidade: 'lancamento', loteId: loteAjuste, motivo: motivoAjusteValor(r._ajusteValor, fmt),
+          itens: [{ id: r._dbTx.id, mudancas: [{ campo: 'amount', de: r._ajusteValor.de, para: r._ajusteValor.para }] }],
+        })),
+        ...historicoResgates.flatMap(({ r, plano }) => linhasHistorico({
+          entidade: 'agendamento', loteId: loteAjuste,
+          motivo: `${motivoAjusteValor(r._ajusteValor, fmt)} — resgate da reserva ${plano.executado ? '(já executado: diferença lançada à parte)' : 'da mesma ocorrência'}`,
+          itens: [{ id: plano.schedule.id, ocorrenciaData: plano.schedule.registered?.[0] || plano.schedule.startDate || null,
+            mudancas: [{ campo: 'amount', de: plano.de, para: plano.para }] }],
+        })),
+      ]
+      registrarEdicao({
+        lancamentos: ajustesGravados.map(r => ({ ...r._dbTx, amount: r._ajusteValor.para })), historico, loteId: loteAjuste,
+      }).catch(err => console.warn('[importar] histórico do ajuste de valor não gravado:', err.message))
     }
 
     // Já gravados que bateram com o arquivo ("já existe" e colisões) → conciliados, pelo mesmo
@@ -2467,7 +2516,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // Recompute absoluto dos saldos das contas Ger. (Σ transferências) — o recalc por fatura só
     // ajusta o saldo incrementalmente; sem isto a Ger. fica defasada após a importação. Sem
     // inserção nem atualização (só baixas de agendamento) nada mudou no gerencial: não roda.
-    if (toImport.length > 0 || collisionsToApply.length > 0) reconciliarGerencial(selectedAccount)
+    if (toImport.length > 0 || collisionsToApply.length > 0 || ajustesGravados.length > 0) reconciliarGerencial(selectedAccount)
     // Garante o estado gerencial por lançamento (etapa A do Grupo G / resgate dos numerados),
     // idempotente. Necessário para faturas de CICLO PASSADO, que o motor (reconcileFaturaState)
     // ignora pela guarda faturaCicloNoPassado — sem isto os gerenciais não seriam materializados.
@@ -2477,7 +2526,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     for (const r of regrasDaConfirmacao(toImport)) learnClassification(r.description, r.categoryId, r.payee, r.opcoes)
 
     // Resumo final: X inseridos · Y que já estavam no banco (já existe / colisão pulada) · Z atualizados.
-    const resumo = { novos: toImport.length, existiam: contarJaExistiam(resolvedRows), atualizados: collisionsToApply.length, conciliados: toImport.length + conferidosNoBanco.length }
+    const resumo = {
+      novos: toImport.length, existiam: contarJaExistiam(resolvedRows), atualizados: collisionsToApply.length, conciliados: toImport.length + conferidosNoBanco.length,
+      ajustados: ajustesGravados.length, ajusteDiferenca: Math.round(ajustesGravados.reduce((t, r) => t + r._ajusteValor.diferenca, 0) * 100) / 100, resgatesAcompanharam,
+    }
     const pending = []
     toImport.forEach(row => {
       // "É este agendamento?" respondido com Sim: baixa a ocorrência pelo valor do cartão (sem
@@ -2712,15 +2764,29 @@ Importar mesmo assim no mês selecionado?`)) return
     setCorrigirToast(`${changed.length} data${changed.length !== 1 ? 's' : ''} corrigida${changed.length !== 1 ? 's' : ''}`)
   }
 
+  // Ajuste ao valor do banco: colisão desmarcada ("não atualizar") não grava o valor do arquivo.
+  const linhasComAjuste = useMemo(
+    () => resolvedRows.map(r => (r._ajusteValor && r._collisionTx && collisionSkip.has(r._id) ? { ...r, _ajusteIgnorado: true } : r)),
+    [resolvedRows, collisionSkip],
+  )
+  const ajustesDeValor = useMemo(() => resumoAjustesDeValor(linhasComAjuste.filter(r => !r._jaLancado)), [linhasComAjuste])
+  // Resgate da reserva que acompanha o ajuste (lib/ajusteValorBanco), para a prévia.
+  const temResgate = (r) => !!planoDoAjuste({ tx: r._dbTx, de: r._ajusteValor.de, para: r._ajusteValor.para, schedules, scheduleReservaFuncoes }).resgate
+  const resgatesDosAjustes = ajustesDeValor.linhas.filter(temResgate).length
+  // Fatura do lançamento ajustado já paga: destaca na prévia (como o conciliado).
+  const faturaPagaDoAjuste = (r) => {
+    const card = accounts.find(a => a.id === selectedAccount)
+    return !!card && creditBillStatus(card, transactions, schedules, r._dbTx?.faturaMonthYear || r.faturaMonthYear).isFaturaPaga
+  }
   // Total do arquivo × total que a fatura terá no banco depois da confirmação. O antigo "Total da
   // fatura" somava só as linhas do arquivo e deixava de fora as desmarcadas (Aramis/M6 como
   // possível duplicata) sem dizer por quê.
   const projecao = useMemo(() => (editingImport || !selectedAccount || !faturaMonthYear)
     ? null
-    : projetarTotalFatura(resolvedRows, {
+    : projetarTotalFatura(linhasComAjuste, {
       fatura: faturaMonthYear, accountId: selectedAccount, transactions, closingDay: selectedAcc?.closingDay || 14,
       aberta: faturaAbertaArquivo,
-    }), [resolvedRows, faturaMonthYear, selectedAccount, selectedAcc, transactions, editingImport, faturaAbertaArquivo])
+    }), [linhasComAjuste, faturaMonthYear, selectedAccount, selectedAcc, transactions, editingImport, faturaAbertaArquivo])
   // ── Revisão: APRESENTAÇÃO das linhas (components/Import/RevisaoFatura). As ações de cada controle
   // são as mesmas de antes (updateRow, toggleRow, toggleForcedDup, editarLinhaDoAgendamento…); só
   // mudou onde e como aparecem. Funções de render (e não componentes) de propósito: componente
@@ -4467,6 +4533,30 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                   sugestoes={sugestoesIa} podeAceitar={podeAceitarIa} onIgnorarSugestao={ignorarSugestaoIa} />
               </div>
 
+              {ajustesDeValor.qtd > 0 && (
+                <BlocoConferencia id="ajustados" titulo="Ajustados ao valor do banco" qtd={ajustesDeValor.qtd}
+                  sub={`${ajustesDeValor.qtd} ${ajustesDeValor.qtd === 1 ? 'lançamento ajustado' : 'lançamentos ajustados'} ao valor do banco (diferença total ${fmt(ajustesDeValor.diferenca)})${resgatesDosAjustes > 0 ? ` · ${resgatesDosAjustes} ${resgatesDosAjustes === 1 ? 'resgate acompanha' : 'resgates acompanham'}` : ''}`}
+                  aberto={blocosAbertos.has('ajustados') || ajustesDeValor.linhas.some(r => r._ajusteValor.conciliado || faturaPagaDoAjuste(r))}
+                  onAlternar={() => alternarBloco('ajustados')}>
+                  <ul className="divide-y divide-borda/50 text-xs" data-testid="ajustes-valor">
+                    {ajustesDeValor.linhas.map(r => {
+                      const paga = faturaPagaDoAjuste(r)
+                      const destaque = r._ajusteValor.conciliado || paga
+                      return (
+                        <li key={r._id} className={`px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 ${destaque ? 'bg-aviso/10' : ''}`}>
+                          <span className="text-texto-1 flex-1 min-w-0 truncate">{r.description}</span>
+                          <span className="text-texto-2 whitespace-nowrap">valor ajustado: {fmt(r._ajusteValor.de)} → {fmt(r._ajusteValor.para)}{temResgate(r) ? ' (resgate da reserva também)' : ''}</span>
+                          {destaque && (
+                            <span className="text-aviso font-medium whitespace-nowrap">
+                              {r._ajusteValor.conciliado ? 'já estava conciliado' : ''}{r._ajusteValor.conciliado && paga ? ' · ' : ''}{paga ? 'fatura já paga' : ''}
+                            </span>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </BlocoConferencia>
+              )}
               {/* 3. O resto, recolhido. */}
               <BlocoConferencia id="novos" titulo="Novos" qtd={blocos.novos.length} sub={`${fmt(resumoBlocos.novos.valor)} · serão importados`}
                 aberto={blocosAbertos.has('novos')} onAlternar={() => alternarBloco('novos')} acoesSempre

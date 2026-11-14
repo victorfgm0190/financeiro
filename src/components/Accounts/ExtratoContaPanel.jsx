@@ -19,6 +19,8 @@ import SeloPagamentoCartao from '../shared/SeloPagamentoCartao'
 import { rotuloDoTipo, tipoVisual, ehPagamentoDeCartao, ROTULO_PAGAMENTO_CARTAO } from '../../lib/rotuloMovimento'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import { exportarExcel } from '../../lib/exportExcel'
+import { exportarCsv } from '../../lib/csvFinup'
+import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import SeloVinculo from '../shared/SeloVinculo'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import BulkEditModal from '../shared/BulkEditModal'
@@ -219,6 +221,9 @@ function ReconcileBtn({ reconciled, onClick }) {
 }
 
 function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, onDelete, onToggleReconcile, todayStr, selectMode, selected, onToggleSelect, mostrarEditar = true, seloParcela = null }) {
+  // Controle gerencial desligado: o selo "Gerencial" some (o grupo gravado fica no banco).
+  const { settings } = useApp()
+  const gerencialLigado = controleGerencialAtivo(settings)
   const { tx } = row
   const delta = txDelta(tx, accountId)
   const isIn = delta > 0
@@ -246,7 +251,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
   // procedência vai para o tooltip.
   let badge = null
   if (todayStr && tx.date > todayStr) {
-    if (tx.grupoGerencial)
+    if (tx.grupoGerencial && gerencialLigado)
       badge = { label: 'Gerencial', cls: 'bg-reserva/20 text-reserva' }
     else if (tx.reservaAuto)
       badge = { label: 'Reserva', cls: 'bg-reserva/20 text-reserva' }
@@ -612,6 +617,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   // Conta gerencial = subconta "Ger. …" (marcada com grupoGerencial pelo motor). Só nelas
   // exibimos os totalizadores por fatura (as transferências tx_gerA_* carregam fatura_ref).
   const isGerencial = !!account.grupoGerencial
+  const gerencialLigado = controleGerencialAtivo(settings)
 
   const filteredTxs = useMemo(() =>
     transactions.filter(tx => tx.date >= from && tx.date <= to),
@@ -763,8 +769,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   // Exporta o extrato atual (mês + filtros aplicados = displayRows) — layout em lib/exportExcel.
   // Uma linha por linha exibida; valores como número; datas como data.
-  const handleExportExcel = async () => {
-    if (displayRows.length === 0) { showToast('Nenhum lançamento para exportar'); return }
+  const linhasDoExtrato = () => {
     const accName = (id) => {
       const a = accounts.find(x => x.id === id)
       return a ? (a.apelido || a.name) : ''
@@ -794,6 +799,24 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         saldo: row.runningBalance, status: row.txs.every(t => t.reconciled) ? 'Conciliado' : 'Pendente',
       }
     })
+    return linhas
+  }
+  const thisNameExport = account.apelido || account.name
+  // Mesmo nome no Excel e no CSV (só muda a extensão).
+  const nomeArquivoExtrato = { relatorio: `Extrato_${thisNameExport}`, periodo: `${year}-${String(month).padStart(2, '0')}` }
+  const handleExportCsv = () => {
+    if (displayRows.length === 0) { showToast('Nenhum lançamento para exportar'); return }
+    const linhas = linhasDoExtrato()
+    return exportarCsv({
+      nomeArquivo: nomeArquivoExtrato,
+      cabecalho: ['Data', 'Histórico', 'Fatura', 'Origem', 'Favorecido', 'De', 'Até', 'Valor Entrada', 'Valor Saída', 'Saldo', 'Conciliação'],
+      linhas: linhas.map(l => [fmtDate(l.data), l.hist, l.fatura, l.origem, l.favorecido, l.de, l.ate, l.entrada ?? '', l.saida ?? '', Number(l.saldo) || 0, l.status]),
+    })
+  }
+  const handleExportExcel = async () => {
+    if (displayRows.length === 0) { showToast('Nenhum lançamento para exportar'); return }
+    const linhas = linhasDoExtrato()
+    const thisName = thisNameExport
     const rotFiltro = { data: 'Data', historico: 'Histórico', favorecido: 'Favorecido', de: 'Conta De', para: 'Conta Para', valor: 'Valor' }
     const aplicados = Object.entries(rotFiltro).filter(([k]) => filtros?.[k]).map(([k, r]) => `${r}: ${filtros[k]}`)
     try {
@@ -817,7 +840,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         ],
         linhas,
         totais: { rotulo: (n) => `${n} ${n === 1 ? 'lançamento' : 'lançamentos'}`, somar: ['entrada', 'saida'] },
-        nomeArquivo: { relatorio: `Extrato_${thisName}`, periodo: `${year}-${String(month).padStart(2, '0')}` },
+        nomeArquivo: nomeArquivoExtrato,
       })
     } catch (err) {
       showToast(`Não consegui exportar: ${err?.message || err}`)
@@ -1124,26 +1147,32 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                   >
                     <CheckSquare size={12} /> Reconciliar
                   </button>
-                  <button
+                  {gerencialLigado && <button
                     data-guia="accounts:extrato.conciliar-gerenciais"
                     onClick={handleConciliarGerenciais}
                     className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
                     title="Conciliar todos os lançamentos pendentes do período que envolvem uma conta gerencial (origem ou destino)"
                   >
                     <Zap size={12} /> Conciliar Gerenciais
-                  </button>
+                  </button>}
                 </>
               )}
-              {isGerencial && (
-                <button
-                  data-guia="accounts:extrato.excel"
-                  onClick={handleExportExcel}
-                  className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
-                  title="Exportar o extrato do mês (com filtros aplicados) para Excel (.xlsx)"
-                >
-                  <Download size={12} /> Excel
-                </button>
-              )}
+              <button
+                data-guia="accounts:extrato.excel"
+                onClick={handleExportExcel}
+                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+                title="Exportar o extrato do mês (com filtros aplicados e o saldo acumulado) para Excel (.xlsx)"
+              >
+                <Download size={12} /> Excel
+              </button>
+              <button
+                data-guia="accounts:extrato.csv"
+                onClick={handleExportCsv}
+                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+                title="Exportar o extrato do mês (com filtros aplicados e o saldo acumulado) para CSV"
+              >
+                <Download size={12} /> CSV
+              </button>
               {onNewTx && podeIncluirTx && (
                 <button data-guia="accounts:extrato.novo" onClick={onNewTx} title={tituloNovoTx} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
                   <Plus size={12} /> Novo Lançamento

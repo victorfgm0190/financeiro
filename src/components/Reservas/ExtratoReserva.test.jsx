@@ -118,7 +118,7 @@ describe('Extrato da função — os números batem com a grade', () => {
   it.each([['f1', 'IPVA'], ['f2', 'Seguro Residencial']])('função %s: saldo de cada fim de mês = grade', async (id, nome) => {
     await abrirFluxo()
     const grade = gradeDe(id)
-    fireEvent.click(screen.getAllByRole('button', { name: `Extrato: ${nome}` })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: `Fluxo de Caixa da Reserva: ${nome}` })[0])
     const sub = subtotais()
     expect(Object.keys(sub)).toHaveLength(MESES_GRADE)
     grade.forEach((v, mi) => expect(sub[chaveDoMes(mi)], `mês ${mi}`).toBe(v))
@@ -128,7 +128,7 @@ describe('Extrato da função — os números batem com a grade', () => {
   it('TOTAL GERAL: soma de todas as funções, coluna "Função" e saldo = rodapé da grade', async () => {
     await abrirFluxo()
     const grade = gradeDe('total')
-    fireEvent.click(screen.getAllByRole('button', { name: 'Extrato: TOTAL GERAL' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Fluxo de Caixa da Reserva: TOTAL GERAL' })[0])
     const sub = subtotais()
     grade.forEach((v, mi) => expect(sub[chaveDoMes(mi)], `mês ${mi}`).toBe(v.replace('—', '0,00')))
     const tabela = within(screen.getByTestId('extrato-reserva')).getAllByRole('table')[0]
@@ -137,7 +137,7 @@ describe('Extrato da função — os números batem com a grade', () => {
 
   it('realizados desde o início do período e previstos marcados; saldo inicial e negativo', async () => {
     await abrirFluxo()
-    fireEvent.click(screen.getAllByRole('button', { name: 'Extrato: IPVA' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Fluxo de Caixa da Reserva: IPVA' })[0])
     const dlg = screen.getByTestId('extrato-reserva')
     // Saldo inicial do período da reserva (15/10): 500.
     expect(texto(within(dlg).getByTestId('extrato-saldo-inicial'))).toMatch('500,00')
@@ -150,7 +150,7 @@ describe('Extrato da função — os números batem com a grade', () => {
   it('outros períodos (atalhos e "De" mais à frente) seguem iguais à grade', async () => {
     await abrirFluxo()
     const grade = gradeDe('f2')
-    fireEvent.click(screen.getAllByRole('button', { name: 'Extrato: Seguro Residencial' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Fluxo de Caixa da Reserva: Seguro Residencial' })[0])
     fireEvent.click(screen.getByRole('button', { name: 'Próximos 3 meses' }))
     let sub = subtotais()
     expect(Object.keys(sub).sort()).toEqual(['1', '2', 'hoje'])
@@ -170,7 +170,7 @@ describe('Extrato da função — os números batem com a grade', () => {
   it('Agrupar rendimentos: ligada por padrão, quebra no depósito, e os números não mudam ao desligar', async () => {
     await abrirFluxo()
     const grade = gradeDe('f1')
-    fireEvent.click(screen.getAllByRole('button', { name: 'Extrato: IPVA' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Fluxo de Caixa da Reserva: IPVA' })[0])
     const dlg = screen.getByTestId('extrato-reserva')
     const chave = within(dlg).getByRole('switch', { name: 'Agrupar rendimentos' })
     expect(chave.checked).toBe(true)
@@ -196,7 +196,7 @@ describe('Extrato da função — os números batem com a grade', () => {
     await abrirFluxo()
     const porReservas = {}
     for (const [id, nome] of [['f1', 'IPVA'], ['f2', 'Seguro Residencial'], ['total', 'TOTAL GERAL']]) {
-      fireEvent.click(screen.getAllByRole('button', { name: `Extrato: ${nome}` })[0])
+      fireEvent.click(screen.getAllByRole('button', { name: `Fluxo de Caixa da Reserva: ${nome}` })[0])
       porReservas[id] = { sub: subtotais(), fim: texto(screen.getByTestId('extrato-saldo-final')) }
       fechar()
     }

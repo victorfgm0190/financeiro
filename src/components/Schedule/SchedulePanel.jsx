@@ -2923,6 +2923,8 @@ export default function SchedulePanel() {
   const podeIncluirAgend = pode('agendamentos', 'incluir')
   // Controle gerencial desligado: Executar Gerenciais some (nada gerencial é gerado).
   const podeExecutarGer = controleGerencialAtivo(settings) && (pode('lancamentos', 'incluir'))
+  // Controle gerencial desligado: a aba "Gerencial" some (os agendamentos gravados continuam no banco).
+  const abaGerencialVisivel = controleGerencialAtivo(settings)
 
   // Aviso do ScheduleForm — a sincronização de favorecido de uma parcela de financiamento mexe
   // no financiamento inteiro, e isso precisa ficar visível para quem editou só uma parcela.
@@ -3074,6 +3076,7 @@ export default function SchedulePanel() {
     setter(e.target.value)
     if (periodoAtual !== 'custom') atualizarFiltrosAba(f => ({ ...f, periodos: { ...f.periodos, [f.status]: 'custom' } }))
   }
+  if (activeTab === 'gerencial' && !abaGerencialVisivel) setActiveTab('conta')
   const trocarAba = (aba) => {
     setActiveTab(aba)
     setSelContas(new Set())
@@ -3584,9 +3587,11 @@ export default function SchedulePanel() {
         <TabButton active={activeTab === 'cartao'} onClick={() => trocarAba('cartao')} badge={pendingInvoice + pendingFaturaPayments}>
           <CreditCard size={14} /> Cartão de Crédito
         </TabButton>
-        <TabButton active={activeTab === 'gerencial'} onClick={() => trocarAba('gerencial')} badge={pendingGerencial}>
-          <BarChart3 size={14} /> Gerencial
-        </TabButton>
+        {abaGerencialVisivel && (
+          <TabButton active={activeTab === 'gerencial'} onClick={() => trocarAba('gerencial')} badge={pendingGerencial}>
+            <BarChart3 size={14} /> Gerencial
+          </TabButton>
+        )}
         <TabButton active={activeTab === 'anuais'} onClick={() => trocarAba('anuais')} badge={pendingContasAnuais}>
           <ArrowLeftRight size={14} /> Contas Anuais
         </TabButton>

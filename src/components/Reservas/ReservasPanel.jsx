@@ -1358,7 +1358,7 @@ const totalOuTraco = (v) => (v === 0 ? '—' : fmt(v))
 // lado; no computador sublinha ao passar o mouse.
 function NomeExtrato({ nome, onAbrir, className = '' }) {
   return (
-    <button type="button" onClick={onAbrir} title={`Ver o extrato de ${nome}`} aria-label={`Extrato: ${nome}`}
+    <button type="button" onClick={onAbrir} title={`Ver o Fluxo de Caixa da Reserva de ${nome}`} aria-label={`Fluxo de Caixa da Reserva: ${nome}`}
       className={`inline-flex items-center gap-1 text-left hover:underline underline-offset-2 cursor-pointer ${className}`}>
       <span className="truncate">{nome}</span>
       <ScrollText size={11} className="shrink-0 text-texto-3" aria-hidden="true" />
