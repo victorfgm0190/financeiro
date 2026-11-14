@@ -160,10 +160,12 @@
     --color-barra-alerta-claro: #E6C86E;
     --color-barra-estouro-claro: #F08A8A;
 
-    /* Marca-d'água no grafite: opacidade um pouco maior que no celular (no cinza, valor baixo some). */
+    /* Marca-d'água no grafite: opacidade bem maior que no celular (no cinza, valor baixo some e fica
+       mais apagada que no claro). texto = frase do login; texto-header = frase do cabeçalho. */
     --marca-dagua-cor: var(--color-texto-3);
-    --marca-dagua-opacidade-simbolo: 0.16;
-    --marca-dagua-opacidade-texto: 0.18;
+    --marca-dagua-opacidade-simbolo: 0.24;
+    --marca-dagua-opacidade-texto: 0.30;
+    --marca-dagua-opacidade-texto-header: 0.40;
   }
   /* Cartões coloridos da tela Contas (gradiente saturado com texto branco): um pouco menos de
      saturação e brilho, sem sombra — a separação vem do tom. O filtro escurece fundo e texto
@@ -194,8 +196,7 @@
   --marca-dagua-opacidade-simbolo: 0.12;
   --marca-dagua-opacidade-texto: 0.14;
   /* Frase AO LADO da coroa, só no cabeçalho do computador (texto de 12px, legível): própria, para não
-     mexer no login e no celular. O cabeçalho só existe no computador, então o padrão aqui é o do
-     escuro do computador. */
+     mexer no login e no celular. O escuro do computador sobrescreve no bloco "Escuro SUAVE". */
   --marca-dagua-opacidade-texto-header: 0.26;
 }
 /* Claro: texto principal, símbolo 14% / frase 22%. :root[...] para vencer o :root acima. */
