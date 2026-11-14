@@ -18,6 +18,19 @@
 // O build publica esta lista em /versao.json (vite.config.js): a versão aberta compara com a nova.
 export const NOVIDADES = [
   {
+    id: '2026.11.14',
+    data: '2026-11-14',
+    titulo: 'Extrato da reserva no Fluxo Futuro',
+    publico: 'todos',
+    obrigatoria: false,
+    itens: [
+      'Em Reservas › Fluxo Futuro, toque no nome de uma função (ex.: IPVA) para ver o extrato dela: o saldo inicial, cada entrada e saída em ordem de data, com o saldo depois de cada uma, e um resumo no fim de cada mês.',
+      'Toque em "TOTAL GERAL" para ver o extrato de todas as funções juntas, com o nome da função em cada linha.',
+      'O extrato junta o que já aconteceu e o que está agendado; o que ainda vai acontecer aparece marcado como "Previsto". Se o saldo ficar negativo, a linha fica destacada e o topo avisa a data.',
+      'Dá para escolher o período (ou usar "Este mês", "Próximos 3 meses" e "Próximos 12 meses") e baixar em Excel. O saldo de cada fim de mês é o mesmo da tabela do Fluxo Futuro.',
+    ],
+  },
+  {
     id: '2026.11.13-4',
     data: '2026-11-13',
     titulo: "Nova marca-d'água do Finup",

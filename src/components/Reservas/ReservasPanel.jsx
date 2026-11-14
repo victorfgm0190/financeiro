@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from 'react'
 import {
   Plus, Edit2, Trash2, RotateCcw, CheckCircle, AlertTriangle, Layers,
-  ArrowDownCircle, ArrowUpCircle, PiggyBank, ChevronLeft, ChevronRight, FileSpreadsheet, GripVertical, MessageSquare, List,
+  ArrowDownCircle, ArrowUpCircle, PiggyBank, ChevronLeft, ChevronRight, FileSpreadsheet, GripVertical, MessageSquare, List, ScrollText,
 } from 'lucide-react'
 import { exportarExcel } from '../../lib/exportExcel'
 import { useApp } from '../../context/AppContext'
@@ -28,6 +28,8 @@ import { totaisFluxoFuturo, funcoesReservaNoPerfil, linhasDasFuncoesNoPerfil } f
 import { mesDaData, somarMeses, periodoDaPreferencia, preferenciaDoPeriodo, janelaDoPeriodo } from '../../lib/fluxoPeriodo'
 import { carregarBoasVindas, assinarBoasVindas, estadoBoasVindas, definirPeriodoFluxo } from '../../lib/boasVindasApi'
 import SeletorPeriodoFluxo from './SeletorPeriodoFluxo'
+import ExtratoReservaModal from './ExtratoReservaModal'
+import { realizadosDaFuncao } from '../../lib/extratoReserva'
 import ProfileBadge from '../shared/ProfileBadge'
 import AvisosCaixaReserva from './AvisosCaixaReserva'
 import { parseValorBR } from '../../lib/valorBR'
@@ -1372,14 +1374,18 @@ function computeScheduledByFunction(linked, accounts, schedules, scheduleReserva
     // FUTUROS (idx >= 1; idx 0 é o mês anterior/referência) — casam com o total dos arrays.
     const depItems = []  // { date, label, amount }
     const resItems = []  // { date, label, amount, resgateScheduleId? } (resgates reais + provisões)
+    // Extrato da função: as mesmas ocorrências, na MESMA ordem em que entram nas colunas, com o
+    // tipo e o índice do mês — o extrato refaz a conta da grade a partir delas (lib/extratoReserva).
+    const movs = []      // { ...itemFluxo, tipo, idx }
     for (const p of previsoes[f.id] || []) {
       const idx = winIndexOf(p.date)
       if (idx < 0 || idx > n - 1) continue
       const coluna = p.tipo === 'deposito' ? deps : p.tipo === 'resgate' ? ress : provs
       coluna[idx] = round2(coluna[idx] + p.amount)
       if (idx >= 1) (p.tipo === 'deposito' ? depItems : resItems).push(p.itemFluxo)
+      if (idx >= 1) movs.push({ ...p.itemFluxo, amount: p.amount, tipo: p.tipo, idx })
     }
-    result[f.id] = { deps, ress, provs, depItems, resItems }
+    result[f.id] = { deps, ress, provs, depItems, resItems, movs }
   }
   return result
 }
@@ -1405,8 +1411,20 @@ function futureMovimentosByFunction(linked, accounts, schedules, scheduleReserva
 
 const totalOuTraco = (v) => (v === 0 ? '—' : fmt(v))
 
+// Nome da função (ou TOTAL GERAL) no Fluxo Futuro: abre o Extrato da função. Ícone de extrato ao
+// lado; no computador sublinha ao passar o mouse.
+function NomeExtrato({ nome, onAbrir, className = '' }) {
+  return (
+    <button type="button" onClick={onAbrir} title={`Ver o extrato de ${nome}`} aria-label={`Extrato: ${nome}`}
+      className={`inline-flex items-center gap-1 text-left hover:underline underline-offset-2 cursor-pointer ${className}`}>
+      <span className="truncate">{nome}</span>
+      <ScrollText size={11} className="shrink-0 text-texto-3" aria-hidden="true" />
+    </button>
+  )
+}
+
 // ── Tab 2: Fluxo Futuro ─────────────────────────────────────────────────────
-function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizados, schedules, schedulesSemVinculo = schedules, scheduleReservaFuncoes, getNextOccurrences, periodoAberto }) {
+function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizados, schedules, schedulesSemVinculo = schedules, scheduleReservaFuncoes, getNextOccurrences, periodoAberto, realizadosDe, hoje }) {
   // Memo: com 60 meses o cálculo pesa, e um array novo a cada render o refazia sempre.
   const linked = useMemo(() => functions.filter(f => f.accountId), [functions])
   const round2 = (n) => Math.round(n * 100) / 100
@@ -1414,6 +1432,8 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
   // porque o componente tem `return` antecipado quando não há função vinculada — um useState
   // depois dele quebraria a ordem dos hooks entre renders.
   const [detalhe, setDetalhe] = useState(null)
+  // Extrato da função aberto: { funcao } (null = TOTAL GERAL, todas as funções da tela).
+  const [extratoAlvo, setExtratoAlvo] = useState(null)
 
   // Período escolhido (src/lib/fluxoPeriodo.js), guardado por usuário em boas_vindas_usuario.progresso.
   // `atual` = mês do período ABERTO do Controle de Reservas (o do topo); "De" não vai antes dele.
@@ -1450,16 +1470,31 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
   // Dep/Res por função/mês a partir dos AGENDAMENTOS reais (não dos campos de planejamento).
   // Lógica extraída para computeScheduledByFunction (compartilhada com o Resumo).
   // Função "Sem vínculo": todos os agendamentos (o valor não depende do perfil do topo).
-  const scheduledByFunction = useMemo(() => ({
-    ...computeScheduledByFunction(linked.filter(f => !semVinculo?.has(f.id)), accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win),
-    ...computeScheduledByFunction(linked.filter(f => semVinculo?.has(f.id)), accounts, schedulesSemVinculo, scheduleReservaFuncoes, getNextOccurrences, win),
-  }), [linked, semVinculo, accounts, schedules, schedulesSemVinculo, scheduleReservaFuncoes, getNextOccurrences, win])
+  const scheduledDaJanela = useCallback((w) => ({
+    ...computeScheduledByFunction(linked.filter(f => !semVinculo?.has(f.id)), accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, w),
+    ...computeScheduledByFunction(linked.filter(f => semVinculo?.has(f.id)), accounts, schedulesSemVinculo, scheduleReservaFuncoes, getNextOccurrences, w),
+  }), [linked, semVinculo, accounts, schedules, schedulesSemVinculo, scheduleReservaFuncoes, getNextOccurrences])
+  const scheduledByFunction = useMemo(() => scheduledDaJanela(win), [scheduledDaJanela, win])
 
+  // Extrato da função: previstos de um período qualquer pelo MESMO cálculo da grade (mesma âncora da
+  // janela, mesmas funções); no período da grade, os próprios valores dela.
+  const previstosDoPeriodo = useCallback((p) => {
+    if (p.de === periodo.de && p.ate === periodo.ate) return { win, ini, sched: scheduledByFunction }
+    const jan = janelaDoPeriodo(p, inicioJanela)
+    const w = buildFluxoWindow(jan.meses)
+    return { win: w, ini: jan.primeiro, sched: scheduledDaJanela(w) }
+  }, [periodo, win, ini, scheduledByFunction, inicioJanela, scheduledDaJanela])
+
+  // Ponto de partida da projeção (o saldo de hoje) — o mesmo para a grade e para o extrato.
+  const saldoInicialDe = useCallback(
+    (f) => saldosAtualizados[f.id] ?? round2(f.saldoInicial + f.entradas - f.saidas),
+    [saldosAtualizados],
+  )
   // Projeção em toda a janela calculada (mesma conta de antes, só mais longa)…
   const projecoesCompletas = useMemo(() => {
     return linked.map(f => {
       const account = accounts.find(a => a.id === f.accountId)
-      const start = saldosAtualizados[f.id] ?? round2(f.saldoInicial + f.entradas - f.saidas)
+      const start = saldoInicialDe(f)
       const schd = scheduledByFunction[f.id] || { deps: new Array(nMeses).fill(0), ress: new Array(nMeses).fill(0), provs: new Array(nMeses).fill(0) }
       let bal = start
       const monthly = win.windowMonths.map((wm, i) => {
@@ -1473,7 +1508,7 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
       })
       return { f, account, monthly }
     })
-  }, [linked, accounts, saldosAtualizados, scheduledByFunction, win, nMeses])
+  }, [linked, accounts, saldoInicialDe, scheduledByFunction, win, nMeses])
   // …e o recorte exibido: linhas, TOTAL GERAL e Excel usam só os meses do período. O alerta conta
   // também a função que já está negativa hoje (saldo do índice 0 = Total Investido), para nenhuma
   // ficar escondida pelo período escolhido.
@@ -1626,7 +1661,7 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
             {/* Card header */}
             <div className="px-3 py-2.5 border-b border-borda flex items-center gap-2">
               {hasAlert && <AlertTriangle size={11} className="text-aviso shrink-0" />}
-              <span className="text-sm font-medium text-texto-1 flex-1 truncate">{f.name}</span>
+              <NomeExtrato nome={f.name} onAbrir={() => setExtratoAlvo({ funcao: f })} className="text-sm font-medium text-texto-1 flex-1 min-w-0" />
               {semVinculo?.has(f.id) && <ProfileBadge account={account} className="shrink-0" />}
               {account && (
                 <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-2 shrink-0">
@@ -1693,7 +1728,7 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
         {/* Total geral: fixo no fim da área de rolagem, sem precisar rolar a lista. */}
         <div className="card p-0 overflow-hidden sticky bottom-0 z-20 bg-surface-2 border-t-2 border-t-borda-forte shadow-2xl">
           <div className="px-3 py-2 border-b border-borda flex items-center gap-2">
-            <span className="text-sm font-bold text-texto-1 flex-1">TOTAL GERAL</span>
+            <NomeExtrato nome="TOTAL GERAL" onAbrir={() => setExtratoAlvo({ funcao: null })} className="text-sm font-bold text-texto-1 flex-1 min-w-0" />
             <span className={`text-xs font-bold shrink-0 ${totalGeral.investido < 0 ? 'text-despesa' : totalGeral.investido === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
               {totalOuTraco(totalGeral.investido)}
             </span>
@@ -1761,7 +1796,7 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
                   {/* Fundo opaco (a coluna passa por cima das outras) com o mesmo tom do alerta/hover da linha. */}
                   <td className={`sticky left-0 z-10 border-r border-r-borda px-3 py-2 text-texto-1 whitespace-nowrap group-hover:bg-[color-mix(in_srgb,var(--color-surface-hover)_20%,var(--color-surface))] ${hasAlert ? 'bg-[color-mix(in_srgb,var(--color-aviso)_5%,var(--color-surface))]' : 'bg-surface'}`}>
                     {hasAlert && <AlertTriangle size={10} className="inline text-aviso mr-1" />}
-                    {f.name}
+                    <NomeExtrato nome={f.name} onAbrir={() => setExtratoAlvo({ funcao: f })} />
                     {semVinculo?.has(f.id) && <ProfileBadge account={account} className="ml-1.5 align-middle" />}
                   </td>
                   <td className="px-3 py-2">
@@ -1804,7 +1839,7 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
                           </span>
                         )}
                       </td>
-                      <td className={`px-2 py-2 text-right font-semibold ${d.neg ? 'text-despesa bg-despesa/15' : d.saldo === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
+                      <td data-testid={`fluxo-saldo-${f.id}-${mi}`} className={`px-2 py-2 text-right font-semibold ${d.neg ? 'text-despesa bg-despesa/15' : d.saldo === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
                         {fmt(d.saldo)}
                       </td>
                     </Fragment>
@@ -1814,7 +1849,7 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
             </tbody>
             <tfoot className="sticky bottom-0 z-20">
               <tr className="bg-surface-2 font-bold [&>td]:border-t-2 [&>td]:border-t-borda-forte">
-                <td className="sticky left-0 z-10 bg-surface-2 border-r border-r-borda px-3 py-2.5 text-texto-1 whitespace-nowrap">TOTAL GERAL</td>
+                <td className="sticky left-0 z-10 bg-surface-2 border-r border-r-borda px-3 py-2.5 text-texto-1 whitespace-nowrap"><NomeExtrato nome="TOTAL GERAL" onAbrir={() => setExtratoAlvo({ funcao: null })} /></td>
                 <td className="px-3 py-2.5" />
                 <td className={`px-3 py-2.5 text-right ${totalGeral.investido < 0 ? 'text-despesa' : totalGeral.investido === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
                   {totalOuTraco(totalGeral.investido)}
@@ -1834,7 +1869,7 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
                           </span>
                         )}
                       </td>
-                      <td className={`px-2 py-2.5 text-right ${t.saldo < 0 ? 'text-despesa bg-despesa/15' : t.saldo === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
+                      <td data-testid={`fluxo-saldo-total-${mi}`} className={`px-2 py-2.5 text-right ${t.saldo < 0 ? 'text-despesa bg-despesa/15' : t.saldo === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
                         {totalOuTraco(t.saldo)}
                       </td>
                     </Fragment>
@@ -1847,6 +1882,19 @@ function FluxoTab({ functions, semVinculo, accounts, categories, saldosAtualizad
       </div>
 
       {detalhe && <FluxoCelulaModal detalhe={detalhe} onClose={() => setDetalhe(null)} />}
+      {extratoAlvo && (
+        <ExtratoReservaModal
+          funcao={extratoAlvo.funcao}
+          funcoes={linked}
+          saldoInicialDe={saldoInicialDe}
+          previstosDoPeriodo={previstosDoPeriodo}
+          realizadosDe={realizadosDe}
+          periodoInicial={periodo}
+          atual={atual}
+          hoje={hoje}
+          onClose={() => setExtratoAlvo(null)}
+        />
+      )}
     </div>
   )
 }
@@ -2204,6 +2252,13 @@ export default function ReservasPanel() {
     }
   }, [effectiveFunctions, semVinculoIds, todasContas, schedules, agendamentosSemVinculo, scheduleReservaFuncoes, getNextOccurrences])
 
+  // Extrato da função (Fluxo Futuro): movimentos realizados com os mesmos filtros do saldo — a
+  // função "Sem vínculo" com todos os lançamentos, como no saldo dela.
+  const realizadosDe = useCallback(
+    (f, desde) => realizadosDaFuncao(f, desde, todayStr, semVinculoIds.has(f.id) ? reservaIdxTodos : reservaIdx),
+    [todayStr, semVinculoIds, reservaIdxTodos, reservaIdx],
+  )
+
   const nonCreditAccounts = accounts.filter(a => a.type !== 'credit')
   // Resumo e Fluxo Futuro: funções do perfil do topo (lib/fluxoReservaTotais). Contas de TODOS os
   // perfis, porque a conta "Sem vínculo" não está nas contas do perfil e a função dela aparece em
@@ -2302,6 +2357,8 @@ export default function ReservasPanel() {
           scheduleReservaFuncoes={scheduleReservaFuncoes}
           getNextOccurrences={getNextOccurrences}
           periodoAberto={mesDaData(period.start)}
+          realizadosDe={realizadosDe}
+          hoje={todayStr}
         />
       )}
 

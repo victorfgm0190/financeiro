@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { X, ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useRef } from 'react'
 import { GuardaFechamentoContext } from './guardaFechamento'
 import { useCamadaModal, CamadaContext } from '../../context/atalhosHooks'
@@ -13,11 +13,13 @@ const MAX_WIDTHS = {
   md: 'md:max-w-lg',
   lg: 'md:max-w-2xl',
   xl: 'md:max-w-4xl',
+  '2xl': 'md:max-w-6xl',
 }
 
 // `chaveRolagem`: em modal com etapas montado pelo próprio dono, trocar o valor rola o corpo ao topo
 // (filhos usam useRolarAoTopo, de ./rolagemModal).
-export default function Modal({ open, onClose, title, children, size = 'md', chaveRolagem }) {
+// `voltarNoCelular`: no celular (tela cheia) o fechar vira uma seta ← à esquerda do título.
+export default function Modal({ open, onClose, title, children, size = 'md', chaveRolagem, voltarNoCelular = false }) {
   const corpoRef = useRef(null)
   const chaveAnterior = useRef(chaveRolagem)
   useEffect(() => {
@@ -105,9 +107,14 @@ export default function Modal({ open, onClose, title, children, size = 'md', cha
         {/* Celular (tela cheia): o cabeçalho desce abaixo da status bar do iPhone (modal-safe-top),
             no fundo do próprio modal. No md+ e fora do iOS standalone é no-op. */}
         <div className="modal-safe-top flex items-center justify-between gap-2 px-5 pb-4 border-b border-borda shrink-0">
-          <h2 className="min-w-0 text-base font-semibold text-texto-1">{title}</h2>
+          {voltarNoCelular && (
+            <button onClick={fechar} tabIndex={-1} aria-label="Voltar" className="md:hidden -ml-1 text-texto-2 hover:text-texto-1 p-1 rounded-lg hover:bg-surface-hover">
+              <ArrowLeft size={20} />
+            </button>
+          )}
+          <h2 className={`min-w-0 text-base font-semibold text-texto-1 ${voltarNoCelular ? 'flex-1' : ''}`}>{title}</h2>
           {/* Fora da ordem do Tab (Esc fecha): o Tab começa no primeiro campo. */}
-          <button onClick={fechar} tabIndex={-1} aria-label="Fechar" className="text-texto-3 hover:text-texto-2 transition-colors p-1 rounded-lg hover:bg-surface-hover">
+          <button onClick={fechar} tabIndex={-1} aria-label="Fechar" className={`text-texto-3 hover:text-texto-2 transition-colors p-1 rounded-lg hover:bg-surface-hover ${voltarNoCelular ? 'max-md:hidden' : ''}`}>
             <X size={18} />
           </button>
         </div>
