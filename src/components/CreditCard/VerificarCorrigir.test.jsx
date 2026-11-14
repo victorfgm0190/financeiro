@@ -163,6 +163,21 @@ describe('tela do cartão: aviso e menu "Mais"', () => {
     expect(screen.getByRole('menuitem', { name: /Verificar e corrigir/ })).toBeTruthy()
   })
 
+  it('faixas: erro (atenção) e tarefa do mês (neutra) juntas; "Executar agora" abre a seção B com as parcelas marcadas', async () => {
+    vi.setSystemTime(new Date(2026, 10, 15, 12, 0, 0)) // 15/11: mês financeiro começa dia 15 → a 12/2026 entra no ciclo
+    const parcela = g({ id: 'dez2', grupoGerencial: 'grp_1', date: '2026-11-15', amount: 49.37, faturaMonthYear: '2026-12', installmentNum: 2, installmentTotal: 3, description: 'Amazon 2/3' })
+    base({ settings: { faturasFechadas: {}, financialMonthStartDay: 15, financialMonthMode: 'custom' }, profileTransactions: [...TXS, parcela], transactions: [...TXS, parcela] })
+    render(<CreditCardPanel />)
+    await act(async () => {})
+    expect(screen.getByTestId('aviso-verificar').textContent).toMatch(/216,00 sem etapa A/)
+    const mes = screen.getByTestId('aviso-mes')
+    expect(mes.textContent).toMatch(/1 parcela da fatura 12\/2026 pronta para a etapa A \(R\$\s*49,37\)/)
+    fireEvent.click(within(mes).getByRole('button', { name: 'Executar agora' }))
+    await act(async () => {})
+    expect(screen.getByTestId('b-grupo-mes')).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: 'Amazon 2/3' }).checked).toBe(true)
+  })
+
   it('quem não é administrador não vê o menu nem o aviso', async () => {
     sessao.nivel = 'operador'
     render(<CreditCardPanel />)

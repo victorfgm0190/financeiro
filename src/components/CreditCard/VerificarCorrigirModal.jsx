@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { useApp } from '../../context/AppContext'
@@ -6,11 +6,10 @@ import { fmt, fmtDate, today } from '../shared/utils'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import { faturaDoLancamento, previstoDaFaturaFn } from '../../lib/faturaCartao'
 import {
-  verificarCartao, TITULO_SECAO, SECOES, SECOES_NAO_GERENCIAIS, ymParaRef, etapaADevida,
+  verificarCartao, TITULO_SECAO, SECOES, SECOES_NAO_GERENCIAIS, ymParaRef, etapaADevida, ehParcela2aN,
 } from '../../lib/verificarCartao'
 import { acoesDoPlano, linhasHistoricoRevisao } from '../../lib/revisaoCompetencia'
 import { linhasHistorico, novoLoteId } from '../../lib/historico'
-import { isParcelaGeradaOrigin } from '../../lib/origins'
 
 const ROTULO_ACAO = {
   REMOVER_GERENCIAL: 'Remover etapa A', CRIAR_GERENCIAL: 'Criar etapa A', ATUALIZAR_GERENCIAL: 'Atualizar etapa A',
@@ -22,8 +21,6 @@ const ROTULO_COMPETENCIA = {
   mover: (it) => `Mudar para a fatura ${ymParaRef(it.mover?.para)}`,
   excluir_reserva: () => 'Excluir a reserva gerencial (o gasto de origem fica)',
 }
-// Parcela 2..N (mesmo critério do applyEnsureGerencial, que não cria a etapa A delas).
-const ehParcela2aN = (t) => Number(t.installmentNum) > 1 || t.parentTxId != null || isParcelaGeradaOrigin(t)
 const valorAcao = (a) => (a.valor != null ? fmt(a.valor) : `${fmt(a.valor_anterior)} → ${fmt(a.valor_novo)}`)
 
 // VERIFICAR E CORRIGIR — substitui "Atualizar", "Revisar Movimentos Automáticos" e "Reconciliar
@@ -32,7 +29,7 @@ const valorAcao = (a) => (a.valor != null ? fmt(a.valor) : `${fmt(a.valor_anteri
 // histórico de alterações com o motivo de cada correção.
 // Escopo: o cartão e a fatura da tela; opção "todas as faturas deste cartão". Controle gerencial
 // desligado: só as seções não gerenciais (a, d, g).
-export default function VerificarCorrigirModal({ card, billKey, secaoInicial = null, onClose }) {
+export default function VerificarCorrigirModal({ card, billKey, secaoInicial = null, preSelecionar = [], onClose }) {
   const {
     profileTransactions: transactions = [], profileAccounts: accounts = [], profileSchedules: schedules = [],
     scheduleReservaFuncoes = [], gerencialGroups = [], settings,
@@ -41,7 +38,8 @@ export default function VerificarCorrigirModal({ card, billKey, secaoInicial = n
   } = useApp()
   const gerencialLigado = controleGerencialAtivo(settings)
   const [todas, setTodas] = useState(false)
-  const [sel, setSel] = useState(() => new Set())
+  // Pré-seleção (faixa "prontas para a etapa A"): as parcelas do mês já marcadas na seção B.
+  const [sel, setSel] = useState(() => new Set((preSelecionar || []).map(id => `b:etapa:${id}`)))
   const [revisao, setRevisao] = useState([]) // [{ fatura, acoes }]
   const [etapa, setEtapa] = useState('previa') // previa | confirmar | aplicando | feito
   const [resultado, setResultado] = useState(null)
@@ -53,7 +51,7 @@ export default function VerificarCorrigirModal({ card, billKey, secaoInicial = n
 
   const v = useMemo(() => verificarCartao({
     transactions, accounts, schedules, scheduleReservaFuncoes, gerencialGroups,
-    faturasFechadas: settings?.faturasFechadas || {}, card, faturas, hoje, gerencialLigado,
+    faturasFechadas: settings?.faturasFechadas || {}, card, faturas, hoje, gerencialLigado, settings: settings || {},
     // Compras agendadas que vão cair na fatura (a regra dos previstos da tela): fatura com previsto não é "sem gasto".
     previstoDe: previstoDaFaturaFn({ schedules, card, getOccurrences: getOccurrencesProjecao }),
   }), [transactions, accounts, schedules, scheduleReservaFuncoes, gerencialGroups, settings, card, faturas, hoje, gerencialLigado, getOccurrencesProjecao])
@@ -73,7 +71,9 @@ export default function VerificarCorrigirModal({ card, billKey, secaoInicial = n
     const out = []
     for (const t of v.a || []) out.push({ chave: `a:${t.id}`, secao: 'a', tx: t, titulo: t.description || '(sem descrição)', detalhe: `${fmtDate(t.date)} · fatura ${ymParaRef(faturaDoLancamento(t, card))} · corrigir para cartão de crédito${t.grupoGerencial ? ' (o motor cria a etapa A em seguida)' : ''}`, valor: t.amount })
     for (const f of v.b?.semEtapa || []) {
-      for (const t of f.itens) out.push({ chave: `b:etapa:${t.id}`, secao: 'b', tx: t, fatura: f.fatura, titulo: t.description || '(sem descrição)', detalhe: `${fmtDate(t.date)} · fatura ${ymParaRef(f.fatura)} · sem etapa A${ehParcela2aN(t) ? ' · parcela: criada como no "Executar Gerenciais"' : ''}${t.accountType !== 'credit' ? ' (corrija antes o tipo da conta — seção a)' : ''}`, valor: t.amount })
+      const item = (t, grupoB) => ({ chave: `b:etapa:${t.id}`, secao: 'b', grupoB, tx: t, fatura: f.fatura, titulo: t.description || '(sem descrição)', detalhe: `${fmtDate(t.date)} · fatura ${ymParaRef(f.fatura)} · ${grupoB === 'mes' ? 'pronta para a etapa A (como no "Executar Gerenciais")' : `sem etapa A${ehParcela2aN(t) ? ' (parcela de ciclo já passado)' : ''}`}${t.accountType !== 'credit' ? ' — corrija antes o tipo da conta (seção a)' : ''}`, valor: t.amount })
+      for (const t of f.faltando) out.push(item(t, 'faltando'))
+      for (const t of f.doMes) out.push(item(t, 'mes'))
     }
     for (const r of revisao) {
       out.push({ chave: `b:motor:${r.fatura}`, secao: 'b', fatura: r.fatura, acoes: r.acoes,
@@ -145,7 +145,7 @@ export default function VerificarCorrigirModal({ card, billKey, secaoInicial = n
       // parcela 1: o ensure. Só de fatura já aberta (etapaADevida) — nunca antes da hora.
       const parcelas2aN = []
       for (const i of sec('b')) {
-        if (i.tx && etapaADevida(card, i.fatura, hoje, settings?.faturasFechadas || {})) {
+        if (i.tx && etapaADevida(card, i.fatura, hoje, settings?.faturasFechadas || {}, settings || {}, i.tx)) {
           if (ehParcela2aN(i.tx)) parcelas2aN.push(i.tx.id)
           else garantirEtapa.add(i.tx.id)
           recalcular.add(i.fatura)
@@ -212,14 +212,21 @@ export default function VerificarCorrigirModal({ card, billKey, secaoInicial = n
                   <h3 className="text-sm font-semibold text-texto-1">
                     {s.toUpperCase()}) {TITULO_SECAO[s]} <span className="text-texto-3 font-normal">({lista.length})</span>
                     {s === 'b' && diferencaB > 0.005 && <span className="ml-2 text-aviso">{fmt(diferencaB)} sem etapa A</span>}
+                    {s === 'b' && v.b?.valorDoMes > 0.005 && <span className="ml-2 text-texto-2 font-normal">· {fmt(v.b.valorDoMes)} prontas para a etapa A</span>}
                   </h3>
                   <button type="button" className="text-xs text-texto-2 underline" onClick={() => alternarSecao(s)}>marcar/desmarcar todos</button>
                 </div>
                 {s === 'b' && <p className="text-[11px] text-texto-3">O recálculo do motor aplica de uma vez as mudanças daquela fatura (etapas A das parcelas, resgates, devolução e pagamento).</p>}
                 {s === 'e' && <p className="text-[11px] text-texto-3">Regravar refaz o saldo de todas as contas Ger. listadas pelas transferências (antes o "Reconciliar Gerenciais" fazia isso sem mostrar).</p>}
                 <ul className="space-y-1.5">
-                  {lista.map(i => (
-                    <li key={i.chave}>
+                  {lista.map((i, k) => (
+                    <Fragment key={i.chave}>
+                    {s === 'b' && i.grupoB && i.grupoB !== lista[k - 1]?.grupoB && (
+                      <li className={`text-[11px] font-semibold uppercase tracking-wide pt-1 ${i.grupoB === 'faltando' ? 'text-aviso' : 'text-texto-2'}`} data-testid={`b-grupo-${i.grupoB}`}>
+                        {i.grupoB === 'faltando' ? 'Faltando (erro)' : 'Do mês (prontas para a etapa A)'}
+                      </li>
+                    )}
+                    <li>
                       <label className="flex items-start gap-2 cursor-pointer">
                         <input type="checkbox" className="mt-1" checked={sel.has(i.chave)} onChange={() => alternar(i.chave)} aria-label={i.titulo} />
                         <span className="min-w-0 flex-1">
@@ -228,6 +235,7 @@ export default function VerificarCorrigirModal({ card, billKey, secaoInicial = n
                         </span>
                       </label>
                     </li>
+                    </Fragment>
                   ))}
                 </ul>
               </section>

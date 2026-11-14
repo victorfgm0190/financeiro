@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { comTipoDaConta } from '../lib/tipoDaConta'
+import { cicloFinanceiroAtual } from '../lib/cicloFinanceiro'
 import { registrarContas } from '../lib/rotuloMovimento'
 import { format } from 'date-fns'
 import {
@@ -153,25 +154,6 @@ export const DEFAULT_ACCOUNT_GROUPS = [
 ]
 
 const AppContext = createContext(null)
-
-// Janela do ciclo financeiro CORRENTE, a partir de settings. Mesma regra de getFinancialPeriod.
-// Pura e compartilhada: o motor (reconcileFaturaState) e o reconcile por lançamento
-// (applyEnsureGerencial) precisam concordar sobre o que é "fatura passada" — cópias
-// independentes desse cálculo são justamente como os dois divergiram.
-function cicloFinanceiroAtual(settings, ref = new Date()) {
-  if ((settings?.financialMonthMode || 'custom') === 'calendar') {
-    return {
-      start: new Date(ref.getFullYear(), ref.getMonth(), 1),
-      end: new Date(ref.getFullYear(), ref.getMonth() + 1, 0),
-    }
-  }
-  const startDay = settings?.financialMonthStartDay || 1
-  return ref.getDate() >= startDay
-    ? { start: new Date(ref.getFullYear(), ref.getMonth(), startDay),
-        end: new Date(ref.getFullYear(), ref.getMonth() + 1, startDay - 1) }
-    : { start: new Date(ref.getFullYear(), ref.getMonth() - 1, startDay),
-        end: new Date(ref.getFullYear(), ref.getMonth(), startDay - 1) }
-}
 
 // isResgatePago / isResgatePagoParaGasto moraram aqui; foram para src/lib/resgates.js para
 // ficarem testáveis sem carregar o contexto. Reexportados porque TransactionForm os importa daqui.

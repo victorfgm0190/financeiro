@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   verificarCartao, gastosGSemEtapaA, fantasmasDaGer, detalhamentoDivergente, saldosGerDivergentes,
-  agendamentosSemGasto, faturasAntigasSemPagamento, planoDeCompetencia, avisoDaFatura, contarPendencias,
+  agendamentosSemGasto, faturasAntigasSemPagamento, planoDeCompetencia, avisoDaFatura, contarPendencias, situacaoDaEtapaA, etapaADevida,
 } from './verificarCartao.js'
 import { comTipoDaConta, lancamentosSemTipoDeConta } from './tipoDaConta.js'
 
@@ -103,9 +103,10 @@ describe('aviso automático da fatura', () => {
   ]
   it('com pendência: conta, aponta a seção a e o valor sem etapa A', () => {
     const a = avisoDaFatura({ transactions: txs, accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD, fatura: '2026-11', hoje: HOJE })
-    expect(a.total).toBeGreaterThan(0)
-    expect(a.secao).toBe('a')
-    expect(a.semEtapa).toBe(216)
+    expect(a.erro.total).toBeGreaterThan(0)
+    expect(a.erro.secao).toBe('a')
+    expect(a.erro.semEtapa).toBe(216)
+    expect(a.mes).toBeNull()
   })
   it('sem diferença: nada', () => {
     const devolucao = [{ id: 'dev', tipo: 'gerencial_devolucao', cardId: 'card', faturaMesAno: '2026-11', faturaRef: '11/2026', amount: 100, transactionType: 'transfer', accountId: 'ger', toAccountId: 'cc', registered: [], skipped: [] }]
@@ -116,7 +117,8 @@ describe('aviso automático da fatura', () => {
     expect(Object.keys(v).sort()).toEqual(['a', 'd', 'g'])
     expect(contarPendencias(v).a).toBe(1)
     const a = avisoDaFatura({ transactions: txs, accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD, fatura: '2026-11', hoje: HOJE, gerencialLigado: false })
-    expect(a).toMatchObject({ secao: 'a', semEtapa: 0, semTipo: 1 })
+    expect(a.erro).toMatchObject({ secao: 'a', semEtapa: 0, semTipo: 1 })
+    expect(a.mes).toBeNull()
   })
 })
 
@@ -128,13 +130,14 @@ describe('falsos alarmes (teste no teste1, 14/11)', () => {
     gasto({ id: 'p01', date: '2026-12-15', amount: 39.95, faturaMonthYear: '2027-01', installmentNum: 7, installmentTotal: 12, description: 'Vindi *Finclasssp 7/12' }),
     gasto({ id: 'p03', date: '2027-02-15', amount: 39.95, faturaMonthYear: '2027-03', installmentNum: 9, installmentTotal: 12 }),
   ]
-  it('B: parcela de fatura futura (não devida) não aparece nem conta na diferença; a devida aparece', () => {
-    const v = verificarCartao({ transactions: parcelas, accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD, faturas: ['2026-11', '2027-01', '2027-03'], hoje: HOJE })
-    expect(v.b.semEtapa.flatMap(x => x.itens.map(t => t.id))).toEqual(['p11'])
-    expect(v.b.diferenca).toBe(10)
+  it('B: parcela de fatura que ainda não entrou no ciclo fica aguardando (fora da diferença e do aviso)', () => {
+    const v = verificarCartao({ transactions: parcelas, accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD, faturas: ['2026-11', '2027-01', '2027-03'], hoje: HOJE, settings: { financialMonthStartDay: 1 } })
+    // Mês começando dia 1: ciclo 01–30/11 → a fatura 11/2026 (fecha 13/11) é do mês; 01 e 03/2027 aguardam.
+    expect(v.b.semEtapa.flatMap(x => x.doMes.map(t => t.id))).toEqual(['p11'])
+    expect(v.b.diferenca).toBe(0)
+    expect(v.b.valorDoMes).toBe(10)
     expect(v.b.aguardando).toEqual({ qtd: 2, valor: 79.9 })
-    // Aviso da fatura futura: nada de etapa A.
-    expect(avisoDaFatura({ transactions: parcelas, accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD, fatura: '2027-01', hoje: HOJE })?.semEtapa || 0).toBe(0)
+    expect(avisoDaFatura({ transactions: parcelas, accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD, fatura: '2027-01', hoje: HOJE, settings: { financialMonthStartDay: 1 } })?.erro).toBeFalsy()
   })
   it('F: fatura futura com compra AGENDADA não é "sem gasto"; sem nada (nem lançado nem agendado) aparece', () => {
     const schedules = [
@@ -143,5 +146,46 @@ describe('falsos alarmes (teste no teste1, 14/11)', () => {
     ]
     const previstoDe = (f) => (f === '2027-11' ? 48.29 : 0) // compra mensal agendada cai em 11/2027
     expect(agendamentosSemGasto({ schedules, transactions: [], card: CARD, hoje: HOJE, previstoDe }).map(s => s.id)).toEqual(['pag_dez27'])
+  })
+})
+
+describe('etapa A das parcelas 2..N pelo CICLO FINANCEIRO (fechamento da fatura)', () => {
+  // Cartão como o Itaupers: fecha dia 13, vence dia 20.
+  const CARD13 = { ...CARD, closingDay: 13, dueDay: 20 }
+  const dez = gasto({ id: 'dez9', date: '2026-11-15', amount: 49.37, faturaMonthYear: '2026-12', installmentNum: 2, installmentTotal: 3, description: 'Amazon 2/3' })
+  const avista = gasto({ id: 'vista', date: '2026-10-27', amount: 216, faturaMonthYear: '2026-11', description: 'VIVO' })
+  const S15 = { financialMonthStartDay: 15, financialMonthMode: 'custom' }
+
+  it('mês começando no dia 15: a parcela da fatura 12/2026 (fecha 13/12) aguarda em 14/11 e é devida a partir de 15/11', () => {
+    expect(situacaoDaEtapaA(CARD13, '2026-12', '2026-11-14', S15)).toBe('futura')
+    expect(situacaoDaEtapaA(CARD13, '2026-12', '2026-11-15', S15)).toBe('mes')
+    expect(etapaADevida(CARD13, '2026-12', '2026-11-14', {}, S15, dez)).toBe(false)
+    expect(etapaADevida(CARD13, '2026-12', '2026-11-15', {}, S15, dez)).toBe(true)
+    const em14 = gastosGSemEtapaA({ transactions: [dez], gerencialGroups: GRUPOS, card: CARD13, fatura: '2026-12', hoje: '2026-11-14', settings: S15 })
+    const em15 = gastosGSemEtapaA({ transactions: [dez], gerencialGroups: GRUPOS, card: CARD13, fatura: '2026-12', hoje: '2026-11-15', settings: S15 })
+    expect([em14.aguardando.length, em14.doMes.length]).toEqual([1, 0])
+    expect([em15.aguardando.length, em15.doMes.length, em15.faltando.length]).toEqual([0, 1, 0])
+  })
+
+  it('a regra acompanha a configuração: mês começando no dia 1 e mês de calendário', () => {
+    expect(situacaoDaEtapaA(CARD13, '2026-12', '2026-11-15', { financialMonthStartDay: 1 })).toBe('futura') // ciclo 01–30/11
+    expect(situacaoDaEtapaA(CARD13, '2026-11', '2026-11-15', { financialMonthStartDay: 1 })).toBe('mes')
+    expect(situacaoDaEtapaA(CARD13, '2026-12', '2026-12-01', { financialMonthStartDay: 1 })).toBe('mes')
+    expect(situacaoDaEtapaA(CARD13, '2026-10', '2026-11-15', { financialMonthMode: 'calendar' })).toBe('passada')
+  })
+
+  it('à vista / parcela 1 sem etapa A é sempre erro; parcela de ciclo passado também', () => {
+    const r = gastosGSemEtapaA({ transactions: [avista], gerencialGroups: GRUPOS, card: CARD13, fatura: '2026-11', hoje: '2026-11-14', settings: S15 })
+    expect(r.faltando.map(t => t.id)).toEqual(['vista'])
+    const antiga = gasto({ id: 'old', date: '2026-08-15', amount: 5, faturaMonthYear: '2026-09', installmentNum: 3, installmentTotal: 5 })
+    expect(gastosGSemEtapaA({ transactions: [antiga], gerencialGroups: GRUPOS, card: CARD13, fatura: '2026-09', hoje: '2026-11-15', settings: S15 }).faltando.map(t => t.id)).toEqual(['old'])
+  })
+
+  it('faixas: erro e tarefa do mês ao mesmo tempo, cada uma com o seu conteúdo', () => {
+    const a = avisoDaFatura({ transactions: [avista, dez], accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD13, fatura: '2026-11', hoje: '2026-11-15', settings: S15 })
+    expect(a.erro).toMatchObject({ semEtapa: 216, secao: 'b' })
+    expect(a.mes).toEqual({ qtd: 1, valor: 49.37, fatura: '2026-12', ids: ['dez9'] })
+    // Em 14/11 a parcela de 12/2026 ainda aguarda: só a faixa de erro.
+    expect(avisoDaFatura({ transactions: [avista, dez], accounts: ACCOUNTS, gerencialGroups: GRUPOS, card: CARD13, fatura: '2026-11', hoje: '2026-11-14', settings: S15 }).mes).toBeNull()
   })
 })

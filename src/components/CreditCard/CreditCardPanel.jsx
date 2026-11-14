@@ -258,7 +258,7 @@ export default function CreditCardPanel() {
   const gerencialLigado = controleGerencialAtivo(settings)
   // Aviso automático da fatura (regras do motor de integridade só para ela + lançamento sem tipo).
   const aviso = useMemo(() => (selectedCard && billKey
-    ? avisoDaFatura({ transactions, accounts, schedules, gerencialGroups, faturasFechadas: settings?.faturasFechadas || {}, card: selectedCard, fatura: billKey, hoje: today(), gerencialLigado })
+    ? avisoDaFatura({ transactions, accounts, schedules, gerencialGroups, faturasFechadas: settings?.faturasFechadas || {}, card: selectedCard, fatura: billKey, hoje: today(), gerencialLigado, settings: settings || {} })
     : null), [transactions, accounts, schedules, gerencialGroups, settings, selectedCard, billKey, gerencialLigado])
   const hasGer = gerencialLigado && billLancamentos.some(tx => tx.grupoGerencial)
 
@@ -621,7 +621,7 @@ export default function CreditCardPanel() {
                 <div role="menu" className="absolute right-0 mt-1 z-30 w-64 card p-1 shadow-xl border border-borda">
                   <button type="button" role="menuitem" data-guia="credit.verificar"
                     className="w-full text-left text-sm px-3 py-2 rounded hover:bg-surface-hover flex items-center gap-2"
-                    onClick={() => { setMenuMais(false); setVerificar({ secao: aviso?.secao || null }) }}>
+                    onClick={() => { setMenuMais(false); setVerificar({ secao: aviso?.erro?.secao || null }) }}>
                     <ShieldCheck size={14} /> Verificar e corrigir
                   </button>
                 </div>
@@ -634,14 +634,24 @@ export default function CreditCardPanel() {
 
       {/* Aviso automático: as regras do motor de integridade só para esta fatura (lib/verificarCartao
           avisoDaFatura). Sem diferença, nada aparece. Gerencial desligado: só o não gerencial. */}
-      {aviso && ehAdministrador && podeEditar && (
+      {/* Erro: faixa de atenção. */}
+      {aviso?.erro && ehAdministrador && podeEditar && (
         <div className="flex items-center justify-between gap-3 flex-wrap rounded-lg border border-aviso/30 bg-aviso/10 px-3 py-2 text-xs" data-testid="aviso-verificar">
           <span className="flex items-center gap-1.5 text-texto-1">
             <AlertTriangle size={13} className="text-aviso shrink-0" />
-            Esta fatura tem {aviso.total} {aviso.total === 1 ? 'pendência' : 'pendências'}
-            {aviso.semEtapa > 0.005 ? ` (ex.: ${fmt(aviso.semEtapa)} sem etapa A)` : aviso.semTipo > 0 ? ` (ex.: ${aviso.semTipo} sem tipo de conta)` : ''}.
+            Esta fatura tem {aviso.erro.total} {aviso.erro.total === 1 ? 'pendência' : 'pendências'}
+            {aviso.erro.semEtapa > 0.005 ? ` (${fmt(aviso.erro.semEtapa)} sem etapa A)` : aviso.erro.semTipo > 0 ? ` (${aviso.erro.semTipo} sem tipo de conta)` : ''}.
           </span>
-          <button type="button" className="text-primary-fg underline font-medium" onClick={() => setVerificar({ secao: aviso.secao })}>Verificar e corrigir</button>
+          <button type="button" className="text-primary-fg underline font-medium" onClick={() => setVerificar({ secao: aviso.erro.secao })}>Verificar e corrigir</button>
+        </div>
+      )}
+      {/* Tarefa do mês (Executar Gerenciais): faixa neutra, sem tom de erro. */}
+      {aviso?.mes && ehAdministrador && podeEditar && (
+        <div className="flex items-center justify-between gap-3 flex-wrap rounded-lg border border-borda bg-surface-2/60 px-3 py-2 text-xs" data-testid="aviso-mes">
+          <span className="text-texto-2">
+            {aviso.mes.qtd} {aviso.mes.qtd === 1 ? 'parcela' : 'parcelas'} da fatura {aviso.mes.fatura.slice(5, 7)}/{aviso.mes.fatura.slice(0, 4)} {aviso.mes.qtd === 1 ? 'pronta' : 'prontas'} para a etapa A ({fmt(aviso.mes.valor)}).
+          </span>
+          <button type="button" className="text-primary-fg underline font-medium" onClick={() => setVerificar({ secao: 'b', fatura: aviso.mes.fatura, preSelecionar: aviso.mes.ids })}>Executar agora</button>
         </div>
       )}
 
@@ -987,7 +997,7 @@ export default function CreditCardPanel() {
       )}
 
       {verificar && (
-        <VerificarCorrigirModal card={selectedCard} billKey={billKey} secaoInicial={verificar.secao} onClose={() => setVerificar(null)} />
+        <VerificarCorrigirModal card={selectedCard} billKey={verificar.fatura || billKey} secaoInicial={verificar.secao} preSelecionar={verificar.preSelecionar} onClose={() => setVerificar(null)} />
       )}
 
       {/* Espaçador p/ a barra de ações fixa não cobrir o último lançamento (mais alto no
