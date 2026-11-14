@@ -90,8 +90,8 @@ describe("marca-d'água", () => {
     const cls = frase.getAttribute('class')
     expect(cls).toContain('marca-dagua-frase-header')
     expect(cls).not.toMatch(/\bmarca-dagua-frase\s/)
-    // sem 280px de sobra no cabeçalho, some só a frase (a coroa fica)
-    expect(cls).toMatch(/\bhidden @min-\[280px\]:inline\b/)
+    // sem 280px livres entre chips e Assistente (container = livre − 16px → 264px), some só a frase
+    expect(cls).toMatch(/\bhidden @min-\[264px\]:inline\b/)
     expect(cls).toContain('text-[12px]')
     expect(cls).toContain('whitespace-nowrap')
     expect(cls).toMatch(/Georgia/)

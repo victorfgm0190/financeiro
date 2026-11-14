@@ -96,8 +96,11 @@ export function SimboloCoroa({ simples = false, ...props }) {
 // Cabeçalho do computador: coroa (versão simples, 44px — quase toda a altura do cabeçalho de 55px) e a
 // frase AO LADO, numa linha, em texto de 12px (embaixo da coroa ela ficava com ~4,5px, ilegível).
 // O cabeçalho mostra a marca dentro de um @container (Header.jsx → EspacoMarca): a coroa aparece com
-// 72px de sobra; a frase só com 280px (coroa 44 + 8 de espaço + frase ~190 + folga). Com menos, some só
-// a frase. A frase tem opacidade própria (--marca-dagua-opacidade-texto-header): legível, mas discreta,
+// 72px de sobra; a frase só quando o espaço livre REAL entre os chips e o "Assistente" é ≥ 280px
+// (marca inteira ~208px + folga). O container (EspacoMarca) mede esse espaço menos 16px (gap-3 do
+// cabeçalho + px-1 do bloco dos chips), por isso a regra é @min-[264px]. Com menos, some só a frase.
+// Escala do Windows e zoom do navegador reduzem a largura em CSS: 1920px a 150% = 1280px, e aí o
+// espaço livre (com menu lateral e chips) fica abaixo de 280px. A frase tem opacidade própria (--marca-dagua-opacidade-texto-header): legível, mas discreta,
 // sem mexer no login e no celular.
 function MarcaCabecalho({ className }) {
   return (
@@ -107,7 +110,7 @@ function MarcaCabecalho({ className }) {
       className={`marca-dagua items-center gap-2 pointer-events-none select-none print:hidden ${className}`}
     >
       <SimboloCoroa simples width="44" height="44" className="marca-dagua-simbolo shrink-0" />
-      <span className="marca-dagua-frase-header hidden @min-[280px]:inline whitespace-nowrap leading-none text-[12px] tracking-[0.17em] font-normal font-[Georgia,'Times_New_Roman',serif]">
+      <span className="marca-dagua-frase-header hidden @min-[264px]:inline whitespace-nowrap leading-none text-[12px] tracking-[0.17em] font-normal font-[Georgia,'Times_New_Roman',serif]">
         TOTUS TUUS, MARIA
       </span>
     </span>
